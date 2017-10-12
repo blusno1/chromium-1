@@ -10,6 +10,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/timing/SubTaskAttribution.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/Resource.h"
 #include "platform/scheduler/base/task_time_observer.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "public/platform/WebThread.h"
@@ -75,6 +76,8 @@ class CORE_EXPORT PerformanceMonitor final
                                      double time,
                                      std::unique_ptr<SourceLocation>);
   static double Threshold(ExecutionContext*, Violation);
+
+  void BypassLongCompileThresholdOnceForTesting();
 
   // Instrumenting methods.
   void Will(const probe::RecalculateStyle&);
@@ -156,6 +159,7 @@ class CORE_EXPORT PerformanceMonitor final
               typename DefaultHash<size_t>::Hash,
               WTF::UnsignedWithZeroKeyHashTraits<size_t>>
       subscriptions_;
+  bool bypass_long_compile_threshold_ = false;
 };
 
 }  // namespace blink

@@ -66,7 +66,8 @@ WorkerInspectorController::~WorkerInspectorController() {
   DCHECK(!thread_);
 }
 
-void WorkerInspectorController::ConnectFrontend(int session_id) {
+void WorkerInspectorController::ConnectFrontend(int session_id,
+                                                const String& host_id) {
   if (sessions_.find(session_id) != sessions_.end())
     return;
 
@@ -77,9 +78,12 @@ void WorkerInspectorController::ConnectFrontend(int session_id) {
                                         nullptr, session->V8Session()));
   if (thread_->GlobalScope()->IsWorkerGlobalScope() &&
       RuntimeEnabledFeatures::OffMainThreadFetchEnabled()) {
-    DCHECK(ToWorkerGlobalScope(thread_->GlobalScope())->GetResourceFetcher());
-    session->Append(InspectorNetworkAgent::CreateForWorker(
-        ToWorkerGlobalScope(thread_->GlobalScope())));
+    DCHECK(ToWorkerGlobalScope(thread_->GlobalScope())->EnsureFetcher());
+    InspectorNetworkAgent* network_agent =
+        InspectorNetworkAgent::CreateForWorker(
+            ToWorkerGlobalScope(thread_->GlobalScope()));
+    session->Append(network_agent);
+    network_agent->SetHostId(host_id);
   }
   if (sessions_.IsEmpty())
     thread_->GetWorkerBackingThread().BackingThread().AddTaskObserver(this);

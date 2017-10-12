@@ -4,11 +4,11 @@
 
 #include "net/cert/cert_verify_proc_builtin.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/sha1.h"
 #include "base/strings/string_piece.h"
 #include "crypto/sha2.h"
@@ -17,12 +17,12 @@
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verify_proc.h"
 #include "net/cert/cert_verify_result.h"
-#include "net/cert/crl_set.h"
 #include "net/cert/internal/cert_errors.h"
 #include "net/cert/internal/cert_issuer_source_static.h"
 #include "net/cert/internal/common_cert_errors.h"
 #include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/internal/path_builder.h"
+#include "net/cert/internal/revocation_checker.h"
 #include "net/cert/internal/simple_path_builder_delegate.h"
 #include "net/cert/internal/system_trust_store.h"
 #include "net/cert/x509_certificate.h"
@@ -32,16 +32,6 @@
 namespace net {
 
 namespace {
-
-DEFINE_CERT_ERROR_ID(kCertificateRevoked, "Certificate is revoked");
-
-// Enum to indicate whether the revocation status for a certificate is
-// known. When the status is "known" it means it was either revoked, or
-// affirmatively unrevoked.
-enum class CertRevocationStatus {
-  kUnknown,
-  kKnown,
-};
 
 // TODO(eroman): The path building code in this file enforces its idea of weak
 // keys, and separately cert_verify_proc.cc also checks the chains with its
@@ -56,88 +46,21 @@ class PathBuilderDelegateImpl : public SimplePathBuilderDelegate {
 
   // This is called for each built chain, including ones which failed. It is
   // responsible for adding errors to the built chain if it is not acceptable.
-  void CheckPathAfterVerification(const CertPath& path,
-                                  CertPathErrors* errors) override {
-    CheckRevocation(path, errors);
+  void CheckPathAfterVerification(CertPathBuilderResultPath* path) override {
+    CheckRevocation(path);
   }
 
  private:
   // This method checks whether a certificate chain has been revoked, and if
   // so adds errors to the affected certificates.
-  CertRevocationStatus CheckRevocation(const CertPath& path,
-                                       CertPathErrors* errors) const {
+  void CheckRevocation(CertPathBuilderResultPath* path) const {
     // First check for revocations using the CRLSet. This does not require
     // any network activity.
     if (crl_set_) {
-      CertRevocationStatus status = CheckRevocationUsingCRLSet(path, errors);
-      if (status == CertRevocationStatus::kKnown)
-        return status;
+      CheckChainRevocationUsingCRLSet(crl_set_, path->certs, &path->errors);
     }
 
     // TODO(eroman): Next check revocation using OCSP and CRL.
-    return CertRevocationStatus::kUnknown;
-  }
-
-  // Checks the revocation status of the certificate chain using the CRLSet. If
-  // any certificate is revoked, the kCertificateRevoked high-severity error is
-  // added.
-  CertRevocationStatus CheckRevocationUsingCRLSet(
-      const CertPath& path,
-      CertPathErrors* errors) const {
-    // Iterate from root certificate towards the leaf (the root certificate is
-    // also checked for revocation by CRLSet).
-    std::string issuer_spki_hash;
-    for (size_t reverse_i = 0; reverse_i < path.certs.size(); ++reverse_i) {
-      size_t i = path.certs.size() - reverse_i - 1;
-      const scoped_refptr<ParsedCertificate>& cert = path.certs[i];
-
-      // True if |cert| is the root of the chain.
-      const bool is_root = reverse_i == 0;
-      // True if |cert| is the leaf certificate of the chain.
-      const bool is_target = i == 0;
-
-      // Check for revocation using the certificate's SPKI.
-      std::string spki_hash =
-          crypto::SHA256HashString(cert->tbs().spki_tlv.AsStringPiece());
-      CRLSet::Result result = crl_set_->CheckSPKI(spki_hash);
-
-      // Check for revocation using the certificate's serial number and issuer's
-      // SPKI.
-      if (result != CRLSet::REVOKED && !is_root) {
-        result = crl_set_->CheckSerial(
-            cert->tbs().serial_number.AsStringPiece(), issuer_spki_hash);
-      }
-
-      // Prepare for the next iteration.
-      issuer_spki_hash = std::move(spki_hash);
-
-      switch (result) {
-        case CRLSet::REVOKED:
-          // If any certificate was revoked, add an error to the chain and
-          // return (no need to check the remaining certificates).
-          errors->GetErrorsForCert(i)->AddError(kCertificateRevoked);
-          return CertRevocationStatus::kKnown;
-        case CRLSet::UNKNOWN:
-          // If the status is unknown, advance to the subordinate certificate.
-          break;
-        case CRLSet::GOOD:
-          if (is_target && !crl_set_->IsExpired()) {
-            // If the target is covered by the CRLSet and known good, consider
-            // the entire chain to be valid (even though the revocation status
-            // of the intermediates may have been UNKNOWN).
-            //
-            // Only the leaf certificate is considered for coverage because some
-            // intermediates have CRLs with no revocations (after filtering) and
-            // those CRLs are pruned from the CRLSet at generation time.
-            return CertRevocationStatus::kKnown;
-          }
-          break;
-      }
-    }
-
-    // If no certificate was revoked, and the target was not known good, then
-    // the revocation status is still unknown.
-    return CertRevocationStatus::kUnknown;
   }
 
   // The CRLSet may be null.
@@ -212,10 +135,10 @@ void AppendPublicKeyHashes(const der::Input& spki_bytes,
 }
 
 // Appends the SubjectPublicKeyInfo hashes for all certificates in
-// |partial_path| to |*hashes|.
-void AppendPublicKeyHashes(const CertPathBuilder::ResultPath& partial_path,
+// |path| to |*hashes|.
+void AppendPublicKeyHashes(const CertPathBuilderResultPath& path,
                            HashValueVector* hashes) {
-  for (const scoped_refptr<ParsedCertificate>& cert : partial_path.path.certs)
+  for (const scoped_refptr<ParsedCertificate>& cert : path.certs)
     AppendPublicKeyHashes(cert->tbs().spki_tlv, hashes);
 }
 
@@ -227,7 +150,7 @@ void MapPathBuilderErrorsToCertStatus(const CertPathErrors& errors,
   if (!errors.ContainsHighSeverityErrors())
     return;
 
-  if (errors.ContainsError(kCertificateRevoked))
+  if (errors.ContainsError(cert_errors::kCertificateRevoked))
     *cert_status |= CERT_STATUS_REVOKED;
 
   if (errors.ContainsError(cert_errors::kUnacceptablePublicKey))
@@ -260,12 +183,12 @@ X509Certificate::OSCertHandle CreateOSCertHandle(
 //  * |path|: The result (possibly failed) from path building.
 scoped_refptr<X509Certificate> CreateVerifiedCertChain(
     X509Certificate* target_cert,
-    const CertPathBuilder::ResultPath& path) {
+    const CertPathBuilderResultPath& path) {
   X509Certificate::OSCertHandles intermediates;
 
   // Skip the first certificate in the path as that is the target certificate
-  for (size_t i = 1; i < path.path.certs.size(); ++i)
-    intermediates.push_back(CreateOSCertHandle(path.path.certs[i]));
+  for (size_t i = 1; i < path.certs.size(); ++i)
+    intermediates.push_back(CreateOSCertHandle(path.certs[i]));
 
   scoped_refptr<X509Certificate> result = X509Certificate::CreateFromHandle(
       target_cert->os_cert_handle(), intermediates);
@@ -354,10 +277,10 @@ void DoVerify(X509Certificate* input_cert,
 
   // Use the best path that was built. This could be a partial path, or it could
   // be a valid complete path.
-  const CertPathBuilder::ResultPath& partial_path =
+  const CertPathBuilderResultPath& partial_path =
       *result.paths[result.best_result_index].get();
 
-  const ParsedCertificate* trusted_cert = partial_path.path.GetTrustedCert();
+  const ParsedCertificate* trusted_cert = partial_path.GetTrustedCert();
   if (trusted_cert) {
     verify_result->is_issued_by_known_root =
         ssl_trust_store->IsKnownRoot(trusted_cert);
@@ -380,7 +303,7 @@ void DoVerify(X509Certificate* input_cert,
 
   if (partial_path.errors.ContainsHighSeverityErrors()) {
     LOG(ERROR) << "CertVerifyProcBuiltin for " << hostname << " failed:\n"
-               << partial_path.errors.ToDebugString(partial_path.path.certs);
+               << partial_path.errors.ToDebugString(partial_path.certs);
   }
 }
 

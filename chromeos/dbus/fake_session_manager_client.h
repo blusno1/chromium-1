@@ -44,7 +44,7 @@ class FakeSessionManagerClient : public SessionManagerClient {
   void RequestLockScreen() override;
   void NotifyLockScreenShown() override;
   void NotifyLockScreenDismissed() override;
-  void RetrieveActiveSessions(const ActiveSessionsCallback& callback) override;
+  void RetrieveActiveSessions(ActiveSessionsCallback callback) override;
   void RetrieveDevicePolicy(const RetrievePolicyCallback& callback) override;
   RetrievePolicyResponseType BlockingRetrieveDevicePolicy(
       std::string* policy_out) override;
@@ -76,7 +76,6 @@ class FakeSessionManagerClient : public SessionManagerClient {
                        const std::vector<std::string>& flags) override;
   void GetServerBackedStateKeys(const StateKeysCallback& callback) override;
 
-  void CheckArcAvailability(const ArcCallback& callback) override;
   void StartArcInstance(ArcStartupMode startup_mode,
                         const cryptohome::Identification& cryptohome_id,
                         bool disable_boot_completed_broadcast,
@@ -89,7 +88,7 @@ class FakeSessionManagerClient : public SessionManagerClient {
       const ArcCallback& callback) override;
   void EmitArcBooted(const cryptohome::Identification& cryptohome_id,
                      const ArcCallback& callback) override;
-  void GetArcStartTime(const GetArcStartTimeCallback& callback) override;
+  void GetArcStartTime(DBusMethodCallback<base::TimeTicks> callback) override;
   void RemoveArcData(const cryptohome::Identification& cryptohome_id,
                      const ArcCallback& callback) override;
 

@@ -69,19 +69,19 @@ bool ParseOutputDeviceData(const std::vector<uint8_t>& edid,
   //   bytes 10-11: manufacturer product code, in little-endian
   //   bytes 54-125: four descriptors (18-bytes each) which may contain
   //     the display name.
-  const size_t kManufacturerOffset = 8;
-  const size_t kManufacturerLength = 2;
-  const size_t kProductCodeOffset = 10;
-  const size_t kProductCodeLength = 2;
-  const size_t kDescriptorOffset = 54;
-  const size_t kNumDescriptors = 4;
-  const size_t kDescriptorLength = 18;
+  constexpr size_t kManufacturerOffset = 8;
+  constexpr size_t kManufacturerLength = 2;
+  constexpr size_t kProductCodeOffset = 10;
+  constexpr size_t kProductCodeLength = 2;
+  constexpr size_t kDescriptorOffset = 54;
+  constexpr size_t kNumDescriptors = 4;
+  constexpr size_t kDescriptorLength = 18;
   // The specifier types.
-  const uint8_t kMonitorNameDescriptor = 0xfc;
+  constexpr uint8_t kMonitorNameDescriptor = 0xfc;
 
   if (manufacturer_id) {
     if (edid.size() < kManufacturerOffset + kManufacturerLength) {
-      LOG(ERROR) << "too short EDID data: manufacturer id";
+      LOG(ERROR) << "Too short EDID data: manufacturer id";
       return false;
     }
 
@@ -93,7 +93,7 @@ bool ParseOutputDeviceData(const std::vector<uint8_t>& edid,
 
   if (product_code) {
     if (edid.size() < kProductCodeOffset + kProductCodeLength) {
-      LOG(ERROR) << "too short EDID data: manufacturer product code";
+      LOG(ERROR) << "Too short EDID data: manufacturer product code";
       return false;
     }
 
@@ -112,13 +112,13 @@ bool ParseOutputDeviceData(const std::vector<uint8_t>& edid,
 
     // Detailed Timing Descriptor:
     if (edid[offset] != 0 && edid[offset + 1] != 0) {
-      const int kMaxResolution = 10080;  // 8k display.
+      constexpr int kMaxResolution = 10080;  // 8k display.
 
       if (active_pixel_out) {
-        const size_t kHorizontalPixelLsbOffset = 2;
-        const size_t kHorizontalPixelMsbOffset = 4;
-        const size_t kVerticalPixelLsbOffset = 5;
-        const size_t kVerticalPixelMsbOffset = 7;
+        constexpr size_t kHorizontalPixelLsbOffset = 2;
+        constexpr size_t kHorizontalPixelMsbOffset = 4;
+        constexpr size_t kVerticalPixelLsbOffset = 5;
+        constexpr size_t kVerticalPixelMsbOffset = 7;
 
         const uint8_t h_lsb = edid[offset + kHorizontalPixelLsbOffset];
         const uint8_t h_msb = edid[offset + kHorizontalPixelMsbOffset];
@@ -135,9 +135,9 @@ bool ParseOutputDeviceData(const std::vector<uint8_t>& edid,
       }
 
       if (physical_display_size_out) {
-        const size_t kHorizontalSizeLsbOffset = 12;
-        const size_t kVerticalSizeLsbOffset = 13;
-        const size_t kSizeMsbOffset = 14;
+        constexpr size_t kHorizontalSizeLsbOffset = 12;
+        constexpr size_t kVerticalSizeLsbOffset = 13;
+        constexpr size_t kSizeMsbOffset = 14;
 
         const uint8_t h_lsb = edid[offset + kHorizontalSizeLsbOffset];
         const uint8_t v_lsb = edid[offset + kVerticalSizeLsbOffset];
@@ -193,17 +193,17 @@ bool ParseOutputOverscanFlag(const std::vector<uint8_t>& edid, bool* flag) {
   //  - byte 0: tag.  should be 02h.
   //  - byte 1: revision.  only cares revision 3 (03h).
   //  - byte 4-: data block.
-  const size_t kExtensionBaseOffset = 128;
-  const size_t kExtensionSize = 128;
-  const size_t kNumExtensionsOffset = 126;
-  const size_t kDataBlockOffset = 4;
-  const uint8_t kCEAExtensionTag = '\x02';
-  const uint8_t kExpectedExtensionRevision = '\x03';
-  const uint8_t kExtendedTag = 7;
-  const uint8_t kExtendedVideoCapabilityTag = 0;
-  const uint8_t kPTOverscanFlagPosition = 4;
-  const uint8_t kITOverscanFlagPosition = 2;
-  const uint8_t kCEOverscanFlagPosition = 0;
+  constexpr size_t kExtensionBaseOffset = 128;
+  constexpr size_t kExtensionSize = 128;
+  constexpr size_t kNumExtensionsOffset = 126;
+  constexpr size_t kDataBlockOffset = 4;
+  constexpr uint8_t kCEAExtensionTag = '\x02';
+  constexpr uint8_t kExpectedExtensionRevision = '\x03';
+  constexpr uint8_t kExtendedTag = 7;
+  constexpr uint8_t kExtendedVideoCapabilityTag = 0;
+  constexpr uint8_t kPTOverscanFlagPosition = 4;
+  constexpr uint8_t kITOverscanFlagPosition = 2;
+  constexpr uint8_t kCEOverscanFlagPosition = 0;
 
   if (edid.size() <= kNumExtensionsOffset)
     return false;
@@ -262,39 +262,39 @@ bool ParseChromaticityCoordinates(const std::vector<uint8_t>& edid,
   // [1] http://en.wikipedia.org/wiki/Extended_display_identification_data
   // [2] "VESA Enhanced EDID Standard " Release A, Revision 1, Feb 2000, Sec 3.7
   //  "Phosphor or Filter Chromaticity: 10 bytes"
-  const size_t kChromaticityOffset = 25;
-  const unsigned int kChromaticityLength = 10;
+  constexpr size_t kChromaticityOffset = 25;
+  constexpr unsigned int kChromaticityLength = 10;
 
-  const size_t kRedGreenLsbOffset = 25;
-  const uint8_t kRedxLsbPosition = 6;
-  const uint8_t kRedyLsbPosition = 4;
-  const uint8_t kGreenxLsbPosition = 3;
-  const uint8_t kGreenyLsbPosition = 0;
+  constexpr size_t kRedGreenLsbOffset = 25;
+  constexpr uint8_t kRedxLsbPosition = 6;
+  constexpr uint8_t kRedyLsbPosition = 4;
+  constexpr uint8_t kGreenxLsbPosition = 3;
+  constexpr uint8_t kGreenyLsbPosition = 0;
 
-  const size_t kBlueWhiteLsbOffset = 26;
-  const uint8_t kBluexLsbPosition = 6;
-  const uint8_t kBlueyLsbPosition = 4;
-  const uint8_t kWhitexLsbPosition = 3;
-  const uint8_t kWhiteyLsbPosition = 0;
+  constexpr size_t kBlueWhiteLsbOffset = 26;
+  constexpr uint8_t kBluexLsbPosition = 6;
+  constexpr uint8_t kBlueyLsbPosition = 4;
+  constexpr uint8_t kWhitexLsbPosition = 3;
+  constexpr uint8_t kWhiteyLsbPosition = 0;
 
   // All LSBits parts are 2 bits wide.
-  const uint8_t kLsbMask = 0x3;
+  constexpr uint8_t kLsbMask = 0x3;
 
-  const size_t kRedxMsbOffset = 27;
-  const size_t kRedyMsbOffset = 28;
-  const size_t kGreenxMsbOffset = 29;
-  const size_t kGreenyMsbOffset = 30;
-  const size_t kBluexMsbOffset = 31;
-  const size_t kBlueyMsbOffset = 32;
-  const size_t kWhitexMsbOffset = 33;
-  const size_t kWhiteyMsbOffset = 34;
+  constexpr size_t kRedxMsbOffset = 27;
+  constexpr size_t kRedyMsbOffset = 28;
+  constexpr size_t kGreenxMsbOffset = 29;
+  constexpr size_t kGreenyMsbOffset = 30;
+  constexpr size_t kBluexMsbOffset = 31;
+  constexpr size_t kBlueyMsbOffset = 32;
+  constexpr size_t kWhitexMsbOffset = 33;
+  constexpr size_t kWhiteyMsbOffset = 34;
 
   static_assert(
       kChromaticityOffset + kChromaticityLength == kWhiteyMsbOffset + 1,
       "EDID Parameter section length error");
 
   if (edid.size() < kChromaticityOffset + kChromaticityLength) {
-    LOG(ERROR) << "too short EDID data: chromaticity coordinates";
+    LOG(ERROR) << "Too short EDID data: chromaticity coordinates";
     return false;
   }
 
@@ -331,6 +331,56 @@ bool ParseChromaticityCoordinates(const std::vector<uint8_t>& edid,
   // TODO(mcasas): Up to two additional White Point coordinates can be provided
   // in a Display Descriptor.Read them if we are not satisfied with |fWX| or
   // |FWy|. https://crbug.com/771345.
+  return true;
+}
+
+DISPLAY_UTIL_EXPORT bool ParseGammaValue(const std::vector<uint8_t>& edid,
+                                         double* gamma) {
+  // Constants are taken from "VESA Enhanced EDID Standard" Release A, Revision
+  // 2, Sep 2006, Sec. 3.6.3 "Display Transfer Characteristics (GAMMA ): 1 Byte"
+  constexpr size_t kGammaOffset = 23;
+  constexpr double kGammaMultiplier = 100.0;
+  constexpr double kGammaBias = 100.0;
+
+  if (edid.size() < kGammaOffset + 1) {
+    LOG(ERROR) << "Too short EDID data: gamma";
+    return false;
+  }
+  if (edid[kGammaOffset] == 0xFF)  // Gamma is stored elsewhere.
+    return false;
+  DCHECK(gamma);
+  *gamma = (edid[kGammaOffset] + kGammaBias) / kGammaMultiplier;
+  return true;
+}
+
+DISPLAY_UTIL_EXPORT bool ParseBitsPerChannel(const std::vector<uint8_t>& edid,
+                                             int* bits_per_channel) {
+  // Constants are taken from "VESA Enhanced EDID Standard" Release A, Revision
+  // 1, Feb 2000, Sec 3.6 "Basic Display Parameters and Features: 5 bytes"
+  static constexpr int kBitsPerChannelTable[] = {0, 6, 8, 10, 12, 14, 16, 0};
+
+  constexpr size_t kEDIDRevisionNumberOffset = 19;
+  constexpr uint8_t kEDIDRevision4Value = 4;
+
+  constexpr size_t kVideoInputDefinitionOffset = 20;
+  constexpr uint8_t kDigitalInfoMask = 0x80;
+  constexpr uint8_t kColorBitDepthMask = 0x70;
+  constexpr uint8_t kColorBitDepthOffset = 4;
+
+  if (edid.size() < kVideoInputDefinitionOffset + 1) {
+    LOG(ERROR) << "Too short EDID data: gamma";
+    return false;
+  }
+  // EDID needs to be revision 4 at least, and kDigitalInfoMask be set for
+  // the Video Input Definition entry to describe a digital interface.
+  if (edid[kEDIDRevisionNumberOffset] < kEDIDRevision4Value ||
+      !(edid[kVideoInputDefinitionOffset] & kDigitalInfoMask)) {
+    return false;
+  }
+  DCHECK(bits_per_channel);
+  *bits_per_channel = kBitsPerChannelTable[(
+      (edid[kVideoInputDefinitionOffset] & kColorBitDepthMask) >>
+      kColorBitDepthOffset)];
   return true;
 }
 

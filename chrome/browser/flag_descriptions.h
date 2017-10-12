@@ -183,6 +183,9 @@ extern const char kEmbeddedExtensionOptionsDescription[];
 extern const char kEnableAsmWasmName[];
 extern const char kEnableAsmWasmDescription[];
 
+extern const char kEnableAutofillCreditCardAblationExperimentDisplayName[];
+extern const char kEnableAutofillCreditCardAblationExperimentDescription[];
+
 extern const char kEnableAutofillCreditCardBankNameDisplayName[];
 extern const char kEnableAutofillCreditCardBankNameDisplayDescription[];
 
@@ -209,6 +212,9 @@ extern const char kEnableClearBrowsingDataCountersDescription[];
 
 extern const char kEnableClientLoFiName[];
 extern const char kEnableClientLoFiDescription[];
+
+extern const char kEnableNoScriptPreviewsName[];
+extern const char kEnableNoScriptPreviewsDescription[];
 
 extern const char kEnableDataReductionProxyLitePageName[];
 extern const char kEnableDataReductionProxyLitePageDescription[];
@@ -255,9 +261,6 @@ extern const char kEnableMaterialDesignBookmarksDescription[];
 
 extern const char kEnableMaterialDesignExtensionsName[];
 extern const char kEnableMaterialDesignExtensionsDescription[];
-
-extern const char kEnableMaterialDesignFeedbackName[];
-extern const char kEnableMaterialDesignFeedbackDescription[];
 
 extern const char kEnablePolicyToolName[];
 extern const char kEnablePolicyToolDescription[];
@@ -320,17 +323,6 @@ extern const char kEnableZeroSuggestRedirectToChromeDescription[];
 
 extern const char kEnableWasmStreamingName[];
 extern const char kEnableWasmStreamingDescription[];
-
-extern const char kEnableWebfontsInterventionName[];
-extern const char kEnableWebfontsInterventionDescription[];
-extern const char kEnableWebfontsInterventionV2ChoiceDefault[];
-extern const char kEnableWebfontsInterventionV2ChoiceEnabledWith2g[];
-extern const char kEnableWebfontsInterventionV2ChoiceEnabledWith3g[];
-extern const char kEnableWebfontsInterventionV2ChoiceEnabledWithSlow2g[];
-extern const char kEnableWebfontsInterventionV2ChoiceDisabled[];
-
-extern const char kEnableWebfontsInterventionTriggerName[];
-extern const char kEnableWebfontsInterventionTriggerDescription[];
 
 extern const char kEnableWebNotificationCustomLayoutsName[];
 extern const char kEnableWebNotificationCustomLayoutsDescription[];
@@ -983,8 +975,8 @@ extern const char kBackgroundLoaderForDownloadsDescription[];
 extern const char kChromeHomeDoodleName[];
 extern const char kChromeHomeDoodleDescription[];
 
-extern const char kChromeHomeExpandButtonName[];
-extern const char kChromeHomeExpandButtonDescription[];
+extern const char kChromeHomeOptOutSnackbarName[];
+extern const char kChromeHomeOptOutSnackbarDescription[];
 
 extern const char kChromeHomePersonalizedOmniboxSuggestionsName[];
 extern const char kChromeHomePersonalizedOmniboxSuggestionsDescription[];
@@ -995,7 +987,6 @@ extern const char kChromeHomePromoDescription[];
 extern const char kChromeHomeSwipeLogicName[];
 extern const char kChromeHomeSwipeLogicDescription[];
 extern const char kChromeHomeSwipeLogicRestrictArea[];
-extern const char kChromeHomeSwipeLogicButtonOnly[];
 
 extern const char kChromeHomeName[];
 extern const char kChromeHomeDescription[];
@@ -1490,6 +1481,9 @@ extern const char kEnableExternalDriveRenameDescription[];
 
 extern const char kEnableImeMenuName[];
 extern const char kEnableImeMenuDescription[];
+
+extern const char kEnableTabletSplitViewName[];
+extern const char kEnableTabletSplitViewDescription[];
 
 extern const char kEnableZipArchiverOnFileManagerName[];
 extern const char kEnableZipArchiverOnFileManagerDescription[];

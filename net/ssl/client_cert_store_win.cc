@@ -5,6 +5,7 @@
 #include "net/ssl/client_cert_store_win.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 
 #define SECURITY_WIN32  // Needs to be defined before including security.h
@@ -15,7 +16,6 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -187,9 +187,13 @@ ClientCertIdentityList GetClientCertsImpl(HCERTSTORE cert_store,
       intermediates.pop_back();
     }
 
+    // Allow UTF-8 inside PrintableStrings in client certificates. See
+    // crbug.com/770323.
+    X509Certificate::UnsafeCreateOptions options;
+    options.printable_string_is_utf8 = true;
     scoped_refptr<X509Certificate> cert =
-        x509_util::CreateX509CertificateFromCertContexts(cert_context2,
-                                                         intermediates);
+        x509_util::CreateX509CertificateFromCertContexts(
+            cert_context2, intermediates, options);
     if (cert) {
       selected_identities.push_back(std::make_unique<ClientCertIdentityWin>(
           std::move(cert),

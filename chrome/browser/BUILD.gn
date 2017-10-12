@@ -1749,9 +1749,6 @@ split_static_library("browser") {
     "//third_party/libyuv",
     "//third_party/re2",
     "//third_party/smhasher:cityhash",
-    "//third_party/webrtc/modules/desktop_capture",
-    "//third_party/webrtc_overrides",
-    "//third_party/webrtc_overrides:init_webrtc",
     "//third_party/widevine/cdm:headers",
     "//third_party/zlib",
     "//third_party/zlib:minizip",
@@ -1873,6 +1870,8 @@ split_static_library("browser") {
       "android/contextualsearch/resolved_search_term.h",
       "android/cookies/cookies_fetcher.cc",
       "android/cookies/cookies_fetcher.h",
+      "android/crash/pure_java_exception_handler.cc",
+      "android/crash/pure_java_exception_handler.h",
       "android/customtabs/origin_verifier.cc",
       "android/customtabs/origin_verifier.h",
       "android/data_usage/data_use_matcher.cc",
@@ -2237,6 +2236,7 @@ split_static_library("browser") {
       "//rlz:rlz_utils",
       "//sandbox",
       "//sandbox:sandbox_features",
+      "//services/proxy_resolver:lib",
       "//third_party/android_opengl/etc1",
       "//third_party/android_tools:cpu_features",
       "//third_party/libaddressinput:util",
@@ -2479,6 +2479,8 @@ split_static_library("browser") {
       "page_load_metrics/observers/session_restore_page_load_metrics_observer.h",
       "pdf/pdf_extension_util.cc",
       "pdf/pdf_extension_util.h",
+      "picture_in_picture/picture_in_picture_window_controller.cc",
+      "picture_in_picture/picture_in_picture_window_controller.h",
       "policy/local_sync_policy_handler.cc",
       "policy/local_sync_policy_handler.h",
       "process_singleton_modal_dialog_lock.cc",
@@ -2996,7 +2998,8 @@ split_static_library("browser") {
     ]
   }
 
-  if (is_posix && !is_mac) {
+  if (is_posix && !is_mac && !is_fuchsia) {
+    # TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
     sources += [
       "//chrome/app/chrome_crash_reporter_client.cc",
       "//chrome/app/chrome_crash_reporter_client.h",
@@ -3177,7 +3180,7 @@ split_static_library("browser") {
         "service_process/service_process_control.h",
         "service_process/service_process_control_mac.mm",
       ]
-      deps += [ "//chrome/common:service_process_mojom" ]
+      public_deps += [ "//chrome/common:service_process_mojom" ]
     } else {
       # Partial-only printing support.
       sources += [
@@ -3948,6 +3951,11 @@ split_static_library("browser") {
       "media/webrtc/webrtc_text_log_handler.cc",
       "media/webrtc/webrtc_text_log_handler.h",
     ]
+    deps += [
+      "//third_party/webrtc/modules/desktop_capture",
+      "//third_party/webrtc_overrides",
+      "//third_party/webrtc_overrides:init_webrtc",
+    ]
   }
 
   if (!is_chrome_branded) {
@@ -4074,6 +4082,7 @@ if (is_android) {
       "../android/java/src/org/chromium/chrome/browser/contextualsearch/CtrSuppression.java",
       "../android/java/src/org/chromium/chrome/browser/cookies/CookiesFetcher.java",
       "../android/java/src/org/chromium/chrome/browser/crash/MinidumpUploadService.java",
+      "../android/java/src/org/chromium/chrome/browser/crash/PureJavaExceptionHandler.java",
       "../android/java/src/org/chromium/chrome/browser/customtabs/LoadingPredictor.java",
       "../android/java/src/org/chromium/chrome/browser/database/SQLiteCursor.java",
       "../android/java/src/org/chromium/chrome/browser/datausage/DataUseTabUIManager.java",
@@ -4183,6 +4192,7 @@ if (is_android) {
       "../android/java/src/org/chromium/chrome/browser/payments/SslValidityChecker.java",
       "../android/java/src/org/chromium/chrome/browser/permissions/PermissionDialogController.java",
       "../android/java/src/org/chromium/chrome/browser/permissions/PermissionDialogDelegate.java",
+      "../android/java/src/org/chromium/chrome/browser/permissions/PermissionUmaUtil.java",
       "../android/java/src/org/chromium/chrome/browser/photo_picker/DecoderService.java",
       "../android/java/src/org/chromium/chrome/browser/physicalweb/PhysicalWebBroadcastService.java",
       "../android/java/src/org/chromium/chrome/browser/physicalweb/UrlManager.java",

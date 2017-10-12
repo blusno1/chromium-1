@@ -37,7 +37,7 @@
 #include "core/dom/events/Event.h"
 #include "core/editing/EditingUtilities.h"  // For firstPositionInOrBeforeNode
 #include "core/editing/FrameSelection.h"
-#include "core/editing/InputMethodController.h"
+#include "core/editing/ime/InputMethodController.h"
 #include "core/frame/FrameClient.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -49,8 +49,8 @@
 #include "core/html/HTMLPlugInElement.h"
 #include "core/html/HTMLShadowElement.h"
 #include "core/html/HTMLSlotElement.h"
-#include "core/html/TextControlElement.h"
 #include "core/html/forms/HTMLFormElement.h"
+#include "core/html/forms/TextControlElement.h"
 #include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/HitTestResult.h"

@@ -53,8 +53,9 @@ void RootCompositorFrameSinkImpl::SetDisplayVisible(bool visible) {
 }
 
 void RootCompositorFrameSinkImpl::SetDisplayColorSpace(
-    const gfx::ColorSpace& color_space) {
-  display_->SetColorSpace(color_space, color_space);
+    const gfx::ColorSpace& blending_color_space,
+    const gfx::ColorSpace& device_color_space) {
+  display_->SetColorSpace(blending_color_space, device_color_space);
 }
 
 void RootCompositorFrameSinkImpl::SetOutputIsSecure(bool secure) {
@@ -113,7 +114,7 @@ void RootCompositorFrameSinkImpl::DisplayOutputSurfaceLost() {
 void RootCompositorFrameSinkImpl::DisplayWillDrawAndSwap(
     bool will_draw_and_swap,
     const RenderPassList& render_pass) {
-  hit_test_aggregator_.PostTaskAggregate(display_->CurrentSurfaceId());
+  hit_test_aggregator_.Aggregate(display_->CurrentSurfaceId());
 }
 
 void RootCompositorFrameSinkImpl::DisplayDidDrawAndSwap() {}

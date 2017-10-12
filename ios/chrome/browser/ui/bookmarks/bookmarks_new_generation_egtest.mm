@@ -233,6 +233,60 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   [self verifyContextBarInDefaultStateWithSelectEnabled:YES];
 }
 
+- (void)testSwipeToDeleteDisabledInEditMode {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(kBookmarkNewGeneration);
+
+  [BookmarksNewGenTestCase setupStandardBookmarks];
+  [BookmarksNewGenTestCase openBookmarks];
+  [BookmarksNewGenTestCase openMobileBookmarks];
+
+  // Swipe action on the URL.
+  [[EarlGrey
+      selectElementWithMatcher:TappableBookmarkNodeWithLabel(@"First URL")]
+      performAction:grey_swipeFastInDirection(kGREYDirectionLeft)];
+
+  // Verify the delete confirmation button shows up.
+  [[[EarlGrey selectElementWithMatcher:BookmarksDeleteSwipeButton()]
+      inRoot:grey_kindOfClass(NSClassFromString(@"UITableView"))]
+      assertWithMatcher:grey_notNil()];
+
+  // Change to edit mode
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          @"context_bar_trailing_button")]
+      performAction:grey_tap()];
+
+  // Verify the delete confirmation button is gone after entering edit mode.
+  [[[EarlGrey selectElementWithMatcher:BookmarksDeleteSwipeButton()]
+      inRoot:grey_kindOfClass(NSClassFromString(@"UITableView"))]
+      assertWithMatcher:grey_nil()];
+
+  // Swipe action on "Second URL".  This should not bring out delete
+  // confirmation button as swipe-to-delete is disabled in edit mode.
+  [[EarlGrey
+      selectElementWithMatcher:TappableBookmarkNodeWithLabel(@"Second URL")]
+      performAction:grey_swipeFastInDirection(kGREYDirectionLeft)];
+
+  // Verify the delete confirmation button doesn't appear.
+  [[[EarlGrey selectElementWithMatcher:BookmarksDeleteSwipeButton()]
+      inRoot:grey_kindOfClass(NSClassFromString(@"UITableView"))]
+      assertWithMatcher:grey_nil()];
+
+  // Cancel edit mode
+  [BookmarksNewGenTestCase closeContextBarEditMode];
+
+  // Swipe action on the URL.
+  [[EarlGrey
+      selectElementWithMatcher:TappableBookmarkNodeWithLabel(@"French URL")]
+      performAction:grey_swipeFastInDirection(kGREYDirectionLeft)];
+
+  // Verify the delete confirmation button shows up. (swipe-to-delete is
+  // re-enabled).
+  [[[EarlGrey selectElementWithMatcher:BookmarksDeleteSwipeButton()]
+      inRoot:grey_kindOfClass(NSClassFromString(@"UITableView"))]
+      assertWithMatcher:grey_notNil()];
+}
+
 // Tests that the bookmark context bar is shown in MobileBookmarks.
 - (void)testBookmarkContextBarShown {
   base::test::ScopedFeatureList scoped_feature_list;
@@ -595,7 +649,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
 
   // Select Copy URL.
   [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
-                                          IDS_IOS_BOOKMARK_CONTEXT_MENU_COPY)]
+                                          IDS_IOS_CONTENT_CONTEXT_COPY)]
       performAction:grey_tap()];
 
   // Wait so that the string is copied to clipboard.
@@ -752,7 +806,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   [BookmarksNewGenTestCase openBookmarks];
   [BookmarksNewGenTestCase openMobileBookmarks];
 
-  // Open a bookmark in a normal session.
+  // Open a bookmark in current tab in a normal session.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"First URL")]
       performAction:grey_tap()];
 
@@ -763,22 +817,18 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
 
   [BookmarksNewGenTestCase openBookmarks];
 
-  // Open a incognito tab from a normal session (through a long press).
+  // Open a bookmark in new tab from a normal session (through a long press).
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Second URL")]
       performAction:grey_longPress()];
-  [[EarlGrey selectElementWithMatcher:
-                 ButtonWithAccessibilityLabelId(
-                     IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO)]
+  [[EarlGrey
+      selectElementWithMatcher:ButtonWithAccessibilityLabelId(
+                                   IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)]
       performAction:grey_tap()];
 
-  // Verify there is 1 incognito tab created and no new normal tab created.
-  [ChromeEarlGrey waitForIncognitoTabCount:1];
-  GREYAssertTrue(chrome_test_util::GetMainTabCount() == 1,
-                 @"Main tab count should be 1");
-
-  // Verify the current tab is an incognito tab.
-  GREYAssertTrue(chrome_test_util::IsIncognitoMode(),
-                 @"Failed to switch to incognito mode");
+  // Verify there is 1 new normal tab created and no new incognito tab created.
+  [ChromeEarlGrey waitForMainTabCount:2];
+  GREYAssertTrue(chrome_test_util::GetIncognitoTabCount() == 0,
+                 @"Incognito tab count should be 0");
 
   // Verify "Second URL" appears in the omnibox.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
@@ -787,50 +837,99 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
 
   [BookmarksNewGenTestCase openBookmarks];
 
-  // Open a bookmark from a incognito session.
+  // Open a bookmark in an incognito tab from a normal session (through a long
+  // press).
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"French URL")]
+      performAction:grey_longPress()];
+  [[EarlGrey selectElementWithMatcher:
+                 ButtonWithAccessibilityLabelId(
+                     IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)]
       performAction:grey_tap()];
+
+  // Verify there is 1 incognito tab created and no new normal tab created.
+  [ChromeEarlGrey waitForIncognitoTabCount:1];
+  GREYAssertTrue(chrome_test_util::GetMainTabCount() == 2,
+                 @"Main tab count should be 2");
 
   // Verify the current tab is an incognito tab.
   GREYAssertTrue(chrome_test_util::IsIncognitoMode(),
-                 @"Failed to staying at incognito mode");
+                 @"Failed to switch to incognito mode");
 
   // Verify "French URL" appears in the omnibox.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
                                           getFrenchURL().GetContent())]
       assertWithMatcher:grey_notNil()];
 
-  // Verify no new tabs created.
-  GREYAssertTrue(chrome_test_util::GetIncognitoTabCount() == 1,
-                 @"Incognito tab count should be 1");
-  GREYAssertTrue(chrome_test_util::GetMainTabCount() == 1,
-                 @"Main tab count should be 1");
-
   [BookmarksNewGenTestCase openBookmarks];
 
-  // Open a bookmark in incognito from a incognito session (through a long
-  // press).
+  // Open a bookmark in current tab from a incognito session.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"First URL")]
-      performAction:grey_longPress()];
-  [[EarlGrey selectElementWithMatcher:
-                 ButtonWithAccessibilityLabelId(
-                     IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO)]
       performAction:grey_tap()];
-
-  // Verify the current tab is an incognito tab.
-  GREYAssertTrue(chrome_test_util::IsIncognitoMode(),
-                 @"Failed to stayling at incognito mode");
 
   // Verify "First URL" appears in the omnibox.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
                                           getFirstURL().GetContent())]
       assertWithMatcher:grey_notNil()];
 
+  // Verify the current tab is an incognito tab.
+  GREYAssertTrue(chrome_test_util::IsIncognitoMode(),
+                 @"Failed to staying at incognito mode");
+
   // Verify no new tabs created.
   GREYAssertTrue(chrome_test_util::GetIncognitoTabCount() == 1,
                  @"Incognito tab count should be 1");
-  GREYAssertTrue(chrome_test_util::GetMainTabCount() == 1,
-                 @"Main tab count should be 1");
+  GREYAssertTrue(chrome_test_util::GetMainTabCount() == 2,
+                 @"Main tab count should be 2");
+
+  [BookmarksNewGenTestCase openBookmarks];
+
+  // Open a bookmark in new incognito tab from a incognito session (through a
+  // long press).
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Second URL")]
+      performAction:grey_longPress()];
+  [[EarlGrey selectElementWithMatcher:
+                 ButtonWithAccessibilityLabelId(
+                     IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)]
+      performAction:grey_tap()];
+
+  // Verify a new incognito tab is created.
+  [ChromeEarlGrey waitForIncognitoTabCount:2];
+  GREYAssertTrue(chrome_test_util::GetMainTabCount() == 2,
+                 @"Main tab count should be 2");
+
+  // Verify the current tab is an incognito tab.
+  GREYAssertTrue(chrome_test_util::IsIncognitoMode(),
+                 @"Failed to staying at incognito mode");
+
+  // Verify "Second URL" appears in the omnibox.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
+                                          getSecondURL().GetContent())]
+      assertWithMatcher:grey_notNil()];
+
+  [BookmarksNewGenTestCase openBookmarks];
+
+  // Open a bookmark in a new normal tab from a incognito session (through a
+  // long press).
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"French URL")]
+      performAction:grey_longPress()];
+  [[EarlGrey
+      selectElementWithMatcher:ButtonWithAccessibilityLabelId(
+                                   IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)]
+      performAction:grey_tap()];
+
+  // Verify a new normal tab is created and no incognito tab is created.
+  [ChromeEarlGrey waitForMainTabCount:3];
+  GREYAssertTrue(chrome_test_util::GetIncognitoTabCount() == 2,
+                 @"Incognito tab count should be 2");
+
+  // Verify the current tab is a normal tab.
+  GREYAssertFalse(chrome_test_util::IsIncognitoMode(),
+                  @"Failed to switch to normal mode");
+
+  // Verify "French URL" appears in the omnibox.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
+                                          getFrenchURL().GetContent())]
+      assertWithMatcher:grey_notNil()];
 }
 
 - (void)testContextBarForSingleFolderSelection {
@@ -970,6 +1069,26 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
                                           IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)]
       assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Dismiss the context menu.
+  [[EarlGrey
+      selectElementWithMatcher:ButtonWithAccessibilityLabelId(IDS_CANCEL)]
+      performAction:grey_tap()];
+
+  // Come back to the root.
+  [[EarlGrey selectElementWithMatcher:BookmarksBackButton()]
+      performAction:grey_tap()];
+
+  // Long press on Mobile Bookmarks.
+  [[EarlGrey selectElementWithMatcher:TappableBookmarkNodeWithLabel(
+                                          @"Mobile Bookmarks")]
+      performAction:grey_longPress()];
+
+  // Verify it doesn't show the context menu. (long press is disabled on
+  // permanent node.)
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(@"bookmark_context_menu")]
+      assertWithMatcher:grey_nil()];
 }
 
 // Verify Edit functionality for single folder selection.
@@ -1418,17 +1537,8 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Second URL")]
       assertWithMatcher:grey_notNil()];
 
-  // Verify Delete is disabled.
-  [[EarlGrey selectElementWithMatcher:ContextBarLeadingButtonWithLabel(
-                                          [BookmarksNewGenTestCase
-                                              contextBarDeleteString])]
-      assertWithMatcher:grey_allOf(grey_notNil(),
-                                   grey_accessibilityTrait(
-                                       UIAccessibilityTraitNotEnabled),
-                                   nil)];
-
-  // Cancel edit mode.
-  [BookmarksNewGenTestCase closeContextBarEditMode];
+  // Verify edit mode is closed (context bar back to default state).
+  [self verifyContextBarInDefaultStateWithSelectEnabled:YES];
 }
 
 - (void)testDeleteSingleFolderNode {
@@ -1466,17 +1576,8 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 1")]
       assertWithMatcher:grey_notNil()];
 
-  // Verify Delete is disabled.
-  [[EarlGrey selectElementWithMatcher:ContextBarLeadingButtonWithLabel(
-                                          [BookmarksNewGenTestCase
-                                              contextBarDeleteString])]
-      assertWithMatcher:grey_allOf(grey_notNil(),
-                                   grey_accessibilityTrait(
-                                       UIAccessibilityTraitNotEnabled),
-                                   nil)];
-
-  // Cancel edit mode.
-  [BookmarksNewGenTestCase closeContextBarEditMode];
+  // Verify edit mode is closed (context bar back to default state).
+  [self verifyContextBarInDefaultStateWithSelectEnabled:YES];
 }
 
 - (void)testDeleteMultipleNodes {
@@ -1520,8 +1621,8 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 1")]
       assertWithMatcher:grey_notNil()];
 
-  // Cancel edit mode.
-  [BookmarksNewGenTestCase closeContextBarEditMode];
+  // Verify edit mode is closed (context bar back to default state).
+  [self verifyContextBarInDefaultStateWithSelectEnabled:YES];
 }
 
 // Tests that the promo view is only seen at root level and not in any of the
@@ -2336,13 +2437,18 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
                                           IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
-                                          IDS_IOS_BOOKMARK_CONTEXT_MENU_COPY)]
+  [[EarlGrey
+      selectElementWithMatcher:ButtonWithAccessibilityLabelId(
+                                   IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:
                  ButtonWithAccessibilityLabelId(
-                     IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO)]
+                     IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
+                                          IDS_IOS_CONTENT_CONTEXT_COPY)]
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
@@ -2500,7 +2606,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
 
 // TODO(crbug.com/695749): Add egtests for:
 // 1. Spinner background.
-// 2. Reorder bookmarks.
+// 2. Reorder bookmarks. (make sure it won't clear the row selection on table)
 // 3. Current root node removed: Verify that the New Folder, Select button are
 //    disabled and empty background appears when _currentRootNode becomes NULL
 //    (maybe programmatically remove the current root node from model, and

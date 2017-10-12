@@ -190,6 +190,14 @@ TEST_F(
           .run();
     });
 
+TEST_F(
+    'CrExtensionsDetailViewTest', 'Warnings',
+    function() {
+      mocha
+          .grep(assert(extension_detail_view_tests.TestNames.Warnings))
+          .run();
+    });
+
 ////////////////////////////////////////////////////////////////////////////////
 // Extension Item List Tests
 
@@ -517,6 +525,12 @@ TEST_F('CrExtensionsNavigationHelperTest', 'PushAndReplaceState', function() {
   mocha
       .grep(assert(
           extension_navigation_helper_tests.TestNames.PushAndReplaceState))
+      .run();
+});
+
+TEST_F('CrExtensionsNavigationHelperTest', 'SupportedRoutes', function() {
+  mocha
+      .grep(assert(extension_navigation_helper_tests.TestNames.SupportedRoutes))
       .run();
 });
 

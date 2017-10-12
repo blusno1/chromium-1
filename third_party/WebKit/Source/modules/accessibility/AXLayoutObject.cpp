@@ -52,13 +52,13 @@
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/HTMLInputElement.h"
-#include "core/html/HTMLTextAreaElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/HTMLLabelElement.h"
 #include "core/html/forms/HTMLOptionElement.h"
 #include "core/html/forms/HTMLSelectElement.h"
+#include "core/html/forms/HTMLTextAreaElement.h"
 #include "core/html/forms/LabelsNodeList.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/imagebitmap/ImageBitmap.h"
@@ -571,6 +571,13 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   if (IsInPageLinkTarget())
     return false;
 
+  // A click handler might be placed on an otherwise ignored non-empty block
+  // element, e.g. a div. We shouldn't ignore such elements because if an AT
+  // sees the |AXDefaultActionVerb::kClickAncestor|, it will look for the
+  // clickable ancestor and it expects to find one.
+  if (IsClickable())
+    return false;
+
   if (layout_object_->IsText()) {
     if (CanIgnoreTextAsEmpty()) {
       if (ignored_reasons)
@@ -988,7 +995,7 @@ String AXLayoutObject::ImageDataUrl(const IntSize& max_size) const {
   SkImageInfo info = SkImageInfo::Make(width, height, kRGBA_8888_SkColorType,
                                        kUnpremul_SkAlphaType);
   size_t row_bytes = info.minRowBytes();
-  Vector<char> pixel_storage(info.getSafeSize(row_bytes));
+  Vector<char> pixel_storage(info.computeByteSize(row_bytes));
   SkPixmap pixmap(info, pixel_storage.data(), row_bytes);
   if (!SkImage::MakeFromBitmap(bitmap)->readPixels(pixmap, 0, 0))
     return String();
@@ -2199,7 +2206,7 @@ VisiblePosition AXLayoutObject::VisiblePositionForIndex(int index) const {
     return VisiblePosition();
 
   if (index <= 0)
-    return CreateVisiblePosition(FirstPositionInOrBeforeNodeDeprecated(node));
+    return CreateVisiblePosition(FirstPositionInOrBeforeNode(*node));
 
   Position start, end;
   bool selected = Range::selectNodeContents(node, start, end);

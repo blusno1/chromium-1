@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/numerics/ranges.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "ui/gfx/geometry/size.h"
@@ -155,23 +156,21 @@ const static float kPrimariesPrecision = 0.001f;
     const char* rhs_expr,
     const SkColorSpacePrimaries& lhs,
     const SkColorSpacePrimaries& rhs) {
-  // TODO(mcasas): consider using MathUtil::ApproximatelyEqual() when and if
-  // this is available in //base, https://crbug.com/771345
-  if (std::fabs(lhs.fRX - rhs.fRX) > kPrimariesPrecision)
+  if (!base::IsApproximatelyEqual(lhs.fRX, rhs.fRX, kPrimariesPrecision))
     return AssertionFailure() << "fRX: " << lhs.fRX << " != " << rhs.fRX;
-  if (std::fabs(lhs.fRY - rhs.fRY) > kPrimariesPrecision)
+  if (!base::IsApproximatelyEqual(lhs.fRY, rhs.fRY, kPrimariesPrecision))
     return AssertionFailure() << "fRY: " << lhs.fRY << " != " << rhs.fRY;
-  if (std::fabs(lhs.fGX - rhs.fGX) > kPrimariesPrecision)
+  if (!base::IsApproximatelyEqual(lhs.fGX, rhs.fGX, kPrimariesPrecision))
     return AssertionFailure() << "fGX: " << lhs.fGX << " != " << rhs.fGX;
-  if (std::fabs(lhs.fGY - rhs.fGY) > kPrimariesPrecision)
+  if (!base::IsApproximatelyEqual(lhs.fGY, rhs.fGY, kPrimariesPrecision))
     return AssertionFailure() << "fGY: " << lhs.fGY << " != " << rhs.fGY;
-  if (std::fabs(lhs.fBX - rhs.fBX) > kPrimariesPrecision)
+  if (!base::IsApproximatelyEqual(lhs.fBX, rhs.fBX, kPrimariesPrecision))
     return AssertionFailure() << "fBX: " << lhs.fBX << " != " << rhs.fBX;
-  if (std::fabs(lhs.fBY - rhs.fBY) > kPrimariesPrecision)
+  if (!base::IsApproximatelyEqual(lhs.fBY, rhs.fBY, kPrimariesPrecision))
     return AssertionFailure() << "fBY: " << lhs.fBY << " != " << rhs.fBY;
-  if (std::fabs(lhs.fWX - rhs.fWX) > kPrimariesPrecision)
+  if (!base::IsApproximatelyEqual(lhs.fWX, rhs.fWX, kPrimariesPrecision))
     return AssertionFailure() << "fWX: " << lhs.fWX << " != " << rhs.fWX;
-  if (std::fabs(lhs.fWY - rhs.fWY) > kPrimariesPrecision)
+  if (!base::IsApproximatelyEqual(lhs.fWY, rhs.fWY, kPrimariesPrecision))
     return AssertionFailure() << "fWY: " << lhs.fWY << " != " << rhs.fWY;
   return AssertionSuccess();
 }
@@ -397,6 +396,67 @@ TEST(EDIDParserTest, ParseChromaticityCoordinates) {
       0.6396f, 0.3291f, 0.2998f, 0.5996f, 0.1494f, 0.0595f, 0.3144f, 0.3281f};
   EXPECT_PRED_FORMAT2(SkColorSpacePrimariesEquals, primaries_eve,
                       kEvePrimaries);
+}
+
+TEST(EDIDParserTest, ParseGammaValue) {
+  const std::vector<uint8_t> edid_normal_display(
+      kNormalDisplay, kNormalDisplay + charsize(kNormalDisplay));
+  double edid_normal_display_gamma = 0.0;
+  EXPECT_TRUE(ParseGammaValue(edid_normal_display, &edid_normal_display_gamma));
+  EXPECT_DOUBLE_EQ(2.2, edid_normal_display_gamma);
+
+  const std::vector<uint8_t> edid_internal_display(
+      kInternalDisplay, kInternalDisplay + charsize(kInternalDisplay));
+  double edid_internal_display_gamma = 0.0;
+  EXPECT_TRUE(
+      ParseGammaValue(edid_internal_display, &edid_internal_display_gamma));
+  EXPECT_DOUBLE_EQ(2.2, edid_internal_display_gamma);
+
+  const std::vector<uint8_t> edid_hpz32x(kHPz32x, kHPz32x + charsize(kHPz32x));
+  double edid_hpz32x_gamma = 0.0;
+  EXPECT_TRUE(ParseGammaValue(edid_hpz32x, &edid_hpz32x_gamma));
+  EXPECT_DOUBLE_EQ(2.2, edid_hpz32x_gamma);
+
+  const std::vector<uint8_t> edid_samus(kSamus, kSamus + charsize(kSamus));
+  double edid_samus_gamma = 0.0;
+  EXPECT_TRUE(ParseGammaValue(edid_samus, &edid_samus_gamma));
+  EXPECT_DOUBLE_EQ(2.5, edid_samus_gamma);
+
+  const std::vector<uint8_t> edid_eve(kEve, kEve + charsize(kEve));
+  double edid_eve_gamma = 0.0;
+  EXPECT_TRUE(ParseGammaValue(edid_eve, &edid_eve_gamma));
+  EXPECT_DOUBLE_EQ(2.2, edid_eve_gamma);
+}
+
+TEST(EDIDParserTest, ParseBitsPerChannel) {
+  const std::vector<uint8_t> edid_normal_display(
+      kNormalDisplay, kNormalDisplay + charsize(kNormalDisplay));
+  int edid_normal_display_bits_per_channel = 0;
+  EXPECT_TRUE(ParseBitsPerChannel(edid_normal_display,
+                                  &edid_normal_display_bits_per_channel));
+  EXPECT_EQ(10, edid_normal_display_bits_per_channel);
+
+  const std::vector<uint8_t> edid_internal_display(
+      kInternalDisplay, kInternalDisplay + charsize(kInternalDisplay));
+  int edid_internal_display_bits_per_channel = 0;
+  // |kInternalDisplay| doesn't have bits per channel information.
+  EXPECT_FALSE(ParseBitsPerChannel(edid_internal_display,
+                                   &edid_internal_display_bits_per_channel));
+
+  const std::vector<uint8_t> edid_hpz32x(kHPz32x, kHPz32x + charsize(kHPz32x));
+  int edid_hpz32x_bits_per_channel = 0;
+  EXPECT_TRUE(ParseBitsPerChannel(edid_hpz32x, &edid_hpz32x_bits_per_channel));
+  EXPECT_EQ(10, edid_hpz32x_bits_per_channel);
+
+  const std::vector<uint8_t> edid_samus(kSamus, kSamus + charsize(kSamus));
+  int edid_samus_bits_per_channel = 0;
+  EXPECT_TRUE(ParseBitsPerChannel(edid_samus, &edid_samus_bits_per_channel));
+  EXPECT_EQ(8, edid_samus_bits_per_channel);
+
+  const std::vector<uint8_t> edid_eve(kEve, kEve + charsize(kEve));
+  int edid_eve_bits_per_channel = 0;
+  EXPECT_TRUE(ParseBitsPerChannel(edid_eve, &edid_eve_bits_per_channel));
+  EXPECT_EQ(8, edid_eve_bits_per_channel);
 }
 
 }  // namespace display

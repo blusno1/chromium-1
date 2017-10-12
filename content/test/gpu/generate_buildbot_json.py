@@ -20,6 +20,9 @@ SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(THIS_DIR)))
 # Current stable Windows 7 NVIDIA GT 610 device/driver identifier.
 WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER = '10de:104a-21.21.13.7254'
 
+# Current experimental Windows NVIDIA GT 610 device/driver identifier.
+WIN_NVIDIA_GEFORCE_610_EXPERIMENTAL_DRIVER = '10de:104a-23.21.13.8792'
+
 # Current stable Windows 10 NVIDIA GT 610 device/driver identifier.
 WIN_10_NVIDIA_GEFORCE_610_STABLE_DRIVER = '10de:104a-21.21.13.7619'
 
@@ -274,8 +277,7 @@ FYI_WATERFALL = {
     'Win7 Experimental Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          # TODO(jmadill): change this to experimental driver version.
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_EXPERIMENTAL_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -1966,6 +1968,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       '--use-angle=d3d9',
     ],
     'asan_args': ['--is-asan'],
+    'swarming': {
+      'shards': 2,
+    },
   },
   'webgl_conformance_gl_tests': {
     'tester_configs': [
@@ -2014,6 +2019,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       '--use-angle=gl',
     ],
     'asan_args': ['--is-asan'],
+    'swarming': {
+      'shards': 2,
+    },
   },
   'webgl_conformance_d3d11_passthrough': {
     'tester_configs': [
@@ -2038,6 +2046,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       '--use-passthrough-cmd-decoder',
     ],
     'asan_args': ['--is-asan'],
+    'swarming': {
+      'shards': 2,
+    },
   },
   'webgl_conformance_gl_passthrough': {
     'tester_configs': [
@@ -2062,6 +2073,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       '--use-passthrough-cmd-decoder',
     ],
     'asan_args': ['--is-asan'],
+    'swarming': {
+      'shards': 2,
+    },
   },
   'webgl2_conformance_tests': {
     'tester_configs': [
@@ -2155,8 +2169,8 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'asan_args': ['--is-asan'],
     'swarming': {
       # These tests currently take about an hour and fifteen minutes
-      # to run. Split them into roughly 5-minute shards.
-      'shards': 15,
+      # to run serially.
+      'shards': 20,
     },
   },
   'webgl2_conformance_gl_tests': {
@@ -2187,6 +2201,20 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'extra_browser_args': [
       '--use-angle=gl',
     ],
+    'args': [
+      '--webgl-conformance-version=2.0.1',
+      # The current working directory when run via isolate is
+      # out/Debug or out/Release. Reference this file relatively to
+      # it.
+      '--read-abbreviated-json-results-from=' + \
+      '../../content/test/data/gpu/webgl2_conformance_tests_output.json',
+    ],
+    'asan_args': ['--is-asan'],
+    'swarming': {
+      # These tests currently take about an hour and fifteen minutes
+      # to run serially.
+      'shards': 20,
+    },
   },
   'webgl2_conformance_d3d11_passthrough_tests': {
     'tester_configs': [
@@ -2222,7 +2250,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'swarming': {
       # These tests currently take about an hour and fifteen minutes
       # to run. Split them into roughly 5-minute shards.
-      'shards': 15,
+      'shards': 20,
     },
   },
 }

@@ -10,7 +10,6 @@
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "crypto/signature_verifier.h"
@@ -379,6 +378,8 @@ int ProofVerifierChromium::Job::DoVerifyCert(int result) {
 }
 
 int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Net.QuicSession.CertVerificationResult",
+                              -result);
   cert_verifier_request_.reset();
 
   const CertVerifyResult& cert_verify_result =
@@ -404,6 +405,11 @@ int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
           CERT_STATUS_CT_COMPLIANCE_FAILED;
       verify_details_->cert_verify_result.cert_status &= ~CERT_STATUS_IS_EV;
     }
+
+    UMA_HISTOGRAM_ENUMERATION(
+        "Net.CertificateTransparency.ConnectionComplianceStatus.QUIC",
+        verify_details_->ct_verify_result.cert_policy_compliance,
+        ct::CertPolicyCompliance::CERT_POLICY_MAX);
 
     int ct_result = OK;
     if (transport_security_state_->CheckCTRequirements(

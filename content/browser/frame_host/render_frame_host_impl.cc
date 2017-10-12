@@ -119,7 +119,6 @@
 #include "device/vr/vr_service.mojom.h"
 #include "media/base/media_switches.h"
 #include "media/media_features.h"
-#include "media/mojo/interfaces/media_service.mojom.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
 #include "media/mojo/services/media_interface_provider.h"
 #include "media/mojo/services/video_decode_stats_recorder.h"
@@ -657,6 +656,10 @@ int RenderFrameHostImpl::GetFrameTreeNodeId() {
   return frame_tree_node_->frame_tree_node_id();
 }
 
+base::UnguessableToken RenderFrameHostImpl::GetDevToolsFrameToken() {
+  return frame_tree_node_->devtools_frame_token();
+}
+
 const std::string& RenderFrameHostImpl::GetFrameName() {
   return frame_tree_node_->frame_name();
 }
@@ -930,7 +933,6 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
     IPC_MESSAGE_HANDLER(FrameHostMsg_FocusedNodeChanged, OnFocusedNodeChanged)
     IPC_MESSAGE_HANDLER(FrameHostMsg_SetHasReceivedUserGesture,
                         OnSetHasReceivedUserGesture)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_SetDevToolsFrameId, OnSetDevToolsFrameId)
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
     IPC_MESSAGE_HANDLER(FrameHostMsg_ShowPopup, OnShowPopup)
     IPC_MESSAGE_HANDLER(FrameHostMsg_HidePopup, OnHidePopup)
@@ -1142,6 +1144,7 @@ bool RenderFrameHostImpl::CreateRenderFrame(int proxy_routing_id,
   params->parent_routing_id = parent_routing_id;
   params->previous_sibling_routing_id = previous_sibling_routing_id;
   params->replication_state = frame_tree_node()->current_replication_state();
+  params->devtools_frame_token = frame_tree_node()->devtools_frame_token();
 
   // Normally, the replication state contains effective frame policy, excluding
   // sandbox flags and feature policy attributes that were updated but have not
@@ -1305,6 +1308,7 @@ void RenderFrameHostImpl::OnCreateChildFrame(
     blink::WebTreeScopeType scope,
     const std::string& frame_name,
     const std::string& frame_unique_name,
+    const base::UnguessableToken& devtools_frame_token,
     blink::WebSandboxFlags sandbox_flags,
     const ParsedFeaturePolicyHeader& container_policy,
     const FrameOwnerProperties& frame_owner_properties) {
@@ -1318,9 +1322,12 @@ void RenderFrameHostImpl::OnCreateChildFrame(
   if (!is_active() || !IsCurrent() || !render_frame_created_)
     return;
 
+  // |new_routing_id| and |devtools_frame_token| were generated on the browser's
+  // IO thread and not taken from the renderer process.
   frame_tree_->AddFrame(frame_tree_node_, GetProcess()->GetID(), new_routing_id,
-                        scope, frame_name, frame_unique_name, sandbox_flags,
-                        container_policy, frame_owner_properties);
+                        scope, frame_name, frame_unique_name,
+                        devtools_frame_token, sandbox_flags, container_policy,
+                        frame_owner_properties);
 }
 
 void RenderFrameHostImpl::SetLastCommittedOrigin(const url::Origin& origin) {
@@ -2685,11 +2692,6 @@ void RenderFrameHostImpl::OnSetHasReceivedUserGesture() {
   frame_tree_node_->OnSetHasReceivedUserGesture();
 }
 
-void RenderFrameHostImpl::OnSetDevToolsFrameId(
-    const std::string& devtools_frame_id) {
-  untrusted_devtools_frame_id_ = devtools_frame_id;
-}
-
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
 void RenderFrameHostImpl::OnShowPopup(
     const FrameHostMsg_ShowPopup_Params& params) {
@@ -2927,8 +2929,9 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
       base::Bind(&PermissionServiceContext::CreateService,
                  base::Unretained(permission_service_context_.get())));
 
-  registry_->AddInterface(base::Bind(
-      &PresentationServiceImpl::CreateMojoService, base::Unretained(this)));
+  registry_->AddInterface(
+      base::Bind(&RenderFrameHostImpl::BindPresentationServiceRequest,
+                 base::Unretained(this)));
 
   registry_->AddInterface(
       base::Bind(&MediaSessionServiceImpl::Create, base::Unretained(this)));
@@ -2957,9 +2960,8 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
   registry_->AddInterface(base::Bind(&SharedWorkerConnectorImpl::Create,
                                      process_->GetID(), routing_id_));
 
-  registry_->AddInterface<device::mojom::VRService>(
-      base::Bind(&WebvrServiceProvider::BindWebvrService, GetProcess()->GetID(),
-                 GetRoutingID()));
+  registry_->AddInterface<device::mojom::VRService>(base::Bind(
+      &WebvrServiceProvider::BindWebvrService, base::Unretained(this)));
 
   if (RendererAudioOutputStreamFactoryContextImpl::UseMojoFactories()) {
     registry_->AddInterface(base::BindRepeating(
@@ -4089,6 +4091,14 @@ void RenderFrameHostImpl::BindNFCRequest(device::mojom::NFCRequest request) {
     delegate_->GetNFC(std::move(request));
 }
 #endif
+
+void RenderFrameHostImpl::BindPresentationServiceRequest(
+    blink::mojom::PresentationServiceRequest request) {
+  if (!presentation_service_)
+    presentation_service_ = PresentationServiceImpl::Create(this);
+
+  presentation_service_->Bind(std::move(request));
+}
 
 void RenderFrameHostImpl::GetInterface(
     const std::string& interface_name,

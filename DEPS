@@ -26,11 +26,6 @@
 #  git commit -a
 #  git cl upload
 
-gclient_gn_args_file = 'src/build/config/gclient_args.gni'
-gclient_gn_args = [
-  'checkout_nacl',
-]
-
 
 vars = {
   # By default, we should check out everything needed to run on the main
@@ -39,16 +34,13 @@ vars = {
   # purposes.
   'checkout_configuration': 'default',
 
-  # Check out and download nacl by default. This can be disabled e.g. with
-  # custom_vars.
-  'checkout_nacl': 'True',
-
   # By default, do not check out src-internal. This can be overridden e.g. with
   # custom_vars.
   'checkout_src_internal': False,
 
   # TODO(dpranke): change to != "small" once != is supported.
   'checkout_traffic_annotation_tools': 'checkout_configuration == "default"',
+  'checkout_instrumented_libraries': 'checkout_linux and checkout_configuration == "default"',
 
   'chromium_git': 'https://chromium.googlesource.com',
   'swiftshader_git': 'https://swiftshader.googlesource.com',
@@ -63,11 +55,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '67ef5d76406d702e7afe4ec5b490a75d9bcaba10',
+  'skia_revision': 'e60ca7eae432bbff7d2213920cbfb8f3aa9a9c28',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': 'd48dc2e0aef07c4f6c290bee2ac6077974cf2aca',
+  'v8_revision': '094a7c93dcdcd921de3883ba4674b7e1a0feffbe',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -75,7 +67,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '000dab88d3d34fa7038bab00600764b51b245526',
+  'angle_revision': '852fe87341b2a90a5ea12df93e91662235d045dc',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -87,7 +79,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'b962ecceb7a7d961fdebc1bdf314d450cc6bf204',
+  'pdfium_revision': 'fb6165ff8f8ad1d7725f63e509eb7f7543df231e',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -95,7 +87,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': '12fdd08a401d2ef562612638abd016f8b5794cc7',
+  'boringssl_revision': '664e99a6486c293728097c661332f92bf2d847c6',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
@@ -115,11 +107,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype
   # and whatever else without interference from each other.
-  'freetype_revision': '6f2b6f8f72ffb5017ab00fca83185b21f1a9f56d',
+  'freetype_revision': 'c3a51e430ca5c7a9cc047548b446b044196da995',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'fe511b3686feddb035898d390b5e0c0de54722be',
+  'catapult_revision': '67c01572b02248ec553a2064be7e5e065fb494b8',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -213,10 +205,8 @@ deps = {
   'src/media/cdm/api':
     Var('chromium_git') + '/chromium/cdm.git' + '@' + '1f49c55d3151a4e1eec088befee5f578fea81f4b',
 
-  'src/native_client': {
-      'url': Var('chromium_git') + '/native_client/src/native_client.git' + '@' + Var('nacl_revision'),
-      'condition': 'checkout_nacl',
-  },
+  'src/native_client':
+    Var('chromium_git') + '/native_client/src/native_client.git' + '@' + Var('nacl_revision'),
 
   'src/third_party/SPIRV-Tools/src':
     Var('chromium_git') + '/external/github.com/KhronosGroup/SPIRV-Tools.git' + '@' + '9166854ac93ef81b026e943ccd230fed6c8b8d3c',
@@ -261,7 +251,7 @@ deps = {
 
   # Build tools for Chrome OS. Note: This depends on third_party/pyelftools.
   'src/third_party/chromite': {
-      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '5704204e2f302317e202fd7ccb24593f64425ea9',
+      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '66814c3bbbd2068dd34af9df2f677316bf081752',
       'condition': 'checkout_linux',
   },
 
@@ -289,7 +279,7 @@ deps = {
   },
 
   'src/third_party/depot_tools':
-    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '8db10a6fb1d4b86909b8cb32e3b53e35624c8979',
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'b40a45149a73a6b00e92fd1d2df4c0b1543d0005',
 
   # DevTools node modules. Used on Linux buildbots only.
   'src/third_party/devtools-node-modules': {
@@ -306,12 +296,12 @@ deps = {
   },
 
   'src/third_party/errorprone/lib': {
-      'url': Var('chromium_git') + '/chromium/third_party/errorprone.git' + '@' + '0f2d079e6ae4be0880bae71952a8b7203767724f',
+      'url': Var('chromium_git') + '/chromium/third_party/errorprone.git' + '@' + '6a55852cd7d1ef2f05a75d300495143be2a051d4',
       'condition': 'checkout_android',
   },
 
   'src/third_party/ffmpeg':
-    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '1e201feaa3260336aa63545c9471b76e5aef2e0a',
+    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '62ff55193a061c21c039a2ba0b39641136912c2e',
 
   'src/third_party/findbugs': {
       'url': Var('chromium_git') + '/chromium/deps/findbugs.git' + '@' + '57f05238d3ac77ea0a194813d3065dd780c6e566',
@@ -353,7 +343,7 @@ deps = {
   # GNU binutils assembler for x86-32.
   'src/third_party/gnu_binutils': {
       'url': Var('chromium_git') + '/native_client/deps/third_party/gnu_binutils.git' + '@' + 'f4003433b61b25666565690caf3d7a7a1a4ec436',
-      'condition': 'checkout_nacl and checkout_win',
+      'condition': 'checkout_win',
   },
 
   'src/third_party/gperf': {
@@ -370,7 +360,7 @@ deps = {
     Var('chromium_git') + '/chromium/deps/hunspell_dictionaries.git' + '@' + 'dc6e7c25bf47cbfb466e0701fd2728b4a12e79d5',
 
   'src/third_party/icu':
-    Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '08cb956852a5ccdba7f9c941728bb833529ba3c6',
+    Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '21d33b1a09a77f033478ea4ffffb61e6970f83bd',
 
   'src/third_party/jsoncpp/source':
     Var('chromium_git') + '/external/github.com/open-source-parsers/jsoncpp.git' + '@' + 'f572e8e42e22cfcf5ab0aea26574f408943edfa4', # from svn 248
@@ -391,7 +381,7 @@ deps = {
   },
 
   'src/third_party/leveldatabase/src':
-    Var('chromium_git') + '/external/leveldb.git' + '@' + '09a3c8e7417547829b94bcdaa62cdf9e896f29a9',
+    Var('chromium_git') + '/external/leveldb.git' + '@' + 'ca216e493f32278f50a823811ab95f64cf0f839b',
 
   'src/third_party/libFuzzer/src':
     Var('chromium_git') + '/chromium/llvm-project/compiler-rt/lib/fuzzer.git' + '@' +  Var('libfuzzer_revision'),
@@ -465,7 +455,7 @@ deps = {
   # GNU binutils assembler for x86-64.
   'src/third_party/mingw-w64/mingw/bin': {
       'url': Var('chromium_git') + '/native_client/deps/third_party/mingw-w64/mingw/bin.git' + '@' + '3cc8b140b883a9fe4986d12cfd46c16a093d3527',
-      'condition': 'checkout_nacl and checkout_win',
+      'condition': 'checkout_win',
   },
 
   # Graphics buffer allocator for Chrome OS.
@@ -488,7 +478,7 @@ deps = {
   # Binaries for nacl sdk.
   'src/third_party/nacl_sdk_binaries': {
       'url': Var('chromium_git') + '/chromium/deps/nacl_sdk_binaries.git' + '@' + '759dfca03bdc774da7ecbf974f6e2b84f43699a5',
-      'condition': 'checkout_nacl and checkout_win',
+      'condition': 'checkout_win',
   },
 
   'src/third_party/netty-tcnative/src': {
@@ -600,7 +590,7 @@ deps = {
     Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '34842fa3c36988840c89f5bc6a68503175acf7d9',
 
   'src/third_party/webrtc':
-    Var('webrtc_git') + '/src.git' + '@' + '59ff0e216b2736c2d002d94b9230ec7a918a5bda', # commit position 20165
+    Var('webrtc_git') + '/src.git' + '@' + 'bef8a5d2ca5413c680995584b8c0976852ba5f25', # commit position 20237
 
   'src/third_party/xdg-utils': {
       'url': Var('chromium_git') + '/chromium/deps/xdg-utils.git' + '@' + 'd80274d5869b17b8c9067a1022e4416ee7ed5e0d',
@@ -709,7 +699,6 @@ hooks = [
     # anywhere from 30 minutes to 4 hours depending on platform to build.
     'name': 'nacltools',
     'pattern': '.',
-    'condition': 'checkout_nacl',
     'action': [
         'python',
         'src/build/download_nacl_toolchains.py',
@@ -732,9 +721,8 @@ hooks = [
     # Update the Windows toolchain if necessary.  Must run before 'clang' below.
     'name': 'win_toolchain',
     'pattern': '.',
-    # TODO(thakis): Put some condition here. Not just host_os == 'win', because
-    # we also need this for (mac|linux) -> win cross builds.
-    'action': ['python', 'src/build/vs_toolchain.py', 'update'],
+    'condition': 'checkout_win',
+    'action': ['python', 'src/build/vs_toolchain.py', 'update', '--force'],
   },
   {
     # Update the Mac toolchain if necessary.
@@ -941,11 +929,28 @@ hooks = [
     ],
   },
   {
-    # Pull sanitizer-instrumented third-party libraries if requested via
-    # GYP_DEFINES.
-    'name': 'instrumented_libraries',
-    'pattern': '\\.sha1',
-    'action': ['python', 'src/third_party/instrumented_libraries/scripts/download_binaries.py'],
+    'name': 'msan_chained_origins',
+    'pattern': '.',
+    'condition': 'checkout_instrumented_libraries',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
+                "--no_resume",
+                "--no_auth",
+                "--bucket", "chromium-instrumented-libraries",
+                "-s", "src/third_party/instrumented_libraries/binaries/msan-chained-origins-trusty.tgz.sha1",
+              ],
+  },
+  {
+    'name': 'msan_no_origins',
+    'pattern': '.',
+    'condition': 'checkout_instrumented_libraries',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
+                "--no_resume",
+                "--no_auth",
+                "--bucket", "chromium-instrumented-libraries",
+                "-s", "src/third_party/instrumented_libraries/binaries/msan-no-origins-trusty.tgz.sha1",
+              ],
   },
   {
     "name": "wasm_fuzzer",
@@ -1067,21 +1072,6 @@ hooks = [
     ],
   },
 
-  # Download checkstyle for use in PRESUBMIT for Java changes.
-  # TODO(jbudorick): Move this back down to the android section of hooks_os
-  # once it's no longer necessary for the chromium_presubmit bot.
-  {
-    'name': 'checkstyle',
-    'pattern': '.',
-    'action': [ 'python',
-                'src/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-android-tools/checkstyle',
-                '-s', 'src/third_party/checkstyle/checkstyle-8.0-all.jar.sha1'
-    ],
-  },
-
   {
     # This downloads SDK extras and puts them in the
     # third_party/android_tools/sdk/extras directory.
@@ -1104,6 +1094,20 @@ hooks = [
                'download',
                '-b', 'android_system_stubs',
                '-l', 'third_party/android_system_sdk'
+    ],
+  },
+  # Download checkstyle for use in PRESUBMIT for Java changes.
+  {
+    'name': 'checkstyle',
+    'pattern': '.',
+    # Must also be downloaded on linux for use on chromium_presubmit.
+    'condition': 'checkout_android or checkout_linux',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-android-tools/checkstyle',
+                '-s', 'src/third_party/checkstyle/checkstyle-8.0-all.jar.sha1'
     ],
   },
   {
@@ -1380,7 +1384,7 @@ hooks = [
     'action': [
       'python',
       'src/build/fuchsia/update_sdk.py',
-      '226f6dd0cad1d6be63a353ce2649423470729ae9',
+      'bb7a8c4be8001868468ba0a76389ce4ee111620c',
     ],
   },
 ]

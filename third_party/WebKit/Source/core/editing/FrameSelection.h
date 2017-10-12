@@ -177,16 +177,12 @@ class CORE_EXPORT FrameSelection final
   void SetUseSecureKeyboardEntryWhenActive(bool);
 
   bool IsHandleVisible() const { return is_handle_visible_; }
+  bool ShouldShrinkNextTap() const { return should_shrink_next_tap_; }
 
   void UpdateSecureKeyboardEntryIfActive();
 
   // Returns true if a word is selected.
   bool SelectWordAroundCaret();
-
-  // TODO(editing-dev): We should replace |SelectWordAroundPosition()|
-  // with |SelectWordAroundCaret()|.
-  // Returns true if a word is selected.
-  bool SelectWordAroundPosition(const VisiblePosition&);
 
 #ifndef NDEBUG
   void ShowTreeForThis() const;
@@ -272,6 +268,7 @@ class CORE_EXPORT FrameSelection final
 
   bool focused_ : 1;
   bool is_handle_visible_ = false;
+  bool should_shrink_next_tap_ = false;
 
   // Controls text granularity used to adjust the selection's extent in
   // moveRangeSelectionExtent.

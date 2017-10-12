@@ -155,8 +155,10 @@ void GvrDevice::RequestPresent(
     mojom::VRPresentationProviderRequest request,
     mojom::VRDisplayHost::RequestPresentCallback callback) {
   GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
-  if (!delegate_provider)
-    return std::move(callback).Run(false);
+  if (!delegate_provider) {
+    std::move(callback).Run(false);
+    return;
+  }
 
   // RequestWebVRPresent is async as we may trigger a DON (Device ON) flow that
   // pauses Chrome.
@@ -184,36 +186,16 @@ void GvrDevice::ExitPresent() {
 }
 
 void GvrDevice::GetPose(
-    VRDisplayImpl* display,
     mojom::VRMagicWindowProvider::GetPoseCallback callback) {
-  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
-  if (!delegate_provider) {
-    std::move(callback).Run(nullptr);
-    return;
-  }
-  delegate_provider->GetNextMagicWindowPose(gvr_api_.get(), display,
-                                            std::move(callback));
+  std::move(callback).Run(
+      GvrDelegate::GetVRPosePtrWithNeckModel(gvr_api_.get(), nullptr));
 }
 
-void GvrDevice::OnDisplayAdded(VRDisplayImpl* display) {
+void GvrDevice::OnListeningForActivateChanged(bool listening) {
   GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
   if (!delegate_provider)
     return;
-  delegate_provider->OnDisplayAdded(display);
-}
-
-void GvrDevice::OnDisplayRemoved(VRDisplayImpl* display) {
-  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
-  if (!delegate_provider)
-    return;
-  delegate_provider->OnDisplayRemoved(display);
-}
-
-void GvrDevice::OnListeningForActivateChanged(VRDisplayImpl* display) {
-  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
-  if (!delegate_provider)
-    return;
-  delegate_provider->OnListeningForActivateChanged(display);
+  delegate_provider->OnListeningForActivateChanged(listening);
 }
 
 void GvrDevice::PauseTracking() {

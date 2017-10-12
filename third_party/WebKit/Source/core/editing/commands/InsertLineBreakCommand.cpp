@@ -36,7 +36,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLElement.h"
-#include "core/html/TextControlElement.h"
+#include "core/html/forms/TextControlElement.h"
 #include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
@@ -64,8 +64,7 @@ bool InsertLineBreakCommand::ShouldUseBreakElement(
 }
 
 void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
-  DeleteSelection(editing_state);
-  if (editing_state->IsAborted())
+  if (!DeleteSelection(editing_state))
     return;
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();

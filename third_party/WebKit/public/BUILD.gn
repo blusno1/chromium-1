@@ -274,7 +274,6 @@ source_set("blink_headers") {
     "platform/WebNativeScrollBehavior.h",
     "platform/WebNetworkStateNotifier.h",
     "platform/WebNonCopyable.h",
-    "platform/WebOriginTrialTokenStatus.h",
     "platform/WebPageVisibilityState.h",
     "platform/WebPasswordCredential.h",
     "platform/WebPlatformEventListener.h",
@@ -416,7 +415,6 @@ source_set("blink_headers") {
     "platform/modules/presentation/WebPresentationClient.h",
     "platform/modules/presentation/WebPresentationConnection.h",
     "platform/modules/presentation/WebPresentationConnectionCallbacks.h",
-    "platform/modules/presentation/WebPresentationConnectionProxy.h",
     "platform/modules/presentation/WebPresentationController.h",
     "platform/modules/presentation/WebPresentationError.h",
     "platform/modules/presentation/WebPresentationInfo.h",
@@ -510,7 +508,6 @@ source_set("blink_headers") {
     "web/WebElementCollection.h",
     "web/WebEmbeddedWorker.h",
     "web/WebEmbeddedWorkerStartData.h",
-    "web/WebExceptionCode.h",
     "web/WebExternalPopupMenu.h",
     "web/WebExternalPopupMenuClient.h",
     "web/WebFileChooserCompletion.h",
@@ -846,9 +843,6 @@ mojom("mojo_bindings") {
   export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
   export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
-
-  # TODO(crbug.com/699569): Convert to use the new JS bindings.
-  js_bindings_mode = "both"
 }
 
 mojom("android_mojo_bindings") {
@@ -880,9 +874,6 @@ mojom("android_mojo_bindings") {
   export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
   export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
-
-  # TODO(crbug.com/699569): Convert to use the new JS bindings.
-  js_bindings_mode = "both"
 }
 
 # The offscreen_canvas_mojo_bindings is separated from the rest of mojom files

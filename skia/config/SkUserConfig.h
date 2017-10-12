@@ -200,12 +200,16 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 // Remove this after we fixed all the issues related to the new SDF algorithm
 // (https://codereview.chromium.org/1643143002)
-#ifndef    SK_USE_LEGACY_DISTANCE_FIELDS
-#   define SK_USE_LEGACY_DISTANCE_FIELDS
+#ifndef SK_USE_LEGACY_DISTANCE_FIELDS
+#define SK_USE_LEGACY_DISTANCE_FIELDS
 #endif
 
 #ifndef SK_DISABLE_DEFERRED_PROXIES
 #define SK_DISABLE_DEFERRED_PROXIES
+#endif
+
+#ifndef SK_SUPPORT_LEGACY_BLUR_IMAGE
+#define SK_SUPPORT_LEGACY_BLUR_IMAGE
 #endif
 
 #ifndef SK_SUPPORT_LEGACY_DELTA_AA
@@ -224,8 +228,8 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_SUPPORT_LEGACY_SAFESIZE64
 #endif
 
-#ifndef SK_SUPPORT_LEGACY_COMPUTEBYTESIZE_RET_0
-#define SK_SUPPORT_LEGACY_COMPUTEBYTESIZE_RET_0
+#ifndef SK_COLOR_SPACE_XFORM_LEGACY_PIPELINE
+#define SK_COLOR_SPACE_XFORM_LEGACY_PIPELINE
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
@@ -234,10 +238,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
  *  or fall back to lazy runtime initialization. Chrome always wants the latter.
  */
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
-
-/* This flag forces Skia not to use typographic metrics with GDI.
- */
-#define SK_GDI_ALWAYS_USE_TEXTMETRICS_FOR_FONT_METRICS
 
 /* Restrict formats for Skia font matching to SFNT type fonts. */
 #define SK_FONT_CONFIG_INTERFACE_ONLY_ALLOW_SFNT_FONTS

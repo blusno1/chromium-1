@@ -459,6 +459,9 @@
       name: "HeapCompaction",
       status: "stable",
     },
+    {
+      name: "HeapIncrementalMarking",
+    },
     // https://crbug.com/523952 for testing disabling the feature.
     {
       name: "HTMLImportsStyleApplication",
@@ -1093,18 +1096,6 @@
     {
       name: "WebFontsCacheAwareTimeoutAdaptation",
       status: "experimental",
-    },
-    {
-      name: "WebFontsInterventionTrigger",
-    },
-    {
-      name: "WebFontsInterventionV2With2G",
-    },
-    {
-      name: "WebFontsInterventionV2With3G",
-    },
-    {
-      name: "WebFontsInterventionV2WithSlow2G",
     },
     {
       name: "WebGLDraftExtensions",

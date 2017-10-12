@@ -170,8 +170,10 @@ void AddDetailsLocalizedStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_INTERNET_NETWORK_PROXY_ADD_EXCEPTION},
       {"networkProxyAllowShared",
        IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED},
-      {"networkProxyAllowSharedWarningTitle",
-       IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_WARNING_TITLE},
+      {"networkProxyAllowSharedEnableWarningTitle",
+       IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_ENABLE_WARNING_TITLE},
+      {"networkProxyAllowSharedDisableWarningTitle",
+       IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_DISABLE_WARNING_TITLE},
       {"networkProxyAllowSharedWarningMessage",
        IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_WARNING_MESSAGE},
       {"networkProxyAutoConfig",
@@ -217,9 +219,17 @@ void AddConfigLocalizedStrings(content::WebUIDataSource* html_source) {
   } localized_strings[] = {
       {"networkCAUseDefault", IDS_SETTINGS_INTERNET_NETWORK_CA_USE_DEFAULT},
       {"networkCADoNotCheck", IDS_SETTINGS_INTERNET_NETWORK_CA_DO_NOT_CHECK},
+      {"networkCertificateName",
+       IDS_SETTINGS_INTERNET_NETWORK_CERTIFICATE_NAME},
+      {"networkCertificateNameHardwareBacked",
+       IDS_SETTINGS_INTERNET_NETWORK_CERTIFICATE_NAME_HARDWARE_BACKED},
+      {"networkCertificateNoneInstalled",
+       IDS_SETTINGS_INTERNET_NETWORK_CERTIFICATE_NONE_INSTALLED},
       {"networkConfigSaveCredentials",
        IDS_SETTINGS_INTERNET_CONFIG_SAVE_CREDENTIALS},
       {"networkConfigShare", IDS_SETTINGS_INTERNET_CONFIG_SHARE},
+      {"hidePassword", IDS_SETTINGS_PASSWORD_HIDE},
+      {"showPassword", IDS_SETTINGS_PASSWORD_SHOW},
   };
   for (const auto& entry : localized_strings)
     html_source->AddLocalizedString(entry.name, entry.id);

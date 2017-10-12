@@ -180,12 +180,9 @@ void Display::SetOutputIsSecure(bool secure) {
 }
 
 void Display::InitializeRenderer() {
-  // Not relevant for display compositor since it's not delegated.
-  constexpr bool delegated_sync_points_required = false;
   resource_provider_ = base::MakeUnique<cc::DisplayResourceProvider>(
       output_surface_->context_provider(), bitmap_manager_,
-      gpu_memory_buffer_manager_, delegated_sync_points_required,
-      settings_.resource_settings);
+      gpu_memory_buffer_manager_, settings_.resource_settings);
 
   if (output_surface_->context_provider()) {
     DCHECK(texture_mailbox_deleter_);
@@ -447,6 +444,11 @@ const SurfaceId& Display::CurrentSurfaceId() {
 void Display::ForceImmediateDrawAndSwapIfPossible() {
   if (scheduler_)
     scheduler_->ForceImmediateSwapIfPossible();
+}
+
+void Display::SetNeedsOneBeginFrame() {
+  if (scheduler_)
+    scheduler_->SetNeedsOneBeginFrame();
 }
 
 }  // namespace viz

@@ -4,10 +4,6 @@
 
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation_struct_traits.h"
 
-#include "base/trace_event/memory_dump_request_args.h"
-#include "mojo/common/common_custom_types_struct_traits.h"
-#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
-
 namespace mojo {
 
 // static
@@ -100,6 +96,56 @@ bool EnumTraits<memory_instrumentation::mojom::LevelOfDetail,
       return false;
   }
   return true;
+}
+
+// static
+memory_instrumentation::mojom::HeapProfilingMode
+EnumTraits<memory_instrumentation::mojom::HeapProfilingMode,
+           base::trace_event::HeapProfilingMode>::
+    ToMojom(base::trace_event::HeapProfilingMode mode) {
+  switch (mode) {
+    case base::trace_event::HeapProfilingMode::kHeapProfilingModePseudo:
+      return memory_instrumentation::mojom::HeapProfilingMode::PSEUDO_STACK;
+    case base::trace_event::HeapProfilingMode::kHeapProfilingModeNative:
+      return memory_instrumentation::mojom::HeapProfilingMode::NATIVE_STACK;
+    case base::trace_event::HeapProfilingMode::kHeapProfilingModeBackground:
+      return memory_instrumentation::mojom::HeapProfilingMode::BACKGROUND;
+    case base::trace_event::HeapProfilingMode::kHeapProfilingModeTaskProfiler:
+      return memory_instrumentation::mojom::HeapProfilingMode::TASK_PROFILER;
+    case base::trace_event::HeapProfilingMode::kHeapProfilingModeDisabled:
+      return memory_instrumentation::mojom::HeapProfilingMode::DISABLED;
+    case base::trace_event::HeapProfilingMode::kHeapProfilingModeInvalid:
+      break;
+  }
+  NOTREACHED() << "Invalid mode: " << static_cast<uint8_t>(mode);
+  return memory_instrumentation::mojom::HeapProfilingMode::DISABLED;
+}
+
+// static
+bool EnumTraits<memory_instrumentation::mojom::HeapProfilingMode,
+                base::trace_event::HeapProfilingMode>::
+    FromMojom(memory_instrumentation::mojom::HeapProfilingMode input,
+              base::trace_event::HeapProfilingMode* out) {
+  switch (input) {
+    case memory_instrumentation::mojom::HeapProfilingMode::DISABLED:
+      *out = base::trace_event::HeapProfilingMode::kHeapProfilingModeDisabled;
+      return true;
+    case memory_instrumentation::mojom::HeapProfilingMode::TASK_PROFILER:
+      *out =
+          base::trace_event::HeapProfilingMode::kHeapProfilingModeTaskProfiler;
+      return true;
+    case memory_instrumentation::mojom::HeapProfilingMode::BACKGROUND:
+      *out = base::trace_event::HeapProfilingMode::kHeapProfilingModeBackground;
+      return true;
+    case memory_instrumentation::mojom::HeapProfilingMode::PSEUDO_STACK:
+      *out = base::trace_event::HeapProfilingMode::kHeapProfilingModePseudo;
+      return true;
+    case memory_instrumentation::mojom::HeapProfilingMode::NATIVE_STACK:
+      *out = base::trace_event::HeapProfilingMode::kHeapProfilingModeNative;
+      return true;
+  }
+  NOTREACHED() << "Invalid mode: " << static_cast<uint8_t>(input);
+  return false;
 }
 
 // static

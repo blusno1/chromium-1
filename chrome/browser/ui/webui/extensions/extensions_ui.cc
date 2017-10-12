@@ -39,6 +39,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/ui/webui/extensions/chromeos/kiosk_apps_handler.h"
+#include "components/user_manager/user_manager.h"
 #endif
 
 namespace extensions {
@@ -121,6 +122,7 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddLocalizedString("title",
                              IDS_MANAGE_EXTENSIONS_SETTING_WINDOWS_TITLE);
   source->AddLocalizedString("toolbarTitle", IDS_MD_EXTENSIONS_TOOLBAR_TITLE);
+  source->AddLocalizedString("mainMenu", IDS_MD_EXTENSIONS_MENU_BUTTON_LABEL);
   source->AddLocalizedString("search", IDS_MD_EXTENSIONS_SEARCH);
   // TODO(dpapad): Use a single merged string resource for "Clear search".
   source->AddLocalizedString("clearSearch", IDS_DOWNLOAD_CLEAR_SEARCH);
@@ -144,6 +146,7 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_SIDEBAR_GET_MORE_EXTENSIONS);
   source->AddLocalizedString("keyboardShortcuts",
                              IDS_MD_EXTENSIONS_SIDEBAR_KEYBOARD_SHORTCUTS);
+  source->AddLocalizedString("guestModeMessage", IDS_MD_EXTENSIONS_GUEST_MODE);
   source->AddLocalizedString("itemId", IDS_MD_EXTENSIONS_ITEM_ID);
   source->AddLocalizedString("itemInspectViews",
                              IDS_MD_EXTENSIONS_ITEM_INSPECT_VIEWS);
@@ -255,6 +258,9 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddLocalizedString("toolbarPack", IDS_MD_EXTENSIONS_TOOLBAR_PACK);
   source->AddLocalizedString("toolbarUpdateNow",
                              IDS_MD_EXTENSIONS_TOOLBAR_UPDATE_NOW);
+  source->AddLocalizedString(
+      "updateRequiredByPolicy",
+      IDS_MD_EXTENSIONS_DISABLED_UPDATE_REQUIRED_BY_POLICY);
   source->AddLocalizedString("viewBackgroundPage",
                              IDS_EXTENSIONS_BACKGROUND_PAGE);
   source->AddLocalizedString("viewIncognito",
@@ -296,19 +302,18 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
               GURL(extension_urls::GetWebstoreExtensionsCategoryURL()),
               g_browser_process->GetApplicationLocale()).spec()));
 
+#if BUILDFLAG(OPTIMIZE_WEBUI)
+  source->AddResourcePath("crisper.js", IDR_MD_EXTENSIONS_CRISPER_JS);
+  source->SetDefaultResource(IDR_MD_EXTENSIONS_VULCANIZED_HTML);
+  source->UseGzip();
+#else
   // Add all MD Extensions resources.
   for (size_t i = 0; i < kExtensionsResourcesSize; ++i) {
     source->AddResourcePath(kExtensionsResources[i].name,
                             kExtensionsResources[i].value);
   }
-
-  // Also include drag_and_drop_handler.js and shortcut_util.js, which are
-  // shared between the old and new (MD) version of the page.
-  source->AddResourcePath("drag_and_drop_handler.js",
-                          IDR_EXTENSIONS_DRAG_AND_DROP_HANDLER_JS);
-  source->AddResourcePath("shortcut_util.js", IDR_EXTENSIONS_SHORTCUT_UTIL_JS);
-
   source->SetDefaultResource(IDR_MD_EXTENSIONS_EXTENSIONS_HTML);
+#endif
 
   return source;
 }
@@ -338,6 +343,16 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui) : WebUIController(web_ui) {
 
   if (is_md) {
     source = CreateMdExtensionsSource();
+
+    source->AddBoolean(
+        "isGuest",
+#if defined(OS_CHROMEOS)
+        user_manager::UserManager::Get()->IsLoggedInAsGuest() ||
+            user_manager::UserManager::Get()->IsLoggedInAsPublicAccount());
+#else
+        profile->IsOffTheRecord());
+#endif
+
     auto install_extension_handler =
         base::MakeUnique<InstallExtensionHandler>();
     InstallExtensionHandler* handler = install_extension_handler.get();

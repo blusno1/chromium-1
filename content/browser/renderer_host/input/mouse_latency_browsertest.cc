@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -122,7 +125,7 @@ class MouseLatencyBrowserTest : public ContentBrowserTest {
 
   const base::Value& StopTracing() {
     bool success = TracingController::GetInstance()->StopTracing(
-        TracingController::CreateStringSink(
+        TracingController::CreateStringEndpoint(
             base::Bind(&MouseLatencyBrowserTest::OnTraceDataCollected,
                        base::Unretained(this))));
     EXPECT_TRUE(success);
@@ -146,7 +149,8 @@ class MouseLatencyBrowserTest : public ContentBrowserTest {
 // MouseDown events in the case where no swap is generated.
 // Disabled on Android because we don't support synthetic mouse input on
 // Android (crbug.com/723618).
-#if defined(OS_ANDROID)
+// Flaky on Mac10.10 (crbug.com/774169).
+#if defined(OS_ANDROID) || defined(OS_MACOSX)
 #define MAYBE_MouseDownAndUpRecordedWithoutSwap \
   DISABLED_MouseDownAndUpRecordedWithoutSwap
 #else

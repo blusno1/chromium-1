@@ -90,6 +90,8 @@ SavePageResult ToSavePageResult(ArchiverResult archiver_result) {
   return result;
 }
 
+// TODO(carlosk): Canonicalize this suffix adding logic which is already
+// duplicated in many different places around the codebase.
 std::string AddHistogramSuffix(const ClientId& client_id,
                                const char* histogram_name) {
   if (client_id.name_space.empty()) {
@@ -698,6 +700,13 @@ void OfflinePageModelImpl::GetPagesSupportedByDownloads(
                  base::Passed(builder.Build(GetPolicyController())), callback));
 }
 
+const base::FilePath& OfflinePageModelImpl::GetArchiveDirectory(
+    const std::string& name_space) const {
+  if (policy_controller_->IsRemovedOnCacheReset(name_space))
+    return archive_manager_->GetTemporaryArchivesDir();
+  return archive_manager_->GetPersistentArchivesDir();
+}
+
 void OfflinePageModelImpl::CheckMetadataConsistency() {
   DCHECK(is_loaded_);
 
@@ -1177,13 +1186,6 @@ void OfflinePageModelImpl::PostClearStorageIfNeededTask(bool delayed) {
                             base::Bind(&OfflinePageModelImpl::OnStorageCleared,
                                        weak_ptr_factory_.GetWeakPtr())),
       delay);
-}
-
-const base::FilePath& OfflinePageModelImpl::GetArchiveDirectory(
-    const std::string& name_space) const {
-  if (policy_controller_->IsRemovedOnCacheReset(name_space))
-    return archive_manager_->GetTemporaryArchivesDir();
-  return archive_manager_->GetPersistentArchivesDir();
 }
 
 void OfflinePageModelImpl::RunWhenLoaded(const base::Closure& task) {

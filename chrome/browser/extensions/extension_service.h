@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/extensions/blacklist.h"
 #include "chrome/browser/extensions/extension_management.h"
@@ -151,8 +152,6 @@ class ExtensionServiceInterface
 
   // Adds |extension| to this ExtensionService and notifies observers that the
   // extension has been loaded.
-  // TODO(michaelpg): Refactor this function into single-purpose functions and
-  // migrate common code into ExtensionRegistrar.
   virtual void AddExtension(const extensions::Extension* extension) = 0;
 
   // Check if we have preferences for the component extension and, if not or if
@@ -181,7 +180,8 @@ class ExtensionService
       public content::NotificationObserver,
       public extensions::Blacklist::Observer,
       public extensions::ExtensionManagement::Observer,
-      public UpgradeObserver {
+      public UpgradeObserver,
+      public extensions::ExtensionRegistrar::Delegate {
  public:
   // Attempts to uninstall an extension from a given ExtensionService. Returns
   // true iff the target extension exists.
@@ -297,7 +297,7 @@ class ExtensionService
   // This state is stored in preferences, so persists until Chrome restarts.
   //
   // Component, external component and whitelisted policy installed extensions
-  // are exempt from being Blocked (see CanBlockExtension).
+  // are exempt from being Blocked (see CanBlockExtension in .cc file).
   void BlockAllExtensions();
 
   // All blocked extensions are reverted to their previous state, and are
@@ -319,12 +319,16 @@ class ExtensionService
 
   // Informs the service that an extension's files are in place for loading.
   //
-  // |extension|     the extension
-  // |page_ordinal|  the location of the extension in the app launcher
-  // |install_flags| a bitmask of extensions::InstallFlags
-  void OnExtensionInstalled(const extensions::Extension* extension,
-                            const syncer::StringOrdinal& page_ordinal,
-                            int install_flags);
+  // |extension|            the extension
+  // |page_ordinal|         the location of the extension in the app launcher
+  // |install_flags|        a bitmask of extensions::InstallFlags
+  // |dnr_ruleset_checksum| Checksum of the indexed ruleset for the Declarative
+  //                        Net Request API.
+  void OnExtensionInstalled(
+      const extensions::Extension* extension,
+      const syncer::StringOrdinal& page_ordinal,
+      int install_flags,
+      const base::Optional<int>& dnr_ruleset_checksum = base::nullopt);
   void OnExtensionInstalled(const extensions::Extension* extension,
                             const syncer::StringOrdinal& page_ordinal) {
     OnExtensionInstalled(extension,
@@ -346,7 +350,7 @@ class ExtensionService
   static void RecordPermissionMessagesHistogram(
       const extensions::Extension* extension, const char* histogram);
 
-  // Unloads the given extension and mark the extension as terminated. This
+  // Unloads the given extension and marks the extension as terminated. This
   // doesn't notify the user that the extension was terminated, if such a
   // notification is desired the calling code is responsible for doing that.
   void TerminateExtension(const std::string& extension_id);
@@ -421,10 +425,6 @@ class ExtensionService
   void BlacklistExtensionForTest(const std::string& extension_id);
 
 #if defined(UNIT_TEST)
-  void TrackTerminatedExtensionForTest(const extensions::Extension* extension) {
-    TrackTerminatedExtension(extension->id());
-  }
-
   void FinishInstallationForTest(const extensions::Extension* extension) {
     FinishInstallation(extension);
   }
@@ -467,6 +467,16 @@ class ExtensionService
   // UpgradeObserver implementation.
   void OnUpgradeRecommended() override;
 
+  // extensions::ExtensionRegistrar::Delegate implementation.
+  void PostActivateExtension(
+      scoped_refptr<const extensions::Extension> extension,
+      bool is_newly_added) override;
+  void PostDeactivateExtension(
+      scoped_refptr<const extensions::Extension> extension) override;
+  bool CanEnableExtension(const extensions::Extension* extension) override;
+  bool CanDisableExtension(const extensions::Extension* extension) override;
+  bool ShouldBlockExtension(const extensions::Extension* extension) override;
+
   // Similar to FinishInstallation, but first checks if there still is an update
   // pending for the extension, and makes sure the extension is still idle.
   void MaybeFinishDelayedInstallation(const std::string& extension_id);
@@ -496,35 +506,18 @@ class ExtensionService
   // external extensions.
   void OnAllExternalProvidersReady();
 
-  // Adds the given extension id to the list of terminated extensions if
-  // it is not already there and unloads it.
-  void TrackTerminatedExtension(const std::string& extension_id);
-
-  // Removes the extension with the given id from the list of
-  // terminated extensions if it is there.
-  void UntrackTerminatedExtension(const std::string& id);
-
   // Update preferences for a new or updated extension; notify observers that
   // the extension is installed, e.g., to update event handlers on background
   // pages; and perform other extension install tasks before calling
   // AddExtension.
   // |install_flags| is a bitmask of extensions::InstallFlags.
-  void AddNewOrUpdatedExtension(const extensions::Extension* extension,
-                                extensions::Extension::State initial_state,
-                                int install_flags,
-                                const syncer::StringOrdinal& page_ordinal,
-                                const std::string& install_parameter);
-
-  // Handles sending notification that |extension| was loaded.
-  // TODO(michaelpg): Move to a delegate provided to ExtensionRegistrar, so
-  // ExtensionRegistrar is responsible for calling this at the right times.
-  void NotifyExtensionLoaded(const extensions::Extension* extension);
-
-  // Handles updating the profile when |extension| is disabled or removed.
-  // TODO(michaelpg): Move to a delegate provided to ExtensionRegistrar, so
-  // ExtensionRegistrar is responsible for calling this at the right times.
-  void PostDeactivateExtension(
-      scoped_refptr<const extensions::Extension> extension);
+  void AddNewOrUpdatedExtension(
+      const extensions::Extension* extension,
+      extensions::Extension::State initial_state,
+      int install_flags,
+      const syncer::StringOrdinal& page_ordinal,
+      const std::string& install_parameter,
+      const base::Optional<int>& dnr_ruleset_checksum);
 
   // Common helper to finish installing the given extension.
   void FinishInstallation(const extensions::Extension* extension);
@@ -597,6 +590,10 @@ class ExtensionService
 
   // Uninstall extensions that have been migrated to component extensions.
   void UninstallMigratedExtensions();
+
+  // Updates reloading_extensions_ and unloaded_extension_paths_ before the
+  // extension is unloaded.
+  void UpdateForUnloadingExtension(const extensions::ExtensionId& extension_id);
 
   const base::CommandLine* command_line_ = nullptr;
 
@@ -700,10 +697,6 @@ class ExtensionService
   // Store the ids of reloading extensions. We use this to re-enable extensions
   // which were disabled for a reload.
   std::set<std::string> reloading_extensions_;
-
-  // A set of the extension ids currently being terminated. We use this to
-  // avoid trying to unload the same extension twice.
-  std::set<std::string> extensions_being_terminated_;
 
   // The controller for the UI that alerts the user about any blacklisted
   // extensions.

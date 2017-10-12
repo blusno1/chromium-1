@@ -29,7 +29,8 @@ import zipfile
 # Reverting problematic clang rolls is safe, though.
 CLANG_REVISION = '313786'
 
-use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
+use_head_revision = bool(os.environ.get('LLVM_FORCE_HEAD_REVISION', '0')
+                         in ('1', 'YES'))
 if use_head_revision:
   CLANG_REVISION = 'HEAD'
 
@@ -388,11 +389,10 @@ def VeryifyVersionOfBuiltClangMatchesVERSION():
 
 
 def UpdateClang(args):
-  print 'Updating Clang to %s...' % PACKAGE_VERSION
-
   if ReadStampFile() == PACKAGE_VERSION and not args.force_local_build:
-    print 'Clang is already up to date.'
     return 0
+
+  print 'Updating Clang to %s...' % PACKAGE_VERSION
 
   # Reset the stamp file in case the build is unsuccessful.
   WriteStampFile('')
@@ -453,7 +453,7 @@ def UpdateClang(args):
     RunCommand(['svn', 'revert', f])
 
   Checkout('Clang', LLVM_REPO_URL + '/cfe/trunk', CLANG_DIR)
-  if sys.platform != 'darwin':
+  if True:
     Checkout('LLD', LLVM_REPO_URL + '/lld/trunk', LLD_DIR)
   elif os.path.exists(LLD_DIR):
     # In case someone sends a tryjob that temporary adds lld to the checkout,

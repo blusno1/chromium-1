@@ -372,8 +372,6 @@ const FeatureEntry::Choice kChromeHomeSwipeLogicChoices[] = {
     {flags_ui::kGenericExperimentChoiceDefault, "", ""},
     {flag_descriptions::kChromeHomeSwipeLogicRestrictArea,
      switches::kChromeHomeSwipeLogicType, "restrict-area"},
-    {flag_descriptions::kChromeHomeSwipeLogicButtonOnly,
-     switches::kChromeHomeSwipeLogicType, "button-only"},
 };
 
 #endif  // OS_ANDROID
@@ -751,22 +749,6 @@ const FeatureEntry::Choice kEnableUseZoomForDSFChoices[] = {
      switches::kEnableUseZoomForDSF, "true"},
     {flag_descriptions::kEnableUseZoomForDsfChoiceDisabled,
      switches::kEnableUseZoomForDSF, "false"},
-};
-
-const FeatureEntry::Choice kEnableWebFontsInterventionV2Choices[] = {
-    {flag_descriptions::kEnableWebfontsInterventionV2ChoiceDefault, "", ""},
-    {flag_descriptions::kEnableWebfontsInterventionV2ChoiceEnabledWith2g,
-     switches::kEnableWebFontsInterventionV2,
-     switches::kEnableWebFontsInterventionV2SwitchValueEnabledWith2G},
-    {flag_descriptions::kEnableWebfontsInterventionV2ChoiceEnabledWith3g,
-     switches::kEnableWebFontsInterventionV2,
-     switches::kEnableWebFontsInterventionV2SwitchValueEnabledWith3G},
-    {flag_descriptions::kEnableWebfontsInterventionV2ChoiceEnabledWithSlow2g,
-     switches::kEnableWebFontsInterventionV2,
-     switches::kEnableWebFontsInterventionV2SwitchValueEnabledWithSlow2G},
-    {flag_descriptions::kEnableWebfontsInterventionV2ChoiceDisabled,
-     switches::kEnableWebFontsInterventionV2,
-     switches::kEnableWebFontsInterventionV2SwitchValueDisabled},
 };
 
 const FeatureEntry::Choice kTLS13VariantChoices[] = {
@@ -1919,16 +1901,16 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-chrome-home", flag_descriptions::kChromeHomeName,
      flag_descriptions::kChromeHomeDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kChromeHomeFeature)},
-    {"always-show-chrome-home-promo", flag_descriptions::kChromeHomePromoName,
+    {"enable-chrome-home-promo", flag_descriptions::kChromeHomePromoName,
      flag_descriptions::kChromeHomePromoDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kChromeHomePromo)},
     {"enable-chrome-home-doodle", flag_descriptions::kChromeHomeDoodleName,
      flag_descriptions::kChromeHomeDoodleDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kChromeHomeDoodle)},
-    {"enable-chrome-home-expand-button",
-     flag_descriptions::kChromeHomeExpandButtonName,
-     flag_descriptions::kChromeHomeExpandButtonDescription, kOsAndroid,
-     FEATURE_VALUE_TYPE(chrome::android::kChromeHomeExpandButton)},
+    {"enable-chrome-home-opt-out-snackbar",
+     flag_descriptions::kChromeHomeOptOutSnackbarName,
+     flag_descriptions::kChromeHomeOptOutSnackbarDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kChromeHomeOptOutSnackbar)},
     {"enable-chrome-home-personalized-omnibox-suggestions",
      flag_descriptions::kChromeHomePersonalizedOmniboxSuggestionsName,
      flag_descriptions::kChromeHomePersonalizedOmniboxSuggestionsDescription,
@@ -2123,6 +2105,9 @@ const FeatureEntry kFeatureEntries[] = {
          previews::features::kClientLoFi,
          kClientPlaceholdersForServerLoFiFeatureVariations,
          "PreviewsClientLoFi")},
+    {"enable-noscript-previews", flag_descriptions::kEnableNoScriptPreviewsName,
+     flag_descriptions::kEnableNoScriptPreviewsDescription, kOsAll,
+     FEATURE_VALUE_TYPE(previews::features::kNoScriptPreviews)},
     {"allow-insecure-localhost", flag_descriptions::kAllowInsecureLocalhostName,
      flag_descriptions::kAllowInsecureLocalhostDescription, kOsAll,
      SINGLE_VALUE_TYPE(switches::kAllowInsecureLocalhost)},
@@ -2400,9 +2385,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableMaterialDesignBookmarksName,
      flag_descriptions::kEnableMaterialDesignBookmarksDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kMaterialDesignBookmarks)},
-    {"enable-md-feedback", flag_descriptions::kEnableMaterialDesignFeedbackName,
-     flag_descriptions::kEnableMaterialDesignFeedbackDescription, kOsDesktop,
-     SINGLE_VALUE_TYPE(switches::kEnableMaterialDesignFeedback)},
     {"enable-md-incognito-ntp",
      flag_descriptions::kMaterialDesignIncognitoNTPName,
      flag_descriptions::kMaterialDesignIncognitoNTPDescription, kOsAll,
@@ -2463,14 +2445,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAutomaticTabDiscardingDescription, kOsWin | kOsMac,
      FEATURE_VALUE_TYPE(features::kAutomaticTabDiscarding)},
 #endif  // OS_WIN || OS_MACOSX
-    {"enable-webfonts-intervention-v2",
-     flag_descriptions::kEnableWebfontsInterventionName,
-     flag_descriptions::kEnableWebfontsInterventionDescription, kOsAll,
-     MULTI_VALUE_TYPE(kEnableWebFontsInterventionV2Choices)},
-    {"enable-webfonts-intervention-trigger",
-     flag_descriptions::kEnableWebfontsInterventionTriggerName,
-     flag_descriptions::kEnableWebfontsInterventionTriggerDescription, kOsAll,
-     SINGLE_VALUE_TYPE(switches::kEnableWebFontsInterventionTrigger)},
     {"tls13-variant", flag_descriptions::kTLS13VariantName,
      flag_descriptions::kTLS13VariantDescription, kOsAll,
      MULTI_VALUE_TYPE(kTLS13VariantChoices)},
@@ -2946,6 +2920,11 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableAutofillCreditCardUploadNewUiName,
      flag_descriptions::kEnableAutofillCreditCardUploadNewUiDescription,
      kOsDesktop, FEATURE_VALUE_TYPE(autofill::kAutofillUpstreamShowNewUi)},
+    {"enable-autofill-credit-card-ablation-experiment",
+     flag_descriptions::kEnableAutofillCreditCardAblationExperimentDisplayName,
+     flag_descriptions::kEnableAutofillCreditCardAblationExperimentDescription,
+     kOsAll,
+     FEATURE_VALUE_TYPE(autofill::kAutofillCreditCardAblationExperiment)},
     {"enable-autofill-credit-card-bank-name-display",
      flag_descriptions::kEnableAutofillCreditCardBankNameDisplayName,
      flag_descriptions::kEnableAutofillCreditCardBankNameDisplayDescription,
@@ -3488,6 +3467,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kDisableTabletAutohideTitlebarsDescription, kOsCrOS,
      SINGLE_DISABLE_VALUE_TYPE(
          ash::switches::kAshDisableTabletAutohideTitlebars)},
+
+    {"enable-tablet-splitview", flag_descriptions::kEnableTabletSplitViewName,
+     flag_descriptions::kEnableTabletSplitViewDescription, kOsCrOS,
+     SINGLE_VALUE_TYPE(ash::switches::kAshEnableTabletSplitView)},
 #endif  // defined(OS_CHROMEOS)
 
     {"enable-parallel-downloading", flag_descriptions::kParallelDownloadingName,

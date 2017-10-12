@@ -2522,7 +2522,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   DISALLOW_COPY_AND_ASSIGN(GLES2DecoderImpl);
 };
 
-const GLES2DecoderImpl::CommandInfo GLES2DecoderImpl::command_info[] = {
+constexpr GLES2DecoderImpl::CommandInfo GLES2DecoderImpl::command_info[] = {
 #define GLES2_CMD_OP(name)                                   \
   {                                                          \
     &GLES2DecoderImpl::Handle##name, cmds::name::kArgFlags,  \
@@ -10430,10 +10430,8 @@ error::Error GLES2DecoderImpl::HandleDrawArraysInstancedANGLE(
   if (!features().angle_instanced_arrays)
     return error::kUnknownCommand;
 
-  return DoDrawArrays("glDrawArraysIntancedANGLE",
-                      true,
-                      static_cast<GLenum>(c.mode),
-                      static_cast<GLint>(c.first),
+  return DoDrawArrays("glDrawArraysInstancedANGLE", true,
+                      static_cast<GLenum>(c.mode), static_cast<GLint>(c.first),
                       static_cast<GLsizei>(c.count),
                       static_cast<GLsizei>(c.primcount));
 }

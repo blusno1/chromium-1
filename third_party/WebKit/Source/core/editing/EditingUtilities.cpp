@@ -53,12 +53,12 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLDivElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLIElement.h"
 #include "core/html/HTMLParagraphElement.h"
 #include "core/html/HTMLSpanElement.h"
 #include "core/html/HTMLTableCellElement.h"
 #include "core/html/HTMLUListElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html_element_factory.h"
 #include "core/html_names.h"
 #include "core/input_type_names.h"
@@ -1120,8 +1120,8 @@ static HTMLElement* FirstInSpecialElement(const Position& pos) {
     if (IsSpecialHTMLElement(runner)) {
       HTMLElement* special_element = ToHTMLElement(&runner);
       VisiblePosition v_pos = CreateVisiblePosition(pos);
-      VisiblePosition first_in_element = CreateVisiblePosition(
-          FirstPositionInOrBeforeNodeDeprecated(special_element));
+      VisiblePosition first_in_element =
+          CreateVisiblePosition(FirstPositionInOrBeforeNode(*special_element));
       if (IsDisplayInsideTable(special_element) &&
           v_pos.DeepEquivalent() ==
               NextPositionOf(first_in_element).DeepEquivalent())
@@ -1142,8 +1142,8 @@ static HTMLElement* LastInSpecialElement(const Position& pos) {
     if (IsSpecialHTMLElement(runner)) {
       HTMLElement* special_element = ToHTMLElement(&runner);
       VisiblePosition v_pos = CreateVisiblePosition(pos);
-      VisiblePosition last_in_element = CreateVisiblePosition(
-          LastPositionInOrAfterNodeDeprecated(special_element));
+      VisiblePosition last_in_element =
+          CreateVisiblePosition(LastPositionInOrAfterNode(*special_element));
       if (IsDisplayInsideTable(special_element) &&
           v_pos.DeepEquivalent() ==
               PreviousPositionOf(last_in_element).DeepEquivalent())

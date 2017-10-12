@@ -138,20 +138,28 @@ static base::File::Error GetDirectoryEntries(const FilePath& dir_param,
   return return_value;
 #else
   const std::string dir_string = dir_param.AsUTF8Unsafe();
-  DIR* dir = opendir(dir_string.c_str());
-  if (!dir)
-    return base::File::OSErrorToFileError(errno);
-  struct dirent* dent;
   errno = 0;
+  DIR* dir = opendir(dir_string.c_str());
+  int saved_errno;
+  if (!dir) {
+    saved_errno = errno;
+    VLOG(1) << "Error " << saved_errno << " opening directory \"" << dir_string
+            << '"';
+    return base::File::OSErrorToFileError(saved_errno);
+  }
+  struct dirent* dent;
   while ((dent = readdir(dir))) {
     if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
       continue;
     result->push_back(FilePath::FromUTF8Unsafe(dent->d_name));
   }
-  int saved_errno = errno;
+  saved_errno = errno;
   closedir(dir);
-  if (saved_errno != 0)
+  if (saved_errno != 0) {
+    VLOG(1) << "Error " << saved_errno << " listing entries in \"" << dir_string
+            << '"';
     return base::File::OSErrorToFileError(saved_errno);
+  }
   return base::File::FILE_OK;
 #endif
 }
@@ -1396,12 +1404,20 @@ leveldb::Status OpenDB(const leveldb_env::Options& options,
                        const std::string& name,
                        std::unique_ptr<leveldb::DB>* dbptr) {
   DBTracker::TrackedDB* tracked_db = nullptr;
-  leveldb::Status status =
-      DBTracker::GetInstance()->OpenDatabase(options, name, &tracked_db);
-  if (status.ok()) {
-    dbptr->reset(tracked_db);
+  leveldb::Status s;
+  if (options.env && leveldb_chrome::IsMemEnv(options.env)) {
+    // Zero size cache to prevent cache hits.
+    static leveldb::Cache* s_empty_cache = leveldb::NewLRUCache(0);
+    Options mem_options = options;
+    mem_options.block_cache = s_empty_cache;
+    mem_options.write_buffer_size = 0;  // minimum size.
+    s = DBTracker::GetInstance()->OpenDatabase(mem_options, name, &tracked_db);
+  } else {
+    s = DBTracker::GetInstance()->OpenDatabase(options, name, &tracked_db);
   }
-  return status;
+  if (s.ok())
+    dbptr->reset(tracked_db);
+  return s;
 }
 
 base::StringPiece MakeStringPiece(const leveldb::Slice& s) {

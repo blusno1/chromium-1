@@ -4,6 +4,12 @@
   <message name="IDS_MD_EXTENSIONS_DEVELOPER_MODE" desc="The text displayed next to the checkbox to toggle developer mode in the extensions page.">
     Developer mode
   </message>
+  <message name="IDS_MD_EXTENSIONS_DISABLED_UPDATE_REQUIRED_BY_POLICY" desc="Text shown in the extensions settings for extensions disabled due to minimum version requirement from enterprise policy">
+    This extension is outdated and disabled by enterprise policy. It might become enabled automatically when a newer version is available.
+  </message>
+  <message name="IDS_MD_EXTENSIONS_MENU_BUTTON_LABEL" desc="Tooltips for the sidebar menu button.">
+    Main menu
+  </message>
   <message name="IDS_MD_EXTENSIONS_ERROR_PAGE_HEADING" desc="The heading of the page displaying an extension's errors.">
     Errors
   </message>
@@ -18,6 +24,9 @@
   </message>
   <message name="IDS_MD_EXTENSIONS_ITEM_ERRORS" desc="The label of the button to bring the user to the page showing an extension's errors.">
     Errors
+  </message>
+  <message name="IDS_MD_EXTENSIONS_GUEST_MODE" desc="The text displayed when viewing the page under guest-mode to indicate that guests cannot use this feature.">
+    Extension management is not available to Guest users. Please sign in to manage extensions.
   </message>
   <message name="IDS_MD_EXTENSIONS_ITEM_ID" desc="The text for the label next to the extension id.">
     &lt;span&gt;ID:&lt;/span&gt;<ph name="EXTENSION_ID">$1<ex>cfhdojbkjhnklbpkdaibdccddilifddb</ex></ph>

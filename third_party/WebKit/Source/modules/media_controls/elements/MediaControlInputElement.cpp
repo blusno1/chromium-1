@@ -132,8 +132,11 @@ void MediaControlInputElement::UpdateShownState() {
 }
 
 void MediaControlInputElement::DefaultEventHandler(Event* event) {
-  if (event->type() == EventTypeNames::click)
+  if (event->type() == EventTypeNames::click) {
+    if (IsOverflowElement())
+      GetMediaControls().MaybeRecordOverflowTimeToAction();
     MaybeRecordInteracted();
+  }
 
   HTMLInputElement::DefaultEventHandler(event);
 }
@@ -156,8 +159,6 @@ void MediaControlInputElement::MaybeRecordInteracted() {
 bool MediaControlInputElement::IsOverflowElement() const {
   return is_overflow_element_;
 }
-
-void MediaControlInputElement::UpdateDisplayType() {}
 
 bool MediaControlInputElement::IsMouseFocusable() const {
   return false;
@@ -185,6 +186,11 @@ void MediaControlInputElement::SetClass(const AtomicString& class_name,
     classList().Add(class_name);
   else
     classList().Remove(class_name);
+}
+
+void MediaControlInputElement::UpdateDisplayType() {
+  if (overflow_element_)
+    overflow_element_->UpdateDisplayType();
 }
 
 DEFINE_TRACE(MediaControlInputElement) {

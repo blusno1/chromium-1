@@ -64,7 +64,7 @@
 #include "core/html/HTMLFontElement.h"
 #include "core/html/HTMLHRElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/TextControlElement.h"
+#include "core/html/forms/TextControlElement.h"
 #include "core/html_names.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutBox.h"
@@ -2132,9 +2132,6 @@ static bool EnableCaretInEditableText(LocalFrame& frame,
 
 static bool EnabledCopy(LocalFrame& frame, Event*, EditorCommandSource source) {
   if (!CanWriteClipboard(frame, source))
-    return false;
-  if (source == kCommandFromMenuOrKeyBinding &&
-      !frame.Selection().SelectionHasFocus())
     return false;
   return frame.GetEditor().CanDHTMLCopy() || frame.GetEditor().CanCopy();
 }

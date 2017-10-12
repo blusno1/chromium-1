@@ -41,7 +41,7 @@
 #include "core/frame/Settings.h"
 #include "core/html/HTMLDialogElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/input/ContextMenuAllowedScope.h"
 #include "core/input/EventHandler.h"
@@ -2484,6 +2484,11 @@ const AtomicString& AXObject::InternalRoleName(AccessibilityRole role) {
 
 VisiblePosition AXObject::VisiblePositionForIndex(int) const {
   return VisiblePosition();
+}
+
+std::ostream& operator<<(std::ostream& stream, const AXObject& obj) {
+  return stream << AXObject::InternalRoleName(obj.RoleValue()) << ": "
+                << obj.ComputedName();
 }
 
 DEFINE_TRACE(AXObject) {

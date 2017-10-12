@@ -22,6 +22,7 @@
 #include "core/layout/ng/ng_layout_input_node.h"
 #include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_length_utils.h"
+#include "core/layout/ng/ng_page_layout_algorithm.h"
 #include "core/layout/ng/ng_writing_mode.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/runtime_enabled_features.h"
@@ -30,16 +31,30 @@ namespace blink {
 
 namespace {
 
+inline LayoutMultiColumnFlowThread* GetFlowThread(const LayoutBox& box) {
+  if (!box.IsLayoutBlockFlow())
+    return nullptr;
+  return ToLayoutBlockFlow(box).MultiColumnFlowThread();
+}
+
 RefPtr<NGLayoutResult> LayoutWithAlgorithm(const ComputedStyle& style,
                                            NGBlockNode node,
+                                           LayoutBox* box,
                                            const NGConstraintSpace& space,
                                            NGBreakToken* break_token) {
-  if (style.SpecifiesColumns())
-    return NGColumnLayoutAlgorithm(node, space,
-                                   ToNGBlockBreakToken(break_token))
-        .Layout();
-  return NGBlockLayoutAlgorithm(node, space, ToNGBlockBreakToken(break_token))
-      .Layout();
+  auto* token = ToNGBlockBreakToken(break_token);
+  // If there's a legacy layout box, we can only do block fragmentation if we
+  // would have done block fragmentation with the legacy engine. Otherwise
+  // writing data back into the legacy tree will fail. Look for the flow
+  // thread.
+  if (!box || GetFlowThread(*box)) {
+    if (style.IsOverflowPaged())
+      return NGPageLayoutAlgorithm(node, space, token).Layout();
+    if (style.SpecifiesColumns())
+      return NGColumnLayoutAlgorithm(node, space, token).Layout();
+    NOTREACHED();
+  }
+  return NGBlockLayoutAlgorithm(node, space, token).Layout();
 }
 
 bool IsFloatFragment(const NGPhysicalFragment& fragment) {
@@ -49,16 +64,12 @@ bool IsFloatFragment(const NGPhysicalFragment& fragment) {
 
 void UpdateLegacyMultiColumnFlowThread(
     NGBlockNode node,
-    LayoutBox* layout_box,
+    LayoutMultiColumnFlowThread* flow_thread,
     const NGConstraintSpace& constraint_space,
     const NGPhysicalBoxFragment& fragment) {
-  LayoutBlockFlow* multicol = ToLayoutBlockFlow(layout_box);
-  LayoutMultiColumnFlowThread* flow_thread = multicol->MultiColumnFlowThread();
-  if (!flow_thread)
-    return;
-
   NGWritingMode writing_mode = constraint_space.WritingMode();
   LayoutUnit flow_end;
+  LayoutUnit column_block_size;
   bool has_processed_first_child = false;
 
   // Stitch the columns together.
@@ -74,32 +85,35 @@ void UpdateLegacyMultiColumnFlowThread(
       flow_thread->SetX(child->Offset().left);
       flow_thread->SetY(child->Offset().top);
       flow_thread->SetLogicalWidth(child_fragment.InlineSize());
+      column_block_size = child_fragment.BlockSize();
       has_processed_first_child = true;
     }
   }
 
   if (LayoutMultiColumnSet* column_set = flow_thread->FirstMultiColumnSet()) {
     NGFragment logical_fragment(writing_mode, fragment);
-    auto border_scrollbar_padding = CalculateBorderScrollbarPadding(
-        constraint_space, layout_box->StyleRef(), node);
+    auto border_scrollbar_padding =
+        CalculateBorderScrollbarPadding(constraint_space, node.Style(), node);
 
     column_set->SetLogicalLeft(border_scrollbar_padding.inline_start);
     column_set->SetLogicalTop(border_scrollbar_padding.block_start);
     column_set->SetLogicalWidth(logical_fragment.InlineSize() -
                                 border_scrollbar_padding.InlineSum());
-    column_set->SetLogicalHeight(logical_fragment.BlockSize() -
-                                 border_scrollbar_padding.BlockSum());
+    column_set->SetLogicalHeight(column_block_size);
     column_set->EndFlow(flow_end);
     column_set->UpdateFromNG();
   }
   // TODO(mstensho): Update all column boxes, not just the first column set
   // (like we do above). This is needed to support column-span:all.
   for (LayoutBox* column_box = flow_thread->FirstMultiColumnBox(); column_box;
-       column_box = column_box->NextSiblingMultiColumnBox())
+       column_box = column_box->NextSiblingMultiColumnBox()) {
     column_box->ClearNeedsLayout();
+    column_box->UpdateAfterLayout();
+  }
 
   flow_thread->ValidateColumnSets();
   flow_thread->SetLogicalHeight(flow_end);
+  flow_thread->UpdateAfterLayout();
   flow_thread->ClearNeedsLayout();
 }
 
@@ -123,7 +137,7 @@ RefPtr<NGLayoutResult> NGBlockNode::Layout(
   }
 
   layout_result =
-      LayoutWithAlgorithm(Style(), *this, constraint_space, break_token);
+      LayoutWithAlgorithm(Style(), *this, box_, constraint_space, break_token);
   if (box_->IsLayoutNGBlockFlow()) {
     ToLayoutNGBlockFlow(box_)->SetCachedLayoutResult(
         constraint_space, break_token, layout_result);
@@ -284,7 +298,25 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
     box_->SetMargin(ComputePhysicalMargins(constraint_space, Style()));
   }
 
-  PlaceChildrenInLayoutBox(constraint_space, physical_fragment);
+  LayoutMultiColumnFlowThread* flow_thread = GetFlowThread(*box_);
+  if (flow_thread) {
+    PlaceChildrenInFlowThread(constraint_space, physical_fragment);
+  } else {
+    NGPhysicalOffset offset_from_start;
+    if (constraint_space.HasBlockFragmentation()) {
+      // Need to include any block space that this container has used in
+      // previous fragmentainers. The offset of children will be relative to
+      // the container, in flow thread coordinates, i.e. the model where
+      // everything is represented as one single strip, rather than being
+      // sliced and translated into columns.
+
+      // TODO(mstensho): writing modes
+      offset_from_start.top =
+          PreviouslyUsedBlockSpace(constraint_space, physical_fragment);
+    }
+    PlaceChildrenInLayoutBox(constraint_space, physical_fragment,
+                             offset_from_start);
+  }
 
   if (box_->IsLayoutBlock() && IsLastFragment(physical_fragment)) {
     LayoutBlock* block = ToLayoutBlock(box_);
@@ -296,6 +328,12 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
           PreviouslyUsedBlockSpace(constraint_space, physical_fragment);
     }
     block->LayoutPositionedObjects(true);
+
+    if (flow_thread) {
+      UpdateLegacyMultiColumnFlowThread(*this, flow_thread, constraint_space,
+                                        physical_fragment);
+    }
+
     // |ComputeOverflow()| below calls |AddOverflowFromChildren()|, which
     // computes visual overflow from |RootInlineBox| if |ChildrenInline()|.
     block->ComputeOverflow(intrinsic_block_size -
@@ -312,34 +350,12 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
     if (block_flow->CreatesNewFormattingContext())
       block_flow->AddOverflowFromFloats();
   }
-  if (box_->Style()->SpecifiesColumns()) {
-    UpdateLegacyMultiColumnFlowThread(*this, box_, constraint_space,
-                                      physical_fragment);
-  }
 }
 
 void NGBlockNode::PlaceChildrenInLayoutBox(
     const NGConstraintSpace& constraint_space,
-    const NGPhysicalBoxFragment& physical_fragment) {
-  if (box_->IsLayoutBlockFlow() &&
-      ToLayoutBlockFlow(box_)->MultiColumnFlowThread()) {
-    PlaceChildrenInFlowThread(constraint_space, physical_fragment);
-    return;
-  }
-
-  NGPhysicalOffset offset_from_start;
-  if (constraint_space.HasBlockFragmentation()) {
-    // Need to include any block space that this container has used in previous
-    // fragmentainers. The offset of children will be relative to the
-    // container, in flow thread coordinates, i.e. the model where everything
-    // is represented as one single strip, rather than being sliced and
-    // translated into columns.
-
-    // TODO(mstensho): writing modes
-    offset_from_start.top =
-        PreviouslyUsedBlockSpace(constraint_space, physical_fragment);
-  }
-
+    const NGPhysicalBoxFragment& physical_fragment,
+    const NGPhysicalOffset& offset_from_start) {
   for (const auto& child_fragment : physical_fragment.Children()) {
     auto* child_object = child_fragment->GetLayoutObject();
     DCHECK(child_fragment->IsPlaced());
@@ -378,17 +394,14 @@ void NGBlockNode::PlaceChildrenInFlowThread(
     // Each anonymous child of a multicol container constitutes one column.
     DCHECK(child->IsPlaced());
     DCHECK(child->GetLayoutObject() == box_);
+
+    // TODO(mstensho): writing modes
+    NGPhysicalOffset offset(LayoutUnit(), flowthread_offset);
+
+    // Position each child node in the first column that they occur, relatively
+    // to the block-start of the flow thread.
     const auto* column = ToNGPhysicalBoxFragment(child.get());
-    for (const auto& actual_child : column->Children()) {
-      // Position each child node in the first column that they occur,
-      // relatively to the block-start of the flow thread.
-      const auto& box_fragment = *ToNGPhysicalBoxFragment(actual_child.get());
-      if (!IsFirstFragment(constraint_space, box_fragment))
-        continue;
-      // TODO(mstensho): writing modes
-      NGPhysicalOffset offset(LayoutUnit(), flowthread_offset);
-      CopyChildFragmentPosition(box_fragment, offset);
-    }
+    PlaceChildrenInLayoutBox(constraint_space, *column, offset);
     const auto* token = ToNGBlockBreakToken(column->BreakToken());
     flowthread_offset = token->UsedBlockSize();
   }

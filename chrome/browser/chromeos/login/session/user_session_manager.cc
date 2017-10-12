@@ -405,6 +405,7 @@ UserSessionManager::UserSessionManager()
       weak_factory_(this) {
   net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
   user_manager::UserManager::Get()->AddSessionStateObserver(this);
+  user_manager::UserManager::Get()->AddObserver(this);
 }
 
 UserSessionManager::~UserSessionManager() {
@@ -412,8 +413,10 @@ UserSessionManager::~UserSessionManager() {
   // still exists.
   // TODO(nkostylev): fix order of destruction of UserManager
   // / UserSessionManager objects.
-  if (user_manager::UserManager::IsInitialized())
+  if (user_manager::UserManager::IsInitialized()) {
     user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
+    user_manager::UserManager::Get()->RemoveObserver(this);
+  }
   net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
 }
 
@@ -569,7 +572,8 @@ void UserSessionManager::RestoreAuthenticationSession(Profile* user_profile) {
 void UserSessionManager::RestoreActiveSessions() {
   user_sessions_restore_in_progress_ = true;
   DBusThreadManager::Get()->GetSessionManagerClient()->RetrieveActiveSessions(
-      base::Bind(&UserSessionManager::OnRestoreActiveSessions, AsWeakPtr()));
+      base::BindOnce(&UserSessionManager::OnRestoreActiveSessions,
+                     AsWeakPtr()));
 }
 
 bool UserSessionManager::UserSessionsRestored() const {
@@ -941,6 +945,25 @@ void UserSessionManager::OnProfilePrepared(Profile* profile,
   RestorePendingUserSessions();
 }
 
+void UserSessionManager::OnUsersSignInConstraintsChanged() {
+  const user_manager::UserManager* user_manager =
+      user_manager::UserManager::Get();
+  const user_manager::UserList& logged_in_users =
+      user_manager->GetLoggedInUsers();
+  for (auto* user : logged_in_users) {
+    if (user->GetType() != user_manager::USER_TYPE_REGULAR &&
+        user->GetType() != user_manager::USER_TYPE_GUEST &&
+        user->GetType() != user_manager::USER_TYPE_SUPERVISED &&
+        user->GetType() != user_manager::USER_TYPE_CHILD) {
+      continue;
+    }
+    if (!user_manager->IsUserAllowed(*user)) {
+      LOG(ERROR) << "The current user is not allowed, terminating the session.";
+      chrome::AttemptUserExit();
+    }
+  }
+}
+
 void UserSessionManager::ChildAccountStatusReceivedCallback(Profile* profile) {
   StopChildStatusObserving(profile);
 }
@@ -1201,7 +1224,7 @@ void UserSessionManager::PrepareTpmDeviceAndFinalizeProfile(Profile* profile) {
     return;
   }
 
-  VoidDBusMethodCallback callback =
+  auto callback =
       base::BindOnce(&UserSessionManager::OnCryptohomeOperationCompleted,
                      AsWeakPtr(), profile);
   CryptohomeClient* client = DBusThreadManager::Get()->GetCryptohomeClient();
@@ -1211,10 +1234,9 @@ void UserSessionManager::PrepareTpmDeviceAndFinalizeProfile(Profile* profile) {
     client->TpmCanAttemptOwnership(std::move(callback));
 }
 
-void UserSessionManager::OnCryptohomeOperationCompleted(
-    Profile* profile,
-    DBusMethodCallStatus call_status) {
-  DCHECK_EQ(DBUS_METHOD_CALL_SUCCESS, call_status);
+void UserSessionManager::OnCryptohomeOperationCompleted(Profile* profile,
+                                                        bool result) {
+  DCHECK(result);
   FinalizePrepareProfile(profile);
 }
 
@@ -1527,9 +1549,8 @@ void UserSessionManager::InitializeCertificateTransparencyComponents(
 }
 
 void UserSessionManager::OnRestoreActiveSessions(
-    const SessionManagerClient::ActiveSessionsMap& sessions,
-    bool success) {
-  if (!success) {
+    base::Optional<SessionManagerClient::ActiveSessionsMap> sessions) {
+  if (!sessions.has_value()) {
     LOG(ERROR) << "Could not get list of active user sessions after crash.";
     // If we could not get list of active user sessions it is safer to just
     // sign out so that we don't get in the inconsistent state.
@@ -1541,14 +1562,13 @@ void UserSessionManager::OnRestoreActiveSessions(
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   DCHECK_EQ(1u, user_manager->GetLoggedInUsers().size());
   DCHECK(user_manager->GetActiveUser());
-  const cryptohome::Identification active_cryptohome_id =
-      cryptohome::Identification(user_manager->GetActiveUser()->GetAccountId());
+  const cryptohome::Identification active_cryptohome_id(
+      user_manager->GetActiveUser()->GetAccountId());
 
-  SessionManagerClient::ActiveSessionsMap::const_iterator it;
-  for (it = sessions.begin(); it != sessions.end(); ++it) {
-    if (active_cryptohome_id == it->first)
+  for (auto& item : sessions.value()) {
+    if (active_cryptohome_id == item.first)
       continue;
-    pending_user_sessions_[(it->first).GetAccountId()] = it->second;
+    pending_user_sessions_[item.first.GetAccountId()] = std::move(item.second);
   }
   RestorePendingUserSessions();
 }

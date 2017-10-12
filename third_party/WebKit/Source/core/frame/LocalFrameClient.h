@@ -322,6 +322,9 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual WebEffectiveConnectionType GetEffectiveConnectionType() {
     return WebEffectiveConnectionType::kTypeUnknown;
   }
+  // Overrides the effective connection type for testing.
+  virtual void SetEffectiveConnectionTypeForTesting(
+      WebEffectiveConnectionType) {}
 
   // Returns whether or not Client Lo-Fi is enabled for the frame
   // (and so image requests may be replaced with a placeholder).
@@ -345,8 +348,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void SetHasReceivedUserGesture(bool received_previously) {}
 
-  virtual void SetDevToolsFrameId(const String& devtools_frame_id) {}
-
   virtual void AbortClientNavigation() {}
 
   virtual WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const = 0;
@@ -359,6 +360,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void AnnotatedRegionsChanged() = 0;
 
   virtual void DidBlockFramebust(const KURL&) {}
+
+  virtual String GetDevToolsFrameToken() = 0;
 };
 
 }  // namespace blink

@@ -52,7 +52,6 @@
 #include "core/frame/WebFrameWidgetImpl.h"
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/fullscreen/Fullscreen.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/forms/ColorChooser.h"
 #include "core/html/forms/ColorChooserClient.h"
 #include "core/html/forms/ColorChooserPopupUIController.h"
@@ -63,6 +62,7 @@
 #include "core/html/forms/ExternalDateTimeChooser.h"
 #include "core/html/forms/ExternalPopupMenu.h"
 #include "core/html/forms/FileChooser.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/InternalPopupMenu.h"
 #include "core/inspector/DevToolsEmulator.h"
 #include "core/layout/HitTestResult.h"
@@ -103,7 +103,6 @@
 #include "public/web/WebInputElement.h"
 #include "public/web/WebKit.h"
 #include "public/web/WebNode.h"
-#include "public/web/WebPageImportanceSignals.h"
 #include "public/web/WebPlugin.h"
 #include "public/web/WebPopupMenuInfo.h"
 #include "public/web/WebSelection.h"
@@ -1090,11 +1089,6 @@ void ChromeClientImpl::NotifyPopupOpeningObservers() const {
 
 FloatSize ChromeClientImpl::ElasticOverscroll() const {
   return web_view_->ElasticOverscroll();
-}
-
-void ChromeClientImpl::DidObserveNonGetFetchFromScript() const {
-  if (web_view_->PageImportanceSignals())
-    web_view_->PageImportanceSignals()->SetIssuedNonGetFetchFromScript();
 }
 
 std::unique_ptr<WebFrameScheduler> ChromeClientImpl::CreateFrameScheduler(

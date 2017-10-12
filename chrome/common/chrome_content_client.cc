@@ -33,7 +33,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/pepper_flash.h"
-#include "chrome/common/profiling/memlog_client.h"
+#include "chrome/common/profiling/profiling_client.h"
 #include "chrome/common/secure_origin_whitelist.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/common_resources.h"
@@ -554,9 +554,10 @@ void ChromeContentClient::AddContentDecryptionModules(
       // same directory as the installed adapter.
       const base::Version version(WIDEVINE_CDM_VERSION_STRING);
       DCHECK(version.IsValid());
-      cdms->push_back(content::CdmInfo(
-          kWidevineCdmDisplayName, kWidevineCdmGuid, version, cdm_path,
-          codecs_supported, kWidevineKeySystem, false));
+      cdms->push_back(
+          content::CdmInfo(kWidevineCdmDisplayName, kWidevineCdmGuid, version,
+                           cdm_path, kWidevineCdmFileSystemId, codecs_supported,
+                           kWidevineKeySystem, false));
     }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE_NOT_COMPONENT)
 
@@ -580,14 +581,16 @@ void ChromeContentClient::AddContentDecryptionModules(
       // ECKEncryptedMediaTest.
       cdms->push_back(content::CdmInfo(
           media::kClearKeyCdmDisplayName, media::kClearKeyCdmDifferentGuid,
-          base::Version("0.1.0.0"), clear_key_cdm_path, {},
+          base::Version("0.1.0.0"), clear_key_cdm_path,
+          media::kClearKeyCdmFileSystemId, {},
           kExternalClearKeyDifferentGuidTestKeySystem, false));
 
       // Supported codecs are hard-coded in ExternalClearKeyProperties.
-      cdms->push_back(content::CdmInfo(
-          media::kClearKeyCdmDisplayName, media::kClearKeyCdmGuid,
-          base::Version("0.1.0.0"), clear_key_cdm_path, {},
-          kExternalClearKeyKeySystem, true));
+      cdms->push_back(
+          content::CdmInfo(media::kClearKeyCdmDisplayName,
+                           media::kClearKeyCdmGuid, base::Version("0.1.0.0"),
+                           clear_key_cdm_path, media::kClearKeyCdmFileSystemId,
+                           {}, kExternalClearKeyKeySystem, true));
     }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
   }
@@ -738,7 +741,7 @@ media::MediaDrmBridgeClient* ChromeContentClient::GetMediaDrmBridgeClient() {
 
 void ChromeContentClient::OnServiceManagerConnected(
     content::ServiceManagerConnection* connection) {
-  static base::LazyInstance<profiling::MemlogClient>::Leaky memlog_client =
-      LAZY_INSTANCE_INITIALIZER;
-  memlog_client.Get().OnServiceManagerConnected(connection);
+  static base::LazyInstance<profiling::ProfilingClient>::Leaky
+      profiling_client = LAZY_INSTANCE_INITIALIZER;
+  profiling_client.Get().OnServiceManagerConnected(connection);
 }

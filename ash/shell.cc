@@ -82,6 +82,7 @@
 #include "ash/system/night_light/night_light_controller.h"
 #include "ash/system/palette/palette_tray.h"
 #include "ash/system/power/peripheral_battery_notifier.h"
+#include "ash/system/power/power_button_controller.h"
 #include "ash/system/power/power_event_observer.h"
 #include "ash/system/power/power_status.h"
 #include "ash/system/power/video_activity_notifier.h"
@@ -111,7 +112,6 @@
 #include "ash/wm/native_cursor_manager_ash_mus.h"
 #include "ash/wm/overlay_event_filter.h"
 #include "ash/wm/overview/window_selector_controller.h"
-#include "ash/wm/power_button_controller.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/root_window_finder.h"
 #include "ash/wm/screen_pinning_controller.h"
@@ -418,7 +418,7 @@ bool Shell::ShouldSaveDisplaySettings() {
 }
 
 NightLightController* Shell::night_light_controller() {
-  DCHECK(NightLightController::IsFeatureEnabled());
+  DCHECK(switches::IsNightLightEnabled());
   return night_light_controller_.get();
 }
 
@@ -843,7 +843,7 @@ Shell::~Shell() {
 void Shell::Init(const ShellInitParams& init_params) {
   const Config config = shell_port_->GetAshConfig();
 
-  if (NightLightController::IsFeatureEnabled())
+  if (switches::IsNightLightEnabled())
     night_light_controller_ = std::make_unique<NightLightController>();
 
   touch_devices_controller_ = std::make_unique<TouchDevicesController>();

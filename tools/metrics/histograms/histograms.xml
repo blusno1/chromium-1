@@ -2553,6 +2553,35 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Ash.DisplayColorManager.HasColorCorrectionMatrix"
+    enum="Boolean">
+  <owner>mcasas@chromium.org</owner>
+  <owner>dcastagna@chromium.org</owner>
+  <summary>
+    Whether a display has a &quot;CTM&quot; matrix properties that can be used
+    to set a color transform matrix. Recorded every time there is a display
+    configuration update.
+  </summary>
+</histogram>
+
+<histogram name="Ash.DisplayColorManager.IccFileFound" enum="Boolean">
+  <owner>mcasas@chromium.org</owner>
+  <owner>dcastagna@chromium.org</owner>
+  <summary>
+    This boolean keeps track if a request for an ICC for a specific product id
+    has been successful or not.
+  </summary>
+</histogram>
+
+<histogram name="Ash.DisplayColorManager.ValidProductId" enum="Boolean">
+  <owner>mcasas@chromium.org</owner>
+  <owner>dcastagna@chromium.org</owner>
+  <summary>
+    Whether we could parse a valid product id from a display EDID. Recorded
+    every time there is a display configuration update.
+  </summary>
+</histogram>
+
 <histogram name="Ash.Dock.Action" enum="DockedAction">
   <owner>kuscher@google.com</owner>
   <owner>varkha@chromium.org</owner>
@@ -7811,6 +7840,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="CaptivePortal.DetectionResultSincePortal"
+    enum="BooleanPresent">
+  <owner>warx@chromium.org</owner>
+  <summary>
+    Within one minute of the default network reporting a portal network, if we
+    see an offline detection result, it is likely the client got blacklisted.
+    Record the boolean rate that Chrome observes offline vs non-offline
+    detection results. See go/bad-portal for client blacklisting problem.
+  </summary>
+</histogram>
+
 <histogram name="CaptivePortal.DetectResult" enum="CaptivePortalDetectResult">
   <owner>meacer@chromium.org</owner>
   <summary>Records the result of a captive portal probe.</summary>
@@ -10483,14 +10523,39 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="ContentSettings.Popups.StrongBlockerActions"
+    enum="StrongPopupBlockerAction">
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    Counts of various events related to the strong popup blocker (aka abusive
+    experience enforcement), that is triggered via safe browsing.
+  </summary>
+</histogram>
+
 <histogram name="ContentSuggestions.FetchPendingPlaceholder.VisibleDuration"
     units="ms">
+  <obsolete>
+    Deprecated in favor of
+    ContentSuggestions.FetchPendingSpinner.VisibleDuration.
+  </obsolete>
   <owner>dgn@chromium.org</owner>
   <owner>ntp-dev+metrics@chromium.org</owner>
   <summary>
     Android: How long the content suggestion placeholder is shown. This is
     tracked based on when the placeholder is enabled in the UI, not how long it
     is actually visible on screen. Depending on the screen size, the used value
+    could be bigger.
+  </summary>
+</histogram>
+
+<histogram name="ContentSuggestions.FetchPendingSpinner.VisibleDuration"
+    units="ms">
+  <owner>dgn@chromium.org</owner>
+  <owner>ntp-dev+metrics@chromium.org</owner>
+  <summary>
+    Android: How long the content suggestion loading spinner is shown. This is
+    tracked based on when the spinner is enabled in the UI, not how long it is
+    actually visible on screen. Depending on the screen size, the used value
     could be bigger.
   </summary>
 </histogram>
@@ -12596,6 +12661,41 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     enum="BooleanSuccess">
   <owner>tbansal@chromium.org</owner>
   <summary>Whether the warm up URL was fetched succesfully.</summary>
+</histogram>
+
+<histogram name="DataReductionProxy.WarmupURL.HasViaHeader" enum="Boolean">
+  <owner>tbansal@chromium.org</owner>
+  <summary>
+    Whether the response headers of the warm up URL had Chrome Proxy via header.
+    Recorded only when non-null response headers were available when the fetch
+    of warm  up URL concludes.
+  </summary>
+</histogram>
+
+<histogram name="DataReductionProxy.WarmupURL.HttpResponseCode"
+    enum="HttpResponseCode">
+  <owner>tbansal@chromium.org</owner>
+  <summary>
+    HTTP response code of the warm up URL. Set to 1 when HTTP response headers
+    were unavailable.
+  </summary>
+</histogram>
+
+<histogram name="DataReductionProxy.WarmupURL.NetError" enum="NetErrorCodes">
+  <owner>tbansal@chromium.org</owner>
+  <summary>
+    Net error codes observed when the fetch of the warm up URL concludes.
+  </summary>
+</histogram>
+
+<histogram name="DataReductionProxy.WarmupURL.ProxySchemeUsed"
+    enum="DataReductionProxyProxySchemeUsed">
+  <owner>tbansal@chromium.org</owner>
+  <summary>
+    Proxy scheme of the proxy server via which the warm up URL was fetched.
+    Recorded only when non-null response headers were available when the fetch
+    of warm  up URL concludes.
+  </summary>
 </histogram>
 
 <histogram name="DataUsage.MatchingRulesCount.Invalid" units="count">
@@ -28694,6 +28794,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Provides a breakdown of how many times each possible Bluetooth advertisement
     registration result occurs.
+
+    The bucket &quot;Unknown result&quot; indicates that the Bluetooth platform
+    returned an unknown error code; if it has any counts, the client code should
+    be changed to account for the new error code.
   </summary>
 </histogram>
 
@@ -28703,6 +28807,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Provides a breakdown of how many times each possible Bluetooth advertisement
     unregistration result occurs.
+
+    The bucket &quot;Unknown result&quot; indicates that the Bluetooth platform
+    returned an unknown error code; if it has any counts, the client code should
+    be changed to account for the new error code.
   </summary>
 </histogram>
 
@@ -28807,15 +28915,29 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="InstantTethering.FinalFeatureState"
+<histogram name="InstantTethering.FeatureState"
     enum="InstantTethering_FeatureState">
   <owner>hansberry@chromium.com</owner>
   <summary>
-    Breaks down the state of Instant Tethering, at the end of each user session.
-    All states, except for 'Enabled', indicate that the feature was not active.
-    This histogram is emitted to at the end of each user session and should
-    roughly reflect if Instant Tethering was enabled during that session (and if
-    not, why).
+    Breaks down the state of Instant Tethering during user sessions. All states,
+    except for 'Enabled', indicate that the feature was not active. This
+    histogram is emitted to each time a condition affecting Instant Tethering's
+    state, e.g. the user enabling or disabling the feature, or Bluetooth
+    becoming enabled or disabled.
+  </summary>
+</histogram>
+
+<histogram name="InstantTethering.HostScanBatchDuration" units="ms">
+  <owner>hansberry@chromium.org</owner>
+  <summary>
+    The duration of a batch of host scans. A batch is defined as a series of one
+    or host scans separated by no more than one minute.
+
+    For example, if a scan occurs then stops and does not start back up again,
+    the metric logged would be the amount of time taken for that scan. However,
+    if a scan finishes and a new scan starts up again less than a minute after
+    the previous scan finished, the metric logged would be the time difference
+    between the start of the first scan and the finish of the second scan.
   </summary>
 </histogram>
 
@@ -29376,8 +29498,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="JSDialogs.CharacterCount" units="characters">
   <owner>avi@chromium.org</owner>
   <summary>
-    The count of the number of characters in JavaScript dialog messages grouped
-    by site engagement score.
+    The count of the number of characters in JavaScript dialog messages.
   </summary>
 </histogram>
 
@@ -29479,6 +29600,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="JSDialogs.SiteEngagementOfBeforeUnload" units="%">
+  <obsolete>
+    Deprecated 2017-10.
+  </obsolete>
   <owner>avi@chromium.org</owner>
   <summary>
     The site engagement values of sites showing onbeforeunload dialogs. Logged
@@ -29609,6 +29733,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="Launch.Modes" enum="LaunchMode">
   <owner>calamity@chromium.org</owner>
   <summary>The different ways Chrome is launched.</summary>
+</histogram>
+
+<histogram name="Launch.WebAppDisplayMode" enum="WebAppDisplayMode">
+  <owner>piotrs@chromium.org</owner>
+  <summary>
+    Records the display mode (as defined in the Web App Manifest spec) at the
+    launch of the Added to Home screen or installed Web App (including WebAPKs).
+  </summary>
 </histogram>
 
 <histogram name="Layout.MicroSecondsPerComplexText" units="microseconds">
@@ -30796,6 +30928,26 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Media.Audio.CoreAudioDispatchOverrideInitResult"
+    enum="CoreAudioDispatchOverrideInitResult">
+  <owner>ossu@chromium.org</owner>
+  <summary>
+    Tracks support and initialization success/failure of the CoreAudio dispatch
+    override hotfix. Logged during initialization of AudioManagerMac. The fix is
+    not supported on macOS earlier than version 10.10.
+  </summary>
+</histogram>
+
+<histogram name="Media.Audio.CoreAudioDispatchOverrideLookupEvent"
+    enum="CoreAudioDispatchOverrideLookupEvent">
+  <owner>ossu@chromium.org</owner>
+  <summary>
+    Logged whenever the CoreAudio dispatch override hotfix needs to look up the
+    calling function using dladdr(). Once ResumeIO and PauseIO have been
+    identified, no more lookups should be performed during the session.
+  </summary>
+</histogram>
+
 <histogram name="Media.Audio.InputBufferSizeWasChangedAudioWorkedMac"
     enum="BooleanChanged">
   <owner>henrika@chromium.org</owner>
@@ -31312,6 +31464,27 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Media.AudioOutputResampler.OpenLowLatencyStream"
+    enum="AudioOutputResamplerLowLatencyOpenStreamResult">
+  <owner>olka@chromium.org</owner>
+  <summary>
+    Whether a low latency stream to be rendered through the resampler was opened
+    successfully or which type of fallback stream was used instead. In case a
+    fake fallback stream is used it means audio rendered through the resampler
+    will be muted. In case fallback fails entirely, renderer callback error will
+    be signalled.
+  </summary>
+</histogram>
+
+<histogram name="Media.AudioOutputStreamProxy.StreamFormat"
+    enum="AudioOutputProxyStreamFormat">
+  <owner>olka@chromium.org</owner>
+  <summary>
+    Records format used by AudioManager to create audio output stream proxy. If
+    a fake stream is created it results in muted audio playback.
+  </summary>
+</histogram>
+
 <histogram name="Media.AudioRendererAudioGlitches" enum="AudioGlitchResult">
   <owner>henrika@chromium.org</owner>
   <summary>
@@ -31579,6 +31752,30 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Records events and user interactions related to the download button shown on
     media elements.
+  </summary>
+</histogram>
+
+<histogram name="Media.Controls.Overflow.TimeToAction" units="seconds">
+  <owner>beccahughes@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Records the amount of time the overflow menu is displayed until the user
+    clicked on a menu item. The overflow menu is shown by clicking the three
+    dots on the media controls and is used to show more controls when there is
+    not enough space. This histogram will record up to 100 seconds with accuracy
+    to the second.
+  </summary>
+</histogram>
+
+<histogram name="Media.Controls.Overflow.TimeToDismiss" units="seconds">
+  <owner>beccahughes@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Records the amount of time the overflow menu is displayed until the user
+    dismissed the menu without clicking on a menu item. The overflow menu is
+    shown by clicking the three dots on the media controls and is used to show
+    more controls when there is not enough space. This histogram will record up
+    to 100 seconds with accuracy to the second.
   </summary>
 </histogram>
 
@@ -36083,6 +36280,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="MobileSignInPromo.SettingsManager.ImpressionsTilXButton"
+    units="impressions">
+  <owner>jlebel@chromium.org</owner>
+  <summary>
+    Counts how many times the explicit &quot;X&quot;-to-close button is clicked
+    per impression.
+  </summary>
+</histogram>
+
 <histogram name="MobileStartup.IntentToCreationTime" units="ms">
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -38689,6 +38895,32 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Signed Tree Head (STH) and the STH currently known to the client was issued
     24 hours after the timestamp in the SCT (24 hours being the typical Maximum
     Merge Delay).
+  </summary>
+</histogram>
+
+<histogram name="Net.CertificateTransparency.ConnectionComplianceStatus.QUIC"
+    enum="CTComplianceStatus">
+  <owner>estark@chromium.org</owner>
+  <summary>
+    The compliance of each QUIC connection with the Certificate Transparency
+    policy, recorded once on connection setup unless CT evaluation has been
+    disabled for that connection or the certificate is invalid. Connections can
+    be compliant, or they can be non-compliant for one of several reasons (not
+    enough Signed Certificate Timestamps [SCTs], not diverse enough SCTs, or the
+    build was old so CT compliance wasn't checked).
+  </summary>
+</histogram>
+
+<histogram name="Net.CertificateTransparency.ConnectionComplianceStatus.SSL"
+    enum="CTComplianceStatus">
+  <owner>estark@chromium.org</owner>
+  <summary>
+    The compliance of each SSL connection with the Certificate Transparency
+    policy, recorded once on connection setup unless CT evaluation has been
+    disabled for that connection or the certificate is invalid. Connections can
+    be compliant, or they can be non-compliant for one of several reasons (not
+    enough Signed Certificate Timestamps [SCTs], not diverse enough SCTs, or the
+    build was old so CT compliance wasn't checked).
   </summary>
 </histogram>
 
@@ -42633,6 +42865,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Net.QuicSession.CertVerificationResult" enum="NetErrorCodes">
+  <owner>rch@chromium.org</owner>
+  <summary>
+    The network error code returned to a QUIC session from the CertVerifier when
+    a certification verification is attempted.
+  </summary>
+</histogram>
+
 <histogram name="Net.QuicSession.CertVerifierJob.CompleteTime"
     units="Milliseconds">
   <owner>rch@chromium.org</owner>
@@ -42837,6 +43077,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>rch@chromium.org</owner>
   <summary>
     The value of the TCP cubic sender's CWND when the session is closed.
+  </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.GapBetweenWriteErrorAndNetworkDisconnection"
+    units="ms">
+  <owner>zhongyi@chromium.org</owner>
+  <summary>
+    This measures the time gap between the most recent write error and the
+    network disconnection.
   </summary>
 </histogram>
 
@@ -43418,6 +43667,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Net.QuicSession.WriteError.NetworkDisconnected"
+    enum="NetErrorCodes">
+  <owner>zhongyi@chromium.org</owner>
+  <summary>
+    The most recent network error code when attempting to write to a QUIC
+    connection when the network gets disconnected.
+  </summary>
+</histogram>
+
 <histogram name="Net.QuicSession.WritePacketNotReusableReason"
     enum="QuicNotReusableReason">
   <owner>ckrasic@chromium.org</owner>
@@ -43649,6 +43907,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Net.ResourceLoader.ExpectedContentSizeResult"
     enum="ResourceLoaderExpectedContentSizeResult">
+  <obsolete>
+    Removed 10/2017.
+  </obsolete>
   <owner>maksim.sisov@intel.com</owner>
   <owner>mmenke@chromium.org</owner>
   <summary>
@@ -46456,6 +46717,21 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Network.Shill.Cellular.ExpiredLeaseLengthSeconds"
     units="seconds">
+  <obsolete>
+    Deprecated since Chrome OS build 10010.0.0 and superceded by
+    Network.Shill.Cellular.ExpiredLeaseLengthSeconds2 due to change in number of
+    buckets (crosreview.com/557297, crosreview.com/703679).
+  </obsolete>
+  <owner>benchan@chromium.org</owner>
+  <summary>
+    Chrome OS network performance metric that tracks the length of a lease for a
+    cellular network at the time it expired without the DHCP client being able
+    to renew it.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Cellular.ExpiredLeaseLengthSeconds2"
+    units="seconds">
   <owner>benchan@chromium.org</owner>
   <summary>
     Chrome OS network performance metric that tracks the length of a lease for a
@@ -46742,6 +47018,21 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.ExpiredLeaseLengthSeconds"
+    units="seconds">
+  <obsolete>
+    Deprecated since Chrome OS build 10010.0.0 and superceded by
+    Network.Shill.Ethernet.ExpiredLeaseLengthSeconds2 due to change in number of
+    buckets (crosreview.com/557297, crosreview.com/703679).
+  </obsolete>
+  <owner>benchan@chromium.org</owner>
+  <summary>
+    Chrome OS network performance metric that tracks the length of a lease for
+    an Ethernet network at the time it expired without the DHCP client being
+    able to renew it.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Ethernet.ExpiredLeaseLengthSeconds2"
     units="seconds">
   <owner>benchan@chromium.org</owner>
   <summary>
@@ -47061,6 +47352,51 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Network.Shill.Wifi.Ap80211kSupport" enum="WiFiAp80211kSupport">
+  <owner>matthewmwang@chromium.org</owner>
+  <summary>
+    Chrome OS network metric sampling the number of Wireless Access Points that
+    support the 802.11k standard, sampled on successful connections to an AP.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Wifi.Ap80211rSupport" enum="WiFiAp80211rSupport">
+  <owner>matthewmwang@chromium.org</owner>
+  <summary>
+    Chrome OS network metric sampling the number of Wireless Access Points that
+    support the 802.11r standard, sampled on successful connections to an AP.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Wifi.Ap80211vBSSMaxIdlePeriodSupport"
+    enum="WiFiAp80211vBSSMaxIdlePeriodSupport">
+  <owner>matthewmwang@chromium.org</owner>
+  <summary>
+    Chrome OS network metric sampling the number of Wireless Access Points that
+    support the 802.11v BSS Max Idle Period feature, sampled on successful
+    connections to an AP.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Wifi.Ap80211vBSSTransitionSupport"
+    enum="WiFiAp80211vBSSTransitionSupport">
+  <owner>matthewmwang@chromium.org</owner>
+  <summary>
+    Chrome OS network metric sampling the number of Wireless Access Points that
+    support the 802.11v BSS Transition feature, sampled on successful
+    connections to an AP.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Wifi.Ap80211vDMSSupport"
+    enum="WiFiAp80211vDMSSupport">
+  <owner>matthewmwang@chromium.org</owner>
+  <summary>
+    Chrome OS network metric sampling the number of Wireless Access Points that
+    support the 802.11v DMS feature, sampled on successful connections to an AP.
+  </summary>
+</histogram>
+
 <histogram name="Network.Shill.WiFi.ApDisconnectReason" enum="WiFiReasonCode">
   <owner>kirtika@chromium.org</owner>
   <summary>
@@ -47193,6 +47529,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.ExpiredLeaseLengthSeconds" units="seconds">
+  <obsolete>
+    Deprecated since Chrome OS build 10010.0.0 and superceded by
+    Network.Shill.Wifi.ExpiredLeaseLengthSeconds2 due to change in number of
+    buckets (crosreview.com/557297, crosreview.com/703679).
+  </obsolete>
+  <owner>kirtika@chromium.org</owner>
+  <summary>
+    Chrome OS network performance metric that tracks the length of a lease for a
+    WiFi network at the time it expired without the DHCP client being able to
+    renew it.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Wifi.ExpiredLeaseLengthSeconds2" units="seconds">
   <owner>kirtika@chromium.org</owner>
   <summary>
     Chrome OS network performance metric that tracks the length of a lease for a
@@ -47674,6 +48024,21 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Network.Shill.Wimax.ExpiredLeaseLengthSeconds" units="seconds">
+  <obsolete>
+    Deprecated since Chrome OS build 10010.0.0 and superceded by
+    Network.Shill.Wimax.ExpiredLeaseLengthSeconds2 due to change in number of
+    buckets (crosreview.com/557297, crosreview.com/703679).
+  </obsolete>
+  <owner>benchan@chromium.org</owner>
+  <summary>
+    Chrome OS network performance metric that tracks the length of a lease for a
+    WiMax network at the time it expired without the DHCP client being able to
+    renew it.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Wimax.ExpiredLeaseLengthSeconds2"
+    units="seconds">
   <owner>benchan@chromium.org</owner>
   <summary>
     Chrome OS network performance metric that tracks the length of a lease for a
@@ -48227,12 +48592,32 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram
     name="NewTabPage.ContentSuggestions.CountOnNtpOpenedIfVisible.Articles.Prefetched.Offline">
+  <obsolete>
+    Deprecated in October 2017 (M63) and replaced by
+    CountOnNtpOpenedIfVisible.Articles.Prefetched.Offline2, because
+    underreported. UI checked whether a URL is prefetched asynchronously. As a
+    result, there was a race condition and this metric could be reported before
+    all URLs are checked.
+  </obsolete>
   <owner>vitaliii@chromium.org</owner>
   <summary>
     Android: The number of prefetched suggestion cards that were available in
     Articles category if it was visible at the time an NTP was opened and the
     user was offline. Analogous to
     NewTabPage.ContentSuggestions.CountOnNtpOpenedIfVisible.
+  </summary>
+</histogram>
+
+<histogram
+    name="NewTabPage.ContentSuggestions.CountOnNtpOpenedIfVisible.Articles.Prefetched.Offline2"
+    units="suggestions">
+  <owner>vitaliii@chromium.org</owner>
+  <summary>
+    Android: The number of prefetched suggestion cards that were available in
+    Articles category if it was visible at the time an NTP was opened and the
+    user was offline. Analogous to
+    NewTabPage.ContentSuggestions.CountOnNtpOpenedIfVisible, except that this
+    metric is reported after all URL prefetched asynchronous checks finish.
   </summary>
 </histogram>
 
@@ -48491,6 +48876,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram
     name="NewTabPage.ContentSuggestions.Shown.Articles.Prefetched.Offline"
     units="index">
+  <obsolete>
+    Deprecated in October 2017 (M63) and replaced by
+    Shown.Articles.Prefetched.Offline2, because underreported. UI checked
+    whether a URL is prefetched asynchronously. As a result, there was a race
+    condition and for suggestions immediately visible on the suggestions surface
+    this metric could be reported before their URLs are actually checked.
+  </obsolete>
   <owner>vitaliii@chromium.org</owner>
   <summary>
     Android: The position of a prefetched suggestion card that was shown on the
@@ -48501,6 +48893,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     user. This tracked position can be different from the position observed by
     the user, e.g. when the user dismissed some suggestions from the list or
     requested more that got inserted in the middle of the feed.
+  </summary>
+</histogram>
+
+<histogram
+    name="NewTabPage.ContentSuggestions.Shown.Articles.Prefetched.Offline2"
+    units="index">
+  <owner>vitaliii@chromium.org</owner>
+  <summary>
+    Android: The position of a prefetched suggestion card that was shown on the
+    NTP when offline. Analogous to NewTabPage.ContentSuggestions.Shown. That is
+    a card is considered shown when at least 1/3 of its height is visible on the
+    screen. For each card, at most one impression is recorded per NTP instance.
+    We track the position the card had in the list when it was first seen by the
+    user. This tracked position can be different from the position observed by
+    the user, e.g. when the user dismissed some suggestions from the list or
+    requested more that got inserted in the middle of the feed. This metric is
+    reported not immediately after the impression, but once the request to
+    Offline Page model to check the URL finishes.
   </summary>
 </histogram>
 
@@ -48921,6 +49331,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Action taken by the user on the Most Visited NTP pane.  If the user switches
     panes during this use of the NTP, this action is sometimes not recorded. Ask
     mpearson@ for details.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.MostVisitedAge" units="seconds">
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    The age of the data at click time, that is, the elapsed time since the
+    suggestion was generated by a ranking algorithm.
   </summary>
 </histogram>
 
@@ -49683,6 +50101,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Histogram for impressions on the various most visited tiles. The value is
     equal to the index of the thumbnail.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.SuggestionsImpressionAge" units="seconds">
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    The age of the data at impression time, that is, the elapsed time since the
+    suggestion was generated by a ranking algorithm.
   </summary>
 </histogram>
 
@@ -50723,6 +51149,25 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NQE.ThroughputAnalyzer.HangingRequests.Erased" units="count">
+  <owner>tbansal@chromium.org</owner>
+  <summary>
+    Count of the requests that were marked as hanging by the heuristic algorithm
+    in the throughput analyzer in the network quality estimator. A sample is
+    recorded everytime the heuristic algorithm is run.
+  </summary>
+</histogram>
+
+<histogram name="NQE.ThroughputAnalyzer.HangingRequests.NotErased"
+    units="count">
+  <owner>tbansal@chromium.org</owner>
+  <summary>
+    Count of the requests that were not marked as hanging by the heuristic
+    algorithm in the throughput analyzer in the network quality estimator. A
+    sample is recorded everytime the heuristic algorithm is run.
+  </summary>
+</histogram>
+
 <histogram name="NQE.TransportRTT" units="ms">
   <owner>bengr@chromium.org</owner>
   <owner>tbansal@chromium.org</owner>
@@ -50993,6 +51438,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>zelidrag@chromium.org</owner>
   <summary>
     How long it takes for the session restore to finish succeessfully.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.AccessEntryPoint"
+    enum="OfflinePagesAccessEntryPoint">
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Logs the UI location from which an offline page was launched.
   </summary>
 </histogram>
 
@@ -51327,6 +51780,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>romax@chromium.org</owner>
   <summary>
     Number of pages deleted in a batch during one clear-storage request.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.ClearStoragePreRunUsage" units="MiB">
+  <owner>petewil@chromium.org</owner>
+  <summary>
+    The total storage size used by all offline pages from a specific client
+    namespace.
   </summary>
 </histogram>
 
@@ -51699,6 +52160,32 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Size of the saved copy of an offline page.</summary>
 </histogram>
 
+<histogram name="OfflinePages.PageSizeOnAccess.Offline" units="KiB">
+  <owner>carlosk@chromium.org</owner>
+  <summary>
+    Records the archive size of an offline page loaded during a navigation that
+    took place while the device was considered to be offline or with poor
+    connectivity.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.PageSizeOnAccess.Online" units="KiB">
+  <owner>carlosk@chromium.org</owner>
+  <summary>
+    Records the archive size of an offline page loaded during a navigation that
+    took place while the device was considered to be online.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.PrefetchEnabled" enum="BooleanEnabled">
+  <owner>dimich@chromium.org</owner>
+  <summary>
+    Whether the Offline Pages Prefetch was effectively enabled during the day.
+    Determined by a combination of flags and user preferences. Reported at the
+    same moment as OfflinePages.OfflineUsage.
+  </summary>
+</histogram>
+
 <histogram name="OfflinePages.Prefetching.ActionAttempts" units="attempts">
   <owner>dewittj@chromium.org</owner>
   <summary>
@@ -51789,11 +52276,58 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="OfflinePages.Prefetching.StateCounts."
+<histogram name="OfflinePages.Prefetching.ServiceGetOperationStatus"
+    enum="OfflinePrefetchRequestStatus">
+  <owner>petewil@chromium.org</owner>
+  <summary>
+    Status returned by a request to the Offline Page Service's GetOperation
+    method.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.Prefetching.ServiceGetPageBundleStatus"
+    enum="OfflinePrefetchRequestStatus">
+  <owner>petewil@chromium.org</owner>
+  <summary>
+    Status returned by a request to the Offline Page Service's GetPageBundle
+    method.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.Prefetching.StateCounts"
     enum="OfflinePrefetchItemState">
   <owner>petewil@chromium.org</owner>
   <summary>
     A prefetch item was seen in this state when starting the background task.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.Prefetching.StuckItemState"
+    enum="OfflinePrefetchItemState">
+  <owner>petewil@chromium.org</owner>
+  <summary>
+    A prefetch item was found in this state after more than 7 days since its
+    creation, time enough for it to have been finalized by the pipeline.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.Prefetching.UniqueUrlsAddedCount" units="urls">
+  <owner>dewittj@chromium.org</owner>
+  <summary>
+    When receiving suggestions in the prefetch pipeline, emits the number of new
+    suggestions added to the database. If there is an error, nothing is emitted.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.PrefetchUsage" enum="OfflinePagesPrefetchUsage">
+  <owner>dimich@chromium.org</owner>
+  <summary>
+    Enum-based buckets reflect the number of days the Offline Pages Prefetch was
+    able to fetch new pages, and/or user was opening those pages. This data is
+    accumulated locally when fetch operations complete or when prefetched pages
+    are opened (often happens in background or while offline respectively), and
+    reported when connection is likely to succeed (usually after successful
+    online navigation).
   </summary>
 </histogram>
 
@@ -57369,6 +57903,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="PerformanceMonitor.IdleWakeups" units="WakeupsPerSecond">
+  <owner>lgrey@chromium.org</owner>
+  <summary>
+    The average CPU idle wakeups per second, sampled every two minutes.
+  </summary>
+</histogram>
+
+<histogram name="PerformanceMonitor.PackageExitIdleWakeups"
+    units="WakeupsPerSecond">
+  <owner>lgrey@chromium.org</owner>
+  <summary>
+    (Mac only) The average package exit idle wakeups per second, sampled every
+    two minutes. This is a subset of wakeups that indicate that the processor
+    complex was taken out of low-power state. For more info, see the
+    powermetrics man page on macOS.
+  </summary>
+</histogram>
+
 <histogram name="Permissions.Action" enum="PermissionAction">
   <owner>dominickn@chromium.org</owner>
   <owner>kcarattini@chromium.org</owner>
@@ -57452,6 +58004,46 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Records the elapsed time between the client sending a request to Safe
     Browsing and receiving a result, or the maximum wait time is exceeded and
     Safe Browsing is deemed to have timed out.
+  </summary>
+</histogram>
+
+<histogram name="Permissions.BatteryLevel.Accepted.Geolocation" units="%">
+  <owner>timloh@chromium.org</owner>
+  <summary>
+    Battery percentage when a geolocation permission prompt was accepted on
+    Android.
+  </summary>
+</histogram>
+
+<histogram name="Permissions.BatteryLevel.Accepted.LocationSettingsDialog"
+    units="%">
+  <owner>timloh@chromium.org</owner>
+  <summary>
+    Battery percentage when a location settings dialog was accepted.
+  </summary>
+</histogram>
+
+<histogram name="Permissions.BatteryLevel.Denied.Geolocation" units="%">
+  <owner>timloh@chromium.org</owner>
+  <summary>
+    Battery percentage when a geolocation permission prompt was denied on
+    Android.
+  </summary>
+</histogram>
+
+<histogram name="Permissions.BatteryLevel.Denied.LocationSettingsDialog"
+    units="%">
+  <owner>timloh@chromium.org</owner>
+  <summary>
+    Battery percentage when a location settings dialog was denied.
+  </summary>
+</histogram>
+
+<histogram name="Permissions.BatteryLevel.Dismissed.Geolocation" units="%">
+  <owner>timloh@chromium.org</owner>
+  <summary>
+    Battery percentage when a geolocation permission prompt was dismissed on
+    Android.
   </summary>
 </histogram>
 
@@ -62168,6 +62760,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>The amount of time that elapsed during CreateProfilePrefs.</summary>
 </histogram>
 
+<histogram name="PrefService.NetworkPredictionEnabled" enum="BooleanEnabled">
+  <owner>petewil@chromium.org</owner>
+  <summary>
+    Count events where Network Prediction was enabled or disabled.
+  </summary>
+</histogram>
+
 <histogram name="PrefService.PersistentLogRecallProtobufs"
     enum="PersistedLogsLogReadStatus">
   <owner>holte@chromium.org</owner>
@@ -64435,12 +65034,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="ProximityAuth.BleWeaveConnectionResult"
+    enum="ProximityAuth_BleWeaveConnectionResult">
+  <owner>hansberry@chromium.com</owner>
+  <summary>
+    Provides a breakdown of how often each BLE weave connection result occurs.
+  </summary>
+</histogram>
+
 <histogram name="ProximityAuth.BluetoothGattConnectionResult"
     enum="ProximityAuth_BluetoothGattConnectionResult">
   <owner>hansberry@chromium.com</owner>
   <summary>
     Provides a breakdown of how many times each possible Bluetooth GATT
     connection result occurs.
+
+    The bucket &quot;Unknown result&quot; indicates that the Bluetooth platform
+    returned an unknown error code; if it has any counts, the client code should
+    be changed to account for the new error code.
   </summary>
 </histogram>
 
@@ -64450,6 +65061,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Provides a breakdown of how many times each possible Bluetooth GATT
     &quot;notify session&quot; attempt result occurs.
+
+    The bucket &quot;Unknown result&quot; indicates that the Bluetooth platform
+    returned an unknown error code; if it has any counts, the client code should
+    be changed to account for the new error code.
   </summary>
 </histogram>
 
@@ -64459,14 +65074,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Provides a breakdown of how many times each possible Bluetooth GATT
     &quot;write characteristic&quot; attempt result occurs.
-  </summary>
-</histogram>
-
-<histogram name="ProximityAuth.BluetoothSetSubStatus" enum="BooleanTimedOut">
-  <owner>hansberry@chromium.com</owner>
-  <summary>
-    Provides the success rate of setting connection &quot;sub status&quot;.
-    Timeout indicates a Bluetooth failure.
   </summary>
 </histogram>
 
@@ -64589,6 +65196,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PurgeAndSuspend.PendingTaskCount">
+  <obsolete>
+    Deprecated Oct 2017.
+  </obsolete>
   <owner>tasak@google.com</owner>
   <summary>
     This records how many tasks are still in task queues when a backgrounded
@@ -72517,6 +73127,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Search.ContextualSearchIPHShown" enum="Boolean">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The number of times the Contextual Search panel is opened, categorized by
+    whether In-Product Help for Contextual Search was shown before. Logged when
+    the panel is opened. Implemented for Android.
+  </summary>
+</histogram>
+
 <histogram name="Search.ContextualSearchLiteralSearchDuration" units="ms">
   <owner>donnd@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
@@ -72564,6 +73185,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The time from opening the panel beyond peek until the panel is closed.
     Implemented for Android.
+  </summary>
+</histogram>
+
+<histogram name="Search.ContextualSearchPanelOpenedIPHShown" enum="Boolean">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The number of times the Contextual Search panel is opened, categorized by
+    whether In-Product Help for opening the panel was shown before. Logged when
+    the panel is opened. Implemented for Android.
   </summary>
 </histogram>
 
@@ -73012,6 +73644,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     The duration of a tap that triggered a Contextual Search when the user does
     open the panel. Implemented for Android.  Logged when the panel closes after
     being triggered by a tap and subsequently opened.
+  </summary>
+</histogram>
+
+<histogram name="Search.ContextualSearchTapIPHShown" enum="Boolean">
+  <owner>donnd@chromium.org</owner>
+  <owner>mahmoudi@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The number of times the Contextual Search is triggered by tapping,
+    categorized by whether In-Product Help for tapping was shown before. Logged
+    when Contextual Search is triggered by tapping. Implemented for Android.
   </summary>
 </histogram>
 
@@ -87612,6 +88255,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="UrlFetcher.StringResponseSize" units="KB">
+  <obsolete>
+    Removed 10/2017.
+  </obsolete>
   <owner>mmenke@chromium.org</owner>
   <summary>
     Size (in kilobytes) of response bodies retrieved as strings from URLFetcher.
@@ -87760,6 +88406,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>titzer@chromium.org</owner>
   <owner>aseemgarg@chromium.org</owner>
   <summary>Time to convert asm.js code to WebAssembly.</summary>
+</histogram>
+
+<histogram name="V8.AsmWasmTranslationThroughput" units="MB/s">
+  <owner>bradnelson@chromium.org</owner>
+  <owner>titzer@chromium.org</owner>
+  <owner>aseemgarg@chromium.org</owner>
+  <summary>
+    Throughput of translation of asm.js code to WebAssembly in MB/s.
+  </summary>
 </histogram>
 
 <histogram name="V8.ASTOptimization">
@@ -88481,6 +89136,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>bradnelson@chromium.org</owner>
   <owner>titzer@chromium.org</owner>
   <summary>Time to instantiate a WebAssembly module.</summary>
+</histogram>
+
+<histogram name="V8.WasmLazyCompilationMicroSeconds" units="microseconds">
+  <owner>bradnelson@chromium.org</owner>
+  <owner>titzer@chromium.org</owner>
+  <owner>aseemgarg@chromium.org</owner>
+  <summary>
+    Time for lazy compilation of WebAssembly functions. This is recorded per
+    function for the functions that are lazily compiled.
+  </summary>
 </histogram>
 
 <histogram name="V8.WasmMaxMemPagesCount" units="pages">
@@ -89655,6 +90320,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Records the time point when a request to update a WebAPK is sent to the
     WebAPK Server.
+  </summary>
+</histogram>
+
+<histogram name="Webapp.Install.DisplayMode" enum="WebAppDisplayMode">
+  <owner>piotrs@chromium.org</owner>
+  <summary>
+    Records the display mode (as defined in the Web App Manifest spec) at the
+    install time of a WebApp (including WebApks).
   </summary>
 </histogram>
 
@@ -94786,7 +95459,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <suffix name="Address" label="Address form"/>
   <suffix name="CreditCard" label="Credit card form"/>
   <suffix name="Password" label="Password form"/>
-  <suffix name="UnknownFormType" label="Unknown form type"/>
+  <suffix name="Unknown" label="Unknown form type"/>
+  <affected-histogram
+      name="Autofill.FillDuration.FromInteraction.WithAutofill"/>
+  <affected-histogram
+      name="Autofill.FillDuration.FromInteraction.WithoutAutofill"/>
   <affected-histogram name="Autofill.UserHappiness"/>
 </histogram_suffixes>
 
@@ -96353,7 +97030,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
       label="Link triggered prerender, rel=prerender, same domain."/>
   <suffix name="webnext" label="Link triggered prerender, rel=next."/>
   <suffix name="offline"
-      label="Prerender triggered for saving a page for offline use."/>
+      label="Prerender triggered for saving a page for offline use.">
+    <obsolete>
+      Deprecated October 2017
+    </obsolete>
+  </suffix>
   <affected-histogram name="Prerender.FinalStatus_Prerender5minTTL"/>
   <affected-histogram name="Prerender.FinalStatus_PrerenderControl"/>
   <affected-histogram name="Prerender.FinalStatus_PrerenderEnabled"/>
@@ -97774,6 +98455,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram_suffixes>
 
 <histogram_suffixes name="JSDialogs.EngagementList" separator=".">
+  <obsolete>
+    Deprecated 2017-10.
+  </obsolete>
   <suffix name="EngagementNone" label="site engagement = 0"/>
   <suffix name="EngagementLessThanOne" label="site engagement &lt; 1"/>
   <suffix name="EngagementOneToFive" label="site engagement &gt;= 1, &lt; 5"/>
@@ -97788,6 +98472,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram_suffixes>
 
 <histogram_suffixes name="JSDialogs.LeaveStay" separator=".">
+  <obsolete>
+    Deprecated 2017-10.
+  </obsolete>
   <suffix name="Leave" label="user opted to leave the page"/>
   <suffix name="Stay" label="user opted to stay on the page"/>
   <affected-histogram name="JSDialogs.SiteEngagementOfBeforeUnload"/>
@@ -100160,7 +100847,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     </obsolete>
   </suffix>
   <affected-histogram name="NewTabPage.MostVisited"/>
+  <affected-histogram name="NewTabPage.MostVisitedAge"/>
   <affected-histogram name="NewTabPage.SuggestionsImpression"/>
+  <affected-histogram name="NewTabPage.SuggestionsImpressionAge"/>
   <affected-histogram name="NewTabPage.TileTitle"/>
   <affected-histogram name="NewTabPage.TileTitleClicked"/>
   <affected-histogram name="NewTabPage.TileType"/>
@@ -100606,6 +101295,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <suffix name="ntp_suggestions" label="NTP suggestions offlined by the user"/>
   <suffix name="suggested_articles" label="Prefetched NTP suggestions"/>
   <suffix name="browser_actions" label="Offline Browser Actions pages"/>
+  <affected-histogram name="OfflinePages.AccessEntryPoint"/>
   <affected-histogram
       name="OfflinePages.Background.BackgroundLoadingFailedCode"/>
   <affected-histogram
@@ -100620,6 +101310,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <affected-histogram name="OfflinePages.Background.TimeToSaved"/>
   <affected-histogram name="OfflinePages.Background.TimeToStart"/>
   <affected-histogram name="OfflinePages.Background.TimeToStart.Svelte"/>
+  <affected-histogram name="OfflinePages.ClearStoragePreRunUsage"/>
   <affected-histogram name="OfflinePages.DeletePage.AccessCount"/>
   <affected-histogram name="OfflinePages.DeletePage.LastOpenToCreated"/>
   <affected-histogram name="OfflinePages.DeletePage.PageSize"/>
@@ -100630,6 +101321,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <affected-histogram name="OfflinePages.OpenSinceLastOpen"/>
   <affected-histogram name="OfflinePages.PageLifetime"/>
   <affected-histogram name="OfflinePages.PageSize"/>
+  <affected-histogram name="OfflinePages.PageSizeOnAccess.Offline"/>
+  <affected-histogram name="OfflinePages.PageSizeOnAccess.Online"/>
   <affected-histogram name="OfflinePages.SavePageResult"/>
   <affected-histogram name="OfflinePages.SavePageTime"/>
 </histogram_suffixes>
@@ -101865,6 +102558,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <suffix name="WorkerProcess"/>
   <affected-histogram name="PerformanceMonitor.AverageCPU"/>
   <affected-histogram name="PerformanceMonitor.HighCPU"/>
+  <affected-histogram name="PerformanceMonitor.IdleWakeups"/>
+  <affected-histogram name="PerformanceMonitor.PackageExitIdleWakeups"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PermissionRequestGesture" separator=".">
@@ -102277,7 +102972,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
       label="No origin; in the case of prefetch TTFCP this is when no
              prefetch was involved."/>
   <suffix name="omnibox" label="Triggered from the omnibox."/>
-  <suffix name="wash" label="Multiple sources could have triggered."/>
+  <suffix name="wash" label="Multiple sources could have triggered.">
+    <obsolete>
+      Deprecated April 2017
+    </obsolete>
+  </suffix>
   <suffix name="web" label="Link triggered prerender."/>
   <suffix name="webcross"
       label="Link triggered prerender, rel=prerender, cross domain."/>
@@ -102285,7 +102984,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
       label="Link triggered prerender, rel=prerender, same domain."/>
   <suffix name="webnext" label="Link triggered prerender, rel=next."/>
   <suffix name="offline"
-      label="Prerender triggered for saving a page for offline use."/>
+      label="Prerender triggered for saving a page for offline use.">
+    <obsolete>
+      Deprecated October 2017
+    </obsolete>
+  </suffix>
   <affected-histogram name="Prerender.AbandonTimeUntilUsed"/>
   <affected-histogram name="Prerender.CookieSendType"/>
   <affected-histogram name="Prerender.CookieStatus"/>

@@ -51,7 +51,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLBRElement.h"
-#include "core/html/TextControlElement.h"
+#include "core/html/forms/TextControlElement.h"
 #include "core/html_names.h"
 #include "core/layout/HitTestRequest.h"
 #include "core/layout/HitTestResult.h"
@@ -870,7 +870,7 @@ static bool IsVisuallyEmpty(const LayoutObject* layout) {
       if (ToLayoutInline(child)->FirstLineBoxIncludingCulling())
         return false;
     } else if (child->IsText()) {
-      if (ToLayoutText(child)->HasTextBoxes())
+      if (ToLayoutText(child)->HasNonCollapsedText())
         return false;
     } else {
       return false;
@@ -1014,7 +1014,7 @@ static PositionTemplate<Strategy> MostBackwardCaretPosition(
     if (!layout_object->IsText())
       continue;
     const LayoutText* const text_layout_object = ToLayoutText(layout_object);
-    if (!text_layout_object->FirstTextBox())
+    if (!text_layout_object->HasNonCollapsedText())
       continue;
     const unsigned text_start_offset = text_layout_object->TextStartOffset();
     if (current_node != start_node) {
@@ -1221,7 +1221,7 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
     if (!layout_object->IsText())
       continue;
     const LayoutText* const text_layout_object = ToLayoutText(layout_object);
-    if (!text_layout_object->FirstTextBox())
+    if (!text_layout_object->HasNonCollapsedText())
       continue;
     const unsigned text_start_offset = text_layout_object->TextStartOffset();
     if (current_node != start_node) {

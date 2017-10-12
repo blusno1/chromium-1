@@ -40,6 +40,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/arc/arc_data_remover.h"
+#include "components/arc/arc_instance_mode.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_session_runner.h"
 #include "components/arc/arc_util.h"
@@ -476,13 +477,11 @@ void ArcSessionManager::ShutdownSession() {
       break;
     case State::ACTIVE:
       // Request to stop the ARC. |state_| will be set to STOPPED eventually.
-      // TODO(yusukes): Always call RequestStop() with |true|.
-      // We can actually remove the boolean parameter then.
       // Set state before requesting the runner to stop in order to prevent the
       // case when |OnSessionStopped| can be called inline and as result
       // |state_| might be changed.
       state_ = State::STOPPING;
-      arc_session_runner_->RequestStop(false);
+      arc_session_runner_->RequestStop();
       break;
     case State::STOPPING:
       // Now ARC is stopping. Do nothing here.
@@ -655,7 +654,7 @@ void ArcSessionManager::RequestDisable() {
   if (!enable_requested_) {
     VLOG(1) << "ARC is already disabled. "
             << "Killing an instance for login screen (if any).";
-    arc_session_runner_->RequestStop(true);
+    arc_session_runner_->RequestStop();
     return;
   }
 
@@ -912,7 +911,7 @@ void ArcSessionManager::StartArc() {
 
   arc_start_time_ = base::Time::Now();
   provisioning_reported_ = false;
-  arc_session_runner_->RequestStart();
+  arc_session_runner_->RequestStart(ArcInstanceMode::FULL_INSTANCE);
 }
 
 void ArcSessionManager::StopArc() {

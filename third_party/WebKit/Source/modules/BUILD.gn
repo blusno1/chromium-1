@@ -243,8 +243,10 @@ jumbo_source_set("unit_tests") {
   testonly = true
 
   sources = [
-    "accessibility/AXObjectTest.cpp",
+    "accessibility/AXObjectCacheTest.cpp",
     "accessibility/AccessibilityObjectModelTest.cpp",
+    "accessibility/testing/AccessibilityTest.cpp",
+    "accessibility/testing/AccessibilityTest.h",
     "background_fetch/BackgroundFetchManagerTest.cpp",
     "cachestorage/CacheTest.cpp",
     "canvas/HTMLCanvasElementModuleTest.cpp",
@@ -339,11 +341,11 @@ jumbo_source_set("unit_tests") {
   deps = [
     ":modules",
     ":modules_testing",
-    "//services/network/public/interfaces:interfaces_blink",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/platform/wtf",
     "//v8",
   ]

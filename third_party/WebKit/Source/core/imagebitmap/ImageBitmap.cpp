@@ -92,7 +92,7 @@ ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions& options,
       }
     } else {
       DCHECK_EQ(options.colorSpaceConversion(), kImageBitmapOptionDefault);
-      parsed_options.color_params.SetCanvasColorSpace(kSRGBCanvasColorSpace);
+      parsed_options.color_params.SetCanvasColorSpace(kLegacyCanvasColorSpace);
     }
   }
 
@@ -463,7 +463,7 @@ ImageBitmap::ImageBitmap(HTMLVideoElement* video,
 
   std::unique_ptr<ImageBuffer> buffer =
       ImageBuffer::Create(IntSize(video->videoWidth(), video->videoHeight()),
-                          kNonOpaque, kDoNotInitializeImagePixels);
+                          kDoNotInitializeImagePixels);
   if (!buffer)
     return;
 

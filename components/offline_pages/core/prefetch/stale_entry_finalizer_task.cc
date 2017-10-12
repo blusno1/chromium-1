@@ -7,7 +7,8 @@
 #include <array>
 
 #include "base/bind.h"
-#include "components/offline_pages/core/offline_time_utils.h"
+#include "base/metrics/histogram_macros.h"
+#include "components/offline_pages/core/offline_store_utils.h"
 #include "components/offline_pages/core/prefetch/prefetch_dispatcher.h"
 #include "components/offline_pages/core/prefetch/prefetch_downloader.h"
 #include "components/offline_pages/core/prefetch/prefetch_types.h"
@@ -21,6 +22,10 @@ namespace offline_pages {
 using Result = StaleEntryFinalizerTask::Result;
 
 namespace {
+
+// If this time changes, we need to update the desciption in histograms.xml
+// for OfflinePages.Prefetching.StuckItemState.
+const int kStuckTimeLimitInDays = 7;
 
 const base::TimeDelta FreshnessPeriodForState(PrefetchItemState state) {
   switch (state) {
@@ -66,7 +71,7 @@ bool FinalizeStaleItems(PrefetchItemState state,
       "UPDATE prefetch_items SET state = ?, error_code = ?"
       " WHERE state = ? AND freshness_time < ?";
   const int64_t earliest_fresh_db_time =
-      ToDatabaseTime(now - FreshnessPeriodForState(state));
+      store_utils::ToDatabaseTime(now - FreshnessPeriodForState(state));
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
   statement.BindInt(0, static_cast<int>(PrefetchItemState::FINISHED));
   statement.BindInt(1, static_cast<int>(ErrorCodeForState(state)));
@@ -101,7 +106,7 @@ bool FinalizeFutureItems(PrefetchItemState state,
       "UPDATE prefetch_items SET state = ?, error_code = ?"
       " WHERE state = ? AND freshness_time > ?";
   const int64_t future_fresh_db_time_limit =
-      ToDatabaseTime(now + base::TimeDelta::FromDays(1));
+      store_utils::ToDatabaseTime(now + base::TimeDelta::FromDays(1));
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
   statement.BindInt(0, static_cast<int>(PrefetchItemState::FINISHED));
   statement.BindInt(
@@ -111,6 +116,23 @@ bool FinalizeFutureItems(PrefetchItemState state,
   statement.BindInt64(3, future_fresh_db_time_limit);
 
   return statement.Run();
+}
+
+// If there is a bug in our code, an item might be stuck in the queue waiting
+// on an event that didn't happen.  If so, report that item.
+void ReportStuckItems(base::Time now, sql::Connection* db) {
+  static constexpr char kSql[] =
+      "SELECT state FROM prefetch_items"
+      " WHERE creation_time < ?";
+  const int64_t earliest_valid_creation_time = store_utils::ToDatabaseTime(
+      now - base::TimeDelta::FromDays(kStuckTimeLimitInDays));
+  sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
+  statement.BindInt64(0, earliest_valid_creation_time);
+
+  while (statement.Step()) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY("OfflinePages.Prefetching.StuckItemState",
+                                statement.ColumnInt(0));
+  }
 }
 
 Result FinalizeStaleEntriesSync(StaleEntryFinalizerTask::NowGetter now_getter,
@@ -139,6 +161,10 @@ Result FinalizeStaleEntriesSync(StaleEntryFinalizerTask::NowGetter now_getter,
     if (!FinalizeFutureItems(state, now, db))
       return Result::NO_MORE_WORK;
   }
+
+  // Items could also be stuck in a non-expirable state due to a bug, report
+  // them.
+  ReportStuckItems(now, db);
 
   Result result = Result::MORE_WORK_NEEDED;
   if (!MoreWorkInQueue(db))

@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/message_center/message_center_style.h"
 #include "ash/message_center/message_center_view.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -57,14 +58,12 @@ using message_center::NotifierSettingsProvider;
 
 namespace {
 
-const SkColor kSettingsBackgroundColor = SkColorSetRGB(0xFF, 0xFF, 0xFF);
-const SkColor kEntrySeparatorColor = SkColorSetARGB(0.1 * 255, 0, 0, 0);
-const int kEntryHeight = 45;
-const int kEntrySeparatorHeight = 1;
-const int kHorizontalMargin = 10;
-const int kEntryIconSize = 16;
-const int kInternalHorizontalSpacing = 10;
-const int kCheckboxSizeWithPadding = 24;
+const int kEntryHeight = 48;
+const int kHorizontalMargin = 12;
+const int kEntryIconSize = 20;
+const int kInternalHorizontalSpacing = 16;
+const int kSmallerInternalHorizontalSpacing = 12;
+const int kCheckboxSizeWithPadding = 28;
 
 // The width of the settings pane in pixels.
 const int kWidth = 360;
@@ -96,11 +95,9 @@ std::unique_ptr<views::Painter> CreateFocusPainter() {
       message_center::kFocusBorderColor, gfx::Insets(1, 2, 3, 2));
 }
 
-// TODO(tetsui): Give more general names and remove kEntryHeight, kEntryIconSize
-// etc.
+// TODO(tetsui): Give more general names and remove kEntryHeight, etc.
 constexpr gfx::Insets kTopLabelPadding(16, 18, 15, 0);
 const int kQuietModeViewSpacing = 18;
-const int kQuietModeIconSize = 20;
 
 constexpr gfx::Insets kHeaderViewPadding(4, 0, 4, 0);
 constexpr gfx::Insets kQuietModeViewPadding(16, 18, 15, 14);
@@ -108,16 +105,6 @@ constexpr SkColor kQuietModeIconColor = SkColorSetARGB(0x8A, 0x5A, 0x5A, 0x5A);
 constexpr SkColor kTopLabelColor = SkColorSetRGB(0x42, 0x85, 0xF4);
 constexpr SkColor kLabelColor = SkColorSetARGB(0xDE, 0x0, 0x0, 0x0);
 const int kLabelFontSize = 13;
-
-// "Roboto-Regular, 13sp" is specified in the mock.
-gfx::FontList GetFontListForLabel() {
-  gfx::Font default_font;
-  int font_size_delta = kLabelFontSize - default_font.GetFontSize();
-  gfx::Font font = default_font.Derive(font_size_delta, gfx::Font::NORMAL,
-                                       gfx::Font::Weight::NORMAL);
-  DCHECK_EQ(kLabelFontSize, font.GetFontSize());
-  return gfx::FontList(font);
-}
 
 // EntryView ------------------------------------------------------------------
 
@@ -161,10 +148,7 @@ void EntryView::Layout() {
 }
 
 gfx::Size EntryView::CalculatePreferredSize() const {
-  DCHECK_EQ(1, child_count());
-  gfx::Size size = child_at(0)->GetPreferredSize();
-  size.SetToMax(gfx::Size(kWidth, kEntryHeight));
-  return size;
+  return gfx::Size(kWidth, kEntryHeight);
 }
 
 void EntryView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -213,10 +197,16 @@ NotifierSettingsView::NotifierButton::NotifierButton(
       notifier_(std::move(notifier)),
       icon_view_(new views::ImageView()),
       name_view_(new views::Label(notifier_->name)),
-      checkbox_(new views::Checkbox(base::string16())),
+      checkbox_(new views::Checkbox(base::string16(), true /* force_md */)),
       learn_more_(nullptr) {
   DCHECK(provider_);
   DCHECK(notifier_);
+
+  name_view_->SetAutoColorReadabilityEnabled(false);
+  name_view_->SetEnabledColor(kLabelColor);
+  // "Roboto-Regular, 13sp" is specified in the mock.
+  name_view_->SetFontList(message_center_style::GetFontListForSizeAndWeight(
+      kLabelFontSize, gfx::Font::Weight::NORMAL));
 
   checkbox_->SetChecked(notifier_->enabled);
   checkbox_->set_listener(this);
@@ -340,7 +330,7 @@ void NotifierSettingsView::NotifierButton::GridChanged(bool has_learn_more) {
   // Add a column for the icon.
   cs->AddColumn(GridLayout::CENTER, GridLayout::CENTER, 0, GridLayout::FIXED,
                 kEntryIconSize, 0);
-  cs->AddPaddingColumn(0, kInternalHorizontalSpacing);
+  cs->AddPaddingColumn(0, kSmallerInternalHorizontalSpacing);
 
   // Add a column for the name.
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
@@ -378,7 +368,8 @@ NotifierSettingsView::NotifierSettingsView(NotifierSettingsProvider* provider)
     provider_->AddObserver(this);
 
   SetFocusBehavior(FocusBehavior::ALWAYS);
-  SetBackground(views::CreateSolidBackground(kSettingsBackgroundColor));
+  SetBackground(
+      views::CreateSolidBackground(message_center_style::kBackgroundColor));
   SetPaintToLayer();
 
   header_view_ = new views::View;
@@ -393,15 +384,18 @@ NotifierSettingsView::NotifierSettingsView(NotifierSettingsProvider* provider)
   quiet_mode_view->SetLayoutManager(quiet_mode_layout);
 
   views::ImageView* quiet_mode_icon = new views::ImageView();
-  quiet_mode_icon->SetImage(
-      gfx::CreateVectorIcon(kNotificationCenterDoNotDisturbOffIcon,
-                            kQuietModeIconSize, kQuietModeIconColor));
+  quiet_mode_icon->SetImage(gfx::CreateVectorIcon(
+      kNotificationCenterDoNotDisturbOffIcon,
+      message_center_style::kVectorIconSize, kQuietModeIconColor));
   quiet_mode_view->AddChildView(quiet_mode_icon);
 
   views::Label* quiet_mode_label = new views::Label(l10n_util::GetStringUTF16(
       IDS_ASH_MESSAGE_CENTER_QUIET_MODE_BUTTON_TOOLTIP));
   quiet_mode_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  quiet_mode_label->SetFontList(GetFontListForLabel());
+  // "Roboto-Regular, 13sp" is specified in the mock.
+  quiet_mode_label->SetFontList(
+      message_center_style::GetFontListForSizeAndWeight(
+          kLabelFontSize, gfx::Font::Weight::NORMAL));
   quiet_mode_label->SetAutoColorReadabilityEnabled(false);
   quiet_mode_label->SetEnabledColor(kLabelColor);
   quiet_mode_view->AddChildView(quiet_mode_label);
@@ -416,8 +410,8 @@ NotifierSettingsView::NotifierSettingsView(NotifierSettingsProvider* provider)
       IDS_ASH_MESSAGE_CENTER_SETTINGS_DIALOG_DESCRIPTION));
   top_label->SetBorder(views::CreateEmptyBorder(kTopLabelPadding));
   // "Roboto-Medium, 13sp" is specified in the mock.
-  top_label->SetFontList(GetFontListForLabel().Derive(
-      0, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
+  top_label->SetFontList(message_center_style::GetFontListForSizeAndWeight(
+      kLabelFontSize, gfx::Font::Weight::MEDIUM));
   top_label->SetAutoColorReadabilityEnabled(false);
   top_label->SetEnabledColor(kTopLabelColor);
   top_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -427,7 +421,7 @@ NotifierSettingsView::NotifierSettingsView(NotifierSettingsProvider* provider)
   AddChildView(header_view_);
 
   scroller_ = new views::ScrollView();
-  scroller_->SetBackgroundColor(kSettingsBackgroundColor);
+  scroller_->SetBackgroundColor(message_center_style::kBackgroundColor);
   scroller_->SetVerticalScrollBar(new views::OverlayScrollBar(false));
   scroller_->SetHorizontalScrollBar(new views::OverlayScrollBar(true));
   AddChildView(scroller_);
@@ -489,16 +483,6 @@ void NotifierSettingsView::UpdateContentsView(
         new NotifierButton(provider_, std::move(notifiers[i]), this);
     EntryView* entry = new EntryView(button);
 
-    // This code emulates separators using borders.  We will create an invisible
-    // border on the last notifier, as the spec leaves a space for it.
-    std::unique_ptr<views::Border> entry_border;
-    if (i == notifier_count - 1) {
-      entry_border = views::CreateEmptyBorder(0, 0, kEntrySeparatorHeight, 0);
-    } else {
-      entry_border = views::CreateSolidSidedBorder(0, 0, kEntrySeparatorHeight,
-                                                   0, kEntrySeparatorColor);
-    }
-    entry->SetBorder(std::move(entry_border));
     entry->SetFocusBehavior(FocusBehavior::ALWAYS);
     contents_view->AddChildView(entry);
     buttons_.insert(button);

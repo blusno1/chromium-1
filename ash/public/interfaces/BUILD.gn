@@ -17,6 +17,7 @@ mojom("interfaces_internal") {
     "cast_config.mojom",
     "constants.mojom",
     "event_properties.mojom",
+    "highlighter_controller.mojom",
     "ime_controller.mojom",
     "ime_info.mojom",
     "locale.mojom",
@@ -56,4 +57,14 @@ mojom("interfaces_internal") {
   export_class_attribute = "ASH_PUBLIC_EXPORT"
   export_define = "ASH_PUBLIC_IMPLEMENTATION=1"
   export_header = "ash/public/cpp/ash_public_export.h"
+}
+
+mojom("test_interfaces") {
+  testonly = true
+  sources = [
+    "system_tray_test_api.mojom",
+  ]
+  deps = [
+    "//mojo/common:common_custom_types",
+  ]
 }

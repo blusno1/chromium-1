@@ -160,6 +160,7 @@ void PaintPropertyTreeBuilder::UpdateProperties(
     context.absolute_position = context.current;
     full_context.container_for_absolute_position = nullptr;
     context.fixed_position = context.current;
+    context.fixed_position.fixed_position_children_fixed_to_root = true;
     return;
   } else {
     context.current.paint_offset_root = frame_view.GetLayoutView()->Layer();
@@ -234,6 +235,7 @@ void PaintPropertyTreeBuilder::UpdateProperties(
   context.fixed_position = context.current;
   context.fixed_position.transform = fixed_transform_node;
   context.fixed_position.scroll = fixed_scroll_node;
+  context.fixed_position.fixed_position_children_fixed_to_root = true;
 
   std::unique_ptr<PropertyTreeState> contents_state(new PropertyTreeState(
       context.current.transform, context.current.clip, context.current_effect));
@@ -256,6 +258,10 @@ static bool NeedsScrollOrScrollTranslation(const LayoutObject& object) {
   return !scroll_offset.IsZero() || NeedsScrollNode(object);
 }
 
+static bool NeedsSVGLocalToBorderBoxTransform(const LayoutObject& object) {
+  return object.IsSVGRoot();
+}
+
 static bool NeedsPaintOffsetTranslation(const LayoutObject& object) {
   if (!object.IsBoxModelObject())
     return false;
@@ -271,6 +277,8 @@ static bool NeedsPaintOffsetTranslation(const LayoutObject& object) {
     return true;
   }
   if (NeedsScrollOrScrollTranslation(object))
+    return true;
+  if (NeedsSVGLocalToBorderBoxTransform(object))
     return true;
   return false;
 }
@@ -315,7 +323,6 @@ Optional<IntPoint> PaintPropertyTreeBuilder::UpdateForPaintOffsetTranslation(
        context.current.paint_offset != LayoutPoint())) {
     paint_offset_translation =
         ApplyPaintOffsetTranslation(object, context.current.paint_offset);
-    context.current.paint_offset_root = ToLayoutBoxModelObject(object).Layer();
 
     if (RuntimeEnabledFeatures::RootLayerScrollingEnabled() &&
         object.IsLayoutView()) {
@@ -844,8 +851,7 @@ void PaintPropertyTreeBuilder::UpdateLocalBorderBoxContext(
   if (!object.NeedsPaintPropertyUpdate() && !force_subtree_update)
     return;
 
-  // We only need to cache the local border box properties for layered objects.
-  if (!object.HasLayer()) {
+  if (!object.HasLayer() && !NeedsPaintOffsetTranslation(object)) {
     if (fragment_data)
       fragment_data->ClearLocalBorderBoxProperties();
   } else {
@@ -1029,10 +1035,6 @@ void PaintPropertyTreeBuilder::UpdatePerspective(
   }
 }
 
-static bool NeedsSVGLocalToBorderBoxTransform(const LayoutObject& object) {
-  return object.IsSVGRoot();
-}
-
 void PaintPropertyTreeBuilder::UpdateSvgLocalToBorderBoxTransform(
     const LayoutObject& object,
     ObjectPaintProperties& properties,
@@ -1189,6 +1191,7 @@ void PaintPropertyTreeBuilder::UpdateOutOfFlowContext(
     }
   } else if (object.CanContainFixedPositionObjects()) {
     context.fixed_position = context.current;
+    context.fixed_position.fixed_position_children_fixed_to_root = false;
   } else if (paint_properties && paint_properties->CssClip()) {
     // CSS clip applies to all descendants, even if this object is not a
     // containing block ancestor of the descendant. It is okay for
@@ -1262,6 +1265,11 @@ void PaintPropertyTreeBuilder::UpdatePaintOffset(
       break;
     case EPosition::kFixed:
       context.current = context.fixed_position;
+      // Fixed-position elements that are fixed to the vieport have a transform
+      // above the scroll of the LayoutView. Child content is relative to that
+      // transform, and hence the fixed-position element.
+      if (context.fixed_position.fixed_position_children_fixed_to_root)
+        context.current.paint_offset_root = object.Layer();
       break;
     default:
       NOTREACHED();
@@ -1355,6 +1363,9 @@ void PaintPropertyTreeBuilder::UpdateForObjectLocationAndSize(
     fragment_data->SetPaintOffset(paint_offset);
   }
 
+  if (paint_offset_translation)
+    context.current.paint_offset_root = ToLayoutBoxModelObject(object).Layer();
+
   if (!object.IsBox())
     return;
   const LayoutBox& box = ToLayoutBox(object);
@@ -1430,7 +1441,7 @@ void PaintPropertyTreeBuilder::InitSingleFragmentFromParent(
 }
 
 // Limit the maximum number of fragments, to avoid pathological situations.
-static const int kMaxNumFragments = 10000;
+static const int kMaxNumFragments = 2000;
 
 void PaintPropertyTreeBuilder::UpdateFragments(
     const LayoutObject& object,

@@ -42,11 +42,12 @@
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "core/frame/Deprecation.h"
+#include "core/frame/Frame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
-#include "core/html/FormData.h"
 #include "core/html/HTMLDocument.h"
+#include "core/html/forms/FormData.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -66,6 +67,7 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/blob/BlobData.h"
 #include "platform/exported/WrappedResourceResponse.h"
+#include "platform/feature_policy/FeaturePolicy.h"
 #include "platform/http_names.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
@@ -84,6 +86,7 @@
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/CString.h"
 #include "public/platform/WebCORS.h"
+#include "public/platform/WebFeaturePolicyFeature.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
@@ -692,6 +695,14 @@ void XMLHttpRequest::open(const AtomicString& method,
   upload_complete_ = false;
 
   if (!async && GetExecutionContext()->IsDocument()) {
+    if (IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kSyncXHR) &&
+        !GetDocument()->GetFrame()->IsFeatureEnabled(
+            WebFeaturePolicyFeature::kSyncXHR)) {
+      exception_state.ThrowDOMException(
+          kInvalidAccessError,
+          "Synchronous requests are disabled by Feature Policy.");
+      return;
+    }
     if (GetDocument()->GetSettings() &&
         !GetDocument()->GetSettings()->GetSyncXHRInDocumentsEnabled()) {
       exception_state.ThrowDOMException(
@@ -1786,37 +1797,48 @@ void XMLHttpRequest::ParseDocumentChunk(const char* data, unsigned len) {
 }
 
 std::unique_ptr<TextResourceDecoder> XMLHttpRequest::CreateDecoder() const {
-  if (response_type_code_ == kResponseTypeJSON) {
-    return TextResourceDecoder::Create(TextResourceDecoderOptions(
-        TextResourceDecoderOptions::kPlainTextContent, UTF8Encoding()));
-  }
+  const TextResourceDecoderOptions decoder_options_for_utf8_plain_text(
+      TextResourceDecoderOptions::kPlainTextContent, UTF8Encoding());
+  if (response_type_code_ == kResponseTypeJSON)
+    return TextResourceDecoder::Create(decoder_options_for_utf8_plain_text);
 
   String final_response_charset = FinalResponseCharset();
   if (!final_response_charset.IsEmpty()) {
+    // If the final charset is given, use the charset without sniffing the
+    // content.
     return TextResourceDecoder::Create(TextResourceDecoderOptions(
         TextResourceDecoderOptions::kPlainTextContent,
         WTF::TextEncoding(final_response_charset)));
   }
 
-  // allow TextResourceDecoder to look inside the m_response if it's XML or HTML
-  if (ResponseIsXML()) {
-    TextResourceDecoderOptions options(TextResourceDecoderOptions::kXMLContent);
+  TextResourceDecoderOptions decoder_options_for_xml(
+      TextResourceDecoderOptions::kXMLContent);
+  // Don't stop on encoding errors, unlike it is done for other kinds
+  // of XML resources. This matches the behavior of previous WebKit
+  // versions, Firefox and Opera.
+  decoder_options_for_xml.SetUseLenientXMLDecoding();
 
-    // Don't stop on encoding errors, unlike it is done for other kinds
-    // of XML resources. This matches the behavior of previous WebKit
-    // versions, Firefox and Opera.
-    options.SetUseLenientXMLDecoding();
-
-    return TextResourceDecoder::Create(options);
+  switch (response_type_code_) {
+    case kResponseTypeDefault:
+      if (ResponseIsXML())
+        return TextResourceDecoder::Create(decoder_options_for_xml);
+    // fall through
+    case kResponseTypeText:
+      return TextResourceDecoder::Create(decoder_options_for_utf8_plain_text);
+    case kResponseTypeDocument:
+      if (ResponseIsHTML()) {
+        return TextResourceDecoder::Create(TextResourceDecoderOptions(
+            TextResourceDecoderOptions::kHTMLContent, UTF8Encoding()));
+      }
+      return TextResourceDecoder::Create(decoder_options_for_xml);
+    case kResponseTypeJSON:
+    case kResponseTypeBlob:
+    case kResponseTypeArrayBuffer:
+      NOTREACHED();
+      break;
   }
-
-  if (ResponseIsHTML()) {
-    return TextResourceDecoder::Create(TextResourceDecoderOptions(
-        TextResourceDecoderOptions::kHTMLContent, UTF8Encoding()));
-  }
-
-  return TextResourceDecoder::Create(TextResourceDecoderOptions(
-      TextResourceDecoderOptions::kPlainTextContent, UTF8Encoding()));
+  NOTREACHED();
+  return nullptr;
 }
 
 void XMLHttpRequest::DidReceiveData(const char* data, unsigned len) {

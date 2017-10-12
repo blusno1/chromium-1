@@ -37,9 +37,11 @@ CanvasRenderingContext::CanvasRenderingContext(
     CanvasRenderingContextHost* host,
     const CanvasContextCreationAttributes& attrs)
     : host_(host),
-      color_params_(kLegacyCanvasColorSpace, kRGBA8CanvasPixelFormat),
+      color_params_(kLegacyCanvasColorSpace,
+                    kRGBA8CanvasPixelFormat,
+                    kNonOpaque),
       creation_attributes_(attrs) {
-  color_params_.SetCanvasColorSpace(kSRGBCanvasColorSpace);
+  color_params_.SetCanvasColorSpace(kLegacyCanvasColorSpace);
   if (RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled()) {
     if (creation_attributes_.colorSpace() == kRec2020CanvasColorSpaceName)
       color_params_.SetCanvasColorSpace(kRec2020CanvasColorSpace);
@@ -57,6 +59,11 @@ CanvasRenderingContext::CanvasRenderingContext(
 
     // TODO(ccameron): linearPixelMath needs to be propagated here.
   }
+
+  if (!creation_attributes_.alpha()) {
+    color_params_.SetOpacityMode(kOpaque);
+  }
+
   // Make m_creationAttributes reflect the effective colorSpace, pixelFormat and
   // linearPixelMath rather than the requested one.
   creation_attributes_.setColorSpace(ColorSpaceAsString());
@@ -65,7 +72,7 @@ CanvasRenderingContext::CanvasRenderingContext(
 }
 
 WTF::String CanvasRenderingContext::ColorSpaceAsString() const {
-  switch (color_params_.color_space()) {
+  switch (color_params_.ColorSpace()) {
     case kLegacyCanvasColorSpace:
       return kLegacyCanvasColorSpaceName;
     case kSRGBCanvasColorSpace:
@@ -80,7 +87,7 @@ WTF::String CanvasRenderingContext::ColorSpaceAsString() const {
 }
 
 WTF::String CanvasRenderingContext::PixelFormatAsString() const {
-  switch (color_params_.pixel_format()) {
+  switch (color_params_.PixelFormat()) {
     case kRGBA8CanvasPixelFormat:
       return kRGBA8CanvasPixelFormatName;
     case kRGB10A2CanvasPixelFormat:
@@ -105,19 +112,19 @@ void CanvasRenderingContext::Dispose() {
   // the other in order to break the circular reference.  This is to avoid
   // an error when CanvasRenderingContext::didProcessTask() is invoked
   // after the HTMLCanvasElement is destroyed.
-  if (host()) {
-    host()->DetachContext();
+  if (Host()) {
+    Host()->DetachContext();
     host_ = nullptr;
   }
 }
 
 void CanvasRenderingContext::DidDraw(const SkIRect& dirty_rect) {
-  host()->DidDraw(SkRect::Make(dirty_rect));
+  Host()->DidDraw(SkRect::Make(dirty_rect));
   NeedsFinalizeFrame();
 }
 
 void CanvasRenderingContext::DidDraw() {
-  host()->DidDraw();
+  Host()->DidDraw();
   NeedsFinalizeFrame();
 }
 
@@ -133,8 +140,8 @@ void CanvasRenderingContext::DidProcessTask() {
   finalize_frame_scheduled_ = false;
   // The end of a script task that drew content to the canvas is the point
   // at which the current frame may be considered complete.
-  if (host()) {
-    host()->FinalizeFrame();
+  if (Host()) {
+    Host()->FinalizeFrame();
   }
   FinalizeFrame();
 }

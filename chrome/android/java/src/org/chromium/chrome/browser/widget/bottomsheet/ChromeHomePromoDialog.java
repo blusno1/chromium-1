@@ -12,9 +12,14 @@ import android.view.View;
 import android.widget.CompoundButton;
 
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.StrictModeContext;
 import org.chromium.base.SysUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
+import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.PromoDialog;
@@ -29,12 +34,16 @@ public class ChromeHomePromoDialog extends PromoDialog {
     /** Whether or not the switch in the promo is enabled or disabled. */
     private boolean mSwitchStateShouldEnable;
 
+    /** Whether or not the user made a selection by tapping the 'ok' button. */
+    private boolean mUserMadeSelection;
+
     /**
      * Default constructor.
      * @param activity The {@link Activity} showing the promo.
      */
     public ChromeHomePromoDialog(Activity activity) {
         super(activity);
+        setOnDismissListener(this);
     }
 
     @Override
@@ -56,10 +65,7 @@ public class ChromeHomePromoDialog extends PromoDialog {
 
     @Override
     public void onClick(View view) {
-        if (mSwitchStateShouldEnable != FeatureUtilities.isChromeHomeEnabled()) {
-            FeatureUtilities.switchChromeHomeUserSetting(mSwitchStateShouldEnable);
-            restartChromeInstances();
-        }
+        mUserMadeSelection = true;
 
         // There is only one button for this dialog, so dismiss on any click.
         dismiss();
@@ -102,9 +108,43 @@ public class ChromeHomePromoDialog extends PromoDialog {
             }
         }
 
+        ChromeActivity activity = (ChromeActivity) getOwnerActivity();
+        Tab tab = activity.getActivityTab();
+
+        boolean showOptOutSnackbar = false;
+        if (!mSwitchStateShouldEnable
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_OPT_OUT_SNACKBAR)) {
+            try (StrictModeContext unused = StrictModeContext.allowDiskReads()) {
+                showOptOutSnackbar =
+                        !ChromePreferenceManager.getInstance().getChromeHomeOptOutSnackbarShown();
+            }
+        }
+
+        Runnable finalizeCallback = null;
+        if (showOptOutSnackbar) {
+            finalizeCallback = new Runnable() {
+                @Override
+                public void run() {
+                    ChromeHomeSnackbarController.initialize(tab);
+                }
+            };
+        }
+
+        // Detach the foreground tab and. It will be reattached when the activity is restarted.
+        tab.detachAndStartReparenting(null, null, finalizeCallback);
+
         getOwnerActivity().recreate();
     }
 
     @Override
-    public void onDismiss(DialogInterface dialogInterface) {}
+    public void onDismiss(DialogInterface dialogInterface) {
+        // If the user did not hit 'ok', do not use the switch value to store the user setting.
+        boolean userSetting = mUserMadeSelection ? mSwitchStateShouldEnable
+                                                 : FeatureUtilities.isChromeHomeEnabled();
+
+        boolean restartRequired = userSetting != FeatureUtilities.isChromeHomeEnabled();
+        FeatureUtilities.switchChromeHomeUserSetting(userSetting);
+
+        if (restartRequired) restartChromeInstances();
+    }
 }

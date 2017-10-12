@@ -21,9 +21,9 @@ Task::Task(const Location& posted_from,
               ? MakeCriticalClosure(std::move(task))
               : std::move(task),
           delay.is_zero() ? TimeTicks() : TimeTicks::Now() + delay,
-          false),  // Not nestable.
-      // Prevent a delayed BLOCK_SHUTDOWN task from blocking shutdown before
-      // being scheduled by changing its shutdown behavior to SKIP_ON_SHUTDOWN.
+          Nestable::kNonNestable),
+      // Prevent a delayed BLOCK_SHUTDOWN task from blocking shutdown before it
+      // starts running by changing its shutdown behavior to SKIP_ON_SHUTDOWN.
       traits(
           (!delay.is_zero() &&
            traits.shutdown_behavior() == TaskShutdownBehavior::BLOCK_SHUTDOWN)

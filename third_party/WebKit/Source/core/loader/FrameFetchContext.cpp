@@ -448,6 +448,7 @@ void FrameFetchContext::DispatchWillSendRequest(
     unsigned long identifier,
     ResourceRequest& request,
     const ResourceResponse& redirect_response,
+    Resource::Type resource_type,
     const FetchInitiatorInfo& initiator_info) {
   if (IsDetached())
     return;
@@ -460,7 +461,7 @@ void FrameFetchContext::DispatchWillSendRequest(
   }
   probe::willSendRequest(GetFrame()->GetDocument(), identifier,
                          MasterDocumentLoader(), request, redirect_response,
-                         initiator_info);
+                         initiator_info, resource_type);
   if (IdlenessDetector* idleness_detector = GetFrame()->GetIdlenessDetector())
     idleness_detector->OnWillSendRequest();
   if (GetFrame()->FrameScheduler())
@@ -515,10 +516,6 @@ void FrameFetchContext::DispatchDidReceiveResponse(
   }
 
   if (response.IsLegacySymantecCert()) {
-    // TODO(estark): Consider capping this after the message has been printed
-    // some number of times, since this could get spammy for sites that have
-    // lots of subresources with Symantec certs.
-    // https://bugs.chromium.org/p/chromium/issues/detail?id=770406#c1
     GetLocalFrameClient()->ReportLegacySymantecCert(
         response.Url(), response.CertValidityStart());
   }
@@ -931,12 +928,13 @@ bool FrameFetchContext::ShouldBlockRequestByInspector(const KURL& url) const {
 void FrameFetchContext::DispatchDidBlockRequest(
     const ResourceRequest& resource_request,
     const FetchInitiatorInfo& fetch_initiator_info,
-    ResourceRequestBlockedReason blocked_reason) const {
+    ResourceRequestBlockedReason blocked_reason,
+    Resource::Type resource_type) const {
   if (IsDetached())
     return;
   probe::didBlockRequest(GetFrame()->GetDocument(), resource_request,
                          MasterDocumentLoader(), fetch_initiator_info,
-                         blocked_reason);
+                         blocked_reason, resource_type);
 }
 
 bool FrameFetchContext::ShouldBypassMainWorldCSP() const {

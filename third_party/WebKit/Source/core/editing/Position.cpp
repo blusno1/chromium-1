@@ -334,27 +334,32 @@ Node* PositionTemplate<Strategy>::CommonAncestorContainer(
                                   *other.ComputeContainerNode());
 }
 
-static bool IsPositionValidFor(const Position& position,
-                               const Document& document) {
-  if (position.IsNull())
-    return true;
-  if (position.GetDocument() != document)
-    return false;
-  return position.AnchorNode()->isConnected();
+static bool IsPositionConnected(const Position& position) {
+  return position.AnchorNode() && position.AnchorNode()->isConnected();
 }
 
-static bool IsPositionValidFor(const PositionInFlatTree& position,
-                               const Document& document) {
+static bool IsPositionConnected(const PositionInFlatTree& position) {
   if (position.IsNull())
-    return true;
-  if (position.GetDocument() != document)
     return false;
-  return FlatTreeTraversal::Contains(document, *position.AnchorNode());
+  return FlatTreeTraversal::Contains(*position.GetDocument(),
+                                     *position.AnchorNode());
+}
+
+template <typename Strategy>
+bool PositionTemplate<Strategy>::IsConnected() const {
+  return IsPositionConnected(*this);
 }
 
 template <typename Strategy>
 bool PositionTemplate<Strategy>::IsValidFor(const Document& document) const {
-  return IsPositionValidFor(*this, document);
+  if (IsNull())
+    return true;
+  if (GetDocument() != document)
+    return false;
+  if (!IsConnected())
+    return false;
+  return !IsOffsetInAnchor() ||
+         OffsetInContainerNode() <= LastOffsetInNode(*AnchorNode());
 }
 
 int ComparePositions(const PositionInFlatTree& position_a,

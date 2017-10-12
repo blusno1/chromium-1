@@ -7,7 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "components/offline_pages/core/model/offline_store_utils.h"
+#include "components/offline_pages/core/offline_store_utils.h"
 #include "url/gurl.h"
 
 namespace offline_pages {
@@ -18,7 +18,7 @@ OfflinePageItemGenerator::~OfflinePageItemGenerator() {}
 
 OfflinePageItem OfflinePageItemGenerator::CreateItem() {
   OfflinePageItem item;
-  item.offline_id = OfflineStoreUtils::GenerateOfflineId();
+  item.offline_id = store_utils::GenerateOfflineId();
   item.client_id.name_space = namespace_;
   item.client_id.id = base::Int64ToString(item.offline_id);
   item.request_origin = request_origin_;
@@ -30,8 +30,8 @@ OfflinePageItem OfflinePageItemGenerator::CreateItem() {
 }
 
 OfflinePageItem OfflinePageItemGenerator::CreateItemWithTempFile() {
-  // If hitting this DCHECK, please call SetTempDirectory before calling this
-  // method for creating files with page.
+  // If hitting this DCHECK, please call SetArchiveDirectory before calling
+  // this method for creating files with page.
   DCHECK(!archive_dir_.empty());
   OfflinePageItem item = CreateItem();
   base::FilePath path;

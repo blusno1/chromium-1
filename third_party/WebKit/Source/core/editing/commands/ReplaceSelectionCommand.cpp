@@ -53,10 +53,10 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLIElement.h"
 #include "core/html/HTMLQuoteElement.h"
 #include "core/html/HTMLSpanElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/HTMLSelectElement.h"
 #include "core/html_names.h"
 #include "core/input_type_names.h"
@@ -857,7 +857,7 @@ static void HandleStyleSpansBeforeInsertion(ReplacementFragment& fragment,
   // Handling the case where we are doing Paste as Quotation or pasting into
   // quoted content is more complicated (see handleStyleSpans) and doesn't
   // receive the optimization.
-  if (EnclosingNodeOfType(FirstPositionInOrBeforeNodeDeprecated(top_node),
+  if (EnclosingNodeOfType(FirstPositionInOrBeforeNode(*top_node),
                           IsMailHTMLBlockquoteElement,
                           kCanCrossEditingBoundary))
     return;
@@ -1067,8 +1067,8 @@ void ReplaceSelectionCommand::InsertParagraphSeparatorIfNeeds(
                                      IsStartOfBlock(visible_start);
     // FIXME: We should only expand to include fully selected special elements
     // if we are copying a selection and pasting it on top of itself.
-    DeleteSelection(editing_state, false, merge_blocks_after_delete, false);
-    if (editing_state->IsAborted())
+    if (!DeleteSelection(editing_state, false, merge_blocks_after_delete,
+                         false))
       return;
     if (fragment.HasInterchangeNewlineAtStart()) {
       GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();

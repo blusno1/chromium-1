@@ -24,6 +24,7 @@ namespace headless {
 
 namespace {
 
+const char kUseLocalHostForDevToolsHttpServer[] = "localhost";
 const int kBackLog = 10;
 
 class TCPEndpointServerSocketFactory : public content::DevToolsSocketFactory {
@@ -31,7 +32,8 @@ class TCPEndpointServerSocketFactory : public content::DevToolsSocketFactory {
   explicit TCPEndpointServerSocketFactory(const net::HostPortPair& endpoint)
       : endpoint_(endpoint) {
     DCHECK(!endpoint_.IsEmpty());
-    if (!endpoint.host().empty()) {
+    if (!endpoint.host().empty() &&
+        endpoint.host() != kUseLocalHostForDevToolsHttpServer) {
       net::IPAddress ip;
       DCHECK(ip.AssignFromIPLiteral(endpoint.host()));
     }
@@ -55,7 +57,7 @@ class TCPEndpointServerSocketFactory : public content::DevToolsSocketFactory {
   std::unique_ptr<net::ServerSocket> CreateForHttpServer() override {
     std::unique_ptr<net::ServerSocket> socket(
         new net::TCPServerSocket(nullptr, net::NetLogSource()));
-    if (endpoint_.host().empty())
+    if (endpoint_.host() == kUseLocalHostForDevToolsHttpServer)
       return CreateLocalHostServerSocket(endpoint_.port());
     if (socket->ListenWithAddressAndPort(endpoint_.host(), endpoint_.port(),
                                          kBackLog) == net::OK)

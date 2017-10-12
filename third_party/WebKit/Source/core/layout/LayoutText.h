@@ -36,6 +36,7 @@ namespace blink {
 
 class AbstractInlineTextBox;
 class InlineTextBox;
+class NGOffsetMappingResult;
 
 // LayoutText is the root class for anything that represents
 // a text node (see core/dom/Text.h).
@@ -205,6 +206,9 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   int CaretMaxOffset() const override;
   unsigned ResolvedTextLength() const;
 
+  // True if any character remains after CSS white-space collapsing.
+  bool HasNonCollapsedText() const;
+
   bool ContainsReversedText() const { return contains_reversed_text_; }
 
   bool IsSecure() const {
@@ -248,6 +252,9 @@ class CORE_EXPORT LayoutText : public LayoutObject {
       unsigned short length);  // Subclassed by SVG.
 
   void InvalidateDisplayItemClients(PaintInvalidationReason) const override;
+
+  bool ShouldUseNGAlternatives() const;
+  const NGOffsetMappingResult& GetNGOffsetMapping() const;
 
  private:
   void ComputePreferredLogicalWidths(float lead_width);

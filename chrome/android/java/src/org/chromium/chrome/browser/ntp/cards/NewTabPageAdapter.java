@@ -23,7 +23,6 @@ import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
-import org.chromium.chrome.browser.suggestions.ContentSuggestionPlaceholder;
 import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SiteSection;
 import org.chromium.chrome.browser.suggestions.SuggestionsCarousel;
@@ -46,6 +45,7 @@ import java.util.Set;
 public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements NodeParent {
     private final SuggestionsUiDelegate mUiDelegate;
     private final ContextMenuManager mContextMenuManager;
+    private final OfflinePageBridge mOfflinePageBridge;
 
     @Nullable
     private final View mAboveTheFoldView;
@@ -130,6 +130,8 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
             mRoot.addChild(mBottomSpacer);
         }
 
+        mOfflinePageBridge = offlinePageBridge;
+
         RemoteSuggestionsStatusObserver suggestionsObserver = new RemoteSuggestionsStatusObserver();
         mUiDelegate.addDestructionObserver(suggestionsObserver);
 
@@ -159,8 +161,8 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
                 return new SectionHeaderViewHolder(mRecyclerView, mUiConfig);
 
             case ItemViewType.SNIPPET:
-                return new SnippetArticleViewHolder(
-                        mRecyclerView, mContextMenuManager, mUiDelegate, mUiConfig);
+                return new SnippetArticleViewHolder(mRecyclerView, mContextMenuManager, mUiDelegate,
+                        mUiConfig, mOfflinePageBridge);
 
             case ItemViewType.SPACING:
                 return new NewTabPageViewHolder(SpacingItem.createView(parent));
@@ -186,10 +188,6 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
 
             case ItemViewType.CAROUSEL:
                 return new SuggestionsCarousel.ViewHolder(mRecyclerView);
-
-            case ItemViewType.PLACEHOLDER_CARD:
-                return new ContentSuggestionPlaceholder.ViewHolder(
-                        mRecyclerView, mUiConfig, mContextMenuManager);
         }
 
         assert false : viewType;
@@ -263,15 +261,25 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
     private void updateAllDismissedVisibility() {
         boolean areRemoteSuggestionsEnabled =
                 mUiDelegate.getSuggestionsSource().areRemoteSuggestionsEnabled();
-        boolean hasAllBeenDismissed = hasAllBeenDismissed();
+        boolean allDismissed = hasAllBeenDismissed() && !areArticlesLoading();
 
-        mAllDismissed.setVisible(areRemoteSuggestionsEnabled && hasAllBeenDismissed);
+        mAllDismissed.setVisible(areRemoteSuggestionsEnabled && allDismissed);
         mFooter.setVisible(!SuggestionsConfig.scrollToLoad() && areRemoteSuggestionsEnabled
-                && !hasAllBeenDismissed);
+                && !allDismissed);
 
         if (mBottomSpacer != null) {
-            mBottomSpacer.setVisible(areRemoteSuggestionsEnabled || !hasAllBeenDismissed);
+            mBottomSpacer.setVisible(areRemoteSuggestionsEnabled || !allDismissed);
         }
+    }
+
+    private boolean areArticlesLoading() {
+        for (int category : mUiDelegate.getSuggestionsSource().getCategories()) {
+            if (category != KnownCategories.ARTICLES) continue;
+
+            return mUiDelegate.getSuggestionsSource().getCategoryStatus(KnownCategories.ARTICLES)
+                    == CategoryStatus.AVAILABLE_LOADING;
+        }
+        return false;
     }
 
     @Override

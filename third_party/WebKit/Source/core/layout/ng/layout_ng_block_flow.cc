@@ -4,6 +4,7 @@
 
 #include "core/layout/ng/layout_ng_block_flow.h"
 
+#include "core/layout/HitTestLocation.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/ng/inline/ng_inline_node_data.h"
 #include "core/layout/ng/ng_constraint_space.h"
@@ -11,6 +12,7 @@
 #include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_length_utils.h"
 #include "core/layout/ng/ng_out_of_flow_layout_part.h"
+#include "core/page/scrolling/RootScrollerUtil.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ng/ng_block_flow_painter.h"
 #include "platform/runtime_enabled_features.h"
@@ -176,16 +178,26 @@ void LayoutNGBlockFlow::UpdateOutOfFlowBlockLayout() {
 
   RefPtr<NGPhysicalBoxFragment> fragment =
       ToNGPhysicalBoxFragment(result->PhysicalFragment().get());
-  DCHECK_GT(fragment->Children().size(), (size_t)0);
-  RefPtr<NGPhysicalFragment> child_fragment = fragment->Children()[0];
-  NGPhysicalOffset child_offset = child_fragment->Offset();
-  if (container_style->IsFlippedBlocksWritingMode()) {
-    SetX(containing_block_logical_height - child_offset.left -
-         child_fragment->Size().width);
-  } else {
-    SetX(child_offset.left);
+  DCHECK_GT(fragment->Children().size(), 0u);
+  // Copy sizes of all child fragments to Legacy.
+  // There could be multiple fragments, when this node has descendants whose
+  // container is this node's container.
+  // Example: fixed descendant of fixed element.
+  for (RefPtr<NGPhysicalFragment> child_fragment : fragment->Children()) {
+    DCHECK(child_fragment->GetLayoutObject()->IsBox());
+    LayoutBox* child_legacy_box =
+        ToLayoutBox(child_fragment->GetLayoutObject());
+    NGPhysicalOffset child_offset = child_fragment->Offset();
+    if (container_style->IsFlippedBlocksWritingMode()) {
+      child_legacy_box->SetX(containing_block_logical_height -
+                             child_offset.left - child_fragment->Size().width);
+    } else {
+      child_legacy_box->SetX(child_offset.left);
+    }
+    child_legacy_box->SetY(child_offset.top);
   }
-  SetY(child_offset.top);
+  RefPtr<NGPhysicalFragment> child_fragment = fragment->Children()[0];
+  DCHECK_EQ(fragment->Children()[0]->GetLayoutObject(), this);
   paint_fragment_ = WTF::MakeUnique<NGPaintFragment>(child_fragment.get());
 }
 
@@ -210,9 +222,9 @@ void LayoutNGBlockFlow::WillCollectInlines() {}
 // LayoutResult are required to compute the result.
 // TODO(kojii): Use the cached result for now, we may need to reconsider as the
 // cache evolves.
-const NGPhysicalFragment* LayoutNGBlockFlow::CurrentFragment() const {
+const NGPhysicalBoxFragment* LayoutNGBlockFlow::CurrentFragment() const {
   if (cached_result_)
-    return cached_result_->PhysicalFragment().get();
+    return ToNGPhysicalBoxFragment(cached_result_->PhysicalFragment().get());
   return nullptr;
 }
 
@@ -221,12 +233,12 @@ void LayoutNGBlockFlow::AddOverflowFromChildren() {
   // |CopyFragmentDataToLayoutBox()| and |RecalcOverflowAfterStyleChange()|.
   // Add overflow from the last layout cycle.
   if (ChildrenInline()) {
-    if (const NGPhysicalFragment* physical_fragment = CurrentFragment()) {
+    if (const NGPhysicalBoxFragment* physical_fragment = CurrentFragment()) {
       // TODO(kojii): If |RecalcOverflowAfterStyleChange()|, we need to
       // re-compute glyph bounding box. How to detect it and how to re-compute
       // is TBD.
-      LayoutRect visual_rect = physical_fragment->LocalVisualRect();
-      AddContentsVisualOverflow(visual_rect);
+      AddContentsVisualOverflow(
+          physical_fragment->ContentsVisualRect().ToLayoutRect());
       // TODO(kojii): The above code computes visual overflow only, we fallback
       // to LayoutBlock for AddLayoutOverflow() for now. It doesn't compute
       // correctly without RootInlineBox though.
@@ -303,6 +315,31 @@ void LayoutNGBlockFlow::PaintObject(const PaintInfo& paint_info,
     NGBlockFlowPainter(*this).PaintContents(paint_info, paint_offset);
   else
     LayoutBlockFlow::PaintObject(paint_info, paint_offset);
+}
+
+bool LayoutNGBlockFlow::NodeAtPoint(
+    HitTestResult& result,
+    const HitTestLocation& location_in_container,
+    const LayoutPoint& accumulated_offset,
+    HitTestAction action) {
+  if (!RuntimeEnabledFeatures::LayoutNGPaintFragmentsEnabled()) {
+    return LayoutBlockFlow::NodeAtPoint(result, location_in_container,
+                                        accumulated_offset, action);
+  }
+
+  LayoutPoint adjusted_location = accumulated_offset + Location();
+  if (!RootScrollerUtil::IsEffective(*this)) {
+    // Check if we need to do anything at all.
+    // If we have clipping, then we can't have any spillout.
+    LayoutRect overflow_box =
+        HasOverflowClip() ? BorderBoxRect() : VisualOverflowRect();
+    overflow_box.MoveBy(adjusted_location);
+    if (!location_in_container.Intersects(overflow_box))
+      return false;
+  }
+
+  return NGBlockFlowPainter(*this).NodeAtPoint(result, location_in_container,
+                                               accumulated_offset, action);
 }
 
 }  // namespace blink

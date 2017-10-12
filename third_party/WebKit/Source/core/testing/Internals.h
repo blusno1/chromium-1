@@ -587,6 +587,10 @@ class Internals final : public GarbageCollected<Internals>,
   // The order is not defined.
   Vector<String> supportedTextEncodingLabels() const;
 
+  void simulateRasterUnderInvalidations(bool enable);
+
+  void BypassLongCompileThresholdOnce(ExceptionState&);
+
  private:
   explicit Internals(ExecutionContext*);
   Document* ContextDocument() const;

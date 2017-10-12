@@ -116,6 +116,10 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 // If a new folder is being added currently.
 @property(nonatomic, assign) BOOL addingNewFolder;
 
+// The cell for the newly created folder while its name is being edited. Set
+// to nil once the editing completes. Corresponds to |_editingFolderNode|.
+@property(nonatomic, weak) BookmarkTableCell* editingFolderCell;
+
 @end
 
 @implementation BookmarkTableView
@@ -130,6 +134,7 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 @synthesize editing = _editing;
 @synthesize dispatcher = _dispatcher;
 @synthesize addingNewFolder = _addingNewFolder;
+@synthesize editingFolderCell = _editingFolderCell;
 
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
   registry->RegisterIntegerPref(prefs::kIosBookmarkSigninPromoDisplayedCount,
@@ -253,6 +258,12 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 }
 
 - (void)setEditing:(BOOL)editing {
+  // If not in editing mode but the tableView's editing is ON, it means the
+  // table is waiting for a swipe-to-delete confirmation.  In this case, we need
+  // to close the confirmation by setting tableView.editing to NO.
+  if (!_editing && self.tableView.editing) {
+    self.tableView.editing = NO;
+  }
   _editing = editing;
   [self resetEditNodes];
   [self.tableView setEditing:editing animated:YES];
@@ -286,27 +297,25 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 }
 
 - (CGFloat)contentPosition {
-  UITableViewCell* cell = [[self.tableView visibleCells] firstObject];
-  if (cell) {
-    NSIndexPath* indexPath = [self.tableView indexPathForCell:cell];
-    if (indexPath.section == self.bookmarksSection) {
-      // Cache the content position only if the bookmarks section is visible.
-      return indexPath.row;
-    }
+  if (_currentRootNode == self.bookmarkModel->root_node()) {
+    return 0;
   }
-  return 0;
+  // Divided the scroll position by cell height so that it will stay correct in
+  // case the cell height is changed in future.
+  return self.tableView.contentOffset.y / kCellHeightPt;
 }
 
 - (void)setContentPosition:(CGFloat)position {
-  NSIndexPath* path =
-      [NSIndexPath indexPathForRow:position inSection:self.bookmarksSection];
-  // Anchoring |position| as the starting point calculate the visible rect area,
-  // based on screen size.
-  CGRect visibleRect = [self.tableView rectForRowAtIndexPath:path];
-  visibleRect =
-      CGRectMake(visibleRect.origin.x, visibleRect.origin.y,
-                 visibleRect.size.width, self.tableView.frame.size.height);
-  [self.tableView scrollRectToVisible:visibleRect animated:NO];
+  // The scroll position was divided by the cell height when stored.
+  [self.tableView setContentOffset:CGPointMake(0, position * kCellHeightPt)];
+}
+
+#pragma mark - UIView
+
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  // Stop edit of current bookmark folder name, if any.
+  [self.editingFolderCell stopEdit];
 }
 
 #pragma mark - UITableViewDataSource
@@ -364,6 +373,7 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   if (node == _editingFolderNode) {
     // Delay starting edit, so that the cell is fully created.
     dispatch_async(dispatch_get_main_queue(), ^{
+      self.editingFolderCell = cell;
       [cell startEdit];
       cell.textDelegate = self;
     });
@@ -382,8 +392,7 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   // We enable the swipe-to-delete gesture and reordering control for nodes of
   // type URL or Folder, and not the permanent ones.
   const BookmarkNode* node = [self nodeAtIndexPath:indexPath];
-  return node->type() == BookmarkNode::URL ||
-         node->type() == BookmarkNode::FOLDER;
+  return [self isUrlOrFolder:node];
 }
 
 - (void)tableView:(UITableView*)tableView
@@ -460,6 +469,7 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
       // if editing folder name, cancel it.
       if (_editingFolderNode) {
         _editingFolderNode = NULL;
+        self.editingFolderCell = nil;
         self.addingNewFolder = NO;
         [self refreshContents];
       }
@@ -628,7 +638,9 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   }
 
   const BookmarkNode* node = [self nodeAtIndexPath:indexPath];
-  if (!node) {
+  // Disable the long press gesture if it is a permanent node (not an URL or
+  // Folder).
+  if (!node || ![self isUrlOrFolder:node]) {
     return;
   }
 
@@ -639,6 +651,36 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   _editNodes.clear();
   if (self.editing) {
     // Also update viewcontroler that the edit nodes changed, if in edit mode.
+    [self.delegate bookmarkTableView:self selectedEditNodes:_editNodes];
+  }
+}
+
+// Row selection of the tableView will be cleared after reloadData.  This
+// function is used to restore the row selection.  It also updates editNodes in
+// case some selected nodes are removed.
+- (void)restoreRowSelection {
+  // Create a new editNodes set to check if some selected nodes are removed.
+  std::set<const bookmarks::BookmarkNode*> newEditNodes;
+
+  // Add selected nodes to editNodes only if they are not removed (still exist
+  // in the table).
+  for (size_t index = 0; index < _bookmarkItems.size(); ++index) {
+    const BookmarkNode* node = _bookmarkItems[index];
+    if (_editNodes.find(node) != _editNodes.end()) {
+      newEditNodes.insert(node);
+      // Reselect the row of this node.
+      [self.tableView
+          selectRowAtIndexPath:[NSIndexPath
+                                   indexPathForRow:index
+                                         inSection:self.bookmarksSection]
+                      animated:NO
+                scrollPosition:UITableViewScrollPositionNone];
+    }
+  }
+
+  // if editNodes is changed, update it and tell BookmarkTableViewDelegate.
+  if (_editNodes.size() != newEditNodes.size()) {
+    _editNodes = newEditNodes;
     [self.delegate bookmarkTableView:self selectedEditNodes:_editNodes];
   }
 }
@@ -657,9 +699,11 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   [self computeBookmarkTableViewData];
   [self showEmptyOrLoadingSpinnerBackgroundIfNeeded];
   [self cancelAllFaviconLoads];
-  [self resetEditNodes];
   [self.delegate bookmarkTableViewRefreshContextBar:self];
   [self.tableView reloadData];
+  if (self.editing && !_editNodes.empty()) {
+    [self restoreRowSelection];
+  }
   if (self.addingNewFolder) {
     dispatch_async(dispatch_get_main_queue(), ^{
       // Scroll to the end of the table if a new folder is being added.
@@ -801,7 +845,8 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
       std::find(_bookmarkItems.begin(), _bookmarkItems.end(), bookmarkNode);
   if (it != _bookmarkItems.end()) {
     ptrdiff_t index = std::distance(_bookmarkItems.begin(), it);
-    indexPath = [NSIndexPath indexPathForRow:index inSection:1];
+    indexPath =
+        [NSIndexPath indexPathForRow:index inSection:self.bookmarksSection];
   }
   return indexPath;
 }
@@ -896,6 +941,11 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   _faviconLoadTasks[IntegerPair(indexPath.section, indexPath.item)] = taskId;
 }
 
+- (BOOL)isUrlOrFolder:(const BookmarkNode*)node {
+  return node->type() == BookmarkNode::URL ||
+         node->type() == BookmarkNode::FOLDER;
+}
+
 #pragma mark - Keyboard
 
 - (void)registerForKeyboardNotifications {
@@ -974,6 +1024,7 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
                                  base::SysNSStringToUTF16(newName));
   }
   _editingFolderNode = NULL;
+  self.editingFolderCell = nil;
   [self refreshContents];
 }
 

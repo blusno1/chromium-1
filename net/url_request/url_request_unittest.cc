@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <memory>
 #include <utility>
 
 // This must be before Windows headers
@@ -70,7 +69,6 @@
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/cert/test_root_certs.h"
-#include "net/cert_net/nss_ocsp.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store_test_helpers.h"
 #include "net/disk_cache/disk_cache.h"
@@ -126,6 +124,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
+#if defined(OS_FUCHSIA)
+#define USE_BUILTIN_CERT_VERIFIER
+#endif
+
 #if !BUILDFLAG(DISABLE_FILE_SUPPORT)
 #include "net/base/filename_util.h"
 #include "net/url_request/file_protocol_handler.h"
@@ -146,6 +148,15 @@
 #include "net/reporting/reporting_service.h"
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
+#if defined(USE_BUILTIN_CERT_VERIFIER)
+#include "net/cert/cert_net_fetcher.h"
+#include "net/cert_net/cert_net_fetcher_impl.h"
+#endif
+
+#if defined(USE_NSS_CERTS)
+#include "net/cert_net/nss_ocsp.h"
+#endif
+
 using net::test::IsError;
 using net::test::IsOk;
 
@@ -157,8 +168,8 @@ namespace net {
 
 namespace {
 
-namespace test0 {
-#include "net/http/transport_security_state_static_unittest0.h"
+namespace test_default {
+#include "net/http/transport_security_state_static_unittest_default.h"
 }
 
 const base::string16 kChrome(ASCIIToUTF16("chrome"));
@@ -801,6 +812,8 @@ class URLRequestTest : public PlatformTest {
   ~URLRequestTest() override {
     // URLRequestJobs may post clean-up tasks on destruction.
     base::RunLoop().RunUntilIdle();
+
+    SetTransportSecurityStateSourceForTesting(nullptr);
   }
 
   void SetUp() override {
@@ -812,7 +825,7 @@ class URLRequestTest : public PlatformTest {
 
   virtual void SetUpFactory() {
     job_factory_impl_->SetProtocolHandler(
-        "data", base::WrapUnique(new DataProtocolHandler));
+        "data", std::make_unique<DataProtocolHandler>());
 #if !BUILDFLAG(DISABLE_FILE_SUPPORT)
     job_factory_impl_->SetProtocolHandler(
         "file", std::make_unique<FileProtocolHandler>(
@@ -6087,8 +6100,8 @@ TEST_F(URLRequestTestHTTP, PostFileTest) {
     element_readers.push_back(std::make_unique<UploadFileElementReader>(
         base::ThreadTaskRunnerHandle::Get().get(), path, 0,
         std::numeric_limits<uint64_t>::max(), base::Time()));
-    r->set_upload(base::WrapUnique<UploadDataStream>(
-        new ElementsUploadDataStream(std::move(element_readers), 0)));
+    r->set_upload(std::make_unique<ElementsUploadDataStream>(
+        std::move(element_readers), 0));
 
     r->Start();
     EXPECT_TRUE(r->is_pending());
@@ -6130,8 +6143,8 @@ TEST_F(URLRequestTestHTTP, PostUnreadableFileTest) {
         base::FilePath(FILE_PATH_LITERAL(
             "c:\\path\\to\\non\\existant\\file.randomness.12345")),
         0, std::numeric_limits<uint64_t>::max(), base::Time()));
-    r->set_upload(base::WrapUnique<UploadDataStream>(
-        new ElementsUploadDataStream(std::move(element_readers), 0)));
+    r->set_upload(std::make_unique<ElementsUploadDataStream>(
+        std::move(element_readers), 0));
 
     r->Start();
     EXPECT_TRUE(r->is_pending());
@@ -6212,7 +6225,7 @@ TEST_F(URLRequestTestHTTP, TestPostChunkedDataJustAfterStart) {
         new ChunkedUploadDataStream(0));
     std::unique_ptr<ChunkedUploadDataStream::Writer> writer =
         upload_data_stream->CreateWriter();
-    r->set_upload(base::WrapUnique(upload_data_stream.release()));
+    r->set_upload(std::move(upload_data_stream));
     r->set_method("POST");
     r->Start();
     EXPECT_TRUE(r->is_pending());
@@ -6340,9 +6353,10 @@ TEST_F(URLRequestTestHTTP, STSNotProcessedOnIP) {
 }
 
 namespace {
-const char kExpectCTStaticHostname[] = "preloaded-expect-ct.badssl.com";
-const char kExpectStapleStaticHostname[] = "preloaded-expect-staple.badssl.com";
-const char kExpectStapleReportURI[] = "https://report.badssl.com/expect-staple";
+const char kExpectCTStaticHostname[] = "expect-ct.preloaded.test";
+const char kExpectStapleStaticHostname[] = "expect-staple.preloaded.test";
+const char kExpectStapleReportURI[] =
+    "http://report-uri.preloaded.test/expect-staple";
 const char kHPKPReportUri[] = "https://hpkp-report.test";
 }  // namespace
 
@@ -6809,9 +6823,8 @@ class MockCTPolicyEnforcer : public CTPolicyEnforcer {
 
 // Tests that Expect CT headers for the preload list are processed correctly.
 TEST_F(URLRequestTestHTTP, PreloadExpectCTHeader) {
-#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
-  SetTransportSecurityStateSourceForTesting(&test0::kHSTSSource);
-#endif
+  SetTransportSecurityStateSourceForTesting(&test_default::kHSTSSource);
+
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
       net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
@@ -9453,7 +9466,9 @@ class HTTPSRequestTest : public testing::Test {
     default_context_.set_network_delegate(&default_network_delegate_);
     default_context_.Init();
   }
-  ~HTTPSRequestTest() override {}
+  ~HTTPSRequestTest() override {
+    SetTransportSecurityStateSourceForTesting(nullptr);
+  }
 
  protected:
   TestNetworkDelegate default_network_delegate_;  // Must outlive URLRequest.
@@ -9560,22 +9575,22 @@ TEST_F(HTTPSRequestTest, HTTPSExpiredTest) {
 // TODO(svaldez): iOS tests are flaky with EmbeddedTestServer and transport
 // security state. (see http://crbug.com/550977).
 #if !defined(OS_IOS)
-// This tests that a load of www.google.com with a certificate error sets
-// the |certificate_errors_are_fatal| flag correctly. This flag will cause
-// the interstitial to be fatal.
+// This tests that a load of a domain with preloaded HSTS and HPKP with a
+// certificate error sets the |certificate_errors_are_fatal| flag correctly.
+// This flag will cause the interstitial to be fatal.
 TEST_F(HTTPSRequestTest, HTTPSPreloadedHSTSTest) {
-#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
-  SetTransportSecurityStateSourceForTesting(&test0::kHSTSSource);
-#endif
+  SetTransportSecurityStateSourceForTesting(&test_default::kHSTSSource);
+
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
   test_server.ServeFilesFromSourceDirectory("net/data/ssl");
   ASSERT_TRUE(test_server.Start());
 
-  // We require that the URL be www.google.com in order to pick up the
-  // preloaded HSTS entries in the TransportSecurityState. This means that we
-  // have to use a MockHostResolver in order to direct www.google.com to the
-  // testserver. By default, MockHostResolver maps all hosts to 127.0.0.1.
+  // We require that the URL be hsts-hpkp-preloaded.test. This is a test domain
+  // that has a preloaded HSTS+HPKP entry in the TransportSecurityState. This
+  // means that we have to use a MockHostResolver in order to direct
+  // hsts-hpkp-preloaded.test to the testserver. By default, MockHostResolver
+  // maps all hosts to 127.0.0.1.
 
   MockHostResolver host_resolver;
   TestNetworkDelegate network_delegate;  // Must outlive URLRequest.
@@ -9588,7 +9603,7 @@ TEST_F(HTTPSRequestTest, HTTPSPreloadedHSTSTest) {
 
   TestDelegate d;
   std::unique_ptr<URLRequest> r(context.CreateRequest(
-      GURL(base::StringPrintf("https://www.google.com:%d",
+      GURL(base::StringPrintf("https://hsts-hpkp-preloaded.test:%d",
                               test_server.host_port_pair().port())),
       DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
 
@@ -9606,9 +9621,8 @@ TEST_F(HTTPSRequestTest, HTTPSPreloadedHSTSTest) {
 // This tests that cached HTTPS page loads do not cause any updates to the
 // TransportSecurityState.
 TEST_F(HTTPSRequestTest, HTTPSErrorsNoClobberTSSTest) {
-#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
-  SetTransportSecurityStateSourceForTesting(&test0::kHSTSSource);
-#endif
+  SetTransportSecurityStateSourceForTesting(&test_default::kHSTSSource);
+
   // The actual problem -- CERT_MISMATCHED_NAME in this case -- doesn't
   // matter. It just has to be any error.
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
@@ -9616,10 +9630,11 @@ TEST_F(HTTPSRequestTest, HTTPSErrorsNoClobberTSSTest) {
   test_server.ServeFilesFromSourceDirectory("net/data/ssl");
   ASSERT_TRUE(test_server.Start());
 
-  // We require that the URL be www.google.com in order to pick up the static
-  // and dynamic STS and PKP entries in the TransportSecurityState. This means
-  // that we have to use a MockHostResolver in order to direct www.google.com to
-  // the testserver. By default, MockHostResolver maps all hosts to 127.0.0.1.
+  // We require that the URL be hsts-hpkp-preloaded.test. This is a test domain
+  // that has a preloaded HSTS+HPKP entry in the TransportSecurityState. This
+  // means that we have to use a MockHostResolver in order to direct
+  // hsts-hpkp-preloaded.test to the testserver. By default, MockHostResolver
+  // maps all hosts to 127.0.0.1.
 
   MockHostResolver host_resolver;
   TestNetworkDelegate network_delegate;  // Must outlive URLRequest.
@@ -9631,20 +9646,20 @@ TEST_F(HTTPSRequestTest, HTTPSErrorsNoClobberTSSTest) {
   TransportSecurityState::STSState static_sts_state;
   TransportSecurityState::PKPState static_pkp_state;
   EXPECT_TRUE(transport_security_state.GetStaticDomainState(
-      "www.google.com", &static_sts_state, &static_pkp_state));
+      "hsts-hpkp-preloaded.test", &static_sts_state, &static_pkp_state));
   context.set_transport_security_state(&transport_security_state);
   context.Init();
 
   TransportSecurityState::STSState dynamic_sts_state;
   TransportSecurityState::PKPState dynamic_pkp_state;
-  EXPECT_FALSE(transport_security_state.GetDynamicSTSState("www.google.com",
-                                                           &dynamic_sts_state));
-  EXPECT_FALSE(transport_security_state.GetDynamicPKPState("www.google.com",
-                                                           &dynamic_pkp_state));
+  EXPECT_FALSE(transport_security_state.GetDynamicSTSState(
+      "hsts-hpkp-preloaded.test", &dynamic_sts_state));
+  EXPECT_FALSE(transport_security_state.GetDynamicPKPState(
+      "hsts-hpkp-preloaded.test", &dynamic_pkp_state));
 
   TestDelegate d;
   std::unique_ptr<URLRequest> r(context.CreateRequest(
-      GURL(base::StringPrintf("https://www.google.com:%d",
+      GURL(base::StringPrintf("https://hsts-hpkp-preloaded.test:%d",
                               test_server.host_port_pair().port())),
       DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
 
@@ -9662,13 +9677,14 @@ TEST_F(HTTPSRequestTest, HTTPSErrorsNoClobberTSSTest) {
   TransportSecurityState::STSState new_static_sts_state;
   TransportSecurityState::PKPState new_static_pkp_state;
   EXPECT_TRUE(transport_security_state.GetStaticDomainState(
-      "www.google.com", &new_static_sts_state, &new_static_pkp_state));
+      "hsts-hpkp-preloaded.test", &new_static_sts_state,
+      &new_static_pkp_state));
   TransportSecurityState::STSState new_dynamic_sts_state;
   TransportSecurityState::PKPState new_dynamic_pkp_state;
   EXPECT_FALSE(transport_security_state.GetDynamicSTSState(
-      "www.google.com", &new_dynamic_sts_state));
+      "hsts-hpkp-preloaded.test", &new_dynamic_sts_state));
   EXPECT_FALSE(transport_security_state.GetDynamicPKPState(
-      "www.google.com", &new_dynamic_pkp_state));
+      "hsts-hpkp-preloaded.test", &new_dynamic_pkp_state));
 
   EXPECT_EQ(new_static_sts_state.upgrade_mode, static_sts_state.upgrade_mode);
   EXPECT_EQ(new_static_sts_state.include_subdomains,
@@ -10252,6 +10268,10 @@ class HTTPSOCSPTest : public HTTPSRequestTest {
     CHECK_NE(static_cast<X509Certificate*>(NULL), root_cert.get());
     test_root_.reset(new ScopedTestRoot(root_cert.get()));
 
+#if defined(USE_BUILTIN_CERT_VERIFIER)
+    SetGlobalCertNetFetcherForTesting(net::CreateCertNetFetcher(&context_));
+#endif
+
 #if defined(USE_NSS_CERTS)
     SetURLRequestContextForNSSHttpIO(&context_);
     EnsureNSSHttpIOInit();
@@ -10297,6 +10317,10 @@ class HTTPSOCSPTest : public HTTPSRequestTest {
   }
 
   ~HTTPSOCSPTest() override {
+#if defined(USE_BUILTIN_CERT_VERIFIER)
+    ShutdownGlobalCertNetFetcher();
+#endif
+
 #if defined(USE_NSS_CERTS)
     ShutdownNSSHttpIO();
 #endif
@@ -10350,6 +10374,7 @@ static CertStatus ExpectedCertStatusForFailedOnlineRevocationCheck() {
 // skipped.
 static bool SystemSupportsHardFailRevocationChecking() {
 #if defined(OS_WIN) || defined(USE_NSS_CERTS)
+  // TODO(crbug.com/762380): Enable on Fuchsia once it's implemented.
   return true;
 #else
   return false;
@@ -10384,7 +10409,7 @@ static CertStatus ExpectedCertStatusForFailedOnlineEVRevocationCheck() {
 }
 
 static bool SystemSupportsOCSP() {
-#if defined(OS_ANDROID) || defined(OS_FUCHSIA)
+#if defined(OS_ANDROID) || defined(USE_BUILTIN_CERT_VERIFIER)
   // TODO(jnd): http://crbug.com/117478 - EV verification is not yet supported.
   // TODO(crbug.com/762380): Enable on Fuchsia once it's implemented.
   return false;
@@ -10395,6 +10420,7 @@ static bool SystemSupportsOCSP() {
 
 static bool SystemSupportsOCSPStapling() {
 #if defined(USE_NSS_CERTS) || defined(OS_WIN)
+  // TODO(crbug.com/762380): Enable on Fuchsia once it's implemented.
   return true;
 #else
   return false;
@@ -10514,9 +10540,8 @@ TEST_F(HTTPSOCSPTest, MAYBE_RevokedStapled) {
 }
 
 TEST_F(HTTPSOCSPTest, ExpectStapleReportSentOnMissing) {
-#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
-  SetTransportSecurityStateSourceForTesting(&test0::kHSTSSource);
-#endif
+  SetTransportSecurityStateSourceForTesting(&test_default::kHSTSSource);
+
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
       net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
@@ -11031,7 +11056,7 @@ INSTANTIATE_TEST_CASE_P(OCSPVerify,
                         testing::ValuesIn(kOCSPVerifyData));
 
 static bool SystemSupportsAIA() {
-#if defined(OS_ANDROID) || defined(OS_FUCHSIA)
+#if defined(OS_ANDROID) || defined(USE_BUILTIN_CERT_VERIFIER)
   // TODO(crbug.com/762380): Enable on Fuchsia once it's implemented.
   return false;
 #else
@@ -11342,8 +11367,7 @@ TEST_F(HTTPSCRLSetTest, ExpiredCRLSet) {
 }
 
 TEST_F(HTTPSCRLSetTest, CRLSetRevoked) {
-#if defined(OS_ANDROID) || defined(OS_FUCHSIA)
-  // TODO(crbug.com/762380): Enable on Fuchsia once it's implemented.
+#if defined(OS_ANDROID)
   LOG(WARNING) << "Skipping test because system doesn't support CRLSets";
   return;
 #endif

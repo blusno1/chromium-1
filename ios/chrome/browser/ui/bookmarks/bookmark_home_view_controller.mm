@@ -341,6 +341,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   DCHECK_GE(nodes.size(), 1u);
   bookmark_utils_ios::DeleteBookmarksWithUndoToast(nodes, self.bookmarks,
                                                    self.browserState);
+  [self setTableViewEditing:NO];
 }
 
 // Opens the editor on the given node.
@@ -373,12 +374,14 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 }
 
 - (void)openAllNodes:(const std::vector<const bookmarks::BookmarkNode*>&)nodes
-         inIncognito:(BOOL)inIncognito {
+         inIncognito:(BOOL)inIncognito
+              newTab:(BOOL)newTab {
   [self cachePosition];
   std::vector<GURL> urls = GetUrlsToOpen(nodes);
   [self.homeDelegate bookmarkHomeViewControllerWantsDismissal:self
                                              navigationToUrls:urls
-                                                  inIncognito:inIncognito];
+                                                  inIncognito:inIncognito
+                                                       newTab:newTab];
 }
 
 #pragma mark - Navigation Bar Callbacks
@@ -1181,6 +1184,13 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   return controller;
 }
 
+// Sets the editing mode for tableView, update context bar state accordingly.
+- (void)setTableViewEditing:(BOOL)editing {
+  [self.bookmarksTableView setEditing:editing];
+  [self setContextBarState:editing ? BookmarksContextBarBeginSelection
+                                   : BookmarksContextBarDefault];
+}
+
 #pragma mark - ContextBarDelegate implementation
 
 // Called when the leading button is clicked.
@@ -1265,10 +1275,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 // Called when the trailing button, "Select" or "Cancel" is clicked.
 - (void)trailingButtonClicked {
   // Toggle edit mode.
-  [self.bookmarksTableView setEditing:!self.bookmarksTableView.editing];
-  [self setContextBarState:self.bookmarksTableView.editing
-                               ? BookmarksContextBarBeginSelection
-                               : BookmarksContextBarDefault];
+  [self setTableViewEditing:!self.bookmarksTableView.editing];
 }
 
 #pragma mark - ContextBarStates
@@ -1369,7 +1376,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
               handler:^(UIAlertAction* _Nonnull action) {
                 std::vector<const BookmarkNode*> nodes =
                     [weakSelf.bookmarksTableView getEditNodesInVector];
-                [weakSelf openAllNodes:nodes inIncognito:NO];
+                [weakSelf openAllNodes:nodes inIncognito:NO newTab:NO];
               }];
 
   UIAlertAction* openInIncognitoAction = [UIAlertAction
@@ -1379,7 +1386,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
               handler:^(UIAlertAction* _Nonnull action) {
                 std::vector<const BookmarkNode*> nodes =
                     [weakSelf.bookmarksTableView getEditNodesInVector];
-                [weakSelf openAllNodes:nodes inIncognito:YES];
+                [weakSelf openAllNodes:nodes inIncognito:YES newTab:NO];
               }];
 
   UIAlertAction* moveAction = [UIAlertAction
@@ -1422,22 +1429,32 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     pasteboard.string = base::SysUTF8ToNSString(urlString);
   };
   UIAlertAction* copyAction = [UIAlertAction
-      actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_COPY)
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_COPY)
                 style:UIAlertActionStyleDefault
               handler:copyHandler];
 
-  UIAlertAction* openInIncognitoAction = [UIAlertAction
+  UIAlertAction* openInNewTabAction = [UIAlertAction
       actionWithTitle:l10n_util::GetNSString(
-                          IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO)
+                          IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)
                 style:UIAlertActionStyleDefault
               handler:^(UIAlertAction* _Nonnull action) {
                 std::vector<const BookmarkNode*> nodes = {node};
-                [weakSelf openAllNodes:nodes inIncognito:YES];
+                [weakSelf openAllNodes:nodes inIncognito:NO newTab:YES];
+              }];
+
+  UIAlertAction* openInIncognitoAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)
+                style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* _Nonnull action) {
+                std::vector<const BookmarkNode*> nodes = {node};
+                [weakSelf openAllNodes:nodes inIncognito:YES newTab:YES];
               }];
 
   [alert addAction:editAction];
-  [alert addAction:copyAction];
+  [alert addAction:openInNewTabAction];
   [alert addAction:openInIncognitoAction];
+  [alert addAction:copyAction];
   [alert addAction:cancelAction];
   return alert;
 }

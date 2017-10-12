@@ -69,10 +69,7 @@ TaskQueueImpl::~TaskQueueImpl() {
 }
 
 TaskQueueImpl::Task::Task()
-    : TaskQueue::Task(TaskQueue::PostedTask(base::Closure(),
-                                            base::Location(),
-                                            base::TimeDelta(),
-                                            true),
+    : TaskQueue::Task(TaskQueue::PostedTask(base::Closure(), base::Location()),
                       base::TimeTicks()),
 #ifndef NDEBUG
       enqueue_order_set_(false),
@@ -180,7 +177,8 @@ bool TaskQueueImpl::PostImmediateTaskImpl(TaskQueue::PostedTask task) {
   EnqueueOrder sequence_number =
       any_thread().task_queue_manager->GetNextSequenceNumber();
 
-  PushOntoImmediateIncomingQueueLocked(Task(std::move(task), base::TimeTicks(),
+  PushOntoImmediateIncomingQueueLocked(Task(std::move(task),
+                                            any_thread().time_domain->Now(),
                                             sequence_number, sequence_number));
   return true;
 }
@@ -253,7 +251,7 @@ void TaskQueueImpl::PushOntoDelayedIncomingQueueLocked(Task pending_task) {
       Task(TaskQueue::PostedTask(
                base::Bind(&TaskQueueImpl::ScheduleDelayedWorkTask,
                           base::Unretained(this), base::Passed(&pending_task)),
-               FROM_HERE, base::TimeDelta(), false),
+               FROM_HERE, base::TimeDelta(), base::Nestable::kNonNestable),
            base::TimeTicks(), thread_hop_task_sequence_number,
            thread_hop_task_sequence_number));
 }
@@ -321,6 +319,22 @@ TaskQueueImpl::TaskDeque TaskQueueImpl::TakeImmediateIncomingQueue() {
   base::AutoLock immediate_incoming_queue_lock(immediate_incoming_queue_lock_);
   TaskQueueImpl::TaskDeque queue;
   queue.Swap(immediate_incoming_queue());
+
+  // Activate delayed fence if necessary.
+  if (main_thread_only().delayed_fence) {
+    for (const Task& task : queue) {
+      if (task.delayed_run_time >= main_thread_only().delayed_fence.value()) {
+        main_thread_only().delayed_fence = base::nullopt;
+        DCHECK_EQ(main_thread_only().current_fence,
+                  static_cast<EnqueueOrder>(EnqueueOrderValues::NONE));
+        bool task_unblocked = InsertFenceImpl(task.enqueue_order());
+        DCHECK(!task_unblocked)
+            << "Activating a delayed fence shouldn't unblock new work";
+        break;
+      }
+    }
+  }
+
   // Temporary check for crbug.com/752914. Ideally we'd check the entire queue
   // but that would be too expensive.
   // TODO(skyostil): Remove this.
@@ -403,6 +417,7 @@ TaskQueueImpl::WakeUpForDelayedWork(LazyNow* lazy_now) {
     }
     if (task.delayed_run_time > lazy_now->Now())
       break;
+    ActivateDelayedFenceIfNeeded(task.delayed_run_time);
     task.set_enqueue_order(
         main_thread_only().task_queue_manager->GetNextSequenceNumber());
     main_thread_only().delayed_work_queue->Push(std::move(task));
@@ -480,6 +495,11 @@ void TaskQueueImpl::AsValueInto(base::TimeTicks now,
   }
   if (main_thread_only().current_fence)
     state->SetInteger("current_fence", main_thread_only().current_fence);
+  if (main_thread_only().delayed_fence) {
+    state->SetDouble(
+        "delayed_fence_seconds_from_now",
+        (main_thread_only().delayed_fence.value() - now).InSecondsF());
+  }
   if (AreVerboseSnapshotsEnabled()) {
     state->BeginArray("immediate_incoming_queue");
     QueueAsValueInto(immediate_incoming_queue(), now, state);
@@ -568,26 +588,24 @@ void TaskQueueImpl::InsertFence(TaskQueue::InsertFencePosition position) {
   if (!main_thread_only().task_queue_manager)
     return;
 
+  // Only one fence may be present at a time.
+  main_thread_only().delayed_fence = base::nullopt;
+
   EnqueueOrder previous_fence = main_thread_only().current_fence;
-  main_thread_only().current_fence =
+  EnqueueOrder current_fence =
       position == TaskQueue::InsertFencePosition::NOW
           ? main_thread_only().task_queue_manager->GetNextSequenceNumber()
           : static_cast<EnqueueOrder>(EnqueueOrderValues::BLOCKING_FENCE);
 
   // Tasks posted after this point will have a strictly higher enqueue order
   // and will be blocked from running.
-  bool task_unblocked = main_thread_only().immediate_work_queue->InsertFence(
-      main_thread_only().current_fence);
-  task_unblocked |= main_thread_only().delayed_work_queue->InsertFence(
-      main_thread_only().current_fence);
+  bool task_unblocked = InsertFenceImpl(current_fence);
 
-  if (!task_unblocked && previous_fence &&
-      previous_fence < main_thread_only().current_fence) {
+  if (!task_unblocked && previous_fence && previous_fence < current_fence) {
     base::AutoLock lock(immediate_incoming_queue_lock_);
     if (!immediate_incoming_queue().empty() &&
         immediate_incoming_queue().front().enqueue_order() > previous_fence &&
-        immediate_incoming_queue().front().enqueue_order() <
-            main_thread_only().current_fence) {
+        immediate_incoming_queue().front().enqueue_order() < current_fence) {
       task_unblocked = true;
     }
   }
@@ -598,12 +616,19 @@ void TaskQueueImpl::InsertFence(TaskQueue::InsertFencePosition position) {
   }
 }
 
+void TaskQueueImpl::InsertFenceAt(base::TimeTicks time) {
+  // Task queue can have only one fence, delayed or not.
+  RemoveFence();
+  main_thread_only().delayed_fence = time;
+}
+
 void TaskQueueImpl::RemoveFence() {
   if (!main_thread_only().task_queue_manager)
     return;
 
   EnqueueOrder previous_fence = main_thread_only().current_fence;
   main_thread_only().current_fence = 0;
+  main_thread_only().delayed_fence = base::nullopt;
 
   bool task_unblocked = main_thread_only().immediate_work_queue->RemoveFence();
   task_unblocked |= main_thread_only().delayed_work_queue->RemoveFence();
@@ -620,6 +645,14 @@ void TaskQueueImpl::RemoveFence() {
     main_thread_only().task_queue_manager->MaybeScheduleImmediateWork(
         FROM_HERE);
   }
+}
+
+bool TaskQueueImpl::InsertFenceImpl(EnqueueOrder fence) {
+  main_thread_only().current_fence = fence;
+  bool task_unblocked =
+      main_thread_only().immediate_work_queue->InsertFence(fence);
+  task_unblocked |= main_thread_only().delayed_work_queue->InsertFence(fence);
+  return task_unblocked;
 }
 
 bool TaskQueueImpl::BlockedByFence() const {
@@ -696,7 +729,7 @@ void TaskQueueImpl::TaskAsValueInto(const Task& task,
   state->SetInteger("enqueue_order", task.enqueue_order());
 #endif
   state->SetInteger("sequence_num", task.sequence_num);
-  state->SetBoolean("nestable", task.nestable);
+  state->SetBoolean("nestable", task.nestable == base::Nestable::kNestable);
   state->SetBoolean("is_high_res", task.is_high_res);
   state->SetBoolean("is_cancelled", task.task.IsCancelled());
   state->SetDouble(
@@ -926,6 +959,15 @@ base::WeakPtr<TaskQueueManager> TaskQueueImpl::GetTaskQueueManagerWeakPtr() {
 void TaskQueueImpl::SetQueueEnabledForTest(bool enabled) {
   main_thread_only().is_enabled_for_test = enabled;
   EnableOrDisableWithSelector(IsQueueEnabled());
+}
+
+void TaskQueueImpl::ActivateDelayedFenceIfNeeded(base::TimeTicks now) {
+  if (!main_thread_only().delayed_fence)
+    return;
+  if (main_thread_only().delayed_fence.value() > now)
+    return;
+  InsertFence(TaskQueue::InsertFencePosition::NOW);
+  main_thread_only().delayed_fence = base::nullopt;
 }
 
 }  // namespace internal

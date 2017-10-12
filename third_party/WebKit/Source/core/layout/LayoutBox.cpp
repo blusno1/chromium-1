@@ -673,8 +673,6 @@ void LayoutBox::ScrollRectToVisibleRecursive(
     new_rect = GetScrollableArea()->ScrollIntoView(
         rect_to_scroll, align_x, align_y, is_smooth, scroll_type,
         is_for_scroll_sequence);
-    if (new_rect.IsEmpty())
-      return;
   } else if (!parent_box && CanBeProgramaticallyScrolled()) {
     if (LocalFrameView* frame_view = this->GetFrameView()) {
       HTMLFrameOwnerElement* owner_element = GetDocument().LocalOwner();
@@ -4834,17 +4832,16 @@ PositionWithAffinity LayoutBox::PositionForPoint(const LayoutPoint& point) {
                         : Position());
 
   if (IsTable() && NonPseudoNode()) {
+    const Node& node = *NonPseudoNode();
     LayoutUnit right = Size().Width() - VerticalScrollbarWidth();
     LayoutUnit bottom = Size().Height() - HorizontalScrollbarHeight();
 
     if (point.X() < 0 || point.X() > right || point.Y() < 0 ||
         point.Y() > bottom) {
       if (point.X() <= right / 2) {
-        return CreatePositionWithAffinity(
-            FirstPositionInOrBeforeNodeDeprecated(NonPseudoNode()));
+        return CreatePositionWithAffinity(FirstPositionInOrBeforeNode(node));
       }
-      return CreatePositionWithAffinity(
-          LastPositionInOrAfterNodeDeprecated(NonPseudoNode()));
+      return CreatePositionWithAffinity(LastPositionInOrAfterNode(node));
     }
   }
 

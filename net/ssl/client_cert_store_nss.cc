@@ -16,7 +16,6 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_piece.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -187,8 +186,13 @@ void ClientCertStoreNSS::GetPlatformCertsOnWorkerThread(
        !CERT_LIST_END(node, found_certs); node = CERT_LIST_NEXT(node)) {
     if (!cert_filter.is_null() && !cert_filter.Run(node->cert))
       continue;
+    // Allow UTF-8 inside PrintableStrings in client certificates. See
+    // crbug.com/770323.
+    X509Certificate::UnsafeCreateOptions options;
+    options.printable_string_is_utf8 = true;
     scoped_refptr<X509Certificate> cert =
-        x509_util::CreateX509CertificateFromCERTCertificate(node->cert);
+        x509_util::CreateX509CertificateFromCERTCertificate(node->cert, {},
+                                                            options);
     if (!cert) {
       DVLOG(2) << "x509_util::CreateX509CertificateFromCERTCertificate failed";
       continue;

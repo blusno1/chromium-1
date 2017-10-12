@@ -9,11 +9,11 @@
 #include "ash/public/cpp/config.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
+#include "ash/system/power/power_button_controller.h"
 #include "ash/system/power/power_button_test_base.h"
 #include "ash/test_media_client.h"
 #include "ash/touch/touch_devices_controller.h"
 #include "ash/wm/lock_state_controller_test_api.h"
-#include "ash/wm/power_button_controller.h"
 #include "ash/wm/test_session_state_animator.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
@@ -711,6 +711,26 @@ TEST_F(TabletPowerButtonControllerTest,
   ReleasePowerButton();
   power_manager_client_->SendBrightnessChanged(0, true);
   EXPECT_TRUE(power_manager_client_->backlights_forced_off());
+}
+
+using NoTabletModePowerButtonControllerTest = NoTabletModePowerButtonTestBase;
+
+// Tests that tablet power button behavior should not be enabled on the device
+// that hasn't tablet mode switch set, even it has seen accelerometer data.
+TEST_F(NoTabletModePowerButtonControllerTest,
+       HasAccelerometerUpdateButNoTabletModeSwitch) {
+  InitPowerButtonControllerMembers(true /* send_accelerometer_update */);
+  ASSERT_TRUE(tablet_controller_);
+  ASSERT_FALSE(base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kAshEnableTabletMode));
+
+  // Advance a long duration from initialized last resume time in
+  // |tablet_controller_| to avoid cross interference.
+  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(3000));
+
+  PressPowerButton();
+  ReleasePowerButton();
+  ASSERT_FALSE(power_manager_client_->backlights_forced_off());
 }
 
 }  // namespace ash

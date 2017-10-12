@@ -132,9 +132,9 @@ void FakeSessionManagerClient::NotifyLockScreenDismissed() {
 }
 
 void FakeSessionManagerClient::RetrieveActiveSessions(
-      const ActiveSessionsCallback& callback) {
+    ActiveSessionsCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, user_sessions_, true));
+      FROM_HERE, base::BindOnce(std::move(callback), user_sessions_));
 }
 
 void FakeSessionManagerClient::RetrieveDevicePolicy(
@@ -257,12 +257,6 @@ void FakeSessionManagerClient::GetServerBackedStateKeys(
       FROM_HERE, base::Bind(callback, server_backed_state_keys_));
 }
 
-void FakeSessionManagerClient::CheckArcAvailability(
-    const ArcCallback& callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, arc_available_));
-}
-
 void FakeSessionManagerClient::StartArcInstance(
     ArcStartupMode startup_mode,
     const cryptohome::Identification& cryptohome_id,
@@ -303,9 +297,12 @@ void FakeSessionManagerClient::EmitArcBooted(
 }
 
 void FakeSessionManagerClient::GetArcStartTime(
-    const GetArcStartTimeCallback& callback) {
+    DBusMethodCallback<base::TimeTicks> callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, arc_available_, base::TimeTicks::Now()));
+      FROM_HERE, base::BindOnce(std::move(callback),
+                                arc_available_ ? base::make_optional(
+                                                     base::TimeTicks::Now())
+                                               : base::nullopt));
 }
 
 void FakeSessionManagerClient::RemoveArcData(

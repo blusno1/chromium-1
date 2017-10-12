@@ -13,7 +13,10 @@ Polymer({
   properties: {
     label: String,
 
-    disabled: Boolean,
+    disabled: {
+      type: Boolean,
+      reflectToAttribute: true,
+    },
 
     /** Set to true if |items| is a list of certificates. */
     certList: Boolean,
@@ -38,6 +41,10 @@ Polymer({
   },
 
   observers: ['updateSelected_(items, value)'],
+
+  focus: function() {
+    this.$$('select').focus();
+  },
 
   /**
    * Ensure that the <select> value is updated when |items| or |value| changes.
@@ -67,7 +74,7 @@ Polymer({
     var oncKey = 'Onc' + prefix.replace(/\./g, '-') + '_' + key;
     if (this.i18nExists(oncKey))
       return this.i18n(oncKey);
-    assertNotReached();
+    assertNotReached('ONC Key not found: ' + oncKey);
     return key;
   },
 

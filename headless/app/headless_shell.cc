@@ -20,6 +20,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
@@ -53,6 +54,8 @@ namespace headless {
 
 namespace {
 
+// By default listen to incoming DevTools connections on localhost.
+const char kUseLocalHostForDevToolsHttpServer[] = "localhost";
 // Default file name for screenshot. Can be overriden by "--screenshot" switch.
 const char kDefaultScreenshotFileName[] = "screenshot.png";
 // Default file name for pdf. Can be overriden by "--print-to-pdf" switch.
@@ -678,6 +681,9 @@ int HeadlessShellMain(int argc, const char** argv) {
 // Crash reporting in headless mode is enabled by default in official builds.
 #if defined(GOOGLE_CHROME_BUILD)
   builder.SetCrashReporterEnabled(true);
+  base::FilePath dumps_path;
+  base::PathService::Get(base::DIR_TEMP, &dumps_path);
+  builder.SetCrashDumpsDir(dumps_path);
 #endif
 
   if (command_line.HasSwitch(switches::kEnableCrashReporter))
@@ -692,7 +698,7 @@ int HeadlessShellMain(int argc, const char** argv) {
   // Enable devtools if requested, either by specifying a port (and optional
   // address), or by specifying the fd of an already-open socket.
   if (command_line.HasSwitch(::switches::kRemoteDebuggingPort)) {
-    std::string address;  // Empty string is default, so this is initialized.
+    std::string address = kUseLocalHostForDevToolsHttpServer;
     if (command_line.HasSwitch(switches::kRemoteDebuggingAddress)) {
       address =
           command_line.GetSwitchValueASCII(switches::kRemoteDebuggingAddress);

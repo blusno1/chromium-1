@@ -198,15 +198,15 @@ ProcessMemoryDump& ProcessMemoryDump::operator=(ProcessMemoryDump&& other) =
 
 MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
     const std::string& absolute_name) {
-  return AddAllocatorDumpInternal(
-      std::make_unique<MemoryAllocatorDump>(absolute_name, this));
+  return AddAllocatorDumpInternal(std::make_unique<MemoryAllocatorDump>(
+      absolute_name, dump_args_.level_of_detail));
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
     const std::string& absolute_name,
     const MemoryAllocatorDumpGuid& guid) {
-  return AddAllocatorDumpInternal(
-      std::make_unique<MemoryAllocatorDump>(absolute_name, this, guid));
+  return AddAllocatorDumpInternal(std::make_unique<MemoryAllocatorDump>(
+      absolute_name, dump_args_.level_of_detail, guid));
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::AddAllocatorDumpInternal(
@@ -341,19 +341,12 @@ void ProcessMemoryDump::TakeAllDumpsFrom(ProcessMemoryDump* other) {
   other->heap_dumps_.clear();
 }
 
-void ProcessMemoryDump::AsValueInto(TracedValue* value) const {
+void ProcessMemoryDump::SerializeAllocatorDumpsInto(TracedValue* value) const {
   if (allocator_dumps_.size() > 0) {
     value->BeginDictionary("allocators");
     for (const auto& allocator_dump_it : allocator_dumps_)
       allocator_dump_it.second->AsValueInto(value);
     value->EndDictionary();
-  }
-
-  if (heap_dumps_.size() > 0) {
-    value->BeginDictionary("heaps");
-    for (const auto& name_and_dump : heap_dumps_)
-      value->SetValueWithCopiedName(name_and_dump.first, *name_and_dump.second);
-    value->EndDictionary();  // "heaps"
   }
 
   value->BeginArray("allocators_graph");
@@ -367,6 +360,16 @@ void ProcessMemoryDump::AsValueInto(TracedValue* value) const {
     value->EndDictionary();
   }
   value->EndArray();
+}
+
+void ProcessMemoryDump::SerializeHeapProfilerDumpsInto(
+    TracedValue* value) const {
+  if (heap_dumps_.size() == 0)
+    return;
+  value->BeginDictionary("heaps");
+  for (const auto& name_and_dump : heap_dumps_)
+    value->SetValueWithCopiedName(name_and_dump.first, *name_and_dump.second);
+  value->EndDictionary();  // "heaps"
 }
 
 void ProcessMemoryDump::AddOwnershipEdge(const MemoryAllocatorDumpGuid& source,
@@ -466,7 +469,8 @@ void ProcessMemoryDump::AddSuballocation(const MemoryAllocatorDumpGuid& source,
 MemoryAllocatorDump* ProcessMemoryDump::GetBlackHoleMad() {
   DCHECK(is_black_hole_non_fatal_for_testing_);
   if (!black_hole_mad_)
-    black_hole_mad_.reset(new MemoryAllocatorDump("discarded", this));
+    black_hole_mad_.reset(
+        new MemoryAllocatorDump("discarded", dump_args_.level_of_detail));
   return black_hole_mad_.get();
 }
 

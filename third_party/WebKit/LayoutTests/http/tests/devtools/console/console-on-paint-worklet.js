@@ -8,11 +8,11 @@
   await TestRunner.showPanel('console');
   await TestRunner.evaluateInPagePromise(`
       function importWorklet() {
-        CSS.paintWorklet.addModule(relativeToTest('resources/console-worklet-script.js'));
+        CSS.paintWorklet.addModule('resources/console-worklet-script.js');
       }
   `);
 
-  ConsoleTestRunner.waitForConsoleMessages(3, finish);
+  ConsoleTestRunner.waitForConsoleMessages(6, finish);
   TestRunner.evaluateInPage('importWorklet();');
 
   function finish() {

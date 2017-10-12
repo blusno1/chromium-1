@@ -77,7 +77,9 @@
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/geometry/DOMPoint.h"
@@ -86,14 +88,14 @@
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMediaElement.h"
-#include "core/html/HTMLTextAreaElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/canvas/CanvasFontCache.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/forms/FormController.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/HTMLSelectElement.h"
+#include "core/html/forms/HTMLTextAreaElement.h"
 #include "core/html/forms/TextControlInnerElements.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/html_names.h"
@@ -143,6 +145,7 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/graphics/paint/RasterInvalidationTracking.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/MemoryCache.h"
@@ -3244,6 +3247,9 @@ void Internals::setNetworkQualityInfoOverride(const String& effective_type,
 
   GetNetworkStateNotifier().SetNetworkQualityInfoOverride(
       web_effective_type, transport_rtt_msec, downlink_throughput_mbps);
+
+  GetFrame()->Client()->SetEffectiveConnectionTypeForTesting(
+      web_effective_type);
 }
 
 void Internals::clearNetworkConnectionInfoOverride() {
@@ -3492,4 +3498,22 @@ Vector<String> Internals::supportedTextEncodingLabels() const {
   return WTF::TextEncodingAliasesForTesting();
 }
 
+void Internals::simulateRasterUnderInvalidations(bool enable) {
+  RasterInvalidationTracking::SimulateRasterUnderInvalidations(enable);
+}
+
+void Internals::BypassLongCompileThresholdOnce(
+    ExceptionState& exception_state) {
+  LocalFrame* frame = GetFrame();
+  DCHECK(frame);
+  PerformanceMonitor* performance_monitor = frame->GetPerformanceMonitor();
+  if (!performance_monitor) {
+    exception_state.ThrowDOMException(
+        kInvalidAccessError,
+        "PerformanceObserver should be observing 'longtask' while "
+        "calling BypassLongCompileThresholdOnce.");
+    return;
+  }
+  return performance_monitor->BypassLongCompileThresholdOnceForTesting();
+}
 }  // namespace blink

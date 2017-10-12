@@ -5,6 +5,8 @@
 #include "core/layout/ng/inline/ng_offset_mapping_result.h"
 
 #include "core/dom/Node.h"
+#include "core/dom/Text.h"
+#include "core/layout/ng/inline/ng_inline_node.h"
 
 namespace blink {
 
@@ -38,6 +40,14 @@ unsigned NGOffsetMappingUnit::ConvertDOMOffsetToTextContent(
     return text_content_start_;
   // Handle has identity mapping.
   return offset - dom_start_ + text_content_start_;
+}
+
+const NGOffsetMappingResult* GetNGOffsetMappingFor(const Node& node,
+                                                   unsigned offset) {
+  Optional<NGInlineNode> inline_node = GetNGInlineNodeFor(node, offset);
+  if (!inline_node)
+    return nullptr;
+  return &inline_node->ComputeOffsetMappingIfNeeded();
 }
 
 NGOffsetMappingResult::NGOffsetMappingResult(NGOffsetMappingResult&& other)
@@ -95,6 +105,69 @@ NGMappingUnitRange NGOffsetMappingResult::GetMappingUnitsForDOMOffsetRange(
                        });
 
   return {result_begin, result_end};
+}
+
+size_t NGOffsetMappingResult::GetTextContentOffset(const Node& node,
+                                                   unsigned offset) const {
+  const NGOffsetMappingUnit* unit = GetMappingUnitForDOMOffset(node, offset);
+  if (!unit)
+    return kNotFound;
+  return unit->ConvertDOMOffsetToTextContent(offset);
+}
+
+unsigned NGOffsetMappingResult::StartOfNextNonCollapsedCharacter(
+    const Node& node,
+    unsigned offset) const {
+  const NGOffsetMappingUnit* unit = GetMappingUnitForDOMOffset(node, offset);
+  if (!unit) {
+    // It is possible for a fully collapsed whitespace text node to not have a
+    // LayoutObject, in which case it is not in the offset mapping.
+    if (node.IsTextNode())
+      return ToText(node).length();
+    NOTREACHED() << node << "@" << offset;
+    return offset;
+  }
+
+  unsigned fallback = offset;
+  while (unit != units_.end() && unit->GetOwner() == node) {
+    if (unit->DOMEnd() > offset &&
+        unit->GetType() != NGOffsetMappingUnitType::kCollapsed)
+      return std::max(offset, unit->DOMStart());
+    fallback = unit->DOMEnd();
+    ++unit;
+  }
+  return fallback;
+}
+
+unsigned NGOffsetMappingResult::EndOfLastNonCollapsedCharacter(
+    const Node& node,
+    unsigned offset) const {
+  const NGOffsetMappingUnit* unit = GetMappingUnitForDOMOffset(node, offset);
+  if (!unit) {
+    // It is possible for a fully collapsed whitespace text node to not have a
+    // LayoutObject, in which case it is not in the offset mapping.
+    DCHECK(node.IsTextNode()) << node << "@" << offset;
+    return 0;
+  }
+
+  unsigned fallback = offset;
+  while (unit->GetOwner() == node) {
+    if (unit->DOMStart() < offset &&
+        unit->GetType() != NGOffsetMappingUnitType::kCollapsed)
+      return std::min(offset, unit->DOMEnd());
+    fallback = unit->DOMStart();
+    if (unit == units_.begin())
+      break;
+    --unit;
+  }
+  return fallback;
+}
+
+bool NGOffsetMappingResult::IsNonCollapsedCharacter(const Node& node,
+                                                    unsigned offset) const {
+  const NGOffsetMappingUnit* unit = GetMappingUnitForDOMOffset(node, offset);
+  return unit && offset < unit->DOMEnd() &&
+         unit->GetType() != NGOffsetMappingUnitType::kCollapsed;
 }
 
 }  // namespace blink

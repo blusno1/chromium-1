@@ -36,7 +36,6 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
-#include "components/strings/grit/components_strings.h"
 #include "components/sync/base/bind_to_task_runner.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/passphrase_type.h"
@@ -80,8 +79,6 @@
 #include "components/version_info/version_info_values.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/time_format.h"
 
 #if defined(OS_ANDROID)
 #include "components/sync/syncable/read_transaction.h"
@@ -202,7 +199,7 @@ ProfileSyncService::~ProfileSyncService() {
     gaia_cookie_manager_service_->RemoveObserver(this);
   sync_prefs_.RemoveSyncPrefObserver(this);
   // Shutdown() should have been called before destruction.
-  CHECK(!engine_initialized_);
+  DCHECK(!engine_initialized_);
 }
 
 bool ProfileSyncService::CanSyncStart() const {
@@ -827,9 +824,7 @@ void ProfileSyncService::OnUnrecoverableErrorImpl(
 
   UMA_HISTOGRAM_ENUMERATION(kSyncUnrecoverableErrorHistogram,
                             unrecoverable_error_reason_, ERROR_REASON_LIMIT);
-  std::string location;
-  from_here.Write(true, true, &location);
-  LOG(ERROR) << "Unrecoverable error detected at " << location
+  LOG(ERROR) << "Unrecoverable error detected at " << from_here.ToString()
              << " -- ProfileSyncService unusable: " << message;
 
   // Shut all data types down.
@@ -1457,20 +1452,8 @@ bool ProfileSyncService::IsPassphraseRequiredForDecryption() const {
   return IsEncryptedDatatypeEnabled() && IsPassphraseRequired();
 }
 
-base::string16 ProfileSyncService::GetLastSyncedTimeString() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  const base::Time last_synced_time = sync_prefs_.GetLastSyncedTime();
-  if (last_synced_time.is_null())
-    return l10n_util::GetStringUTF16(IDS_SYNC_TIME_NEVER);
-
-  base::TimeDelta time_since_last_sync = base::Time::Now() - last_synced_time;
-
-  if (time_since_last_sync < base::TimeDelta::FromMinutes(1))
-    return l10n_util::GetStringUTF16(IDS_SYNC_TIME_JUST_NOW);
-
-  return ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_ELAPSED,
-                                ui::TimeFormat::LENGTH_SHORT,
-                                time_since_last_sync);
+base::Time ProfileSyncService::GetLastSyncedTime() const {
+  return sync_prefs_.GetLastSyncedTime();
 }
 
 void ProfileSyncService::UpdateSelectedTypesHistogram(

@@ -124,6 +124,7 @@ source_set("browser") {
     "//services/network/public/interfaces",
     "//services/resource_coordinator:lib",
     "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//services/resource_coordinator/tracing:lib",
     "//services/service_manager",
     "//services/service_manager/embedder",
     "//services/service_manager/public/cpp",
@@ -397,6 +398,8 @@ source_set("browser") {
     "background_fetch/background_fetch_job_controller.h",
     "background_fetch/background_fetch_registration_id.cc",
     "background_fetch/background_fetch_registration_id.h",
+    "background_fetch/background_fetch_registration_notifier.cc",
+    "background_fetch/background_fetch_registration_notifier.h",
     "background_fetch/background_fetch_request_info.cc",
     "background_fetch/background_fetch_request_info.h",
     "background_fetch/background_fetch_service_impl.cc",
@@ -875,6 +878,8 @@ source_set("browser") {
     "indexed_db/indexed_db_leveldb_coding.h",
     "indexed_db/indexed_db_leveldb_operations.cc",
     "indexed_db/indexed_db_leveldb_operations.h",
+    "indexed_db/indexed_db_metadata_coding.cc",
+    "indexed_db/indexed_db_metadata_coding.h",
     "indexed_db/indexed_db_observer.cc",
     "indexed_db/indexed_db_observer.h",
     "indexed_db/indexed_db_pending_connection.cc",
@@ -1159,8 +1164,6 @@ source_set("browser") {
     "renderer_host/clipboard_message_filter_mac.mm",
     "renderer_host/cursor_manager.cc",
     "renderer_host/cursor_manager.h",
-    "renderer_host/database_message_filter.cc",
-    "renderer_host/database_message_filter.h",
     "renderer_host/dip_util.cc",
     "renderer_host/dip_util.h",
     "renderer_host/dwrite_font_proxy_message_filter_win.cc",
@@ -1573,7 +1576,7 @@ source_set("browser") {
     "tracing/trace_message_filter.h",
     "tracing/tracing_controller_impl.cc",
     "tracing/tracing_controller_impl.h",
-    "tracing/tracing_controller_impl_data_sinks.cc",
+    "tracing/tracing_controller_impl_data_endpoint.cc",
     "tracing/tracing_ui.cc",
     "tracing/tracing_ui.h",
     "url_loader_factory_getter.cc",
@@ -1664,6 +1667,10 @@ source_set("browser") {
     sources += [
       "memory/memory_monitor_chromeos.cc",
       "memory/memory_monitor_chromeos.h",
+      "tracing/arc_tracing_agent_impl.cc",
+      "tracing/arc_tracing_agent_impl.h",
+      "tracing/cros_tracing_agent.cc",
+      "tracing/cros_tracing_agent.h",
     ]
   } else {
     sources += [
@@ -1909,6 +1916,13 @@ source_set("browser") {
     if (use_pangocairo) {
       sources += [ "renderer_host/pepper/pepper_truetype_font_list_pango.cc" ]
     }
+  }
+
+  if (enable_library_cdms) {
+    sources += [
+      "media/cdm_storage_impl.cc",
+      "media/cdm_storage_impl.h",
+    ]
   }
 
   if (use_atk) {

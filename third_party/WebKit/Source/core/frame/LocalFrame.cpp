@@ -44,8 +44,8 @@
 #include "core/editing/Editor.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
-#include "core/editing/InputMethodController.h"
 #include "core/editing/VisiblePosition.h"
+#include "core/editing/ime/InputMethodController.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/editing/suggestion/TextSuggestionController.h"
@@ -653,7 +653,7 @@ PositionWithAffinity LocalFrame::PositionForPoint(const IntPoint& frame_point) {
   const PositionWithAffinity position =
       layout_object->PositionForPoint(result.LocalPoint());
   if (position.IsNull())
-    return PositionWithAffinity(FirstPositionInOrBeforeNodeDeprecated(node));
+    return PositionWithAffinity(FirstPositionInOrBeforeNode(*node));
   return position;
 }
 

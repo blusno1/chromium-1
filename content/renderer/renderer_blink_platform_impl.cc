@@ -88,6 +88,7 @@
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "storage/common/database/database_identifier.h"
 #include "storage/common/quota/quota_types.h"
+#include "third_party/WebKit/common/origin_trials/trial_token_validator.h"
 #include "third_party/WebKit/public/platform/BlameContext.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
@@ -291,8 +292,6 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     web_idb_factory_.reset(new WebIDBFactoryImpl(
         sync_message_filter_,
         RenderThreadImpl::current()->GetIOTaskRunner().get()));
-    web_database_observer_impl_.reset(
-        new WebDatabaseObserverImpl(sync_message_filter_.get()));
   } else {
     service_manager::mojom::ConnectorRequest request;
     connector_ = service_manager::Connector::Create(&request);
@@ -333,14 +332,19 @@ std::unique_ptr<blink::WebURLLoader> RendererBlinkPlatformImpl::CreateURLLoader(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   ChildThreadImpl* child_thread = ChildThreadImpl::current();
 
-  if (!url_loader_factory_ && child_thread)
-    url_loader_factory_ = CreateNetworkURLLoaderFactory();
+  if (!url_loader_factory_getter_ && child_thread)
+    url_loader_factory_getter_ = CreateDefaultURLLoaderFactoryGetter();
+
+  mojom::URLLoaderFactory* factory =
+      url_loader_factory_getter_
+          ? url_loader_factory_getter_->GetFactoryForURL(request.Url())
+          : nullptr;
 
   // There may be no child thread in RenderViewTests.  These tests can still use
   // data URLs to bypass the ResourceDispatcher.
   return base::MakeUnique<WebURLLoaderImpl>(
       child_thread ? child_thread->resource_dispatcher() : nullptr,
-      std::move(task_runner), url_loader_factory_.get());
+      std::move(task_runner), factory);
 }
 
 scoped_refptr<ChildURLLoaderFactoryGetter>
@@ -728,6 +732,11 @@ unsigned RendererBlinkPlatformImpl::AudioHardwareOutputChannels() {
 }
 
 WebDatabaseObserver* RendererBlinkPlatformImpl::DatabaseObserver() {
+  if (!web_database_observer_impl_) {
+    InitializeWebDatabaseHostIfNeeded();
+    web_database_observer_impl_ =
+        std::make_unique<WebDatabaseObserverImpl>(web_database_host_);
+  }
   return web_database_observer_impl_.get();
 }
 
@@ -863,12 +872,6 @@ RendererBlinkPlatformImpl::CreateRTCPeerConnectionHandler(
     return nullptr;
 
 #if BUILDFLAG(ENABLE_WEBRTC)
-  std::unique_ptr<WebRTCPeerConnectionHandler> peer_connection_handler =
-      GetContentClient()->renderer()->OverrideCreateWebRTCPeerConnectionHandler(
-          client);
-  if (peer_connection_handler)
-    return peer_connection_handler;
-
   PeerConnectionDependencyFactory* rtc_dependency_factory =
       render_thread->GetPeerConnectionDependencyFactory();
   return rtc_dependency_factory->CreateRTCPeerConnectionHandler(client);
@@ -1322,9 +1325,15 @@ void RendererBlinkPlatformImpl::QueryStorageUsageAndQuota(
 
 //------------------------------------------------------------------------------
 
-blink::WebTrialTokenValidator*
+std::unique_ptr<blink::WebTrialTokenValidator>
 RendererBlinkPlatformImpl::TrialTokenValidator() {
-  return &trial_token_validator_;
+  return std::make_unique<WebTrialTokenValidatorImpl>(
+      std::make_unique<blink::TrialTokenValidator>(OriginTrialPolicy()));
+}
+
+std::unique_ptr<blink::TrialPolicy>
+RendererBlinkPlatformImpl::OriginTrialPolicy() {
+  return std::make_unique<TrialPolicyImpl>();
 }
 
 void RendererBlinkPlatformImpl::WorkerContextCreated(
@@ -1342,13 +1351,17 @@ void RendererBlinkPlatformImpl::RequestPurgeMemory() {
   base::MemoryCoordinatorClientRegistry::GetInstance()->PurgeMemory();
 }
 
-mojom::WebDatabaseHost& RendererBlinkPlatformImpl::GetWebDatabaseHost() {
+void RendererBlinkPlatformImpl::InitializeWebDatabaseHostIfNeeded() {
   if (!web_database_host_) {
     web_database_host_ = content::mojom::ThreadSafeWebDatabaseHostPtr::Create(
         std::move(web_database_host_info_),
         base::CreateSequencedTaskRunnerWithTraits(
             {base::WithBaseSyncPrimitives()}));
   }
+}
+
+mojom::WebDatabaseHost& RendererBlinkPlatformImpl::GetWebDatabaseHost() {
+  InitializeWebDatabaseHostIfNeeded();
   return **web_database_host_;
 }
 

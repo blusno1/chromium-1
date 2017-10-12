@@ -8,7 +8,9 @@
 #include <map>
 
 #include "ash/message_center/message_center_button_bar.h"
+#include "ash/message_center/message_center_style.h"
 #include "ash/message_center/notifier_settings_view.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -34,6 +36,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
+#include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
 
@@ -57,15 +60,55 @@ bool MessageCenterView::disable_animation_for_testing = false;
 
 namespace {
 
-const int kDefaultAnimationDurationMs = 120;
-const int kDefaultFrameRateHz = 60;
-const int kMinScrollViewHeight = 77;
+constexpr int kDefaultAnimationDurationMs = 120;
+constexpr int kDefaultFrameRateHz = 60;
+constexpr int kMinScrollViewHeight = 77;
+constexpr int kEmptyViewHeight = 96;
+constexpr gfx::Insets kEmptyViewPadding(0, 0, 24, 0);
+constexpr SkColor kEmptyViewColor = SkColorSetARGB(0x8A, 0x0, 0x0, 0x0);
+constexpr gfx::Insets kAllDoneIconPadding(0, 0, 4, 0);
+constexpr int kAllDoneIconSize = 24;
+constexpr int kEmptyLabelSize = 12;
 
 void SetViewHierarchyEnabled(views::View* view, bool enabled) {
   for (int i = 0; i < view->child_count(); i++)
     SetViewHierarchyEnabled(view->child_at(i), enabled);
   view->SetEnabled(enabled);
 }
+
+// View that is shown when there are no notifications.
+class EmptyNotificationView : public views::View {
+ public:
+  EmptyNotificationView() {
+    views::BoxLayout* layout =
+        new views::BoxLayout(views::BoxLayout::kVertical, kEmptyViewPadding, 0);
+    layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_END);
+    layout->set_cross_axis_alignment(
+        views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
+    SetLayoutManager(layout);
+
+    views::ImageView* icon = new views::ImageView();
+    icon->SetImage(gfx::CreateVectorIcon(kNotificationCenterAllDoneIcon,
+                                         kAllDoneIconSize, kEmptyViewColor));
+    icon->SetBorder(views::CreateEmptyBorder(kAllDoneIconPadding));
+    AddChildView(icon);
+
+    views::Label* label = new views::Label(
+        l10n_util::GetStringUTF16(IDS_ASH_MESSAGE_CENTER_NO_MESSAGES));
+    label->SetEnabledColor(kEmptyViewColor);
+    // "Roboto-Medium, 12sp" is specified in the mock.
+    label->SetFontList(message_center_style::GetFontListForSizeAndWeight(
+        kEmptyLabelSize, gfx::Font::Weight::MEDIUM));
+    label->SetHorizontalAlignment(gfx::ALIGN_CENTER);
+    AddChildView(label);
+  }
+
+  // views::View:
+  int GetHeightForWidth(int w) const override { return kEmptyViewHeight; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(EmptyNotificationView);
+};
 
 }  // namespace
 
@@ -79,6 +122,7 @@ MessageCenterView::MessageCenterView(MessageCenter* message_center,
       tray_(tray),
       scroller_(nullptr),
       settings_view_(nullptr),
+      no_notifications_view_(nullptr),
       button_bar_(nullptr),
       settings_visible_(initially_settings_visible),
       source_view_(nullptr),
@@ -87,10 +131,14 @@ MessageCenterView::MessageCenterView(MessageCenter* message_center,
       target_height_(0),
       is_closing_(false),
       is_locked_(message_center_->IsLockedState()),
-      mode_((!initially_settings_visible || is_locked_) ? Mode::BUTTONS_ONLY
-                                                        : Mode::SETTINGS),
+      mode_(Mode::NO_NOTIFICATIONS),
       context_menu_controller_(this),
       focus_manager_(nullptr) {
+  if (is_locked_)
+    mode_ = Mode::LOCKED;
+  else if (initially_settings_visible)
+    mode_ = Mode::SETTINGS;
+
   message_center_->AddObserver(this);
   set_notify_enter_exit_on_child(true);
   SetBackground(views::CreateSolidBackground(kBackgroundColor));
@@ -128,11 +176,15 @@ MessageCenterView::MessageCenterView(MessageCenter* message_center,
 
   settings_view_ = new NotifierSettingsView(notifier_settings_provider);
 
+  no_notifications_view_ = new EmptyNotificationView();
+
   scroller_->SetVisible(false);  // Because it has no notifications at first.
   settings_view_->SetVisible(mode_ == Mode::SETTINGS);
+  no_notifications_view_->SetVisible(mode_ == Mode::NO_NOTIFICATIONS);
 
   AddChildView(scroller_);
   AddChildView(settings_view_);
+  AddChildView(no_notifications_view_);
   AddChildView(button_bar_);
 }
 
@@ -192,7 +244,6 @@ void MessageCenterView::ClearAllClosableNotifications() {
 }
 
 void MessageCenterView::OnAllNotificationsCleared() {
-  is_clearing_all_notifications_ = false;
   SetViewHierarchyEnabled(scroller_, true);
   button_bar_->SetCloseAllButtonEnabled(false);
 
@@ -202,6 +253,7 @@ void MessageCenterView::OnAllNotificationsCleared() {
   message_center_->RemoveAllNotifications(
       true /* by_user */,
       message_center::MessageCenter::RemoveType::NON_PINNED);
+  is_clearing_all_notifications_ = false;
 }
 
 size_t MessageCenterView::NumMessageViewsForTest() const {
@@ -256,8 +308,16 @@ void MessageCenterView::Layout() {
     return;
   }
 
+  // In order to keep the fix for https://crbug.com/767805 working,
+  // we have to always call SetBounds of scroller_.
+  // TODO(tetsui): Fix the bug above without calling SetBounds, as SetBounds
+  // invokes Layout() which is a heavy operation.
   scroller_->SetBounds(0, 0, width(), height() - button_height);
-  settings_view_->SetBounds(0, 0, width(), height() - button_height);
+
+  if (settings_view_->visible())
+    settings_view_->SetBounds(0, 0, width(), height() - button_height);
+  if (no_notifications_view_->visible())
+    no_notifications_view_->SetBounds(0, 0, width(), kEmptyViewHeight);
 
   bool is_scrollable = false;
   if (scroller_->visible())
@@ -319,6 +379,8 @@ int MessageCenterView::GetHeightForWidth(int width) const {
     content_height += scroller_->GetHeightForWidth(width);
   else if (settings_view_->visible())
     content_height += settings_view_->GetHeightForWidth(width);
+  else if (no_notifications_view_->visible())
+    content_height += no_notifications_view_->GetHeightForWidth(width);
   return button_bar_->GetHeightForWidth(width) + content_height +
          (button_border ? button_border->GetInsets().height() : 0);
 }
@@ -368,7 +430,9 @@ void MessageCenterView::OnNotificationRemoved(const std::string& id,
     return;
   size_t index = view_pair.first;
 
-  if (by_user) {
+  // We skip repositioning during clear-all anomation, since we don't need keep
+  // positions.
+  if (by_user && !is_clearing_all_notifications_) {
     message_list_view_->SetRepositionTarget(view->bounds());
     // Moves the keyboard focus to the next notification if the removed
     // notification is focused so that the user can dismiss notifications
@@ -444,9 +508,8 @@ void MessageCenterView::RemoveNotification(const std::string& notification_id,
 }
 
 std::unique_ptr<ui::MenuModel> MessageCenterView::CreateMenuModel(
-    const message_center::NotifierId& notifier_id,
-    const base::string16& display_source) {
-  return tray_->CreateNotificationMenuModel(notifier_id, display_source);
+    const message_center::Notification& notification) {
+  return tray_->CreateNotificationMenuModel(notification);
 }
 
 bool MessageCenterView::HasClickedListener(const std::string& notification_id) {
@@ -533,8 +596,11 @@ void MessageCenterView::AddNotificationAt(const Notification& notification,
 
   // TODO(yoshiki): Temporary disable context menu on custom notifications.
   // See crbug.com/750307 for detail.
-  if (notification.type() != message_center::NOTIFICATION_TYPE_CUSTOM)
+  if (notification.type() != message_center::NOTIFICATION_TYPE_CUSTOM &&
+      notification.delegate() &&
+      notification.delegate()->ShouldDisplaySettingsButton()) {
     view->set_context_menu_controller(&context_menu_controller_);
+  }
 
   view->set_scroller(scroller_);
   message_list_view_->AddNotificationAt(view, index);
@@ -544,9 +610,6 @@ base::string16 MessageCenterView::GetButtonBarTitle() const {
   if (is_locked_)
     return l10n_util::GetStringUTF16(IDS_ASH_MESSAGE_CENTER_FOOTER_LOCKSCREEN);
 
-  if (mode_ == Mode::BUTTONS_ONLY)
-    return l10n_util::GetStringUTF16(IDS_ASH_MESSAGE_CENTER_NO_MESSAGES);
-
   return l10n_util::GetStringUTF16(IDS_ASH_MESSAGE_CENTER_FOOTER_TITLE);
 }
 
@@ -554,11 +617,11 @@ void MessageCenterView::Update(bool animate) {
   bool no_message_views = (message_list_view_->GetNotificationCount() == 0);
 
   if (is_locked_)
-    SetVisibilityMode(Mode::BUTTONS_ONLY, animate);
+    SetVisibilityMode(Mode::LOCKED, animate);
   else if (settings_visible_)
     SetVisibilityMode(Mode::SETTINGS, animate);
   else if (no_message_views)
-    SetVisibilityMode(Mode::BUTTONS_ONLY, animate);
+    SetVisibilityMode(Mode::NO_NOTIFICATIONS, animate);
   else
     SetVisibilityMode(Mode::NOTIFICATIONS, animate);
 
@@ -591,6 +654,8 @@ void MessageCenterView::SetVisibilityMode(Mode mode, bool animate) {
     source_view_ = scroller_;
   else if (mode_ == Mode::SETTINGS)
     source_view_ = settings_view_;
+  else if (mode_ == Mode::NO_NOTIFICATIONS)
+    source_view_ = no_notifications_view_;
   else
     source_view_ = nullptr;
 
@@ -598,6 +663,8 @@ void MessageCenterView::SetVisibilityMode(Mode mode, bool animate) {
     target_view_ = scroller_;
   else if (mode == Mode::SETTINGS)
     target_view_ = settings_view_;
+  else if (mode == Mode::NO_NOTIFICATIONS)
+    target_view_ = no_notifications_view_;
   else
     target_view_ = nullptr;
 

@@ -29,6 +29,7 @@
 #include "core/editing/markers/DocumentMarkerController.h"
 
 #include <algorithm>
+#include "core/dom/AXObjectCache.h"
 #include "core/dom/Node.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/Text.h"
@@ -106,6 +107,15 @@ void InvalidatePaintForNode(const Node& node) {
 
   node.GetLayoutObject()->SetShouldDoFullPaintInvalidation(
       PaintInvalidationReason::kDocumentMarker);
+
+  // Tell accessibility about the new marker.
+  AXObjectCache* ax_object_cache = node.GetDocument().ExistingAXObjectCache();
+  if (!ax_object_cache)
+    return;
+  // TODO(nektar): Do major refactoring of all AX classes to comply with const
+  // correctness.
+  Node* non_const_node = &const_cast<Node&>(node);
+  ax_object_cache->HandleTextMarkerDataAdded(non_const_node, non_const_node);
 }
 
 }  // namespace
@@ -130,6 +140,7 @@ inline bool DocumentMarkerController::PossiblyHasMarkers(
     // but that operation is more performance-sensitive than anywhere
     // PossiblyHasMarkers() is used.
     possibly_existing_marker_types_ = 0;
+    SetContext(nullptr);
     return false;
   }
 
@@ -138,12 +149,12 @@ inline bool DocumentMarkerController::PossiblyHasMarkers(
 
 DocumentMarkerController::DocumentMarkerController(Document& document)
     : possibly_existing_marker_types_(0), document_(&document) {
-  SetContext(&document);
 }
 
 void DocumentMarkerController::Clear() {
   markers_.clear();
   possibly_existing_marker_types_ = 0;
+  SetContext(nullptr);
 }
 
 void DocumentMarkerController::AddSpellingMarker(const EphemeralRange& range,
@@ -269,6 +280,7 @@ void DocumentMarkerController::AddMarkerInternal(
 void DocumentMarkerController::AddMarkerToNode(Node* node,
                                                DocumentMarker* new_marker) {
   possibly_existing_marker_types_.Add(new_marker->GetType());
+  SetContext(document_);
 
   Member<MarkerLists>& markers =
       markers_.insert(node, nullptr).stored_value->value;
@@ -369,8 +381,10 @@ void DocumentMarkerController::RemoveMarkersInternal(
 
   if (empty_lists_count == DocumentMarker::kMarkerTypeIndexesCount) {
     markers_.erase(node);
-    if (markers_.IsEmpty())
+    if (markers_.IsEmpty()) {
       possibly_existing_marker_types_ = 0;
+      SetContext(nullptr);
+    }
   }
 
   if (!doc_dirty)
@@ -628,6 +642,9 @@ void DocumentMarkerController::RemoveMarkersOfTypes(
   }
 
   possibly_existing_marker_types_.Remove(marker_types);
+  if (PossiblyHasMarkers(DocumentMarker::AllMarkers()))
+    return;
+  SetContext(nullptr);
 }
 
 void DocumentMarkerController::RemoveMarkersFromList(
@@ -671,8 +688,10 @@ void DocumentMarkerController::RemoveMarkersFromList(
 
   if (node_can_be_removed) {
     markers_.erase(iterator);
-    if (markers_.IsEmpty())
+    if (markers_.IsEmpty()) {
       possibly_existing_marker_types_ = 0;
+      SetContext(nullptr);
+    }
   }
 }
 

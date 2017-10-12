@@ -18,9 +18,14 @@ TestRunner.executeTestScript = function() {
       .then(data => data.text())
       .then(testScript => {
         if (!self.testRunner || Runtime.queryParam('debugFrontend')) {
-          self.eval(`function test(){${testScript}}\n//# sourceURL=${testScriptURL}`);
           TestRunner.addResult = console.log;
           TestRunner.completeTest = () => console.log('Test completed');
+
+          // Auto-start unit tests
+          if (!self.testRunner)
+            eval(`(function test(){${testScript}})()\n//# sourceURL=${testScriptURL}`);
+          else
+            self.eval(`function test(){${testScript}}\n//# sourceURL=${testScriptURL}`);
           return;
         }
         eval(`(function test(){${testScript}})()\n//# sourceURL=${testScriptURL}`);
@@ -445,10 +450,16 @@ TestRunner.deprecatedRunAfterPendingDispatches = function(callback) {
 };
 
 /**
+ * This ensures a base tag is set so all DOM references
+ * are relative to the test file and not the inspected page
+ * (i.e. http/tests/devtools/resources/inspected-page.html).
  * @param {string} html
  * @return {!Promise<undefined>}
  */
 TestRunner.loadHTML = function(html) {
+  var testPath = TestRunner.url('');
+  if (!html.includes('<base'))
+    html = `<base href="${testPath}">` + html;
   html = html.replace(/'/g, '\\\'').replace(/\n/g, '\\n');
   return TestRunner.evaluateInPageAnonymously(`document.write('${html}');document.close();`);
 };
@@ -461,7 +472,7 @@ TestRunner.addScriptTag = function(path) {
   return TestRunner.evaluateInPageAsync(`
     (function(){
       var script = document.createElement('script');
-      script.src = '${TestRunner.url(path)}';
+      script.src = '${path}';
       document.head.append(script);
       return new Promise(f => script.onload = f);
     })();
@@ -478,7 +489,7 @@ TestRunner.addStylesheetTag = function(path) {
       var link = document.createElement('link');
       link.rel = 'stylesheet';
       link.type = 'text/css';
-      link.href = '${TestRunner.url(path)}';
+      link.href = '${path}';
       link.onload = onload;
       document.head.append(link);
       var resolve;
@@ -501,7 +512,7 @@ TestRunner.addIframe = function(path) {
   return TestRunner.evaluateInPageAsync(`
     (function(){
       var iframe = document.createElement('iframe');
-      iframe.src = '${TestRunner.url(path)}';
+      iframe.src = '${path}';
       document.body.appendChild(iframe);
       return new Promise(f => iframe.onload = f);
     })();
@@ -957,6 +968,7 @@ TestRunner.override = function(receiver, methodName, override, opt_sticky) {
 TestRunner.clearSpecificInfoFromStackFrames = function(text) {
   var buffer = text.replace(/\(file:\/\/\/(?:[^)]+\)|[\w\/:-]+)/g, '(...)');
   buffer = buffer.replace(/\(http:\/\/(?:[^)]+\)|[\w\/:-]+)/g, '(...)');
+  buffer = buffer.replace(/\(test:\/\/(?:[^)]+\)|[\w\/:-]+)/g, '(...)');
   buffer = buffer.replace(/\(<anonymous>:[^)]+\)/g, '(...)');
   buffer = buffer.replace(/VM\d+/g, 'VM');
   return buffer.replace(/\s*at[^()]+\(native\)/g, '');
@@ -1128,7 +1140,7 @@ TestRunner.waitForUISourceCodeRemoved = function(callback) {
  */
 TestRunner.url = function(relativeURL) {
   var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
-  return testScriptURL + '/../' + relativeURL;
+  return new URL(testScriptURL + '/../' + relativeURL).href;
 };
 
 /**
@@ -1185,13 +1197,14 @@ TestRunner.TestObserver = class {
 };
 
 TestRunner.runTest = async function() {
-  var basePath = TestRunner.url('');
-  var code = `
-    function relativeToTest(relativePath) {
-      return '${basePath}' + relativePath;
-    }
-  `;
-  await TestRunner.RuntimeAgent.invoke_evaluate({expression: code, objectGroup: 'console'});
+  var testPath = TestRunner.url('');
+  await TestRunner.loadHTML(`
+    <head>
+      <base href="${testPath}">
+    </head>
+    <body>
+    </body>
+  `);
   TestRunner.executeTestScript();
 };
 

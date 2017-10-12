@@ -252,6 +252,11 @@ const char kEnableAsmWasmDescription[] =
     R"*(Validate Asm.js when "use asm" is present and then convert to )*"
     R"*(WebAssembly.)*";
 
+const char kEnableAutofillCreditCardAblationExperimentDisplayName[] =
+    "Credit card autofill ablation experiment.";
+const char kEnableAutofillCreditCardAblationExperimentDescription[] =
+    "If enabled, credit card autofill suggestions will not display.";
+
 const char kEnableAutofillCreditCardBankNameDisplayName[] =
     "Display the issuer bank name of a credit card in autofill.";
 const char kEnableAutofillCreditCardBankNameDisplayDescription[] =
@@ -298,6 +303,11 @@ const char kEnableClientLoFiName[] = "Client-side Lo-Fi previews";
 
 const char kEnableClientLoFiDescription[] =
     "Enable showing low fidelity images on some pages on slow networks.";
+
+const char kEnableNoScriptPreviewsName[] = "NoScript previews";
+
+const char kEnableNoScriptPreviewsDescription[] =
+    "Enable disabling JavaScript on some pages on slow networks.";
 
 const char kEnableDataReductionProxyLitePageName[] =
     "Lite pages for Data Saver Lo-Fi mode";
@@ -385,11 +395,6 @@ const char kEnableMaterialDesignExtensionsName[] =
 const char kEnableMaterialDesignExtensionsDescription[] =
     "If enabled, the chrome://extensions/ URL loads the Material Design "
     "extensions page.";
-
-const char kEnableMaterialDesignFeedbackName[] =
-    "Enable Material Design feedback";
-const char kEnableMaterialDesignFeedbackDescription[] =
-    "If enabled, reporting an issue will load the Material Design feedback UI.";
 
 const char kEnablePolicyToolName[] = "Enable policy management page";
 const char kEnablePolicyToolDescription[] =
@@ -490,23 +495,6 @@ const char kEnableWasmStreamingName[] =
     "WebAssembly streaming compile/instantiate support.";
 const char kEnableWasmStreamingDescription[] =
     "WebAssembly.{compile|instantiate} taking a Response as parameter.";
-
-const char kEnableWebfontsInterventionName[] =
-    "New version of User Agent Intervention for WebFonts loading.";
-const char kEnableWebfontsInterventionDescription[] =
-    "Enable New version of User Agent Intervention for WebFonts loading.";
-const char kEnableWebfontsInterventionV2ChoiceDefault[] = "Default";
-const char kEnableWebfontsInterventionV2ChoiceEnabledWith2g[] = "Enabled: 2G";
-const char kEnableWebfontsInterventionV2ChoiceEnabledWith3g[] = "Enabled: 3G";
-const char kEnableWebfontsInterventionV2ChoiceEnabledWithSlow2g[] =
-    "Enabled: Slow 2G";
-const char kEnableWebfontsInterventionV2ChoiceDisabled[] = "Disabled";
-
-const char kEnableWebfontsInterventionTriggerName[] =
-    "Trigger User Agent Intervention for WebFonts loading always.";
-const char kEnableWebfontsInterventionTriggerDescription[] =
-    "Enable to trigger User Agent Intervention for WebFonts loading always. "
-    "This flag affects only when the intervention is enabled.";
 
 const char kEnableWebNotificationCustomLayoutsName[] =
     "Enable custom layouts for Web Notifications.";
@@ -1594,9 +1582,10 @@ const char kChromeHomeDoodleName[] = "Chrome Home Doodle.";
 const char kChromeHomeDoodleDescription[] =
     "Enables showing the Doodle on the NTP for Chrome Home.";
 
-const char kChromeHomeExpandButtonName[] = "Chrome Home Expand Button";
-const char kChromeHomeExpandButtonDescription[] =
-    "Enables the expand button for Chrome Home.";
+const char kChromeHomeOptOutSnackbarName[] = "Chrome Home Opt-out Snackbar";
+const char kChromeHomeOptOutSnackbarDescription[] =
+    "Show a snackbar prompting users to take a survey the first time they"
+    " opt-out of Chrome Home";
 
 const char kChromeHomePersonalizedOmniboxSuggestionsName[] =
     "Chrome Home Personalized Omnibox Suggestions";
@@ -1605,13 +1594,12 @@ const char kChromeHomePersonalizedOmniboxSuggestionsDescription[] =
 
 const char kChromeHomePromoName[] = "Chrome Home Promo";
 const char kChromeHomePromoDescription[] =
-    "Force the Chrome Home promotion to show each time the browser restarts.";
+    "Enable showing the opt-in/out Chrome Home promo.";
 
 const char kChromeHomeSwipeLogicName[] = "Chrome Home Swipe Logic";
 const char kChromeHomeSwipeLogicDescription[] =
     "Various swipe logic options for Chrome Home for sheet expansion.";
 const char kChromeHomeSwipeLogicRestrictArea[] = "Restrict swipable area";
-const char kChromeHomeSwipeLogicButtonOnly[] = "Swipe on expand button";
 
 const char kChromeHomeName[] = "Chrome Home";
 const char kChromeHomeDescription[] =
@@ -2422,6 +2410,10 @@ const char kEnableExternalDriveRenameDescription[] =
 const char kEnableImeMenuName[] = "Enable opt-in IME menu";
 const char kEnableImeMenuDescription[] =
     "Enable access to the new IME menu in the Language Settings page.";
+
+const char kEnableTabletSplitViewName[] = "Split view in Tablet mode";
+const char kEnableTabletSplitViewDescription[] =
+    "Enable split view for Chrome OS tablet mode.";
 
 const char kEnableZipArchiverOnFileManagerName[] = "ZIP archiver for Drive";
 const char kEnableZipArchiverOnFileManagerDescription[] =

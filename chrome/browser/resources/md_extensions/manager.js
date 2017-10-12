@@ -42,6 +42,13 @@ cr.define('extensions', function() {
       // passed to different elements as different types.
       delegate: Object,
 
+      isGuest_: {
+        type: Boolean,
+        value: function() {
+          return loadTimeData.getBoolean('isGuest');
+        },
+      },
+
       inDevMode: {
         type: Boolean,
         value: false,
@@ -124,6 +131,13 @@ cr.define('extensions', function() {
      */
     currentPage_: null,
 
+    /**
+     * The ID of the listner on |extensions.navigation|. Stored so that the
+     * listener can be removed when this element is detached (happens in tests).
+     * @private {?number}
+     */
+    navigationListener_: null,
+
     /** @override */
     created: function() {
       this.readyPromiseResolver = new PromiseResolver();
@@ -134,9 +148,6 @@ cr.define('extensions', function() {
       this.toolbar =
           /** @type {extensions.Toolbar} */ (this.$$('extensions-toolbar'));
       this.readyPromiseResolver.resolve();
-      extensions.navigation.onRouteChanged(newPage => {
-        this.changePage_(newPage);
-      });
 
       // <if expr="chromeos">
       extensions.KioskBrowserProxyImpl.getInstance()
@@ -145,6 +156,19 @@ cr.define('extensions', function() {
             this.kioskEnabled_ = params.kioskEnabled;
           });
       // </if>
+    },
+
+    /** @override */
+    attached: function() {
+      this.navigationListener_ = extensions.navigation.addListener(newPage => {
+        this.changePage_(newPage);
+      });
+    },
+
+    /** @override */
+    detached: function() {
+      assert(extensions.navigation.removeListener(this.navigationListener_));
+      this.navigationListener_ = null;
     },
 
     get keyboardShortcuts() {
@@ -321,7 +345,7 @@ cr.define('extensions', function() {
      */
     changePage_: function(newPage) {
       this.$.drawer.closeDrawer();
-      if (this.optionsDialog.open)
+      if (this.optionsDialog && this.optionsDialog.open)
         this.optionsDialog.close();
 
       const fromPage = this.currentPage_ ? this.currentPage_.page : null;

@@ -43,7 +43,6 @@
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameCaret.h"
 #include "core/editing/GranularityStrategy.h"
-#include "core/editing/InputMethodController.h"
 #include "core/editing/LayoutSelection.h"
 #include "core/editing/Position.h"
 #include "core/editing/SelectionController.h"
@@ -55,6 +54,7 @@
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/TypingCommand.h"
+#include "core/editing/ime/InputMethodController.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -63,7 +63,7 @@
 #include "core/frame/Settings.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLFrameElementBase.h"
-#include "core/html/HTMLInputElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/HTMLSelectElement.h"
 #include "core/html_names.h"
 #include "core/input/ContextMenuAllowedScope.h"
@@ -226,6 +226,7 @@ bool FrameSelection::SetSelectionDeprecated(
     return false;
   if (is_changed)
     selection_editor_->SetSelection(new_selection);
+  should_shrink_next_tap_ = options.ShouldShrinkNextTap();
   is_handle_visible_ = should_show_handle;
   ScheduleVisualUpdateForPaintInvalidationIfNeeded();
 
@@ -1027,12 +1028,9 @@ bool FrameSelection::SelectWordAroundCaret() {
   // http://crbug.com/657237 for more details.
   if (!selection.IsCaret())
     return false;
-  return SelectWordAroundPosition(selection.VisibleStart());
-}
-
-bool FrameSelection::SelectWordAroundPosition(const VisiblePosition& position) {
-  static const EWordSide kWordSideList[2] = {kRightWordIfOnBoundary,
-                                             kLeftWordIfOnBoundary};
+  const VisiblePosition& position = selection.VisibleStart();
+  static const EWordSide kWordSideList[2] = {kNextWordIfOnBoundary,
+                                             kPreviousWordIfOnBoundary};
   for (EWordSide word_side : kWordSideList) {
     // TODO(yoichio): We should have Position version of |start/endOfWord|
     // for avoiding unnecessary canonicalization.

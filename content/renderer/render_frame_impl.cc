@@ -959,10 +959,12 @@ blink::WebLocalFrame* RenderFrameImpl::UniqueNameFrameAdapter::GetWebFrame()
 }
 
 // static
-RenderFrameImpl* RenderFrameImpl::Create(RenderViewImpl* render_view,
-                                         int32_t routing_id) {
+RenderFrameImpl* RenderFrameImpl::Create(
+    RenderViewImpl* render_view,
+    int32_t routing_id,
+    const base::UnguessableToken& devtools_frame_token) {
   DCHECK(routing_id != MSG_ROUTING_NONE);
-  CreateParams params(render_view, routing_id);
+  CreateParams params(render_view, routing_id, devtools_frame_token);
 
   if (g_create_render_frame_impl)
     return g_create_render_frame_impl(params);
@@ -993,12 +995,13 @@ RenderFrameImpl* RenderFrameImpl::CreateMainFrame(
     const ScreenInfo& screen_info,
     CompositorDependencies* compositor_deps,
     blink::WebFrame* opener,
+    const base::UnguessableToken& devtools_frame_token,
     const FrameReplicationState& replicated_state) {
   // A main frame RenderFrame must have a RenderWidget.
   DCHECK_NE(MSG_ROUTING_NONE, widget_routing_id);
 
   RenderFrameImpl* render_frame =
-      RenderFrameImpl::Create(render_view, routing_id);
+      RenderFrameImpl::Create(render_view, routing_id, devtools_frame_token);
   render_frame->InitializeBlameContext(nullptr);
   WebLocalFrame* web_frame = WebLocalFrame::CreateMainFrame(
       render_view->webview(), render_frame,
@@ -1024,6 +1027,7 @@ void RenderFrameImpl::CreateFrame(
     int opener_routing_id,
     int parent_routing_id,
     int previous_sibling_routing_id,
+    const base::UnguessableToken& devtools_frame_token,
     const FrameReplicationState& replicated_state,
     CompositorDependencies* compositor_deps,
     const mojom::CreateFrameWidgetParams& widget_params,
@@ -1052,8 +1056,8 @@ void RenderFrameImpl::CreateFrame(
       previous_sibling_web_frame = previous_sibling_proxy->web_frame();
 
     // Create the RenderFrame and WebLocalFrame, linking the two.
-    render_frame =
-        RenderFrameImpl::Create(parent_proxy->render_view(), routing_id);
+    render_frame = RenderFrameImpl::Create(parent_proxy->render_view(),
+                                           routing_id, devtools_frame_token);
     render_frame->InitializeBlameContext(FromRoutingID(parent_routing_id));
     render_frame->unique_name_helper_.set_propagated_name(
         replicated_state.unique_name);
@@ -1080,7 +1084,8 @@ void RenderFrameImpl::CreateFrame(
     if (!proxy)
       return;
 
-    render_frame = RenderFrameImpl::Create(proxy->render_view(), routing_id);
+    render_frame = RenderFrameImpl::Create(proxy->render_view(), routing_id,
+                                           devtools_frame_token);
     render_frame->InitializeBlameContext(nullptr);
     render_frame->proxy_routing_id_ = proxy_routing_id;
     proxy->set_provisional_frame_routing_id(routing_id);
@@ -1215,6 +1220,8 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
       media_factory_(this,
                      base::Bind(&RenderFrameImpl::RequestOverlayRoutingToken,
                                 base::Unretained(this))),
+      devtools_frame_token_(
+          blink::WebString::FromUTF8(params.devtools_frame_token.ToString())),
       weak_factory_(this) {
   service_manager::mojom::InterfaceProviderPtr remote_interfaces;
   pending_remote_interface_provider_request_ = MakeRequest(&remote_interfaces);
@@ -3151,6 +3158,7 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
   // Synchronously notify the browser of a child frame creation to get the
   // routing_id for the RenderFrame.
   int child_routing_id = MSG_ROUTING_NONE;
+  base::UnguessableToken devtools_frame_token;
   FrameHostMsg_CreateChildFrame_Params params;
   params.parent_routing_id = routing_id_;
   params.scope = scope;
@@ -3176,7 +3184,8 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
   params.frame_owner_properties =
       ConvertWebFrameOwnerPropertiesToFrameOwnerProperties(
           frame_owner_properties);
-  Send(new FrameHostMsg_CreateChildFrame(params, &child_routing_id));
+  Send(new FrameHostMsg_CreateChildFrame(params, &child_routing_id,
+                                         &devtools_frame_token));
 
   // Allocation of routing id failed, so we can't create a child frame. This can
   // happen if the synchronous IPC message above has failed.  This can
@@ -3194,8 +3203,8 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
                "child", child_routing_id);
 
   // Create the RenderFrame and WebLocalFrame, linking the two.
-  RenderFrameImpl* child_render_frame =
-      RenderFrameImpl::Create(render_view_, child_routing_id);
+  RenderFrameImpl* child_render_frame = RenderFrameImpl::Create(
+      render_view_, child_routing_id, devtools_frame_token);
   child_render_frame->unique_name_helper_.set_propagated_name(
       params.frame_unique_name);
   child_render_frame->InitializeBlameContext(this);
@@ -3348,12 +3357,6 @@ void RenderFrameImpl::DidMatchCSS(
 
 void RenderFrameImpl::SetHasReceivedUserGesture() {
   Send(new FrameHostMsg_SetHasReceivedUserGesture(routing_id_));
-}
-
-void RenderFrameImpl::SetDevToolsFrameId(
-    const blink::WebString& devtools_frame_id) {
-  Send(new FrameHostMsg_SetDevToolsFrameId(routing_id_,
-                                           devtools_frame_id.Utf8()));
 }
 
 bool RenderFrameImpl::ShouldReportDetailedMessageForSource(
@@ -4143,6 +4146,11 @@ RenderFrameImpl::GetEffectiveConnectionType() {
   return effective_connection_type_;
 }
 
+void RenderFrameImpl::SetEffectiveConnectionTypeForTesting(
+    blink::WebEffectiveConnectionType type) {
+  effective_connection_type_ = type;
+}
+
 bool RenderFrameImpl::ShouldUseClientLoFiForRequest(
     const WebURLRequest& request) {
   if (request.GetPreviewsState() != WebURLRequest::kPreviewsUnspecified)
@@ -4170,6 +4178,10 @@ bool RenderFrameImpl::IsClientLoFiActiveForFrame() {
 
 void RenderFrameImpl::DidBlockFramebust(const WebURL& url) {
   Send(new FrameHostMsg_DidBlockFramebust(GetRoutingID(), url));
+}
+
+blink::WebString RenderFrameImpl::GetDevToolsFrameToken() {
+  return devtools_frame_token_;
 }
 
 void RenderFrameImpl::AbortClientNavigation() {
@@ -6884,26 +6896,16 @@ blink::WebPageVisibilityState RenderFrameImpl::VisibilityState() const {
 std::unique_ptr<blink::WebURLLoader> RenderFrameImpl::CreateURLLoader(
     const blink::WebURLRequest& request,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  // Currently the tests (RenderViewTests) that need URLLoader but do not
+  // have ChildThread use the Platform::Current()->CreateURLLoader().
+  DCHECK(ChildThreadImpl::current());
+
   UpdatePeakMemoryStats();
 
-  ChildThreadImpl* child_thread = ChildThreadImpl::current();
-  if (!child_thread) {
-    return RenderThreadImpl::current()->blink_platform_impl()->CreateURLLoader(
-        request, std::move(task_runner));
-  }
-
-  mojom::URLLoaderFactory* factory = custom_url_loader_factory_.get();
-
-  if (base::FeatureList::IsEnabled(features::kNetworkService) &&
-      request.Url().ProtocolIs(url::kBlobScheme)) {
-    factory = GetDefaultURLLoaderFactoryGetter()->GetBlobLoaderFactory();
-    DCHECK(factory);
-  }
-
-  if (!factory) {
-    factory = GetDefaultURLLoaderFactoryGetter()->GetNetworkLoaderFactory();
-    DCHECK(factory);
-  }
+  mojom::URLLoaderFactory* factory =
+      GetDefaultURLLoaderFactoryGetter()->GetFactoryForURL(
+          request.Url(), custom_url_loader_factory_.get());
+  DCHECK(factory);
 
   mojom::KeepAliveHandlePtr keep_alive_handle;
   if (base::FeatureList::IsEnabled(
@@ -6911,9 +6913,9 @@ std::unique_ptr<blink::WebURLLoader> RenderFrameImpl::CreateURLLoader(
       request.GetKeepalive()) {
     GetFrameHost()->IssueKeepAliveHandle(mojo::MakeRequest(&keep_alive_handle));
   }
-  return base::MakeUnique<WebURLLoaderImpl>(child_thread->resource_dispatcher(),
-                                            std::move(task_runner), factory,
-                                            std::move(keep_alive_handle));
+  return base::MakeUnique<WebURLLoaderImpl>(
+      ChildThreadImpl::current()->resource_dispatcher(), std::move(task_runner),
+      factory, std::move(keep_alive_handle));
 }
 
 void RenderFrameImpl::DraggableRegionsChanged() {

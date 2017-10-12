@@ -46,7 +46,9 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.widget.findinpage.FindToolbarManager;
 import org.chromium.chrome.browser.widget.findinpage.FindToolbarObserver;
 import org.chromium.components.feature_engagement.EventConstants;
+import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.feature_engagement.TriggerState;
 import org.chromium.components.navigation_interception.NavigationParams;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.GestureStateListener;
@@ -513,6 +515,13 @@ public class ContextualSearchManager
         tracker.notifyEvent(mWasActivatedByTap
                         ? EventConstants.CONTEXTUAL_SEARCH_TRIGGERED_BY_TAP
                         : EventConstants.CONTEXTUAL_SEARCH_TRIGGERED_BY_LONGPRESS);
+
+        // Log whether IPH for tapping has been shown before.
+        if (mWasActivatedByTap) {
+            ContextualSearchUma.logTapIPH(
+                    tracker.getTriggerState(FeatureConstants.CONTEXTUAL_SEARCH_TAP_FEATURE)
+                    == TriggerState.HAS_BEEN_DISPLAYED);
+        }
     }
 
     @Override
@@ -1642,8 +1651,7 @@ public class ContextualSearchManager
                     // and the selection-pins show: The original tap processing may still be in
                     // progress or may have completed and the Bar is being shown.
                     hideContextualSearch(StateChangeReason.UNKNOWN);
-                    // TODO(donnd): add user action:
-                    // RecordUserAction.record("ContextualSearch.SmartSelectSuppressed");
+                    // TODO(donnd): add user action
                 } else {
                     showContextualSearch(StateChangeReason.TEXT_SELECT_LONG_PRESS);
                 }

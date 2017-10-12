@@ -41,6 +41,8 @@ class WindowSelectorDelegate;
 class WindowSelectorItem;
 class WindowSelectorTest;
 
+enum class IndicatorType;
+
 // The WindowSelector shows a grid of all of your windows, allowing to select
 // one by clicking or tapping on it.
 class ASH_EXPORT WindowSelector : public display::DisplayObserver,
@@ -94,8 +96,9 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   // Called to show or hide the split view overview overlay. This will do
   // nothing if split view is not enabled. |event_location| is used to reparent
   // |split_view_overview_overlays_|'s widget, if necessary.
-  void SetSplitViewOverviewOverlayVisible(bool visible,
-                                          const gfx::Point& event_location);
+  void SetSplitViewOverviewOverlayIndicatorType(
+      IndicatorType indicator_type,
+      const gfx::Point& event_location);
   // Retrieves the window grid whose root window matches |root_window|. Returns
   // nullptr if the window grid is not found.
   WindowGrid* GetGridWithRootWindow(aura::Window* root_window);
@@ -106,7 +109,8 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   void InitiateDrag(WindowSelectorItem* item,
                     const gfx::Point& location_in_screen);
   void Drag(WindowSelectorItem* item, const gfx::Point& location_in_screen);
-  void CompleteDrag(WindowSelectorItem* item);
+  void CompleteDrag(WindowSelectorItem* item,
+                    const gfx::Point& location_in_screen);
 
   // Positions all of the windows in the overview.
   void PositionWindows(bool animate);
@@ -156,6 +160,7 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   // SplitViewController::Observer:
   void OnSplitViewStateChanged(SplitViewController::State previous_state,
                                SplitViewController::State state) override;
+  void OnSplitViewDividerPositionChanged() override;
 
  private:
   friend class WindowSelectorTest;
@@ -177,6 +182,9 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   // Removes all observers that were registered during construction and/or
   // initialization.
   void RemoveAllObservers();
+
+  // Called when the display area for the overview window grids changed.
+  void OnDisplayBoundsChanged();
 
   // Tracks observed windows.
   std::set<aura::Window*> observed_windows_;

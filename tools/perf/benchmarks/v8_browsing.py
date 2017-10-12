@@ -188,6 +188,10 @@ class V8RuntimeStatsMobileBrowsingBenchmark(
   PLATFORM = 'mobile'
   SUPPORTED_PLATFORMS = [story.expectations.ALL_MOBILE]
 
+  def SetExtraBrowserOptions(self, options):
+    options.AppendExtraBrowserArgs(
+      '--enable-blink-features=BlinkRuntimeCallStats')
+
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
       def SetExpectations(self):
@@ -215,6 +219,10 @@ class V8RuntimeStatsMobileBrowsingBenchmark(
             'browse:news:cnn',
             [story.expectations.ALL_MOBILE],
             'crbug.com/767970')
+        self.DisableStory(
+            'browse:chrome:newtab',
+            [story.expectations.ANDROID_WEBVIEW],
+            'crbug.com/773077')
     return StoryExpectations()
 
   @classmethod

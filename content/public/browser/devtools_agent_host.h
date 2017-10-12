@@ -51,15 +51,6 @@ class CONTENT_EXPORT DevToolsAgentHost
   // Returns whether particular version of DevTools protocol is supported.
   static bool IsSupportedProtocolVersion(const std::string& version);
 
-  // Returns the DevTools FrameId for the given pair of |process_id| and
-  // |frame_tree_node_id|. This is sent by the renderer and shouldn't be fully
-  // trusted.
-  // TODO(alexclarke): Remove once there is a solution for stable frame IDs. See
-  // crbug.com/715541
-  static std::string GetUntrustedDevToolsFrameIdForFrameTreeNodeId(
-      int process_id,
-      int frame_tree_node_id);
-
   // Returns DevToolsAgentHost with a given |id| or nullptr of it doesn't exist.
   static scoped_refptr<DevToolsAgentHost> GetForId(const std::string& id);
 
@@ -158,6 +149,9 @@ class CONTENT_EXPORT DevToolsAgentHost
 
   // Returns the id of the parent host, or empty string if no parent.
   virtual std::string GetParentId() = 0;
+
+  // Returns the id of the opener host, or empty string if no opener.
+  virtual std::string GetOpenerId() = 0;
 
   // Returns web contents instance for this host if any.
   virtual WebContents* GetWebContents() = 0;

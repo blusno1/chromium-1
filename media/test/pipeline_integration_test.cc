@@ -553,7 +553,7 @@ TEST_P(BasicMSEPlaybackTest, NewByPts_PlayToEnd) {
 
 const PlaybackTestData kADTSTests[] = {
     {"bear-audio-main-aac.aac", 0, 2724},
-    {"bear-audio-lc-aac.aac", 0, 2858},
+    {"bear-audio-lc-aac.aac", 0, 2717},
     {"bear-audio-implicit-he-aac-v1.aac", 0, 2812},
     {"bear-audio-implicit-he-aac-v2.aac", 0, 3047},
 };
@@ -2338,22 +2338,24 @@ TEST_F(PipelineIntegrationTest, SuspendWhilePlaying) {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 TEST_F(PipelineIntegrationTest, Rotated_Metadata_0) {
   ASSERT_EQ(PIPELINE_OK, Start("bear_rotate_0.mp4"));
-  ASSERT_EQ(VIDEO_ROTATION_0, metadata_.video_rotation);
+  ASSERT_EQ(VIDEO_ROTATION_0, metadata_.video_decoder_config.video_rotation());
 }
 
 TEST_F(PipelineIntegrationTest, Rotated_Metadata_90) {
   ASSERT_EQ(PIPELINE_OK, Start("bear_rotate_90.mp4"));
-  ASSERT_EQ(VIDEO_ROTATION_90, metadata_.video_rotation);
+  ASSERT_EQ(VIDEO_ROTATION_90, metadata_.video_decoder_config.video_rotation());
 }
 
 TEST_F(PipelineIntegrationTest, Rotated_Metadata_180) {
   ASSERT_EQ(PIPELINE_OK, Start("bear_rotate_180.mp4"));
-  ASSERT_EQ(VIDEO_ROTATION_180, metadata_.video_rotation);
+  ASSERT_EQ(VIDEO_ROTATION_180,
+            metadata_.video_decoder_config.video_rotation());
 }
 
 TEST_F(PipelineIntegrationTest, Rotated_Metadata_270) {
   ASSERT_EQ(PIPELINE_OK, Start("bear_rotate_270.mp4"));
-  ASSERT_EQ(VIDEO_ROTATION_270, metadata_.video_rotation);
+  ASSERT_EQ(VIDEO_ROTATION_270,
+            metadata_.video_decoder_config.video_rotation());
 }
 
 TEST_F(PipelineIntegrationTest, Spherical) {

@@ -114,16 +114,9 @@ void MediaRouterDesktop::RegisterMediaRouteProvider(
   // executes commands to the MRP and its route controllers. Commands to the
   // route controllers, once executed, will be queued in Mojo pipes until the
   // Mojo requests are bound to implementations.
-  for (const auto& pair : route_controllers_) {
-    const MediaRoute::Id& route_id = pair.first;
-    MediaRouteController* route_controller = pair.second;
-    auto callback =
-        base::BindOnce(&MediaRouterDesktop::OnMediaControllerCreated,
-                       weak_factory_.GetWeakPtr(), route_id);
-    media_route_provider_->CreateMediaRouteController(
-        route_id, route_controller->CreateControllerRequest(),
-        route_controller->BindObserverPtr(), std::move(callback));
-  }
+  for (const auto& pair : route_controllers_)
+    InitMediaRouteController(pair.second);
+
   extension_provider_.RegisterMediaRouteProvider(
       std::move(media_route_provider_ptr));
 }
@@ -152,8 +145,10 @@ void MediaRouterDesktop::StartDiscovery() {
           context(),
           content::BrowserThread::GetTaskRunnerForThread(
               content::BrowserThread::IO));
+      cast_media_sink_service_->Start();
+    } else {
+      cast_media_sink_service_->ForceSinkDiscoveryCallback();
     }
-    cast_media_sink_service_->Start();
   }
 
   if (media_router::DialLocalDiscoveryEnabled()) {
@@ -165,8 +160,10 @@ void MediaRouterDesktop::StartDiscovery() {
               context());
       dial_media_sink_service_proxy_->SetObserver(
           cast_media_sink_service_.get());
+      dial_media_sink_service_proxy_->Start();
+    } else {
+      dial_media_sink_service_proxy_->ForceSinkDiscoveryCallback();
     }
-    dial_media_sink_service_proxy_->Start();
   }
 }
 

@@ -1014,12 +1014,13 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGRootPaintOffsetTransformNode) {
   LayoutObject& svg = *GetLayoutObjectByElementId("svg");
   const ObjectPaintProperties* svg_properties =
       svg.FirstFragment()->PaintProperties();
-  // Ensure that a paint offset transform is not unnecessarily emitted.
-  EXPECT_EQ(nullptr, svg_properties->PaintOffsetTranslation());
-  EXPECT_EQ(TransformationMatrix().Translate(50, 25),
-            svg_properties->SvgLocalToBorderBoxTransform()->Matrix());
+  EXPECT_TRUE(svg_properties->PaintOffsetTranslation());
+  EXPECT_EQ(
+      FloatSize(50, 25),
+      svg_properties->PaintOffsetTranslation()->Matrix().To2DTranslation());
+  EXPECT_EQ(nullptr, svg_properties->SvgLocalToBorderBoxTransform());
   EXPECT_EQ(FramePreTranslation(),
-            svg_properties->SvgLocalToBorderBoxTransform()->Parent());
+            svg_properties->PaintOffsetTranslation()->Parent());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, SVGRootLocalToBorderBoxTransformNode) {
@@ -2142,13 +2143,14 @@ TEST_P(PaintPropertyTreeBuilderTest, SvgRootAndForeignObjectPixelSnapping) {
 
   const auto* svg = GetLayoutObjectByElementId("svg");
   const auto* svg_properties = svg->FirstFragment()->PaintProperties();
-  EXPECT_EQ(nullptr, svg_properties->PaintOffsetTranslation());
-  EXPECT_EQ(LayoutPoint(LayoutUnit(8.6), LayoutUnit(8.3)), svg->PaintOffset());
-  // Paint offset of SVGRoot is baked into svgLocalToBorderBoxTransform after
-  // snapped to pixels.
-  EXPECT_EQ(TransformationMatrix().Translate(9, 8),
-            svg_properties->SvgLocalToBorderBoxTransform()->Matrix());
-
+  // The paint offset of (8.6, 8.3) is rounded off here. The fractional part
+  // remains PaintOffset.
+  EXPECT_EQ(
+      FloatSize(9, 8),
+      svg_properties->PaintOffsetTranslation()->Matrix().To2DTranslation());
+  EXPECT_EQ(LayoutPoint(LayoutUnit(-0.40625), LayoutUnit(0.3)),
+            svg->PaintOffset());
+  EXPECT_EQ(nullptr, svg_properties->SvgLocalToBorderBoxTransform());
   const auto* foreign_object = GetLayoutObjectByElementId("foreign");
   const auto* foreign_object_properties =
       foreign_object->FirstFragment()->PaintProperties();
@@ -2799,12 +2801,22 @@ TEST_P(PaintPropertyTreeBuilderTest,
       *GetLayoutObjectByElementId("svgWithViewBox");
   EXPECT_EQ(FramePreTranslation(), svg_with_view_box.FirstFragment()
                                        ->LocalBorderBoxProperties()
-                                       ->Transform());
+                                       ->Transform()
+                                       ->Parent());
+  EXPECT_EQ(FloatSize(30, 20), svg_with_view_box.FirstFragment()
+                                   ->LocalBorderBoxProperties()
+                                   ->Transform()
+                                   ->Matrix()
+                                   .To2DTranslation());
 
-  EXPECT_EQ(LayoutPoint(30, 20), svg_with_view_box.PaintOffset());
+  EXPECT_EQ(LayoutPoint(0, 0), svg_with_view_box.PaintOffset());
   auto contents_properties =
       svg_with_view_box.FirstFragment()->ContentsProperties();
-  EXPECT_EQ(FramePreTranslation(), contents_properties.Transform());
+  EXPECT_EQ(svg_with_view_box.FirstFragment()
+                ->PaintProperties()
+                ->PaintOffsetTranslation(),
+            contents_properties.Transform());
+  EXPECT_EQ(FramePreTranslation(), contents_properties.Transform()->Parent());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, OverflowHiddenScrollProperties) {
@@ -3120,7 +3132,13 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGRootClip) {
                                           ->PaintProperties()
                                           ->OverflowClip();
   EXPECT_EQ(FrameContentClip(), clip->Parent());
-  EXPECT_EQ(FloatRoundedRect(8, 8, 100, 100), clip->ClipRect());
+  EXPECT_EQ(FloatSize(8, 8), GetLayoutObjectByElementId("svg")
+                                 ->FirstFragment()
+                                 ->PaintProperties()
+                                 ->PaintOffsetTranslation()
+                                 ->Matrix()
+                                 .To2DTranslation());
+  EXPECT_EQ(FloatRoundedRect(0, 0, 100, 100), clip->ClipRect());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, SVGRootNoClip) {
@@ -3185,6 +3203,63 @@ static FragmentData& FragmentAt(LayoutObject* obj, unsigned count) {
     fragment = fragment->NextFragment();
   }
   return *fragment;
+}
+
+TEST_P(PaintPropertyTreeBuilderTest, PaintOffsetsUnderMultiColumnScrolled) {
+  SetBodyInnerHTML(
+      "<!doctype HTML>"
+      "<div style='columns: 1;'>"
+      "   <div id=scroller style='height: 400px; width: 400px; overflow: "
+      "auto;'>"
+      "     <div style='width: 50px; height: 1000px; background: lightgray'>"
+      "   </div>"
+      " </div>"
+      "</div>");
+
+  LayoutObject* scroller = GetLayoutObjectByElementId("scroller");
+  ToLayoutBoxModelObject(scroller)->Layer()->GetScrollableArea()->ScrollBy(
+      ScrollOffset(0, 300), kUserScroll);
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  EXPECT_EQ(FloatSize(8, 8), scroller->FirstFragment()
+                                 ->PaintProperties()
+                                 ->PaintOffsetTranslation()
+                                 ->Matrix()
+                                 .To2DTranslation());
+}
+
+TEST_P(PaintPropertyTreeBuilderTest,
+       PaintOffsetUnderMulticolumnScrollFixedPos) {
+  SetBodyInnerHTML(
+      "<div id=fixed style='position: fixed; columns: 2'>"
+      "  <div style='width: 50px; height: 20px; background: lightblue'></div>"
+      "  <div style='width: 50px; height: 20px; background: lightgray'></div>"
+      "</div>"
+      "<div style='height: 2000px'></div>");
+  LayoutObject* fixed = GetLayoutObjectByElementId("fixed");
+  LayoutObject* multicol_container = fixed->SlowFirstChild();
+
+  ASSERT_TRUE(multicol_container->FirstFragment());
+  ASSERT_TRUE(multicol_container->FirstFragment()->NextFragment());
+  ASSERT_FALSE(
+      multicol_container->FirstFragment()->NextFragment()->NextFragment());
+  EXPECT_EQ(LayoutPoint(8, 8),
+            multicol_container->FirstFragment()->PaintOffset());
+  EXPECT_EQ(LayoutPoint(59, -12),
+            multicol_container->FirstFragment()->NextFragment()->PaintOffset());
+
+  GetDocument().View()->LayoutViewportScrollableArea()->ScrollBy(
+      ScrollOffset(0, 25), kUserScroll);
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  ASSERT_TRUE(multicol_container->FirstFragment());
+  ASSERT_TRUE(multicol_container->FirstFragment()->NextFragment());
+  ASSERT_FALSE(
+      multicol_container->FirstFragment()->NextFragment()->NextFragment());
+  EXPECT_EQ(LayoutPoint(8, 8),
+            multicol_container->FirstFragment()->PaintOffset());
+  EXPECT_EQ(LayoutPoint(59, -12),
+            multicol_container->FirstFragment()->NextFragment()->PaintOffset());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, PaintOffsetsUnderMultiColumn) {
@@ -3769,7 +3844,7 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGResource) {
             transform_inside_marker_properties->Transform()->Parent());
 
   // Whereas this is not true of the transform above the path.
-  EXPECT_EQ(svg_properties->SvgLocalToBorderBoxTransform(),
+  EXPECT_EQ(svg_properties->PaintOffsetTranslation(),
             transform_outside_path_properties->Transform()->Parent());
 }
 
@@ -3801,7 +3876,7 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGHiddenResource) {
             transform_inside_symbol_properties->Transform()->Parent());
 
   // Whereas this is not true of the transform above the path.
-  EXPECT_EQ(svg_properties->SvgLocalToBorderBoxTransform(),
+  EXPECT_EQ(svg_properties->PaintOffsetTranslation(),
             transform_outside_use_properties->Transform()->Parent());
 }
 

@@ -39,14 +39,15 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLHeadElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLinkElement.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
 #include "core/page/Page.h"
 #include "core/page/ValidationMessageClient.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Handle.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -852,7 +853,7 @@ TEST_F(DocumentTest, SandboxDisablesAppCache) {
 }
 
 TEST_F(DocumentTest, SuboriginDisablesAppCache) {
-  RuntimeEnabledFeatures::SetSuboriginsEnabled(true);
+  ScopedSuboriginsForTest suborigins(true);
   RefPtr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("https://test.com");
   Suborigin suborigin;

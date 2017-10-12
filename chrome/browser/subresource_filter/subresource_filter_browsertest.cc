@@ -12,7 +12,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -53,8 +52,6 @@
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
 #include "components/url_pattern_index/proto/rules.pb.h"
-#include "content/public/browser/devtools_agent_host.h"
-#include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/page_navigator.h"
@@ -136,16 +133,6 @@ GURL GetURLWithFragment(const GURL& url, base::StringPiece fragment) {
   return url.ReplaceComponents(replacements);
 }
 
-class TestClient : public content::DevToolsAgentHostClient {
- public:
-  TestClient() {}
-  ~TestClient() override {}
-  void DispatchProtocolMessage(content::DevToolsAgentHost* agent_host,
-                               const std::string& message) override {}
-  void AgentHostClosed(content::DevToolsAgentHost* agent_host,
-                       bool replaced_with_another_client) override {}
-};
-
 }  // namespace
 
 namespace subresource_filter {
@@ -168,19 +155,6 @@ class SubresourceFilterDisabledByDefaultBrowserTest
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SubresourceFilterDisabledByDefaultBrowserTest);
-};
-
-// This browser test automatically syncs the SubresourceFilter SafeBrowsing list
-// without needing a chrome branded build.
-class SubresourceFilterListInsertingBrowserTest
-    : public SubresourceFilterBrowserTest {
-  std::unique_ptr<TestSafeBrowsingDatabaseHelper> CreateTestDatabase()
-      override {
-    std::vector<safe_browsing::ListIdentifier> list_ids = {
-        safe_browsing::GetUrlSubresourceFilterId()};
-    return base::MakeUnique<TestSafeBrowsingDatabaseHelper>(
-        std::move(list_ids));
-  }
 };
 
 // Tests -----------------------------------------------------------------------
@@ -216,12 +190,43 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterListInsertingBrowserTest,
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
-  EXPECT_EQ(console_observer.message(), kActivationConsoleMessage);
+  EXPECT_EQ(kActivationConsoleMessage, console_observer.message());
 
   // The main frame document should never be filtered.
   SetRulesetToDisallowURLsWithPathSuffix("frame_with_included_script.html");
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterListInsertingBrowserTest,
+                       MainFrameActivationWithWarning_BetterAdsList) {
+  content::ConsoleObserverDelegate console_observer1(web_contents(),
+                                                     "*show ads*");
+  web_contents()->SetDelegate(&console_observer1);
+  GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
+  ConfigureURLWithWarning(url,
+                          {safe_browsing::SubresourceFilterType::BETTER_ADS});
+  ASSERT_NO_FATAL_FAILURE(SetRulesetToDisallowURLsWithPathSuffix(
+      "suffix-that-does-not-match-anything"));
+
+  Configuration config(subresource_filter::ActivationLevel::ENABLED,
+                       subresource_filter::ActivationScope::ACTIVATION_LIST,
+                       subresource_filter::ActivationList::BETTER_ADS);
+  ResetConfiguration(std::move(config));
+
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+  EXPECT_EQ(kActivationWarningConsoleMessage, console_observer1.message());
+
+  content::ConsoleObserverDelegate console_observer2(web_contents(),
+                                                     "*show ads*");
+  web_contents()->SetDelegate(&console_observer2);
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+
+  EXPECT_EQ(kActivationWarningConsoleMessage, console_observer2.message());
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -467,49 +472,6 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
     EXPECT_EQ(allowed_empty_subdocument_url, frame->GetLastCommittedURL());
     ExpectFramesIncludedInLayout(kSubframeNames, kExpectFirstAndSecondSubframe);
   }
-}
-
-IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
-                       ForceActivation_RequiresDevtools) {
-  const GURL url(
-      GetTestUrl("subresource_filter/frame_with_included_script.html"));
-  ASSERT_NO_FATAL_FAILURE(
-      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
-
-  // Should not trigger activation, the URL is not on the blacklist.
-  ui_test_utils::NavigateToURL(browser(), url);
-  EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
-
-  // Open up devtools and trigger forced activation.
-  scoped_refptr<content::DevToolsAgentHost> agent_host =
-      content::DevToolsAgentHost::GetOrCreateFor(web_contents());
-  EXPECT_TRUE(agent_host);
-  TestClient test_client;
-  agent_host->AttachClient(&test_client);
-
-  // Send Page.enable, which is required before any Page methods.
-  agent_host->DispatchProtocolMessage(
-      &test_client, "{\"id\": 0, \"method\": \"Page.enable\"}");
-
-  // Send Page.setAdBlockingEnabled, should force activation.
-  base::DictionaryValue ad_blocking_command;
-  ad_blocking_command.SetInteger("id", 1);
-  ad_blocking_command.SetString("method", "Page.setAdBlockingEnabled");
-  auto params = base::MakeUnique<base::DictionaryValue>();
-  params->SetBoolean("enabled", true);
-  ad_blocking_command.SetDictionary("params", std::move(params));
-  std::string json_string;
-  JSONStringValueSerializer serializer(&json_string);
-  ASSERT_TRUE(serializer.Serialize(ad_blocking_command));
-  agent_host->DispatchProtocolMessage(&test_client, json_string);
-
-  ui_test_utils::NavigateToURL(browser(), url);
-  EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
-
-  // Close devtools, should stop forced activation.
-  agent_host->DetachAllClients();
-  ui_test_utils::NavigateToURL(browser(), url);
-  EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,

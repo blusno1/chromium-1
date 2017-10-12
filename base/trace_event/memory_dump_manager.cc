@@ -47,6 +47,9 @@ namespace trace_event {
 
 namespace {
 
+const char* const kTraceEventArgNames[] = {"dumps"};
+const unsigned char kTraceEventArgTypes[] = {TRACE_VALUE_TYPE_CONVERTABLE};
+
 MemoryDumpManager* g_instance_for_testing = nullptr;
 
 // Temporary (until peak detector and scheduler are moved outside of here)
@@ -103,7 +106,7 @@ void NotifyHeapProfilingEnabledOnMDPThread(
 inline bool ShouldEnableMDPAllocatorHooks(HeapProfilingMode mode) {
   return (mode == kHeapProfilingModePseudo) ||
          (mode == kHeapProfilingModeNative) ||
-         (mode == kHeapProfilingModeNoStack);
+         (mode == kHeapProfilingModeBackground);
 }
 
 #if BUILDFLAG(USE_ALLOCATOR_SHIM) && !defined(OS_NACL)
@@ -211,12 +214,12 @@ HeapProfilingMode MemoryDumpManager::GetHeapProfilingModeFromCommandLine() {
   std::string profiling_mode =
       CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kEnableHeapProfiling);
+  if (profiling_mode == switches::kEnableHeapProfilingTaskProfiler)
+    return kHeapProfilingModeTaskProfiler;
   if (profiling_mode == switches::kEnableHeapProfilingModePseudo)
     return kHeapProfilingModePseudo;
   if (profiling_mode == switches::kEnableHeapProfilingModeNative)
     return kHeapProfilingModeNative;
-  if (profiling_mode == switches::kEnableHeapProfilingTaskProfiler)
-    return kHeapProfilingModeTaskProfiler;
 #endif  // BUILDFLAG(USE_ALLOCATOR_SHIM) && !defined(OS_NACL)
   return kHeapProfilingModeInvalid;
 }
@@ -254,6 +257,17 @@ bool MemoryDumpManager::EnableHeapProfiling(HeapProfilingMode profiling_mode) {
   }
 
   switch (profiling_mode) {
+    case kHeapProfilingModeTaskProfiler:
+      if (!base::debug::ThreadHeapUsageTracker::IsHeapTrackingEnabled())
+        base::debug::ThreadHeapUsageTracker::EnableHeapTracking();
+      notify_mdps = false;
+      break;
+
+    case kHeapProfilingModeBackground:
+      AllocationContextTracker::SetCaptureMode(
+          AllocationContextTracker::CaptureMode::PSEUDO_STACK);
+      break;
+
     case kHeapProfilingModePseudo:
       AllocationContextTracker::SetCaptureMode(
           AllocationContextTracker::CaptureMode::PSEUDO_STACK);
@@ -265,17 +279,6 @@ bool MemoryDumpManager::EnableHeapProfiling(HeapProfilingMode profiling_mode) {
       // using base::debug::StackTrace, which may be slow.
       AllocationContextTracker::SetCaptureMode(
           AllocationContextTracker::CaptureMode::NATIVE_STACK);
-      break;
-
-    case kHeapProfilingModeNoStack:
-      AllocationContextTracker::SetCaptureMode(
-          AllocationContextTracker::CaptureMode::NO_STACK);
-      break;
-
-    case kHeapProfilingModeTaskProfiler:
-      if (!base::debug::ThreadHeapUsageTracker::IsHeapTrackingEnabled())
-        base::debug::ThreadHeapUsageTracker::EnableHeapTracking();
-      notify_mdps = false;
       break;
 
     case kHeapProfilingModeDisabled:
@@ -753,6 +756,33 @@ void MemoryDumpManager::FinishAsyncProcessDump(
   }
 
   TRACE_EVENT0(kTraceCategory, "MemoryDumpManager::FinishAsyncProcessDump");
+
+  // In the general case (allocators and edges) the serialization into the trace
+  // buffer is handled by the memory-infra service (see tracing_observer.cc).
+  // This special case below deals only with serialization of the heap profiler
+  // and is temporary given the upcoming work on the out-of-process heap
+  // profiler.
+  const auto& args = pmd_async_state->req_args;
+  if (!pmd_async_state->process_memory_dump->heap_dumps().empty()) {
+    std::unique_ptr<TracedValue> traced_value = base::MakeUnique<TracedValue>();
+    pmd_async_state->process_memory_dump->SerializeHeapProfilerDumpsInto(
+        traced_value.get());
+
+    traced_value->SetString("level_of_detail",
+                            base::trace_event::MemoryDumpLevelOfDetailToString(
+                                args.level_of_detail));
+    std::unique_ptr<base::trace_event::ConvertableToTraceFormat> event_value(
+        std::move(traced_value));
+    TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_PROCESS_ID(
+        TRACE_EVENT_PHASE_MEMORY_DUMP,
+        base::trace_event::TraceLog::GetCategoryGroupEnabled(
+            base::trace_event::MemoryDumpManager::kTraceCategory),
+        base::trace_event::MemoryDumpTypeToString(args.dump_type),
+        trace_event_internal::kGlobalScope, args.dump_guid,
+        base::kNullProcessId, 1 /* num_args */, kTraceEventArgNames,
+        kTraceEventArgTypes, nullptr /* arg_values */, &event_value,
+        TRACE_EVENT_FLAG_HAS_ID);
+  }
 
   if (!pmd_async_state->callback.is_null()) {
     pmd_async_state->callback.Run(

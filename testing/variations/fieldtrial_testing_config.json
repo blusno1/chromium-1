@@ -656,40 +656,6 @@
             ]
         }
     ],
-    "CaptivePortalCertificateList": [
-        {
-            "platforms": [
-                "android",
-                "chromeos",
-                "linux",
-                "mac",
-                "win"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "CaptivePortalCertificateList"
-                    ]
-                }
-            ]
-        }
-    ],
-    "CaptivePortalInterstitial": [
-        {
-            "platforms": [
-                "chromeos",
-                "linux",
-                "mac",
-                "win"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled"
-                }
-            ]
-        }
-    ],
     "CheckerImaging": [
         {
             "platforms": [
@@ -1717,22 +1683,6 @@
             ]
         }
     ],
-    "MITMSoftwareInterstitial": [
-        {
-            "platforms": [
-                "chromeos",
-                "linux",
-                "mac",
-                "win",
-                "android"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled"
-                }
-            ]
-        }
-    ],
     "MacAllowBackgroundingProcesses": [
         {
             "platforms": [
@@ -2049,6 +1999,8 @@
                 {
                     "name": "Enabled",
                     "params": {
+                        "hanging_request_duration_http_rtt_multiplier": "5",
+                        "hanging_request_min_duration_msec": "3000",
                         "lower_bound_http_rtt_transport_rtt_multiplier": "1",
                         "rssi_weight_per_signal_strength_level": "0.9",
                         "throughput_min_requests_in_flight": "5",
@@ -2573,6 +2525,25 @@
             ]
         }
     ],
+    "PreviewsClientLoFi": [
+        {
+            "platforms": [
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled_2G_Replace_Server_Placeholders",
+                    "params": {
+                        "max_allowed_effective_connection_type": "2G",
+                        "replace_server_placeholders": "true"
+                    },
+                    "enable_features": [
+                        "ClientLoFi"
+                    ]
+                }
+            ]
+        }
+    ],
     "PrintPdfAsImage": [
         {
             "platforms": [
@@ -3074,6 +3045,21 @@
                     },
                     "enable_features": [
                         "SecurityChip"
+                    ]
+                }
+            ]
+        }
+    ],
+    "SerializeCoreAudioPauseResume": [
+        {
+            "platforms": [
+                "mac"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "SerializeCoreAudioPauseResume"
                     ]
                 }
             ]
@@ -3808,22 +3794,6 @@
                     "params": {
                         "blocklist_additions": "00060000:e,fffd:e,ed5f25a4:e"
                     }
-                }
-            ]
-        }
-    ],
-    "WebFontsInterventionV2": [
-        {
-            "platforms": [
-                "android",
-                "chromeos",
-                "linux",
-                "mac",
-                "win"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled-3g"
                 }
             ]
         }

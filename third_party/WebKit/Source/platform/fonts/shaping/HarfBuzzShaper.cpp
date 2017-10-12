@@ -100,6 +100,10 @@ void CheckShapeResultRange(const ShapeResult* result,
                             result->EndIndexForResult()));
   for (unsigned i = start; i < end; ++i)
     log.Append(String::Format(" %02X", text[i]));
+
+  log.Append(", result=");
+  result->ToString(&log);
+
   NOTREACHED() << log.ToString();
 }
 #endif
@@ -885,7 +889,8 @@ RefPtr<ShapeResult> HarfBuzzShaper::Shape(const Font* font,
   }
 
 #if DCHECK_IS_ON()
-  CheckShapeResultRange(result.get(), start, end, text_, font);
+  if (result)
+    CheckShapeResultRange(result.get(), start, end, text_, font);
 #endif
 
   return result;

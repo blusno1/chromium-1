@@ -765,6 +765,8 @@ class HostResolverImpl::ProcTask
   // mutate.
   void DoLookup(const base::TimeTicks& start_time,
                 const uint32_t attempt_number) {
+    TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION scoped_heap_context(
+        "net/dns/proctask");
     AddressList results;
     int os_error = 0;
     int error = params_.resolver_proc->Resolve(key_.hostname,
@@ -2254,7 +2256,8 @@ bool HostResolverImpl::ServeLocalhost(const Key& key,
 void HostResolverImpl::CacheResult(const Key& key,
                                    const HostCache::Entry& entry,
                                    base::TimeDelta ttl) {
-  if (cache_.get())
+  // Don't cache an error unless it has a positive TTL.
+  if (cache_.get() && (entry.error() == OK || ttl > base::TimeDelta()))
     cache_->Set(key, entry, base::TimeTicks::Now(), ttl);
 }
 

@@ -81,6 +81,7 @@
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_service.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_service_factory.h"
+#include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/browser/safe_browsing/url_checker_delegate_impl.h"
@@ -165,6 +166,7 @@
 #include "components/safe_browsing/browser/url_checker_delegate.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/db/database_manager.h"
+#include "components/safe_browsing/password_protection/password_protection_navigation_throttle.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
@@ -223,6 +225,7 @@
 #include "printing/features/features.h"
 #include "services/preferences/public/cpp/in_process_service_factory.h"
 #include "services/preferences/public/interfaces/preferences.mojom.h"
+#include "services/proxy_resolver/public/interfaces/proxy_resolver.mojom.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "third_party/WebKit/public/platform/modules/installedapp/installed_app_provider.mojom.h"
@@ -283,6 +286,8 @@
 #include "components/crash/content/browser/crash_dump_observer_android.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "content/public/browser/android/java_interfaces.h"
+#include "services/proxy_resolver/proxy_resolver_service.h"
+#include "services/proxy_resolver/public/interfaces/proxy_resolver.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
 #include "ui/base/resource/resource_bundle_android.h"
@@ -803,6 +808,15 @@ void InvokeCallbackOnThread(
   task_runner->PostTask(FROM_HERE, base::Bind(std::move(callback), result));
 }
 #endif
+
+// Gets the URL request context getter for the browser process.
+// Must be called on the UI thread.
+scoped_refptr<net::URLRequestContextGetter>
+GetSystemRequestContextOnUIThread() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  return scoped_refptr<net::URLRequestContextGetter>(
+      g_browser_process->system_request_context());
+}
 
 }  // namespace
 
@@ -2163,6 +2177,14 @@ ChromeContentBrowserClient::OverrideRequestContextForURL(
   return NULL;
 }
 
+void ChromeContentBrowserClient::GetGeolocationRequestContext(
+    base::OnceCallback<void(scoped_refptr<net::URLRequestContextGetter>)>
+        callback) {
+  BrowserThread::PostTaskAndReplyWithResult(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&GetSystemRequestContextOnUIThread), std::move(callback));
+}
+
 std::string ChromeContentBrowserClient::GetGeolocationApiKey() {
   return google_apis::GetAPIKey();
 }
@@ -3047,9 +3069,21 @@ void ChromeContentBrowserClient::RegisterInProcessServices(
         std::make_pair(prefs::mojom::kLocalStateServiceName, info));
   }
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  service_manager::EmbeddedServiceInfo info;
-  info.factory = base::Bind(&media::CreateMediaService);
-  services->insert(std::make_pair(media::mojom::kMediaServiceName, info));
+  {
+    service_manager::EmbeddedServiceInfo info;
+    info.factory = base::Bind(&media::CreateMediaService);
+    services->insert(std::make_pair(media::mojom::kMediaServiceName, info));
+  }
+#endif
+
+#if defined(OS_ANDROID)
+  {
+    service_manager::EmbeddedServiceInfo info;
+    info.factory =
+        base::Bind(&proxy_resolver::ProxyResolverService::CreateService);
+    services->insert(
+        std::make_pair(proxy_resolver::mojom::kProxyResolverServiceName, info));
+  }
 #endif
   g_browser_process->platform_part()->RegisterInProcessServices(services);
 }
@@ -3072,6 +3106,9 @@ void ChromeContentBrowserClient::RegisterOutOfProcessServices(
 #if !defined(OS_ANDROID)
   (*services)[chrome::mojom::kProfileImportServiceName] =
       l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_PROFILE_IMPORTER_NAME);
+
+  (*services)[proxy_resolver::mojom::kProxyResolverServiceName] =
+      l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_PROXY_RESOLVER_NAME);
 #endif
 
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
@@ -3307,6 +3344,17 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
           BackgroundTabNavigationThrottle::MaybeCreateThrottleFor(handle);
   if (background_tab_navigation_throttle)
     throttles.push_back(std::move(background_tab_navigation_throttle));
+#endif
+
+// TODO(764520): Remove the OS_CHROMEOS part of the condition once Gaia password
+// reuse feature is enabled on Chrome OS.
+#if defined(SAFE_BROWSING_DB_LOCAL) && !defined(OS_CHROMEOS)
+  std::unique_ptr<content::NavigationThrottle>
+      password_protection_navigation_throttle =
+          safe_browsing::MaybeCreateNavigationThrottle(handle);
+  if (password_protection_navigation_throttle) {
+    throttles.push_back(std::move(password_protection_navigation_throttle));
+  }
 #endif
 
   std::unique_ptr<content::NavigationThrottle> pdf_iframe_throttle =

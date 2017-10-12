@@ -609,9 +609,8 @@ class RenderWidgetHostTest : public testing::Test {
     process_ = new RenderWidgetHostProcess(browser_context_.get());
     sink_ = &process_->sink();
 #if defined(USE_AURA) || defined(OS_MACOSX)
-    ImageTransportFactory::InitializeForUnitTests(
-        std::unique_ptr<ImageTransportFactory>(
-            new NoTransportImageTransportFactory));
+    ImageTransportFactory::SetFactory(
+        std::make_unique<NoTransportImageTransportFactory>());
 #endif
 #if defined(OS_ANDROID)
     ui::SetScreenAndroid();  // calls display::Screen::SetScreenInstance().
@@ -2596,12 +2595,15 @@ TEST_F(RenderWidgetHostTest, ResizeParamsDeviceScale) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitchASCII(switches::kEnableUseZoomForDSF, "true");
 
-  DCHECK(display::Screen::GetScreen());
-  const display::Display& display =
-      display::Screen::GetScreen()->GetPrimaryDisplay();
-  DCHECK(display.id() != display::kInvalidDisplayId);
+  float device_scale = 3.5f;
+  ScreenInfo screen_info;
+  screen_info.device_scale_factor = device_scale;
 
-  float device_scale = display.device_scale_factor();
+  auto* host_delegate =
+      static_cast<MockRenderWidgetHostDelegate*>(host_->delegate());
+
+  host_delegate->SetScreenInfo(screen_info);
+  host_->WasResized();
 
   float top_controls_height = 10.0f;
   float bottom_controls_height = 20.0f;

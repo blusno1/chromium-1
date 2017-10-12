@@ -53,7 +53,6 @@ import org.chromium.chrome.browser.signin.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninPromoController;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.suggestions.ContentSuggestionPlaceholder;
 import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.ImageFetcher;
@@ -76,6 +75,7 @@ import org.chromium.chrome.test.util.browser.compositor.layouts.DisableChromeAni
 import org.chromium.chrome.test.util.browser.suggestions.DummySuggestionsEventReporter;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
+import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.DeviceFormFactor;
 
 import java.io.IOException;
@@ -159,6 +159,13 @@ public class ArticleSnippetsTest {
         mTimestamp = System.currentTimeMillis() - 5 * DateUtils.MINUTE_IN_MILLIS;
 
         ThreadUtils.runOnUiThreadBlocking(() -> {
+            if (!NetworkChangeNotifier.isInitialized()) {
+                NetworkChangeNotifier.init();
+            }
+            NetworkChangeNotifier.forceConnectivityState(true);
+        });
+
+        ThreadUtils.runOnUiThreadBlocking(() -> {
             FeatureUtilities.resetChromeHomeEnabledForTests();
             FeatureUtilities.cacheChromeHomeEnabled();
         });
@@ -178,8 +185,8 @@ public class ArticleSnippetsTest {
                     mUiDelegate.getNavigationDelegate(), touchEnabledDelegate);
             mRecyclerView.init(mUiConfig, mContextMenuManager);
 
-            mSuggestion = new SnippetArticleViewHolder(
-                    mRecyclerView, mContextMenuManager, mUiDelegate, mUiConfig);
+            mSuggestion = new SnippetArticleViewHolder(mRecyclerView, mContextMenuManager,
+                    mUiDelegate, mUiConfig, /* offlinePageBridge = */ null);
             mSigninPromo = new SignInPromo.GenericPromoViewHolder(
                     mRecyclerView, mContextMenuManager, mUiConfig);
         });
@@ -394,23 +401,6 @@ public class ArticleSnippetsTest {
             mContentView.addView(mSigninPromo.itemView);
         });
         mRenderTestRule.render(mSigninPromo.itemView, "hot_state_personalized_signin_promo");
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"ArticleSnippets", "RenderTest"})
-    public void testContentSuggestionPlaceholder() throws IOException {
-        // TODO(dgn): Try to use assume or notify the test runner in some way that we skipped it
-        // instead of making it always PASS here.
-        if (!mChromeHomeEnabled) return; // Placeholder is only valid on modern.
-
-        ThreadUtils.runOnUiThreadBlocking(() -> {
-            ContentSuggestionPlaceholder.ViewHolder viewHolder =
-                    new ContentSuggestionPlaceholder.ViewHolder(mRecyclerView, mUiConfig, null);
-            viewHolder.onBindViewHolder();
-            mContentView.addView(viewHolder.itemView);
-        });
-        mRenderTestRule.render(mContentView.getChildAt(0), "content_suggestion_placeholder");
     }
 
     private void createPersonalizedSigninPromo(@Nullable DisplayableProfileData profileData) {

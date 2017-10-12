@@ -5,6 +5,7 @@
 #ifndef NGOffsetMappingResult_h
 #define NGOffsetMappingResult_h
 
+#include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashMap.h"
@@ -30,7 +31,7 @@ enum class NGOffsetMappingUnitType { kIdentity, kCollapsed, kExpanded };
 //   |text_content_end > text_content_start + 1|, indicating that the character
 //   in the dom range is expanded into multiple characters.
 // See design doc https://goo.gl/CJbxky for details.
-class NGOffsetMappingUnit {
+class CORE_EXPORT NGOffsetMappingUnit {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
  public:
@@ -82,7 +83,7 @@ class NGMappingUnitRange {
 // order in a vector. For each text node, the index range of the units owned by
 // the node is also stored.
 // See design doc https://goo.gl/CJbxky for details.
-class NGOffsetMappingResult {
+class CORE_EXPORT NGOffsetMappingResult {
  public:
   using UnitVector = Vector<NGOffsetMappingUnit>;
   using RangeMap =
@@ -106,12 +107,33 @@ class NGOffsetMappingResult {
                                                       unsigned,
                                                       unsigned) const;
 
+  // Returns the text content offset corresponding to the given DOM offset.
+  size_t GetTextContentOffset(const Node&, unsigned) const;
+
+  // Starting from the given DOM offset in the node, finds the first
+  // non-collapsed character and returns its offset; Or returns the last offset
+  // in the node if such a character does not exist.
+  unsigned StartOfNextNonCollapsedCharacter(const Node&, unsigned offset) const;
+
+  // Starting from the given DOM offset in the node, reversely finds the first
+  // non-collapsed character and returns 1 + its offset; Or returns 0 if such a
+  // character does not exist.
+  unsigned EndOfLastNonCollapsedCharacter(const Node&, unsigned offset) const;
+
+  // Returns true if the character at the position is non-collapsed. If the
+  // offset is at the end of the node, returns false.
+  bool IsNonCollapsedCharacter(const Node&, unsigned offset) const;
+
+  // TODO(xiaochengh): Add APIs for reverse mapping.
+
  private:
   UnitVector units_;
   RangeMap ranges_;
 
   DISALLOW_COPY_AND_ASSIGN(NGOffsetMappingResult);
 };
+
+const NGOffsetMappingResult* GetNGOffsetMappingFor(const Node&, unsigned);
 
 }  // namespace blink
 

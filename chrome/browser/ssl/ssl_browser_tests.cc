@@ -40,6 +40,7 @@
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/bad_clock_blocking_page.h"
+#include "chrome/browser/ssl/captive_portal_blocking_page.h"
 #include "chrome/browser/ssl/cert_report_helper.h"
 #include "chrome/browser/ssl/cert_verifier_browser_test.h"
 #include "chrome/browser/ssl/certificate_reporting_test_utils.h"
@@ -135,10 +136,6 @@
 #include "net/url_request/url_request_test_util.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
-
-#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
-#include "chrome/browser/ssl/captive_portal_blocking_page.h"
-#endif
 
 #if defined(USE_NSS_CERTS)
 #include "chrome/browser/net/nss_context.h"
@@ -5029,8 +5026,6 @@ IN_PROC_BROWSER_TEST_F(SSLUITestIgnoreLocalhostCertErrors,
 // pattern matching.
 using SSLUICaptivePortalListTest = SSLUITest;
 
-#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
-
 std::unique_ptr<chrome_browser_ssl::SSLErrorAssistantConfig>
 MakeCaptivePortalConfig(int version_id,
                         const std::set<std::string>& spki_hashes) {
@@ -5480,50 +5475,6 @@ IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListResourceBundleTest,
   TestNoCaptivePortalInterstitial(cert_status,
                                   net::ERR_CERT_COMMON_NAME_INVALID);
 }
-
-#else
-
-// Tests that the captive portal certificate list is not used when captive
-// portal checks are disabled by build, even if the captive portal certificate
-// list feature is enabled via Finch. The list is passed to SSLErrorHandler via
-// a proto.
-IN_PROC_BROWSER_TEST_F(SSLUICaptivePortalListTest, PortalChecksDisabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitFromCommandLine(
-      "CaptivePortalCertificateList" /* enabled */,
-      std::string() /* disabled */);
-
-  ASSERT_TRUE(https_server_mismatched_.Start());
-  base::HistogramTester histograms;
-
-  // Mark the server's cert as a captive portal cert.
-  SSLErrorHandler::SetErrorAssistantProto(MakeCaptivePortalConfig(
-      kLargeVersionId + 1, std::set<std::string>{server_spki_hash.ToString()}));
-  ASSERT_TRUE(SSLErrorHandler::GetErrorAssistantProtoVersionIdForTesting() > 0);
-
-  // Navigate to an unsafe page on the server. The captive portal interstitial
-  // should be displayed since CaptivePortalCertificateList feature is enabled.
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  SSLInterstitialTimerObserver interstitial_timer_observer(tab);
-  ui_test_utils::NavigateToURL(
-      browser(), https_server_mismatched_.GetURL("/ssl/blank_page.html"));
-  content::WaitForInterstitialAttach(tab);
-
-  InterstitialPage* interstitial_page = tab->GetInterstitialPage();
-  ASSERT_EQ(SSLBlockingPage::kTypeForTesting,
-            interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
-  EXPECT_FALSE(interstitial_timer_observer.timer_started());
-
-  // Check that the histogram for the captive portal cert was recorded.
-  histograms.ExpectTotalCount(SSLErrorHandler::GetHistogramNameForTesting(), 2);
-  histograms.ExpectBucketCount(SSLErrorHandler::GetHistogramNameForTesting(),
-                               SSLErrorHandler::HANDLE_ALL, 1);
-  histograms.ExpectBucketCount(
-      SSLErrorHandler::GetHistogramNameForTesting(),
-      SSLErrorHandler::SHOW_SSL_INTERSTITIAL_OVERRIDABLE, 1);
-}
-
-#endif  // BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
 
 namespace {
 
@@ -6210,6 +6161,7 @@ class SymantecMessageSSLUITest : public CertVerifierBrowserTest {
 
   void SetUpOnMainThread() override {
     CertVerifierBrowserTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
 
     https_server_.AddDefaultHandlers(base::FilePath(kDocRoot));
 
@@ -6270,7 +6222,10 @@ IN_PROC_BROWSER_TEST_F(SymantecMessageSSLUITest, PreJune2016) {
   GURL url(https_server()->GetURL("/ssl/google.html"));
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   content::ConsoleObserverDelegate console_observer(
-      tab, "*The SSL certificate used to load*ssl/google.html*");
+      tab,
+      base::StringPrintf(
+          "*The SSL certificate used to load resources from https://%s:%s*",
+          url.host().c_str(), url.port().c_str()));
   tab->SetDelegate(&console_observer);
   ui_test_utils::NavigateToURL(browser(), url);
   console_observer.Wait();
@@ -6287,7 +6242,10 @@ IN_PROC_BROWSER_TEST_F(SymantecMessageSSLUITest, PostJune2016) {
   GURL url(https_server()->GetURL("/ssl/google.html"));
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   content::ConsoleObserverDelegate console_observer(
-      tab, "*The SSL certificate used to load*/ssl/google.html*");
+      tab,
+      base::StringPrintf(
+          "*The SSL certificate used to load resources from https://%s:%s*",
+          url.host().c_str(), url.port().c_str()));
   tab->SetDelegate(&console_observer);
   ui_test_utils::NavigateToURL(browser(), url);
   console_observer.Wait();
@@ -6295,20 +6253,35 @@ IN_PROC_BROWSER_TEST_F(SymantecMessageSSLUITest, PostJune2016) {
       base::MatchPattern(console_observer.message(), "*distrusted in M70*"));
 }
 
-// Tests that the Symantec console message is logged for subresources.
-IN_PROC_BROWSER_TEST_F(SymantecMessageSSLUITest, Subresource) {
+// Tests that the Symantec console message is logged for subresources, but caps
+// out after many subresource loads.
+IN_PROC_BROWSER_TEST_F(SymantecMessageSSLUITest, ManySubresources) {
+  content::SetupCrossSiteRedirector(https_server());
   ASSERT_NO_FATAL_FAILURE(
       SetUpCertVerifier(false /* use Chrome 66 distrust date */));
   ASSERT_TRUE(https_server()->Start());
-  GURL url(https_server()->GetURL("/ssl/page_with_subresource.html"));
+  GURL url(https_server()->GetURL("/ssl/page_with_many_subresources.html"));
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::ConsoleObserverDelegate console_observer(tab,
-                                                    "*google_files/logo.gif*");
-  tab->SetDelegate(&console_observer);
-  ui_test_utils::NavigateToURL(browser(), url);
-  console_observer.Wait();
-  EXPECT_TRUE(base::MatchPattern(console_observer.message(),
-                                 "*The SSL certificate used to load*"));
+
+  // Observe the message for a cross-site subresource.
+  {
+    content::ConsoleObserverDelegate console_observer(tab, "*https://a.test*");
+    tab->SetDelegate(&console_observer);
+    ui_test_utils::NavigateToURL(browser(), url);
+    console_observer.Wait();
+    EXPECT_TRUE(base::MatchPattern(console_observer.message(),
+                                   "*The SSL certificate used to load*"));
+  }
+  // Observe that the message caps out after some number of subresources.
+  {
+    content::ConsoleObserverDelegate console_observer(tab,
+                                                      "*Additional resources*");
+    tab->SetDelegate(&console_observer);
+    ui_test_utils::NavigateToURL(browser(), url);
+    console_observer.Wait();
+    EXPECT_TRUE(
+        base::MatchPattern(console_observer.message(), "*SSL certificates*"));
+  }
 }
 
 // TODO(jcampan): more tests to do below.

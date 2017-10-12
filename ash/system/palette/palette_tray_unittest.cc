@@ -11,6 +11,7 @@
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
+#include "ash/public/cpp/stylus_utils.h"
 #include "ash/public/cpp/voice_interaction_state.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
@@ -46,7 +47,7 @@ class PaletteTrayTest : public AshTestBase {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kAshEnablePaletteOnAllDisplays);
 
-    palette_utils::SetHasStylusInputForTesting();
+    stylus_utils::SetHasStylusInputForTesting();
 
     AshTestBase::SetUp();
 
@@ -182,13 +183,13 @@ TEST_F(PaletteTrayTest, ModeToolDeactivatedAutomatically) {
   ASSERT_TRUE(palette_tray_->is_active());
   ASSERT_TRUE(test_api_->GetTrayBubbleWrapper());
 
-  // Activate and deactivate the capture region tool.
+  // Activate and deactivate the laser pointer tool.
   test_api_->GetPaletteToolManager()->ActivateTool(
-      PaletteToolId::CAPTURE_REGION);
+      PaletteToolId::LASER_POINTER);
   ASSERT_TRUE(test_api_->GetPaletteToolManager()->IsToolActive(
-      PaletteToolId::CAPTURE_REGION));
+      PaletteToolId::LASER_POINTER));
   test_api_->GetPaletteToolManager()->DeactivateTool(
-      PaletteToolId::CAPTURE_REGION);
+      PaletteToolId::LASER_POINTER);
 
   // Verify the bubble is hidden and the button is inactive after deactivating
   // the capture region tool.
@@ -335,11 +336,7 @@ TEST_F(PaletteTrayTestWithVoiceInteraction, MetalayerToolActivatesHighlighter) {
                          true /* highlighter shown on press */);
   // When metalayer is entered normally (not via stylus button), a failed
   // selection should not exit the mode.
-  // NOTE that this is not testing the real logic in PaletteDelegateChromeOS,
-  // but the logic in HighlighterControllerTestApi (which is mimicking
-  // PaletteDelegateChromeOS). Once PaletteDelegateChromeOS is refactored
-  // (crbug/761120) the assertions below become more useful.
-  EXPECT_TRUE(highlighter_test_api_->handle_failed_selection_called());
+  EXPECT_FALSE(highlighter_test_api_->HandleSelectionCalled());
   EXPECT_TRUE(metalayer_enabled());
 
   // A successfull selection should exit the metalayer mode.
@@ -350,7 +347,7 @@ TEST_F(PaletteTrayTestWithVoiceInteraction, MetalayerToolActivatesHighlighter) {
   EXPECT_TRUE(metalayer_enabled());
   generator.MoveTouch(gfx::Point(300, 100));
   generator.ReleaseTouch();
-  EXPECT_TRUE(highlighter_test_api_->handle_selection_called());
+  EXPECT_TRUE(highlighter_test_api_->HandleSelectionCalled());
   EXPECT_FALSE(metalayer_enabled());
 
   SCOPED_TRACE("drag over palette");

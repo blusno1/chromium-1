@@ -215,20 +215,22 @@ int GetFetchMoreSuggestionsCount() {
       kFetchMoreSuggestionsCountDefault);
 }
 
-// Variation parameter for the timeout when refetching suggestions while
-// displaying. If the fetch takes too long and the timeout is over, the category
-// status is forced back to AVAILABLE and the existing (possibly stale)
-// suggestions are notified.
-const char kTimeoutForRefetchWhileDisplayingSecondsParamName[] =
-    "timeout_for_refetch_while_displaying_seconds";
+// Variation parameter for the timeout when fetching suggestions with a loading
+// indicator. If the fetch takes too long and the timeout is over, the category
+// status is forced back to AVAILABLE. If there are existing (possibly stale)
+// suggestions, they get notified.
+// This timeout is not used for fetching more as the signature of Fetch()
+// provides no way to deliver results later after the timeout.
+const char kTimeoutForLoadingIndicatorSecondsParamName[] =
+    "timeout_for_loading_indicator_seconds";
 
-const int kDefaultTimeoutForRefetchWhileDisplayingSeconds = 5;
+const int kDefaultTimeoutForLoadingIndicatorSeconds = 5;
 
-base::TimeDelta GetTimeoutForRefetchWhileDisplaying() {
+base::TimeDelta GetTimeoutForLoadingIndicator() {
   return base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
       ntp_snippets::kArticleSuggestionsFeature,
-      kTimeoutForRefetchWhileDisplayingSecondsParamName,
-      kDefaultTimeoutForRefetchWhileDisplayingSeconds));
+      kTimeoutForLoadingIndicatorSecondsParamName,
+      kDefaultTimeoutForLoadingIndicatorSeconds));
 }
 
 template <typename SuggestionPtrContainer>
@@ -382,8 +384,6 @@ RemoteSuggestionsProviderImpl::RemoteSuggestionsProviderImpl(
       database_(std::move(database)),
       image_fetcher_(std::move(image_fetcher), pref_service, database_.get()),
       status_service_(std::move(status_service)),
-      fetch_when_ready_(false),
-      fetch_when_ready_interactive_(false),
       clear_history_dependent_state_when_initialized_(false),
       clock_(base::MakeUnique<base::DefaultClock>()),
       prefetched_pages_tracker_(std::move(prefetched_pages_tracker)),
@@ -441,68 +441,47 @@ void RemoteSuggestionsProviderImpl::ReloadSuggestions() {
   if (!remote_suggestions_scheduler_->AcquireQuotaForInteractiveFetch()) {
     return;
   }
+  auto callback = base::Bind(
+      [](RemoteSuggestionsScheduler* scheduler, Status status_code) {
+        scheduler->OnInteractiveFetchFinished(status_code);
+      },
+      base::Unretained(remote_suggestions_scheduler_));
+
+  if (AreArticlesEmpty()) {
+    // No reason to use a timeout to hide the loading indicator before the fetch
+    // definitely fails as we have nothing else to display.
+    FetchSuggestionsWithLoadingIndicator(
+        /*interactive_request=*/true, std::move(callback),
+        /*enable_loading_indication_timeout=*/false);
+    return;
+  }
   FetchSuggestions(
-      /*interactive_request=*/true,
-      base::Bind(
-          [](RemoteSuggestionsScheduler* scheduler, Status status_code) {
-            scheduler->OnInteractiveFetchFinished(status_code);
-          },
-          base::Unretained(remote_suggestions_scheduler_)));
+      /*interactive_request=*/true, std::move(callback));
 }
 
 void RemoteSuggestionsProviderImpl::RefetchInTheBackground(
     FetchStatusCallback callback) {
+  if (AreArticlesEmpty()) {
+    // We want to have a loading indicator even for a background fetch as the
+    // user might open an NTP before the fetch finishes.
+    // No reason to use a timeout to hide the loading indicator before the fetch
+    // definitely fails as we have nothing else to display.
+    FetchSuggestionsWithLoadingIndicator(
+        /*interactive_request=*/false, std::move(callback),
+        /*enable_loading_indication_timeout=*/false);
+    return;
+  }
   FetchSuggestions(/*interactive_request=*/false, std::move(callback));
 }
 
 void RemoteSuggestionsProviderImpl::RefetchWhileDisplaying(
     FetchStatusCallback callback) {
-  debug_logger_->Log(FROM_HERE, /*message=*/std::string());
-  if (!AreArticlesAvailable()) {
-    // If the article section is not AVAILABLE, we cannot safely flip its status
-    // to AVAILABLE_LOADING and back. Instead, we fallback to the standard
-    // background refetch.
-    debug_logger_->Log(
-        FROM_HERE,
-        "fallback because the articles category is not displayed yet");
-    // TODO(jkrcal): If the provider is not ready() we fallback to
-    // RefetchInTheBackground which post-pones the FetchSuggestions() task until
-    // the provider gets ready. When the provider gets ready, the provider calls
-    // FetchSuggestions() directly, without flipping the category status as
-    // implemented in this function. We should postpone the
-    // RefetchWhileDisplaying task here, instead (or deal with postponing in the
-    // scheduler only).
-    RefetchInTheBackground(std::move(callback));
-    return;
-  }
-
-  NotifyRefetchWhileDisplayingStarted();
-  // |fetch_timeout_timer_| makes sure the UI stops waiting after a certain time
-  // period (in that case, it can fall-back to the old suggestions).
-  fetch_timeout_timer_->Start(
-      FROM_HERE, GetTimeoutForRefetchWhileDisplaying(),
-      base::Bind(&RemoteSuggestionsProviderImpl::
-                     NotifyRefetchWhileDisplayingFailedOrTimeouted,
-                 base::Unretained(this)));
-
-  FetchStatusCallback callback_wrapped = base::BindOnce(
-      &RemoteSuggestionsProviderImpl::OnRefetchWhileDisplayingFinished,
-      base::Unretained(this), std::move(callback));
-
-  FetchSuggestions(/*interactive_request=*/true, std::move(callback_wrapped));
-}
-
-void RemoteSuggestionsProviderImpl::OnRefetchWhileDisplayingFinished(
-    FetchStatusCallback callback,
-    Status status) {
-  fetch_timeout_timer_->Stop();
-  // If the fetch succeeds, it already notified new results.
-  if (!status.IsSuccess()) {
-    NotifyRefetchWhileDisplayingFailedOrTimeouted();
-  }
-  if (callback) {
-    std::move(callback).Run(status);
-  }
+  // We also have existing suggestions in place, so we want to use a timeout
+  // after which we fall back to the existing suggestions. This way, we do not
+  // annoy users by too much of waiting on poor connection.
+  FetchSuggestionsWithLoadingIndicator(
+      /*interactive_request=*/true, std::move(callback),
+      /*enable_loading_indication_timeout=*/true);
 }
 
 const RemoteSuggestionsFetcher*
@@ -528,18 +507,68 @@ bool RemoteSuggestionsProviderImpl::IsDisabled() const {
   return state_ == State::DISABLED;
 }
 
+bool RemoteSuggestionsProviderImpl::ready() const {
+  return state_ == State::READY;
+}
+
+void RemoteSuggestionsProviderImpl::FetchSuggestionsWithLoadingIndicator(
+    bool interactive_request,
+    FetchStatusCallback callback,
+    bool enable_loading_indication_timeout) {
+  if (!AreArticlesAvailable()) {
+    // If the article section is not AVAILABLE, we cannot safely flip its status
+    // to AVAILABLE_LOADING and back. Instead, we fallback to the standard
+    // background refetch.
+    debug_logger_->Log(
+        FROM_HERE,
+        "fallback because the articles category is not displayed yet");
+    FetchSuggestions(interactive_request, std::move(callback));
+    return;
+  }
+
+  NotifyFetchWithLoadingIndicatorStarted();
+
+  if (enable_loading_indication_timeout) {
+    // |fetch_timeout_timer_| makes sure the UI stops waiting after a certain
+    // time period (the UI also falls back to previous suggestions, if there are
+    // any).
+    fetch_timeout_timer_->Start(
+        FROM_HERE, GetTimeoutForLoadingIndicator(),
+        base::Bind(&RemoteSuggestionsProviderImpl::
+                       NotifyFetchWithLoadingIndicatorFailedOrTimeouted,
+                   base::Unretained(this)));
+  }
+
+  FetchStatusCallback callback_wrapped =
+      base::BindOnce(&RemoteSuggestionsProviderImpl::
+                         OnFetchSuggestionsWithLoadingIndicatorFinished,
+                     base::Unretained(this), std::move(callback));
+
+  FetchSuggestions(interactive_request, std::move(callback_wrapped));
+}
+
+void RemoteSuggestionsProviderImpl::
+    OnFetchSuggestionsWithLoadingIndicatorFinished(FetchStatusCallback callback,
+                                                   Status status) {
+  fetch_timeout_timer_->Stop();
+  // If the fetch succeeds, it already notified new results.
+  if (!status.IsSuccess()) {
+    NotifyFetchWithLoadingIndicatorFailedOrTimeouted();
+  }
+  if (callback) {
+    std::move(callback).Run(status);
+  }
+}
+
 void RemoteSuggestionsProviderImpl::FetchSuggestions(
     bool interactive_request,
     FetchStatusCallback callback) {
   debug_logger_->Log(FROM_HERE, /*message=*/std::string());
   if (!ready()) {
-    fetch_when_ready_ = true;
-    fetch_when_ready_interactive_ = interactive_request;
-    fetch_when_ready_callback_ = std::move(callback);
+    std::move(callback).Run(Status(StatusCode::TEMPORARY_ERROR,
+                                   "RemoteSuggestionsProvider is not ready!"));
     return;
   }
-
-  MarkEmptyCategoriesAsLoading();
 
   // |count_to_fetch| is actually ignored, because the server does not support
   // this functionality.
@@ -618,27 +647,27 @@ RequestParams RemoteSuggestionsProviderImpl::BuildFetchParams(
   return result;
 }
 
-void RemoteSuggestionsProviderImpl::MarkEmptyCategoriesAsLoading() {
-  for (const auto& item : category_contents_) {
-    Category category = item.first;
-    const CategoryContent& content = item.second;
-    if (content.suggestions.empty()) {
-      UpdateCategoryStatus(category, CategoryStatus::AVAILABLE_LOADING);
-    }
-  }
-}
-
-bool RemoteSuggestionsProviderImpl::AreArticlesAvailable() {
+bool RemoteSuggestionsProviderImpl::AreArticlesEmpty() const {
   if (!ready()) {
     return false;
   }
   auto articles_it = category_contents_.find(articles_category_);
   DCHECK(articles_it != category_contents_.end());
-  CategoryContent& content = articles_it->second;
+  const CategoryContent& content = articles_it->second;
+  return content.suggestions.empty();
+}
+
+bool RemoteSuggestionsProviderImpl::AreArticlesAvailable() const {
+  if (!ready()) {
+    return false;
+  }
+  auto articles_it = category_contents_.find(articles_category_);
+  DCHECK(articles_it != category_contents_.end());
+  const CategoryContent& content = articles_it->second;
   return content.status == CategoryStatus::AVAILABLE;
 }
 
-void RemoteSuggestionsProviderImpl::NotifyRefetchWhileDisplayingStarted() {
+void RemoteSuggestionsProviderImpl::NotifyFetchWithLoadingIndicatorStarted() {
   auto articles_it = category_contents_.find(articles_category_);
   DCHECK(articles_it != category_contents_.end());
   CategoryContent& content = articles_it->second;
@@ -647,7 +676,7 @@ void RemoteSuggestionsProviderImpl::NotifyRefetchWhileDisplayingStarted() {
 }
 
 void RemoteSuggestionsProviderImpl::
-    NotifyRefetchWhileDisplayingFailedOrTimeouted() {
+    NotifyFetchWithLoadingIndicatorFailedOrTimeouted() {
   auto articles_it = category_contents_.find(articles_category_);
   DCHECK(articles_it != category_contents_.end());
   CategoryContent& content = articles_it->second;
@@ -1346,43 +1375,6 @@ void RemoteSuggestionsProviderImpl::FetchSuggestionImage(
                                       std::move(callback));
 }
 
-void RemoteSuggestionsProviderImpl::EnterStateReady() {
-  if (clear_history_dependent_state_when_initialized_) {
-    clear_history_dependent_state_when_initialized_ = false;
-    ClearHistoryDependentState();
-  }
-
-  auto article_category_it = category_contents_.find(articles_category_);
-  DCHECK(article_category_it != category_contents_.end());
-  if (fetch_when_ready_) {
-    FetchSuggestions(fetch_when_ready_interactive_,
-                     std::move(fetch_when_ready_callback_));
-    fetch_when_ready_ = false;
-  }
-
-  for (const auto& item : category_contents_) {
-    Category category = item.first;
-    const CategoryContent& content = item.second;
-    // FetchSuggestions has set the status to |AVAILABLE_LOADING| if relevant,
-    // otherwise we transition to |AVAILABLE| here.
-    if (content.status != CategoryStatus::AVAILABLE_LOADING) {
-      UpdateCategoryStatus(category, CategoryStatus::AVAILABLE);
-    }
-  }
-}
-
-void RemoteSuggestionsProviderImpl::EnterStateDisabled() {
-  ClearSuggestions();
-  if (breaking_news_raw_data_provider_ &&
-      breaking_news_raw_data_provider_->IsListening()) {
-    breaking_news_raw_data_provider_->StopListening();
-  }
-}
-
-void RemoteSuggestionsProviderImpl::EnterStateError() {
-  status_service_.reset();
-}
-
 void RemoteSuggestionsProviderImpl::
     UpdatePushedSuggestionsSubscriptionDueToStatusChange(
         RemoteSuggestionsStatus new_status) {
@@ -1421,13 +1413,6 @@ void RemoteSuggestionsProviderImpl::
 }
 
 void RemoteSuggestionsProviderImpl::FinishInitialization() {
-  if (clear_history_dependent_state_when_initialized_) {
-    // We clear here in addition to EnterStateReady, so that it happens even if
-    // we enter the DISABLED state below.
-    clear_history_dependent_state_when_initialized_ = false;
-    ClearHistoryDependentState();
-  }
-
   // Note: Initializing the status service will run the callback right away with
   // the current state.
   status_service_->Init(base::Bind(
@@ -1457,7 +1442,6 @@ void RemoteSuggestionsProviderImpl::OnStatusChanged(
         // no suggestions).
         ClearSuggestions();
       } else {
-        // Do not change the status. That will be done in EnterStateReady().
         EnterState(State::READY);
       }
       break;
@@ -1469,14 +1453,12 @@ void RemoteSuggestionsProviderImpl::OnStatusChanged(
         // no suggestions).
         ClearSuggestions();
       } else {
-        // Do not change the status. That will be done in EnterStateReady().
         EnterState(State::READY);
       }
       break;
 
     case RemoteSuggestionsStatus::EXPLICITLY_DISABLED:
       EnterState(State::DISABLED);
-      UpdateAllCategoryStatus(CategoryStatus::CATEGORY_EXPLICITLY_DISABLED);
       break;
   }
 
@@ -1503,30 +1485,47 @@ void RemoteSuggestionsProviderImpl::EnterState(State state) {
 
       DVLOG(1) << "Entering state: READY";
       state_ = State::READY;
+
+      DCHECK(category_contents_.find(articles_category_) !=
+             category_contents_.end());
+
+      UpdateAllCategoryStatus(CategoryStatus::AVAILABLE);
+      if (clear_history_dependent_state_when_initialized_) {
+        clear_history_dependent_state_when_initialized_ = false;
+        ClearHistoryDependentState();
+      }
+      // This notification may cause the scheduler to ask the provider to do a
+      // refetch. We want to do it as the last step, when the state change here
+      // in the provider is completed.
       NotifyStateChanged();
-      EnterStateReady();
       break;
 
     case State::DISABLED:
       DCHECK(state_ == State::NOT_INITED || state_ == State::READY);
 
       DVLOG(1) << "Entering state: DISABLED";
-      // TODO(jkrcal): Fix the fragility of the following code. Currently, it is
-      // important that we first change the state and notify the scheduler (as
-      // it will update its state) and only at last we EnterStateDisabled()
-      // which clears suggestions. Clearing suggestions namely notifies the
-      // scheduler to fetch them again, which is ignored because the scheduler
-      // is disabled. crbug/695447
       state_ = State::DISABLED;
+      // Notify the state change to disable the scheduler. Clearing history /
+      // suggestions below tells the scheduler to fetch them again if the
+      // scheduler is not disabled. It is disabled; thus the calls are ignored.
       NotifyStateChanged();
-      EnterStateDisabled();
+      if (clear_history_dependent_state_when_initialized_) {
+        clear_history_dependent_state_when_initialized_ = false;
+        ClearHistoryDependentState();
+      }
+      ClearSuggestions();
+      if (breaking_news_raw_data_provider_ &&
+          breaking_news_raw_data_provider_->IsListening()) {
+        breaking_news_raw_data_provider_->StopListening();
+      }
+      UpdateAllCategoryStatus(CategoryStatus::CATEGORY_EXPLICITLY_DISABLED);
       break;
 
     case State::ERROR_OCCURRED:
       DVLOG(1) << "Entering state: ERROR_OCCURRED";
       state_ = State::ERROR_OCCURRED;
       NotifyStateChanged();
-      EnterStateError();
+      status_service_.reset();
       break;
 
     case State::COUNT:

@@ -141,7 +141,6 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLHtmlElement.h"
-#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLinkElement.h"
 #include "core/html/HTMLMetaElement.h"
 #include "core/html/HTMLPlugInElement.h"
@@ -160,6 +159,7 @@
 #include "core/html/custom/V0CustomElementMicrotaskRunQueue.h"
 #include "core/html/custom/V0CustomElementRegistrationContext.h"
 #include "core/html/forms/FormController.h"
+#include "core/html/forms/HTMLInputElement.h"
 #include "core/html/imports/HTMLImportLoader.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/html/parser/HTMLDocumentParser.h"
@@ -7064,6 +7064,13 @@ CoreProbeSink* Document::GetProbeSink() {
   if (!frame && TemplateDocumentHost())
     frame = TemplateDocumentHost()->GetFrame();
   return probe::ToCoreProbeSink(frame);
+}
+
+service_manager::InterfaceProvider* Document::GetInterfaceProvider() {
+  if (!GetFrame())
+    return nullptr;
+
+  return &GetFrame()->GetInterfaceProvider();
 }
 
 DEFINE_TRACE(Document) {

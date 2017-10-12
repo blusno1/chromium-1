@@ -116,9 +116,9 @@ std::string RangeToString(const RangeClass& range) {
     return "[]";
   }
   std::stringstream ss;
-  ss << "[" << range.GetStartTimestamp().InSecondsF()
-     << ";" << range.GetEndTimestamp().InSecondsF()
-     << "(" << range.GetBufferedEndTimestamp().InSecondsF() << ")]";
+  ss << "[" << range.GetStartTimestamp().InMicroseconds() << "us;"
+     << range.GetEndTimestamp().InMicroseconds() << "us("
+     << range.GetBufferedEndTimestamp().InMicroseconds() << "us)]";
   return ss.str();
 }
 
@@ -139,7 +139,21 @@ std::string RangesToString(
 }
 
 template <typename RangeClass>
-std::string BufferQueueToLogString(
+std::string BufferQueueBuffersToLogString(
+    const typename SourceBufferStream<RangeClass>::BufferQueue& buffers) {
+  std::stringstream result;
+
+  result << "Buffers:\n";
+  for (const auto& buf : buffers) {
+    result << "\tdts=" << buf->GetDecodeTimestamp().InMicroseconds() << " "
+           << buf->AsHumanReadableString() << "\n";
+  }
+
+  return result.str();
+}
+
+template <typename RangeClass>
+std::string BufferQueueMetadataToLogString(
     const typename SourceBufferStream<RangeClass>::BufferQueue& buffers) {
   std::stringstream result;
   DecodeTimestamp pts_interval_start;
@@ -147,11 +161,11 @@ std::string BufferQueueToLogString(
   SourceBufferStream<SourceBufferRangeByPts>::GetTimestampInterval(
       buffers, &pts_interval_start, &pts_interval_end);
 
-  result << "dts=[" << buffers.front()->GetDecodeTimestamp().InSecondsF() << ";"
-         << buffers.back()->GetDecodeTimestamp().InSecondsF()
-         << "(last frame dur=" << buffers.back()->duration().InSecondsF()
-         << ")], pts interval=[" << pts_interval_start.InSecondsF() << ","
-         << pts_interval_end.InSecondsF() << ")";
+  result << "dts=[" << buffers.front()->GetDecodeTimestamp().InMicroseconds()
+         << "us;" << buffers.back()->GetDecodeTimestamp().InMicroseconds()
+         << "us(last frame dur=" << buffers.back()->duration().InMicroseconds()
+         << "us)], pts interval=[" << pts_interval_start.InMicroseconds()
+         << "us," << pts_interval_end.InMicroseconds() << "us)";
   return result.str();
 }
 
@@ -225,8 +239,8 @@ void SourceBufferStream<SourceBufferRangeByDts>::OnStartOfCodedFrameGroup(
     DecodeTimestamp coded_frame_group_start_dts,
     base::TimeDelta coded_frame_group_start_pts) {
   DVLOG(1) << __func__ << " " << GetStreamTypeName() << " (dts "
-           << coded_frame_group_start_dts.InSecondsF() << ", pts "
-           << coded_frame_group_start_pts.InSecondsF() << ")";
+           << coded_frame_group_start_dts.InMicroseconds() << "us, pts "
+           << coded_frame_group_start_pts.InMicroseconds() << "us)";
   DCHECK(!end_of_stream_);
   OnStartOfCodedFrameGroupInternal(coded_frame_group_start_dts);
 }
@@ -239,8 +253,8 @@ void SourceBufferStream<SourceBufferRangeByPts>::OnStartOfCodedFrameGroup(
     DecodeTimestamp coded_frame_group_start_dts,
     base::TimeDelta coded_frame_group_start_pts) {
   DVLOG(1) << __func__ << " " << GetStreamTypeName() << " (dts "
-           << coded_frame_group_start_dts.InSecondsF() << ", pts "
-           << coded_frame_group_start_pts.InSecondsF() << ")";
+           << coded_frame_group_start_dts.InMicroseconds() << "us, pts "
+           << coded_frame_group_start_pts.InMicroseconds() << "us)";
   DCHECK(!end_of_stream_);
   OnStartOfCodedFrameGroupInternal(
       DecodeTimestamp::FromPresentationTime(coded_frame_group_start_pts));
@@ -283,7 +297,8 @@ bool SourceBufferStream<RangeClass>::Append(const BufferQueue& buffers) {
   DCHECK(!end_of_stream_);
 
   DVLOG(1) << __func__ << " " << GetStreamTypeName() << ": buffers "
-           << BufferQueueToLogString<RangeClass>(buffers);
+           << BufferQueueMetadataToLogString<RangeClass>(buffers);
+  DVLOG(4) << BufferQueueBuffersToLogString<RangeClass>(buffers);
 
   // TODO(wolenetz): Make this DCHECK also applicable to ByPts once SAP-Type-2
   // is more fully supported such that the NewByPts versions of
@@ -295,9 +310,9 @@ bool SourceBufferStream<RangeClass>::Append(const BufferQueue& buffers) {
                                       BufferGetTimestamp(buffers.front()))
       << __func__
       << " Suspected SAP-Type-2 occurrence: coded_frame_group_start_time_="
-      << coded_frame_group_start_time_.InSecondsF()
-      << ", first new buffer has timestamp="
-      << BufferGetTimestamp(buffers.front()).InSecondsF();
+      << coded_frame_group_start_time_.InMicroseconds()
+      << "us, first new buffer has timestamp="
+      << BufferGetTimestamp(buffers.front()).InMicroseconds() << "us";
 
   // New coded frame groups emitted by the coded frame processor must begin with
   // a keyframe. TODO(wolenetz): Change this to [DCHECK + MEDIA_LOG(ERROR...) +
@@ -461,11 +476,11 @@ void SourceBufferStream<RangeClass>::Remove(base::TimeDelta start,
                                             base::TimeDelta end,
                                             base::TimeDelta duration) {
   DVLOG(1) << __func__ << " " << GetStreamTypeName() << " ("
-           << start.InSecondsF() << ", " << end.InSecondsF() << ", "
-           << duration.InSecondsF() << ")";
-  DCHECK(start >= base::TimeDelta()) << start.InSecondsF();
-  DCHECK(start < end) << "start " << start.InSecondsF()
-                      << " end " << end.InSecondsF();
+           << start.InMicroseconds() << "us, " << end.InMicroseconds() << "us, "
+           << duration.InMicroseconds() << "us)";
+  DCHECK(start >= base::TimeDelta()) << start.InMicroseconds() << "us";
+  DCHECK(start < end) << "start " << start.InMicroseconds() << "us, end "
+                      << end.InMicroseconds() << "us";
   DCHECK(duration != kNoTimestamp);
 
   DecodeTimestamp start_dts = DecodeTimestamp::FromPresentationTime(start);
@@ -550,8 +565,9 @@ void SourceBufferStream<RangeClass>::UpdateLastAppendStateForRemove(
           remove_end > gop_start) {
         DVLOG(2) << __func__ << " " << GetStreamTypeName()
                  << " Resetting next append state for remove ("
-                 << remove_start.InSecondsF() << ", " << remove_end.InSecondsF()
-                 << ", " << exclude_start << ")";
+                 << remove_start.InMicroseconds() << "us, "
+                 << remove_end.InMicroseconds() << "us, " << exclude_start
+                 << ")";
         range_for_next_append_ = ranges_.end();
         ResetLastAppendedState();
       }
@@ -570,14 +586,14 @@ void SourceBufferStream<RangeClass>::RemoveInternal(
     bool exclude_start,
     BufferQueue* deleted_buffers) {
   DVLOG(2) << __func__ << " " << GetStreamTypeName() << " ("
-           << start.InSecondsF() << ", " << end.InSecondsF() << ", "
+           << start.InMicroseconds() << "us, " << end.InMicroseconds() << "us, "
            << exclude_start << ")";
   DVLOG(3) << __func__ << " " << GetStreamTypeName()
            << ": before remove ranges_=" << RangesToString<RangeClass>(ranges_);
 
   DCHECK(start >= DecodeTimestamp());
-  DCHECK(start < end) << "start " << start.InSecondsF()
-                      << " end " << end.InSecondsF();
+  DCHECK(start < end) << "start " << start.InMicroseconds() << "us, end "
+                      << end.InMicroseconds() << "us";
   DCHECK(deleted_buffers);
 
   // Doing this upfront simplifies decisions about range_for_next_append_ below.
@@ -712,9 +728,9 @@ bool SourceBufferStream<RangeClass>::IsDtsMonotonicallyIncreasing(
     DCHECK(current_timestamp != kNoDecodeTimestamp());
     DCHECK((*itr)->duration() >= base::TimeDelta())
         << "Packet with invalid duration."
-        << " pts " << (*itr)->timestamp().InSecondsF()
-        << " dts " << (*itr)->GetDecodeTimestamp().InSecondsF()
-        << " dur " << (*itr)->duration().InSecondsF();
+        << " pts " << (*itr)->timestamp().InMicroseconds() << "us dts "
+        << (*itr)->GetDecodeTimestamp().InMicroseconds() << "us dur "
+        << (*itr)->duration().InMicroseconds() << "us";
 
     if (prev_timestamp != kNoDecodeTimestamp()) {
       if (current_timestamp < prev_timestamp) {
@@ -851,18 +867,19 @@ bool SourceBufferStream<RangeClass>::GarbageCollectIfNeeded(
   size_t bytes_to_free = ranges_size + newDataSize - effective_memory_limit;
 
   DVLOG(2) << __func__ << " " << GetStreamTypeName()
-           << ": Before GC media_time=" << media_time.InSecondsF()
-           << " ranges_=" << RangesToString<RangeClass>(ranges_)
+           << ": Before GC media_time=" << media_time.InMicroseconds()
+           << "us ranges_=" << RangesToString<RangeClass>(ranges_)
            << " seek_pending_=" << seek_pending_
            << " ranges_size=" << ranges_size << " newDataSize=" << newDataSize
            << " memory_limit_=" << memory_limit_
            << " effective_memory_limit=" << effective_memory_limit
            << " last_appended_buffer_timestamp_="
-           << last_appended_buffer_timestamp_.InSecondsF()
-           << " highest_timestamp_in_append_sequence_="
-           << highest_timestamp_in_append_sequence_.InSecondsF()
-           << " highest_buffered_end_time_in_append_sequence_="
-           << highest_buffered_end_time_in_append_sequence_.InSecondsF();
+           << last_appended_buffer_timestamp_.InMicroseconds()
+           << "us highest_timestamp_in_append_sequence_="
+           << highest_timestamp_in_append_sequence_.InMicroseconds()
+           << "us highest_buffered_end_time_in_append_sequence_="
+           << highest_buffered_end_time_in_append_sequence_.InMicroseconds()
+           << "us";
 
   if (selected_range_ && !seek_pending_ &&
       media_time > RangeGetBufferedEndTimestamp(selected_range_)) {
@@ -877,12 +894,12 @@ bool SourceBufferStream<RangeClass>::GarbageCollectIfNeeded(
     DecodeTimestamp selected_buffered_end =
         RangeGetBufferedEndTimestamp(selected_range_);
 
-    DVLOG(2) << __func__ << " media_time " << media_time.InSecondsF()
-             << " is outside of selected_range_=["
-             << selected_range_->GetStartTimestamp().InSecondsF() << ";"
-             << selected_buffered_end.InSecondsF()
-             << "] clamping media_time to be "
-             << selected_buffered_end.InSecondsF();
+    DVLOG(2) << __func__ << " media_time " << media_time.InMicroseconds()
+             << "us is outside of selected_range_=["
+             << selected_range_->GetStartTimestamp().InMicroseconds() << "us;"
+             << selected_buffered_end.InMicroseconds()
+             << "us] clamping media_time to be "
+             << selected_buffered_end.InMicroseconds() << "us";
     media_time = selected_buffered_end;
   }
 
@@ -913,7 +930,7 @@ bool SourceBufferStream<RangeClass>::GarbageCollectIfNeeded(
              media_time);
       media_time = RangeGetStartTimestamp(range_for_next_append_->get());
       DVLOG(3) << __func__ << " media_time adjusted to "
-               << media_time.InSecondsF();
+               << media_time.InMicroseconds() << "us";
     }
   }
 
@@ -988,8 +1005,8 @@ size_t SourceBufferStream<RangeClass>::FreeBuffersAfterLastAppended(
     size_t total_bytes_to_free,
     DecodeTimestamp media_time) {
   DVLOG(4) << __func__ << " highest_buffered_end_time_in_append_sequence_="
-           << highest_buffered_end_time_in_append_sequence_.InSecondsF()
-           << " media_time=" << media_time.InSecondsF();
+           << highest_buffered_end_time_in_append_sequence_.InMicroseconds()
+           << "us media_time=" << media_time.InMicroseconds() << "us";
 
   DecodeTimestamp remove_range_start =
       highest_buffered_end_time_in_append_sequence_;
@@ -1010,8 +1027,9 @@ size_t SourceBufferStream<RangeClass>::FreeBuffersAfterLastAppended(
                                        &remove_range_end);
   if (bytes_freed > 0) {
     DVLOG(4) << __func__ << " removing ["
-             << remove_range_start.ToPresentationTime().InSecondsF() << ";"
-             << remove_range_end.ToPresentationTime().InSecondsF() << "]";
+             << remove_range_start.ToPresentationTime().InMicroseconds()
+             << "us;" << remove_range_end.ToPresentationTime().InMicroseconds()
+             << "us]";
     Remove(remove_range_start.ToPresentationTime(),
            remove_range_end.ToPresentationTime(),
            media_time.ToPresentationTime());
@@ -1026,10 +1044,11 @@ size_t SourceBufferStream<RangeClass>::GetRemovalRange(
     DecodeTimestamp end_timestamp,
     size_t total_bytes_to_free,
     DecodeTimestamp* removal_end_timestamp) {
-  DCHECK(start_timestamp >= DecodeTimestamp()) << start_timestamp.InSecondsF();
+  DCHECK(start_timestamp >= DecodeTimestamp())
+      << start_timestamp.InMicroseconds() << "us";
   DCHECK(start_timestamp < end_timestamp)
-      << "start " << start_timestamp.InSecondsF()
-      << ", end " << end_timestamp.InSecondsF();
+      << "start " << start_timestamp.InMicroseconds() << "us, end "
+      << end_timestamp.InMicroseconds() << "us";
 
   size_t bytes_freed = 0;
 
@@ -1418,8 +1437,8 @@ void SourceBufferStream<RangeClass>::PruneTrackBuffer(
 
   DVLOG(3) << __func__ << " " << GetStreamTypeName()
            << " Removed all buffers with timestamp >= "
-           << timestamp.InSecondsF()
-           << ". New track buffer size:" << track_buffer_.size();
+           << timestamp.InMicroseconds()
+           << "us. New track buffer size:" << track_buffer_.size();
 }
 
 template <typename RangeClass>
@@ -1457,7 +1476,7 @@ template <typename RangeClass>
 void SourceBufferStream<RangeClass>::Seek(base::TimeDelta timestamp) {
   DCHECK(timestamp >= base::TimeDelta());
   DVLOG(1) << __func__ << " " << GetStreamTypeName() << " ("
-           << timestamp.InSecondsF() << ")";
+           << timestamp.InMicroseconds() << "us)";
   ResetSeekState();
 
   seek_buffer_timestamp_ = timestamp;
@@ -1506,7 +1525,7 @@ bool SourceBufferStream<RangeClass>::IsSeekPending() const {
 template <typename RangeClass>
 void SourceBufferStream<RangeClass>::OnSetDuration(base::TimeDelta duration) {
   DVLOG(1) << __func__ << " " << GetStreamTypeName() << " ("
-           << duration.InSecondsF() << ")";
+           << duration.InMicroseconds() << "us)";
   DCHECK(!end_of_stream_);
 
   if (ranges_.empty())
@@ -1919,7 +1938,7 @@ template <typename RangeClass>
 void SourceBufferStream<RangeClass>::SetSelectedRangeIfNeeded(
     const DecodeTimestamp timestamp) {
   DVLOG(2) << __func__ << " " << GetStreamTypeName() << "("
-           << timestamp.InSecondsF() << ")";
+           << timestamp.InMicroseconds() << "us)";
 
   if (selected_range_) {
     DCHECK(track_buffer_.empty());
@@ -1996,7 +2015,8 @@ SourceBufferStream<RangeClass>::FindNewSelectedRangeSeekTimestamp(
   }
 
   DVLOG(2) << __func__ << " " << GetStreamTypeName()
-           << " no buffered data for dts=" << start_timestamp.InSecondsF();
+           << " no buffered data for dts=" << start_timestamp.InMicroseconds()
+           << "us";
   return kNoDecodeTimestamp();
 }
 

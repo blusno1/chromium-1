@@ -11,6 +11,7 @@ namespace memory_instrumentation {
 namespace {
 
 using base::trace_event::MemoryAllocatorDumpGuid;
+using Edge = GlobalDumpGraph::Edge;
 using Process = GlobalDumpGraph::Process;
 using Node = GlobalDumpGraph::Node;
 
@@ -27,17 +28,33 @@ Process* GlobalDumpGraph::CreateGraphForProcess(base::ProcessId process_id) {
   return id_to_dump_iterator.first->second.get();
 }
 
-Node* GlobalDumpGraph::CreateNode(Process* process_graph) {
-  all_nodes_.emplace_front(process_graph);
+void GlobalDumpGraph::AddNodeOwnershipEdge(Node* owner,
+                                           Node* owned,
+                                           int importance) {
+  // The owner node should not already be associated with an edge.
+  DCHECK(!owner->owns_edge());
+
+  all_edges_.emplace_front(owner, owned, importance);
+  Edge* edge = &*all_edges_.begin();
+  owner->SetOwnsEdge(edge);
+  owned->AddOwnedByEdge(edge);
+}
+
+Node* GlobalDumpGraph::CreateNode(Process* process_graph, Node* parent) {
+  all_nodes_.emplace_front(process_graph, parent);
   return &*all_nodes_.begin();
 }
 
 Process::Process(GlobalDumpGraph* global_graph)
-    : global_graph_(global_graph), root_(global_graph->CreateNode(this)) {}
+    : global_graph_(global_graph),
+      root_(global_graph->CreateNode(this, nullptr)) {}
 Process::~Process() {}
 
 Node* Process::CreateNode(MemoryAllocatorDumpGuid guid,
-                          base::StringPiece path) {
+                          base::StringPiece path,
+                          bool weak) {
+  DCHECK(!path.empty());
+
   std::string path_string = path.as_string();
   base::StringTokenizer tokenizer(path_string, "/");
 
@@ -49,10 +66,15 @@ Node* Process::CreateNode(MemoryAllocatorDumpGuid guid,
     Node* parent = current;
     current = current->GetChild(key);
     if (!current) {
-      current = global_graph_->CreateNode(this);
+      current = global_graph_->CreateNode(this, parent);
       parent->InsertChild(key, current);
     }
   }
+
+  // The final node should have the weakness specified by the
+  // argument and also be considered explicit.
+  current->set_weak(weak);
+  current->set_explicit(true);
 
   // Add to the global guid map as well.
   global_graph_->nodes_by_guid_.emplace(guid, current);
@@ -60,6 +82,8 @@ Node* Process::CreateNode(MemoryAllocatorDumpGuid guid,
 }
 
 Node* Process::FindNode(base::StringPiece path) {
+  DCHECK(!path.empty());
+
   std::string path_string = path.as_string();
   base::StringTokenizer tokenizer(path_string, "/");
   Node* current = root_;
@@ -72,7 +96,8 @@ Node* Process::FindNode(base::StringPiece path) {
   return current;
 }
 
-Node::Node(Process* dump_graph) : dump_graph_(dump_graph) {}
+Node::Node(Process* dump_graph, Node* parent)
+    : dump_graph_(dump_graph), parent_(parent), owns_edge_(nullptr) {}
 Node::~Node() {}
 
 Node* Node::GetChild(base::StringPiece name) {
@@ -88,6 +113,14 @@ void Node::InsertChild(base::StringPiece name, Node* node) {
   DCHECK_EQ(std::string::npos, name.find('/'));
 
   children_.emplace(name.as_string(), node);
+}
+
+void Node::AddOwnedByEdge(Edge* edge) {
+  owned_by_edges_.push_back(edge);
+}
+
+void Node::SetOwnsEdge(Edge* owns_edge) {
+  owns_edge_ = owns_edge;
 }
 
 void Node::AddEntry(std::string name,
@@ -108,5 +141,8 @@ Node::Entry::Entry(std::string value)
       units(Node::Entry::ScalarUnits::kObjects),
       value_string(value),
       value_uint64(0) {}
+
+Edge::Edge(Node* source, Node* target, int priority)
+    : source_(source), target_(target), priority_(priority) {}
 
 }  // namespace memory_instrumentation

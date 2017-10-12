@@ -856,7 +856,7 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   // Set product name ("Chrome OS" or "Chromium OS") to be used in context
   // header of new-style notification.
   message_center::MessageCenter::Get()->SetProductOSName(
-      l10n_util::GetStringUTF16(IDS_PRODUCT_OS_NAME));
+      l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_OS_NAME));
 
   // Register all installed components for regular update.
   base::PostTaskWithTraitsAndReplyWithResult(
@@ -1054,8 +1054,7 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
   // fetch of the initial CrosSettings DeviceRebootOnShutdown policy.
   shutdown_policy_forwarder_ = base::MakeUnique<ShutdownPolicyForwarder>();
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ash::switches::kAshEnableNightLight)) {
+  if (ash::switches::IsNightLightEnabled()) {
     night_light_client_ = base::MakeUnique<NightLightClient>(
         g_browser_process->system_request_context());
     night_light_client_->Start();
