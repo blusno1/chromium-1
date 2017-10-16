@@ -36,6 +36,7 @@ NGLineBreaker::NGLineBreaker(
   if (break_token) {
     item_index_ = break_token->ItemIndex();
     offset_ = break_token->TextOffset();
+    previous_line_had_forced_break_ = break_token->IsForcedBreak();
     node.AssertOffset(item_index_, offset_);
   }
 }
@@ -61,7 +62,7 @@ bool NGLineBreaker::IsFirstFormattedLine() const {
 // Compute the base direction for bidi algorithm for this line.
 void NGLineBreaker::ComputeBaseDirection() {
   // If 'unicode-bidi' is not 'plaintext', use the base direction of the block.
-  if (!line_.is_after_forced_break ||
+  if (!previous_line_had_forced_break_ ||
       node_.Style().GetUnicodeBidi() != UnicodeBidi::kPlaintext)
     return;
   // If 'unicode-bidi: plaintext', compute the base direction for each paragraph
@@ -81,7 +82,7 @@ void NGLineBreaker::PrepareNextLine(const NGExclusionSpace& exclusion_space,
   item_results->clear();
   line_info->SetStartOffset(offset_);
   line_info->SetLineStyle(node_, constraint_space_, IsFirstFormattedLine(),
-                          line_.is_after_forced_break);
+                          previous_line_had_forced_break_);
   SetCurrentStyle(line_info->LineStyle());
   ComputeBaseDirection();
   line_info->SetBaseDirection(base_direction_);
@@ -568,12 +569,13 @@ NGLineBreaker::LineBreakState NGLineBreaker::HandleFloat(
     LayoutUnit origin_block_offset =
         container_bfc_offset.block_offset + content_offset_.block_offset;
 
-    NGPositionedFloat positioned_float = PositionFloat(
-        origin_block_offset, container_bfc_offset.block_offset,
-        unpositioned_float.get(), constraint_space_,
-        container_builder_->Size().inline_size, line_.exclusion_space.get());
+    NGPositionedFloat positioned_float =
+        PositionFloat(origin_block_offset, container_bfc_offset.block_offset,
+                      unpositioned_float.get(), constraint_space_,
+                      line_.exclusion_space.get());
     container_builder_->AddChild(positioned_float.layout_result,
-                                 positioned_float.logical_offset);
+                                 positioned_float.bfc_offset,
+                                 container_bfc_offset);
 
     // We need to recalculate the available_width as the float probably
     // consumed space on the line.
@@ -881,8 +883,9 @@ void NGLineBreaker::SkipCollapsibleWhitespaces() {
 RefPtr<NGInlineBreakToken> NGLineBreaker::CreateBreakToken() const {
   const Vector<NGInlineItem>& items = node_.Items();
   if (item_index_ >= items.size())
-    return nullptr;
-  return NGInlineBreakToken::Create(node_, item_index_, offset_);
+    return NGInlineBreakToken::Create(node_);
+  return NGInlineBreakToken::Create(node_, item_index_, offset_,
+                                    line_.is_after_forced_break);
 }
 
 }  // namespace blink

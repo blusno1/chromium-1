@@ -12,27 +12,4 @@ TestPaletteDelegate::TestPaletteDelegate() {}
 
 TestPaletteDelegate::~TestPaletteDelegate() {}
 
-std::unique_ptr<PaletteDelegate::EnableListenerSubscription>
-TestPaletteDelegate::AddPaletteEnableListener(
-    const EnableListener& on_state_changed) {
-  return nullptr;
-}
-
-void TestPaletteDelegate::CreateNote() {
-  ++create_note_count_;
-}
-
-bool TestPaletteDelegate::HasNoteApp() {
-  ++has_note_app_count_;
-  return has_note_app_;
-}
-
-bool TestPaletteDelegate::ShouldAutoOpenPalette() {
-  return should_auto_open_palette_;
-}
-
-bool TestPaletteDelegate::ShouldShowPalette() {
-  return should_show_palette_;
-}
-
 }  // namespace ash

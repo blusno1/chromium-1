@@ -39,8 +39,8 @@
 #include "core/frame/Settings.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "core/html/media/HTMLVideoElement.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutBox.h"
@@ -4550,7 +4550,7 @@ RefPtr<Image> WebGLRenderingContextBase::DrawImageIntoBuffer(
   // https://crbug.com/672299
   image->Draw(buf->Canvas(), flags, dest_rect, src_rect,
               kDoNotRespectImageOrientation,
-              Image::kDoNotClampImageToSourceRect);
+              Image::kDoNotClampImageToSourceRect, Image::kSyncDecode);
   return buf->NewImageSnapshot(kPreferNoAcceleration,
                                kSnapshotReasonWebGLDrawImageIntoBuffer);
 }

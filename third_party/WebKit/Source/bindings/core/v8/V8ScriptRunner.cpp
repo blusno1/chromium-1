@@ -207,25 +207,6 @@ v8::MaybeLocal<v8::Script> CompileAndProduceCache(
   return script;
 }
 
-// Compile a script, and consume or produce a V8 Cache, depending on whether the
-// given resource already has cached data available.
-v8::MaybeLocal<v8::Script> CompileAndConsumeOrProduce(
-    CachedMetadataHandler* cache_handler,
-    uint32_t tag,
-    v8::ScriptCompiler::CompileOptions consume_options,
-    v8::ScriptCompiler::CompileOptions produce_options,
-    CachedMetadataHandler::CacheType cache_type,
-    v8::Isolate* isolate,
-    v8::Local<v8::String> code,
-    v8::ScriptOrigin origin) {
-  RefPtr<CachedMetadata> code_cache(cache_handler->GetCachedMetadata(tag));
-  return code_cache.get()
-             ? CompileAndConsumeCache(cache_handler, code_cache,
-                                      consume_options, isolate, code, origin)
-             : CompileAndProduceCache(cache_handler, tag, produce_options,
-                                      cache_type, isolate, code, origin);
-}
-
 enum CacheTagKind {
   kCacheTagParser = 0,
   kCacheTagCode = 1,
@@ -328,7 +309,6 @@ typedef Function<v8::MaybeLocal<v8::Script>(v8::Isolate*,
 static CompileFn SelectCompileFunction(
     V8CacheOptions cache_options,
     CachedMetadataHandler* cache_handler,
-    RefPtr<CachedMetadata> code_cache,
     v8::Local<v8::String> code,
     V8CompileHistogram::Cacheability cacheability_if_no_handler) {
   static const int kMinimalCodeLength = 1024;
@@ -348,21 +328,32 @@ static CompileFn SelectCompileFunction(
 
   // The cacheOptions will guide our strategy:
   switch (cache_options) {
-    case kV8CacheOptionsParse:
+    case kV8CacheOptionsParse: {
       // Use parser-cache; in-memory only.
-      return WTF::Bind(CompileAndConsumeOrProduce,
-                       WrapPersistent(cache_handler),
-                       CacheTag(kCacheTagParser, cache_handler),
-                       v8::ScriptCompiler::kConsumeParserCache,
-                       v8::ScriptCompiler::kProduceParserCache,
+      uint32_t parser_tag = CacheTag(kCacheTagParser, cache_handler);
+      RefPtr<CachedMetadata> parser_cache(
+          cache_handler ? cache_handler->GetCachedMetadata(parser_tag)
+                        : nullptr);
+      if (parser_cache) {
+        return WTF::Bind(CompileAndConsumeCache, WrapPersistent(cache_handler),
+                         std::move(parser_cache),
+                         v8::ScriptCompiler::kConsumeParserCache);
+      }
+      return WTF::Bind(CompileAndProduceCache, WrapPersistent(cache_handler),
+                       parser_tag, v8::ScriptCompiler::kProduceParserCache,
                        CachedMetadataHandler::kCacheLocally);
       break;
+    }
 
     case kV8CacheOptionsDefault:
     case kV8CacheOptionsCode:
     case kV8CacheOptionsAlways: {
       // Use code caching for recently seen resources.
       // Use compression depending on the cache option.
+      RefPtr<CachedMetadata> code_cache(
+          cache_handler ? cache_handler->GetCachedMetadata(
+                              CacheTag(kCacheTagCode, cache_handler))
+                        : nullptr);
       if (code_cache) {
         return WTF::Bind(CompileAndConsumeCache, WrapPersistent(cache_handler),
                          std::move(code_cache),
@@ -412,6 +403,7 @@ CompileFn SelectCompileFunction(V8CacheOptions cache_options,
 v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
     ScriptState* script_state,
     const ScriptSourceCode& source,
+    const ScriptFetchOptions& fetch_options,
     AccessControlStatus access_control_status,
     V8CacheOptions cache_options) {
   v8::Isolate* isolate = script_state->GetIsolate();
@@ -419,13 +411,9 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
     V8ThrowException::ThrowError(isolate, "Source file too large.");
     return v8::Local<v8::Script>();
   }
-  // https://html.spec.whatwg.org/multipage/webappapis.html#default-classic-script-fetch-options
-  // The "default classic fetch options" credentials mode is "omit".
-  // TODO(kouhei): Follow html spec proposal to allow different credentials
-  // mode. https://github.com/whatwg/html/pull/3044
-  const ReferrerScriptInfo referrer_info(
-      WebURLRequest::kFetchCredentialsModeOmit, source.Nonce(),
-      source.ParserState());
+  const ReferrerScriptInfo referrer_info(fetch_options.CredentialsMode(),
+                                         fetch_options.Nonce(),
+                                         fetch_options.ParserState());
   return CompileScript(
       script_state, V8String(isolate, source.Source()), source.Url(),
       source.SourceMapUrl(), source.StartPosition(), source.GetResource(),
@@ -500,14 +488,10 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
     cacheability_if_no_handler =
         V8CompileHistogram::Cacheability::kInlineScript;
 
-  RefPtr<CachedMetadata> code_cache(
-      cache_handler ? cache_handler->GetCachedMetadata(
-                          CacheTag(kCacheTagCode, cache_handler))
-                    : nullptr);
   CompileFn compile_fn =
       streamer ? SelectCompileFunction(cache_options, resource, streamer)
-               : SelectCompileFunction(cache_options, cache_handler, code_cache,
-                                       code, cacheability_if_no_handler);
+               : SelectCompileFunction(cache_options, cache_handler, code,
+                                       cacheability_if_no_handler);
 
   return compile_fn(isolate, code, origin);
 }

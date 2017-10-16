@@ -187,7 +187,7 @@ void AddAdditionalRequestHeaders(net::HttpRequestHeaders* headers,
   if (frame_tree_node->IsMainFrame()) {
     // For main frame, the origin is the url currently loading.
     origin = url::Origin(url);
-  } else if ((frame_tree_node->effective_sandbox_flags() &
+  } else if ((frame_tree_node->effective_frame_policy().sandbox_flags &
               blink::WebSandboxFlags::kOrigin) ==
              blink::WebSandboxFlags::kNone) {
     // The origin should be the origin of the root, except for sandboxed
@@ -798,6 +798,35 @@ void NavigationRequest::OnResponseStarted(
 
   subresource_loader_factory_info_ = std::move(subresource_loader_factory_info);
 
+  // Since we've made the final pick for the RenderFrameHost above, the picked
+  // RenderFrameHost's process should be considered "tainted" for future
+  // process reuse decisions. That is, a site requiring a dedicated process
+  // should not reuse this process, unless it's same-site with the URL we're
+  // committing.  An exception is for URLs that do not "use up" the
+  // SiteInstance, such as about:blank or chrome-native://.
+  //
+  // Note that although NavigationThrottles could still cancel the navigation
+  // as part of WillProcessResponse below, we must update the process here,
+  // since otherwise there could be a race if a NavigationThrottle defers the
+  // navigation, and in the meantime another navigation reads the incorrect
+  // IsUnused() value from the same process when making a process reuse
+  // decision.
+  if (render_frame_host &&
+      SiteInstanceImpl::ShouldAssignSiteForURL(common_params_.url)) {
+    render_frame_host->GetProcess()->SetIsUsed();
+
+    // For sites that require a dedicated process, set the site URL now if it
+    // hasn't been set already. This will lock the process to that site, which
+    // will prevent other sites from incorrectly reusing this process. See
+    // https://crbug.com/738634.
+    SiteInstanceImpl* instance = render_frame_host->GetSiteInstance();
+    if (!instance->HasSite() &&
+        SiteInstanceImpl::DoesSiteRequireDedicatedProcess(
+            instance->GetBrowserContext(), common_params_.url)) {
+      instance->SetSite(common_params_.url);
+    }
+  }
+
   // Check if the navigation should be allowed to proceed.
   navigation_handle_->WillProcessResponse(
       render_frame_host, response->head.headers.get(),
@@ -945,7 +974,7 @@ void NavigationRequest::OnStartChecksComplete(
   // Only initialize the ServiceWorkerNavigationHandle if it can be created for
   // this frame.
   bool can_create_service_worker =
-      (frame_tree_node_->pending_sandbox_flags() &
+      (frame_tree_node_->pending_frame_policy().sandbox_flags &
        blink::WebSandboxFlags::kOrigin) != blink::WebSandboxFlags::kOrigin;
   request_params_.should_create_service_worker = can_create_service_worker;
   if (can_create_service_worker) {

@@ -79,6 +79,7 @@
 #include "chrome/browser/renderer_host/chrome_render_message_filter.h"
 #include "chrome/browser/renderer_host/pepper/chrome_browser_pepper_host_factory.h"
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
+#include "chrome/browser/resource_coordinator/chrome_browser_main_extra_parts_resource_coordinator.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_service.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_service_factory.h"
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
@@ -318,13 +319,6 @@
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h"
-#endif
-
-#if defined(USE_AURA)
-#include "services/service_manager/runner/common/client_util.h"
-#include "services/ui/public/cpp/gpu/gpu.h"
-#include "ui/aura/mus/window_tree_client.h"
-#include "ui/views/mus/mus_client.h"
 #endif
 
 #if defined(USE_X11)
@@ -922,6 +916,8 @@ content::BrowserMainParts* ChromeContentBrowserClient::CreateBrowserMainParts(
 #if defined(USE_X11)
   main_parts->AddParts(new ChromeBrowserMainExtraPartsX11());
 #endif
+
+  main_parts->AddParts(new ChromeBrowserMainExtraPartsResourceCoordinator);
 
   main_parts->AddParts(new ChromeBrowserMainExtraPartsProfiling);
 
@@ -1852,7 +1848,7 @@ void ChromeContentBrowserClient::AdjustUtilityServiceProcessCommandLine(
     base::CommandLine* command_line) {
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
   // Mash services do their own resource loading.
-  if (IsMashServiceName(identity.name())) {
+  if (mash_service_registry::IsMashServiceName(identity.name())) {
     // This switch is used purely for debugging to make it easier to know what
     // service a process is running.
     command_line->AppendSwitchASCII("mash-service-name", identity.name());
@@ -2686,15 +2682,6 @@ content::BrowserPpapiHost*
   return NULL;
 }
 
-gpu::GpuChannelEstablishFactory*
-ChromeContentBrowserClient::GetGpuChannelEstablishFactory() {
-#if defined(USE_AURA)
-  if (views::MusClient::Exists())
-    return views::MusClient::Get()->window_tree_client()->gpu();
-#endif
-  return nullptr;
-}
-
 bool ChromeContentBrowserClient::AllowPepperSocketAPI(
     content::BrowserContext* browser_context,
     const GURL& url,
@@ -3113,8 +3100,16 @@ void ChromeContentBrowserClient::RegisterOutOfProcessServices(
 
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kMash))
-    RegisterOutOfProcessServicesForMash(services);
+    mash_service_registry::RegisterOutOfProcessServices(services);
 #endif
+}
+
+bool ChromeContentBrowserClient::ShouldTerminateOnServiceQuit(
+    const service_manager::Identity& id) {
+#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+  return mash_service_registry::ShouldTerminateOnServiceQuit(id.name());
+#endif
+  return false;
 }
 
 std::unique_ptr<base::Value>

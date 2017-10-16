@@ -79,7 +79,7 @@ class CORE_EXPORT HTMLImageElement final
   String AltText() const final;
 
   ImageResourceContent* CachedImage() const {
-    return GetImageLoader().GetImage();
+    return GetImageLoader().GetContent();
   }
   ImageResource* CachedImageResourceForImageDocument() const {
     return GetImageLoader().ImageResourceForImageDocument();
@@ -135,6 +135,8 @@ class CORE_EXPORT HTMLImageElement final
 
   FormAssociated* ToFormAssociatedOrNull() override { return this; };
   void AssociateWith(HTMLFormElement*) override;
+
+  Image::ImageDecodingMode GetDecodingMode() const { return decoding_mode_; }
 
  protected:
   // Controls how an image element appears in the layout. See:
@@ -192,6 +194,7 @@ class CORE_EXPORT HTMLImageElement final
   void ResetFormOwner();
   ImageCandidate FindBestFitImageFromPictureParent();
   void SetBestFitURLAndDPRFromImageCandidate(const ImageCandidate&);
+  LayoutSize DensityCorrectedIntrinsicDimensions() const;
   HTMLImageLoader& GetImageLoader() const override { return *image_loader_; }
   void NotifyViewportChanged();
   void CreateMediaQueryListIfDoesNotExist();
@@ -203,6 +206,7 @@ class CORE_EXPORT HTMLImageElement final
   float image_device_pixel_ratio_;
   Member<HTMLSourceElement> source_;
   LayoutDisposition layout_disposition_;
+  Image::ImageDecodingMode decoding_mode_;
   unsigned form_was_set_by_parser_ : 1;
   unsigned element_created_by_parser_ : 1;
   unsigned is_fallback_image_ : 1;

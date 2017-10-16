@@ -1082,52 +1082,64 @@ bool DirectCompositionSurfaceWin::AreOverlaysSupported() {
 
 // static
 bool DirectCompositionSurfaceWin::IsHDRSupported() {
-  // When a D3D device is created, it creates a snapshot of the output adapters'
-  // properties. In order to get an up-to-date result, it is necessary to create
-  // a new D3D11Device for every query.
-  base::win::ScopedComPtr<ID3D11Device> d3d11_device;
-  base::win::ScopedComPtr<ID3D11DeviceContext> d3d11_device_context;
-  {
-    D3D_FEATURE_LEVEL feature_levels[] = {D3D_FEATURE_LEVEL_11_1,
-                                          D3D_FEATURE_LEVEL_11_0};
-    UINT flags = 0;
-    D3D_FEATURE_LEVEL feature_level_out = D3D_FEATURE_LEVEL_11_0;
-    HRESULT hr = D3D11CreateDevice(
-        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, feature_levels,
-        arraysize(feature_levels), D3D11_SDK_VERSION,
-        d3d11_device.GetAddressOf(), &feature_level_out,
-        d3d11_device_context.GetAddressOf());
-    if (FAILED(hr)) {
-      DLOG(ERROR) << "Failing to detect HDR, couldn't create D3D11 device.";
-    }
-  }
+  // HDR support was introduced in Windows 10 Creators Update.
+  if (base::win::GetVersion() < base::win::VERSION_WIN10_RS2)
+    return false;
 
-  base::win::ScopedComPtr<IDXGIDevice> dxgi_device;
-  d3d11_device.CopyTo(dxgi_device.GetAddressOf());
-  base::win::ScopedComPtr<IDXGIAdapter> dxgi_adapter;
-  dxgi_device->GetAdapter(dxgi_adapter.GetAddressOf());
+  HRESULT hr = S_OK;
+  base::win::ScopedComPtr<IDXGIFactory> factory;
+  hr = CreateDXGIFactory(__uuidof(IDXGIFactory),
+                         reinterpret_cast<void**>(factory.GetAddressOf()));
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "Failed to create DXGI factory.";
+    return false;
+  }
 
   bool hdr_monitor_found = false;
-  unsigned int i = 0;
-  while (true) {
-    base::win::ScopedComPtr<IDXGIOutput> output;
-    if (FAILED(dxgi_adapter->EnumOutputs(i++, output.GetAddressOf())))
+  for (UINT adapter_index = 0;; ++adapter_index) {
+    base::win::ScopedComPtr<IDXGIAdapter> adapter;
+    hr = factory->EnumAdapters(adapter_index, adapter.GetAddressOf());
+    if (hr == DXGI_ERROR_NOT_FOUND)
       break;
-    base::win::ScopedComPtr<IDXGIOutput6> output6;
-    if (FAILED(output.CopyTo(output6.GetAddressOf())))
-      continue;
+    if (FAILED(hr)) {
+      DLOG(ERROR) << "Unexpected error creating DXGI adapter.";
+      break;
+    }
 
-    DXGI_OUTPUT_DESC1 desc;
-    if (FAILED(output6->GetDesc1(&desc)))
-      continue;
+    for (UINT output_index = 0;; ++output_index) {
+      base::win::ScopedComPtr<IDXGIOutput> output;
+      hr = adapter->EnumOutputs(output_index, output.GetAddressOf());
+      if (hr == DXGI_ERROR_NOT_FOUND)
+        break;
+      if (FAILED(hr)) {
+        DLOG(ERROR) << "Unexpected error creating DXGI adapter.";
+        break;
+      }
 
-    UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.Output.ColorSpace", desc.ColorSpace);
-    UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.Output.MaxLuminance", desc.MaxLuminance);
+      base::win::ScopedComPtr<IDXGIOutput6> output6;
+      hr = output->QueryInterface(
+          __uuidof(IDXGIOutput6),
+          reinterpret_cast<void**>(output6.GetAddressOf()));
+      if (FAILED(hr)) {
+        DLOG(WARNING) << "IDXGIOutput6 is required for HDR detection.";
+        continue;
+      }
 
-    if (desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) {
-      hdr_monitor_found = true;
+      DXGI_OUTPUT_DESC1 desc;
+      if (FAILED(output6->GetDesc1(&desc))) {
+        DLOG(ERROR) << "Unexpected error getting output descriptor.";
+        continue;
+      }
+
+      UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.Output.ColorSpace", desc.ColorSpace);
+      UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.Output.MaxLuminance", desc.MaxLuminance);
+
+      if (desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) {
+        hdr_monitor_found = true;
+      }
     }
   }
+
   UMA_HISTOGRAM_BOOLEAN("GPU.Output.HDR", hdr_monitor_found);
   return hdr_monitor_found;
 }

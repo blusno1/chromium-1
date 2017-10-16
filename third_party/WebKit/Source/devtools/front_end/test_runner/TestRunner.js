@@ -571,6 +571,16 @@ TestRunner.formatters.formatAsTypeName = function(value) {
 
 /**
  * @param {*} value
+ * @return {string}
+ */
+TestRunner.formatters.formatAsTypeNameOrNull = function(value) {
+  if (value === null)
+    return 'null';
+  return TestRunner.formatters.formatAsTypeName(value);
+};
+
+/**
+ * @param {*} value
  * @return {string|!Date}
  */
 TestRunner.formatters.formatAsRecentTime = function(value) {
@@ -897,15 +907,22 @@ TestRunner.runWhenPageLoads = function(callback) {
 /**
  * @param {!Array<function(function():void)>} testSuite
  */
-TestRunner.runTestSuite = async function(testSuite) {
-  for (var test of testSuite) {
+TestRunner.runTestSuite = function(testSuite) {
+  var testSuiteTests = testSuite.slice();
+
+  function runner() {
+    if (!testSuiteTests.length) {
+      TestRunner.completeTest();
+      return;
+    }
+    var nextTest = testSuiteTests.shift();
     TestRunner.addResult('');
     TestRunner.addResult(
         'Running: ' +
-        /function\s([^(]*)/.exec(test)[1]);
-    await new Promise(fulfill => TestRunner.safeWrap(test)(fulfill));
+        /function\s([^(]*)/.exec(nextTest)[1]);
+    TestRunner.safeWrap(nextTest)(runner);
   }
-  TestRunner.completeTest();
+  runner();
 };
 
 /**
@@ -1045,7 +1062,8 @@ TestRunner.MockSetting = class {
  * @return {!Array<!Runtime.Module>}
  */
 TestRunner.loadedModules = function() {
-  return self.runtime._modules.filter(module => module._loadedForTest);
+  return self.runtime._modules.filter(module => module._loadedForTest)
+      .filter(module => module.name().indexOf('test_runner') === -1);
 };
 
 /**
@@ -1208,7 +1226,9 @@ TestRunner.runTest = async function() {
   TestRunner.executeTestScript();
 };
 
-SDK.targetManager.observeTargets(new TestRunner.TestObserver());
+// Old-style tests start test using inspector-test.js
+if (Runtime.queryParam('test'))
+  SDK.targetManager.observeTargets(new TestRunner.TestObserver());
 
 (function() {
 /**

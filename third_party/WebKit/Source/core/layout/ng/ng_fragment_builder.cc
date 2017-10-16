@@ -8,6 +8,7 @@
 #include "core/layout/ng/ng_block_node.h"
 #include "core/layout/ng/ng_break_token.h"
 #include "core/layout/ng/ng_exclusion_space.h"
+#include "core/layout/ng/ng_fragment.h"
 #include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
 
@@ -17,7 +18,7 @@ NGFragmentBuilder::NGFragmentBuilder(NGLayoutInputNode node,
                                      RefPtr<const ComputedStyle> style,
                                      NGWritingMode writing_mode,
                                      TextDirection direction)
-    : NGBaseFragmentBuilder(style, writing_mode, direction),
+    : NGContainerFragmentBuilder(style, writing_mode, direction),
       node_(node),
       layout_object_(node.GetLayoutObject()),
       did_break_(false) {}
@@ -26,20 +27,15 @@ NGFragmentBuilder::NGFragmentBuilder(LayoutObject* layout_object,
                                      RefPtr<const ComputedStyle> style,
                                      NGWritingMode writing_mode,
                                      TextDirection direction)
-    : NGBaseFragmentBuilder(style, writing_mode, direction),
+    : NGContainerFragmentBuilder(style, writing_mode, direction),
       node_(nullptr),
       layout_object_(layout_object),
       did_break_(false) {}
 
 NGFragmentBuilder::~NGFragmentBuilder() {}
 
-NGFragmentBuilder& NGFragmentBuilder::SetSize(const NGLogicalSize& size) {
-  size_ = size;
-  return *this;
-}
-
-NGFragmentBuilder& NGFragmentBuilder::SetBlockSize(LayoutUnit size) {
-  size_.block_size = size;
+NGFragmentBuilder& NGFragmentBuilder::SetBlockSize(LayoutUnit block_size) {
+  block_size_ = block_size;
   return *this;
 }
 
@@ -49,20 +45,28 @@ NGFragmentBuilder& NGFragmentBuilder::SetIntrinsicBlockSize(
   return *this;
 }
 
-NGFragmentBuilder& NGFragmentBuilder::AddChild(
+// TODO(ikilpatrick): Remove this once line-by-line refactoring is complete.
+// This is temporary code, which is duplicated from NGBlockLayoutAlgorithm.
+NGContainerFragmentBuilder& NGFragmentBuilder::AddChild(
     RefPtr<NGLayoutResult> child,
-    const NGLogicalOffset& child_offset) {
-  // Collect child's out of flow descendants.
-  for (const NGOutOfFlowPositionedDescendant& descendant :
-       child->OutOfFlowPositionedDescendants()) {
-    oof_positioned_candidates_.push_back(
-        NGOutOfFlowPositionedCandidate{descendant, child_offset});
-  }
+    const NGBfcOffset& child_bfc_offset,
+    const NGBfcOffset& parent_bfc_offset) {
+  NGFragment child_fragment(WritingMode(), *child->PhysicalFragment());
 
-  return AddChild(child->PhysicalFragment(), child_offset);
+  LayoutUnit relative_line_offset =
+      child_bfc_offset.line_offset - parent_bfc_offset.line_offset;
+
+  LayoutUnit inline_offset =
+      Direction() == TextDirection::kLtr
+          ? relative_line_offset
+          : inline_size_ - relative_line_offset - child_fragment.InlineSize();
+
+  return AddChild(child, NGLogicalOffset{inline_offset,
+                                         child_bfc_offset.block_offset -
+                                             parent_bfc_offset.block_offset});
 }
 
-NGFragmentBuilder& NGFragmentBuilder::AddChild(
+NGContainerFragmentBuilder& NGFragmentBuilder::AddChild(
     RefPtr<NGPhysicalFragment> child,
     const NGLogicalOffset& child_offset) {
   switch (child->Type()) {
@@ -86,10 +90,7 @@ NGFragmentBuilder& NGFragmentBuilder::AddChild(
       break;
   }
 
-  children_.push_back(std::move(child));
-  offsets_.push_back(child_offset);
-
-  return *this;
+  return NGContainerFragmentBuilder::AddChild(std::move(child), child_offset);
 }
 
 NGFragmentBuilder& NGFragmentBuilder::AddBreakBeforeChild(
@@ -120,11 +121,6 @@ NGFragmentBuilder& NGFragmentBuilder::PropagateBreak(
   return *this;
 }
 
-NGFragmentBuilder& NGFragmentBuilder::SetBfcOffset(const NGBfcOffset& offset) {
-  bfc_offset_ = offset;
-  return *this;
-}
-
 NGFragmentBuilder& NGFragmentBuilder::AddOutOfFlowChildCandidate(
     NGBlockNode child,
     const NGLogicalOffset& child_offset) {
@@ -143,8 +139,8 @@ NGFragmentBuilder& NGFragmentBuilder::AddOutOfFlowChildCandidate(
 void NGFragmentBuilder::AddOutOfFlowLegacyCandidate(
     NGBlockNode node,
     const NGStaticPosition& static_position) {
-  DCHECK_GE(size_.inline_size, LayoutUnit());
-  DCHECK_GE(size_.block_size, LayoutUnit());
+  DCHECK_GE(inline_size_, LayoutUnit());
+  DCHECK_GE(block_size_, LayoutUnit());
 
   NGOutOfFlowPositionedDescendant descendant{node, static_position};
   // Need 0,0 physical coordinates as child offset. Because offset
@@ -155,21 +151,21 @@ void NGFragmentBuilder::AddOutOfFlowLegacyCandidate(
       if (IsLtr(Direction()))
         zero_offset = NGLogicalOffset();
       else
-        zero_offset = NGLogicalOffset(size_.inline_size, LayoutUnit());
+        zero_offset = NGLogicalOffset(inline_size_, LayoutUnit());
       break;
     case kVerticalRightLeft:
     case kSidewaysRightLeft:
       if (IsLtr(Direction()))
-        zero_offset = NGLogicalOffset(LayoutUnit(), size_.block_size);
+        zero_offset = NGLogicalOffset(LayoutUnit(), block_size_);
       else
-        zero_offset = NGLogicalOffset(size_.inline_size, size_.block_size);
+        zero_offset = NGLogicalOffset(inline_size_, block_size_);
       break;
     case kVerticalLeftRight:
     case kSidewaysLeftRight:
       if (IsLtr(Direction()))
         zero_offset = NGLogicalOffset();
       else
-        zero_offset = NGLogicalOffset(size_.inline_size, LayoutUnit());
+        zero_offset = NGLogicalOffset(inline_size_, LayoutUnit());
       break;
   }
   oof_positioned_candidates_.push_back(
@@ -182,9 +178,9 @@ void NGFragmentBuilder::GetAndClearOutOfFlowDescendantCandidates(
 
   descendant_candidates->ReserveCapacity(oof_positioned_candidates_.size());
 
-  DCHECK_GE(size_.inline_size, LayoutUnit());
-  DCHECK_GE(size_.block_size, LayoutUnit());
-  NGPhysicalSize builder_physical_size{size_.ConvertToPhysical(WritingMode())};
+  DCHECK_GE(inline_size_, LayoutUnit());
+  DCHECK_GE(block_size_, LayoutUnit());
+  NGPhysicalSize builder_physical_size{Size().ConvertToPhysical(WritingMode())};
 
   for (NGOutOfFlowPositionedCandidate& candidate : oof_positioned_candidates_) {
     NGPhysicalOffset child_offset = candidate.child_offset.ConvertToPhysical(
@@ -209,18 +205,6 @@ void NGFragmentBuilder::GetAndClearOutOfFlowDescendantCandidates(
   oof_positioned_candidates_.clear();
 }
 
-NGFragmentBuilder& NGFragmentBuilder::AddOutOfFlowDescendant(
-    NGOutOfFlowPositionedDescendant descendant) {
-  oof_positioned_descendants_.push_back(descendant);
-  return *this;
-}
-
-NGFragmentBuilder& NGFragmentBuilder::SetExclusionSpace(
-    std::unique_ptr<const NGExclusionSpace> exclusion_space) {
-  exclusion_space_ = std::move(exclusion_space);
-  return *this;
-}
-
 void NGFragmentBuilder::AddBaseline(NGBaselineRequest request,
                                     LayoutUnit offset) {
 #if DCHECK_IS_ON()
@@ -233,7 +217,7 @@ void NGFragmentBuilder::AddBaseline(NGBaselineRequest request,
 RefPtr<NGLayoutResult> NGFragmentBuilder::ToBoxFragment() {
   DCHECK_EQ(offsets_.size(), children_.size());
 
-  NGPhysicalSize physical_size = size_.ConvertToPhysical(WritingMode());
+  NGPhysicalSize physical_size = Size().ConvertToPhysical(WritingMode());
 
   NGPhysicalOffsetRect contents_visual_rect({}, physical_size);
   for (size_t i = 0; i < children_.size(); ++i) {

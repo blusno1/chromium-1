@@ -89,13 +89,6 @@ const char kBypassAppBannerEngagementChecksDescription[] =
     "eligibility requirements for showing app banners, such as having a "
     "manifest, are met.";
 
-const char kCaptureThumbnailOnNavigatingAwayName[] =
-    "Capture page thumbnail on navigating away";
-const char kCaptureThumbnailOnNavigatingAwayDescription[] =
-    "Capture a page thumbnail (for use on the New Tab page) when navigating "
-    "away from the current page, in addition to other times a thumbnail may be "
-    "captured.";
-
 const char kCastStreamingHwEncodingName[] =
     "Cast Streaming hardware video encoding";
 const char kCastStreamingHwEncodingDescription[] =
@@ -252,11 +245,6 @@ const char kEnableAsmWasmDescription[] =
     R"*(Validate Asm.js when "use asm" is present and then convert to )*"
     R"*(WebAssembly.)*";
 
-const char kEnableAutofillCreditCardAblationExperimentDisplayName[] =
-    "Credit card autofill ablation experiment.";
-const char kEnableAutofillCreditCardAblationExperimentDescription[] =
-    "If enabled, credit card autofill suggestions will not display.";
-
 const char kEnableAutofillCreditCardBankNameDisplayName[] =
     "Display the issuer bank name of a credit card in autofill.";
 const char kEnableAutofillCreditCardBankNameDisplayDescription[] =
@@ -284,6 +272,13 @@ const char kEnableAutofillCreditCardUploadNewUiName[] =
 const char kEnableAutofillCreditCardUploadNewUiDescription[] =
     "If enabled, displays a new save card bubble/infobar design when offering "
     "to upload credit cards to Google Payments.";
+
+const char kEnableAutofillSendBillingCustomerNumberName[] =
+    "Enable autofill sending billing customer number when calling Google "
+    "Payments";
+const char kEnableAutofillSendBillingCustomerNumberDescription[] =
+    "If enabled, autofill sends billing customer number when calling Google "
+    "Payments.";
 
 const char kEnableBreakingNewsPushName[] = "Breaking News Push";
 const char kEnableBreakingNewsPushDescription[] =
@@ -545,6 +540,10 @@ const char kExperimentalSecurityFeaturesDescription[] =
     "pages that you visit on a daily basis. Strict mixed content checking, for "
     "example. And locking powerful features to secure contexts. This flag will "
     "probably annoy you.";
+
+const char kExperimentalVRFeaturesName[] = "Experimental VR features";
+const char kExperimentalVRFeaturesDescription[] =
+    "Enables VR browsing features that are under development.";
 
 const char kExperimentalWebPlatformFeaturesName[] =
     "Experimental Web Platform features";
@@ -1314,6 +1313,7 @@ const char kTopChromeMd[] = "UI Layout for the browser's top chrome";
 const char kTopChromeMdDescription[] =
     R"*(Toggles between normal and touch (formerly "hybrid") layouts.)*";
 const char kTopChromeMdMaterial[] = "Normal";
+const char kTopChromeMdMaterialAuto[] = "Auto";
 const char kTopChromeMdMaterialHybrid[] = "Touch";
 
 const char kThreadedScrollingName[] = "Threaded scrolling";
@@ -2047,12 +2047,6 @@ const char kThirdPartyDoodlesDescription[] =
     "Enables fetching and displaying Doodles on the NTP for third-party search "
     "engines.";
 
-const char kXGEOVisibleNetworksName[] = "Enable XGEO Visible Networks";
-const char kXGEOVisibleNetworksDescription[] =
-    "If location permissions are granted, include visible networks in the XGEO "
-    "Header for omnibox queries. This will only happen if location is not "
-    "fresh or not available (for example, due to a cold start).";
-
 // Non-Android -----------------------------------------------------------------
 
 #else  // !defined(OS_ANDROID)
@@ -2349,12 +2343,6 @@ const char kDisableLockScreenAppsDescription[] =
     "Disable new-note action handler apps on the lock screen. The user will "
     "not be able to launch the preferred note-taking action from the lock "
     "screen, provided that the app supports lock screen note taking.";
-
-const char kDisableNewVirtualKeyboardBehaviorName[] =
-    "New window behavior for the accessibility keyboard";
-const char kDisableNewVirtualKeyboardBehaviorDescription[] =
-    "Disable new window behavior for the accessibility keyboard in non-sticky "
-    "mode (do not change work area in non-sticky mode).";
 
 const char kDisableTabletAutohideTitlebarsName[] =
     "Disable autohide titlebars in tablet mode";

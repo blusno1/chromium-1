@@ -221,7 +221,7 @@ public class ChromeTabbedActivity
     private static final long TIME_SINCE_BACKGROUNDED_TO_SHOW_BOTTOM_SHEET_HALF_MS = 10800000L;
 
     // Name of the ChromeTabbedActivity alias that handles MAIN intents.
-    private static final String MAIN_LAUNCHER_ACTIVITY_NAME = "com.google.android.apps.chrome.Main";
+    public static final String MAIN_LAUNCHER_ACTIVITY_NAME = "com.google.android.apps.chrome.Main";
 
     private final ActivityStopMetrics mActivityStopMetrics;
     private final MainIntentBehaviorMetrics mMainIntentMetrics;
@@ -414,6 +414,11 @@ public class ChromeTabbedActivity
                 @Override
                 public void didCloseTab(int tabId, boolean incognito) {
                     closeIfNoTabsAndHomepageEnabled(false);
+                    if (!isFinishing() && FeatureUtilities.isChromeHomeEnabled()
+                            && getTabModelSelector().getTotalTabCount() == 0) {
+                        getBottomSheet().displayNewTabUi(incognito);
+                        getBottomSheet().setSheetState(BottomSheet.SHEET_STATE_HALF, true);
+                    }
                 }
 
                 @Override
@@ -510,7 +515,9 @@ public class ChromeTabbedActivity
                     if (!DataReductionPromoScreen.launchDataReductionPromo(
                                 this, currentModel.isIncognito())) {
                         if (FeatureUtilities.shouldShowChromeHomePromoForStartup()) {
-                            new ChromeHomePromoDialog(this).show();
+                            new ChromeHomePromoDialog(
+                                    this, ChromeHomePromoDialog.ShowReason.STARTUP)
+                                    .show();
                         } else if (getBottomSheet() != null) {
                             getBottomSheet().showHelpBubbleIfNecessary();
                         }
@@ -1609,7 +1616,9 @@ public class ChromeTabbedActivity
                         if (getBottomSheet() != null
                                 && ChromeFeatureList.isEnabled(
                                            ChromeFeatureList.CHROME_HOME_PROMO)) {
-                            new ChromeHomePromoDialog(ChromeTabbedActivity.this).show();
+                            new ChromeHomePromoDialog(ChromeTabbedActivity.this,
+                                    ChromeHomePromoDialog.ShowReason.MENU)
+                                    .show();
                             return;
                         }
 

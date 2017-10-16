@@ -51,6 +51,10 @@
 #include "media/gpu/android/content_video_view_overlay_allocator.h"
 #endif
 
+#if defined(OS_WIN)
+#include "gpu/ipc/service/direct_composition_surface_win.h"
+#endif
+
 namespace viz {
 
 namespace {
@@ -153,14 +157,14 @@ void GpuServiceImpl::UpdateGPUInfoFromPreferences(
 }
 
 void GpuServiceImpl::InitializeWithHost(
-    ui::mojom::GpuHostPtr gpu_host,
+    mojom::GpuHostPtr gpu_host,
     gpu::GpuProcessActivityFlags activity_flags,
     gpu::SyncPointManager* sync_point_manager,
     base::WaitableEvent* shutdown_event) {
   DCHECK(main_runner_->BelongsToCurrentThread());
   gpu_host->DidInitialize(gpu_info_, gpu_feature_info_);
-  gpu_host_ = ui::mojom::ThreadSafeGpuHostPtr::Create(gpu_host.PassInterface(),
-                                                      io_runner_);
+  gpu_host_ =
+      mojom::ThreadSafeGpuHostPtr::Create(gpu_host.PassInterface(), io_runner_);
   if (!in_host_process()) {
     // The global callback is reset from the dtor. So Unretained() here is safe.
     // Note that the callback can be called from any thread. Consequently, the
@@ -312,6 +316,24 @@ void GpuServiceImpl::RequestCompleteGpuInfo(
 #endif
           },
           this, std::move(callback))));
+}
+
+void GpuServiceImpl::RequestHDRStatus(RequestHDRStatusCallback callback) {
+  DCHECK(io_runner_->BelongsToCurrentThread());
+  main_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&GpuServiceImpl::RequestHDRStatusOnMainThread,
+                                weak_ptr_, std::move(callback)));
+}
+
+void GpuServiceImpl::RequestHDRStatusOnMainThread(
+    RequestHDRStatusCallback callback) {
+  DCHECK(main_runner_->BelongsToCurrentThread());
+  bool hdr_enabled = false;
+#if defined(OS_WIN)
+  hdr_enabled = gpu::DirectCompositionSurfaceWin::IsHDRSupported();
+#endif
+  io_runner_->PostTask(FROM_HERE,
+                       base::BindOnce(std::move(callback), hdr_enabled));
 }
 
 #if defined(OS_MACOSX)

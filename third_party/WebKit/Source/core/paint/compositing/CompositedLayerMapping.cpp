@@ -34,9 +34,10 @@
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLIFrameElement.h"
-#include "core/html/HTMLMediaElement.h"
-#include "core/html/HTMLVideoElement.h"
+#include "core/html/HTMLImageElement.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
+#include "core/html/media/HTMLMediaElement.h"
+#include "core/html/media/HTMLVideoElement.h"
 #include "core/html_names.h"
 #include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutEmbeddedObject.h"
@@ -254,7 +255,7 @@ void CompositedLayerMapping::CreatePrimaryGraphicsLayer() {
       CreateGraphicsLayer(owning_layer_.GetCompositingReasons(),
                           owning_layer_.GetSquashingDisallowedReasons());
 
-  UpdateShouldHitTest(true);
+  UpdateHitTestableWithoutDrawsContent(true);
   UpdateOpacity(GetLayoutObject().StyleRef());
   UpdateTransform(GetLayoutObject().StyleRef());
   UpdateFilters(GetLayoutObject().StyleRef());
@@ -281,8 +282,9 @@ void CompositedLayerMapping::DestroyGraphicsLayers() {
   scrolling_contents_layer_ = nullptr;
 }
 
-void CompositedLayerMapping::UpdateShouldHitTest(const bool& should_hit_test) {
-  graphics_layer_->SetShouldHitTest(should_hit_test);
+void CompositedLayerMapping::UpdateHitTestableWithoutDrawsContent(
+    const bool& should_hit_test) {
+  graphics_layer_->SetHitTestableWithoutDrawsContent(should_hit_test);
 }
 
 void CompositedLayerMapping::UpdateOpacity(const ComputedStyle& style) {
@@ -502,11 +504,39 @@ void CompositedLayerMapping::UpdateCompositedBounds() {
   content_offset_in_compositing_layer_dirty_ = true;
 }
 
+GraphicsLayer* CompositedLayerMapping::FrameContentsGraphicsLayer() const {
+  Node* node = GetLayoutObject().GetNode();
+  if (!node->IsFrameOwnerElement())
+    return nullptr;
+
+  Document* document = ToHTMLFrameOwnerElement(node)->contentDocument();
+  if (!document)
+    return nullptr;
+
+  LayoutView* layoutView = document->GetLayoutView();
+  if (!layoutView)
+    return nullptr;
+
+  DCHECK(layoutView->HasLayer());
+  PaintLayer* layer = layoutView->Layer();
+  if (!layer->IsAllowedToQueryCompositingState() ||
+      !layer->HasCompositedLayerMapping()) {
+    // If the child frame's compositing update is still pending, it will compute
+    // its own GraphicsLayer location with FrameOwnerContentsLocation().
+    return nullptr;
+  }
+
+  return layer->GetCompositedLayerMapping()->MainGraphicsLayer();
+}
+
 void CompositedLayerMapping::UpdateAfterPartResize() {
   if (GetLayoutObject().IsLayoutEmbeddedContent()) {
-    if (PaintLayerCompositor* inner_compositor =
-            PaintLayerCompositor::FrameContentsCompositor(
-                ToLayoutEmbeddedContent(GetLayoutObject()))) {
+    if (RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+      if (GraphicsLayer* document_layer = FrameContentsGraphicsLayer())
+        document_layer->SetPosition(FlooredIntPoint(ContentsBox().Location()));
+    } else if (PaintLayerCompositor* inner_compositor =
+                   PaintLayerCompositor::FrameContentsCompositor(
+                       ToLayoutEmbeddedContent(GetLayoutObject()))) {
       inner_compositor->FrameViewDidChangeSize();
       // We can floor this point because our frameviews are always aligned to
       // pixel boundaries.
@@ -797,7 +827,7 @@ bool CompositedLayerMapping::UpdateGraphicsLayerConfiguration() {
     if (IsDirectlyCompositedImage()) {
       UpdateImageContents();
     } else if (graphics_layer_->HasContentsLayer()) {
-      graphics_layer_->SetContentsToImage(nullptr);
+      graphics_layer_->SetContentsToImage(nullptr, Image::kUnspecifiedDecode);
     }
   }
 
@@ -1238,6 +1268,26 @@ void CompositedLayerMapping::UpdateMainGraphicsLayerGeometry(
       EBackfaceVisibility::kVisible);
 }
 
+LayoutPoint CompositedLayerMapping::FrameOwnerContentsLocation() const {
+  LocalFrame* frame = GetLayoutObject().GetFrame();
+  DCHECK(frame && !frame->IsLocalRoot());
+
+  HTMLFrameOwnerElement* owner = ToHTMLFrameOwnerElement(frame->Owner());
+  LayoutObject* ownerLayoutObject = owner->GetLayoutObject();
+  if (!ownerLayoutObject->HasLayer())
+    return LayoutPoint();
+
+  PaintLayer* ownerLayer = ToLayoutBoxModelObject(ownerLayoutObject)->Layer();
+  if (!ownerLayer->IsAllowedToQueryCompositingState() ||
+      !ownerLayer->HasCompositedLayerMapping()) {
+    // If the parent frame's compositing update is still pending, it will adjust
+    // our position in UpdateAfterPartResize.
+    return LayoutPoint();
+  }
+
+  return ownerLayer->GetCompositedLayerMapping()->ContentsBox().Location();
+}
+
 void CompositedLayerMapping::ComputeGraphicsLayerParentLocation(
     const PaintLayer* compositing_container,
     const IntRect& ancestor_compositing_bounds,
@@ -1265,6 +1315,11 @@ void CompositedLayerMapping::ComputeGraphicsLayerParentLocation(
   } else if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
     graphics_layer_parent_location =
         GetLayoutObject().View()->DocumentRect().Location();
+  } else if (!GetLayoutObject().GetFrame()->IsLocalRoot()) {  // TODO(oopif)
+    DCHECK(RuntimeEnabledFeatures::RootLayerScrollingEnabled() &&
+           !compositing_container);
+    graphics_layer_parent_location =
+        -FlooredIntPoint(FrameOwnerContentsLocation());
   }
 
   if (compositing_container &&
@@ -1666,7 +1721,7 @@ void CompositedLayerMapping::UpdateForegroundLayerGeometry(
     foreground_layer_->SetNeedsDisplay();
   }
   foreground_layer_->SetOffsetFromLayoutObject(foreground_offset);
-  foreground_layer_->SetShouldHitTest(true);
+  foreground_layer_->SetHitTestableWithoutDrawsContent(true);
 
   // NOTE: there is some more configuring going on in
   // updateScrollingLayerGeometry().
@@ -2435,7 +2490,7 @@ bool CompositedLayerMapping::UpdateScrollingLayers(
       // Inner layer which renders the content that scrolls.
       scrolling_contents_layer_ =
           CreateGraphicsLayer(kCompositingReasonLayerForScrollingContents);
-      scrolling_contents_layer_->SetShouldHitTest(true);
+      scrolling_contents_layer_->SetHitTestableWithoutDrawsContent(true);
 
       auto element_id = scrollable_area->GetCompositorElementId();
       scrolling_contents_layer_->SetElementId(element_id);
@@ -2815,9 +2870,15 @@ void CompositedLayerMapping::UpdateImageContents() {
   if (!image)
     return;
 
+  Node* node = image_layout_object.GetNode();
+  Image::ImageDecodingMode decode_mode =
+      IsHTMLImageElement(node) ? ToHTMLImageElement(node)->GetDecodingMode()
+                               : Image::kUnspecifiedDecode;
+
   // This is a no-op if the layer doesn't have an inner layer for the image.
   graphics_layer_->SetContentsToImage(
-      image, LayoutObject::ShouldRespectImageOrientation(&image_layout_object));
+      image, decode_mode,
+      LayoutObject::ShouldRespectImageOrientation(&image_layout_object));
 
   graphics_layer_->SetFilterQuality(
       GetLayoutObject().Style()->ImageRendering() == EImageRendering::kPixelated

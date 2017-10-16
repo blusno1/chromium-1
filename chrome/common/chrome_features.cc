@@ -123,18 +123,6 @@ const base::Feature kTabStripKeyboardFocus{"TabStripKeyboardFocus",
 // Enables Basic/Advanced tabs in ClearBrowsingData.
 const base::Feature kTabsInCbd{"TabsInCBD", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// If enabled, we'll only take thumbnails of unknown URLs (i.e. URLs that are
-// not (yet) part of TopSites) if they have an interesting transition type, i.e.
-// one that qualifies for inclusion in TopSites.
-const base::Feature kCaptureThumbnailDependingOnTransitionType{
-    "CaptureThumbnailDependingOnTransitionType",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Whether to capture page thumbnails when navigating away from the current page
-// (in addition to any other times this might happen).
-const base::Feature kCaptureThumbnailOnNavigatingAway{
-    "CaptureThumbnailOnNavigatingAway", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Whether to trigger app banner installability checks on page load.
 const base::Feature kCheckInstallabilityForBannerOnLoad{
     "CheckInstallabilityForBannerOnLoad", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -178,7 +166,7 @@ const base::Feature kDoodlesOnLocalNtp{"DoodlesOnLocalNtp",
 #if defined(OS_ANDROID)
 // Enables downloads as a foreground service for all versions of Android.
 const base::Feature kDownloadsForeground{"DownloadsForeground",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 // Enables Expect CT reporting, which sends reports for opted-in sites
@@ -195,6 +183,12 @@ const base::Feature kExperimentalAppBanners{"ExperimentalAppBanners",
 // system-reserved keyboard shortcuts.
 const base::Feature kExperimentalKeyboardLockUI{
     "ExperimentalKeyboardLockUI", base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if BUILDFLAG(ENABLE_VR)
+// Enables features related to VR browsing that are under development.
+const base::Feature kExperimentalVRFeatures{"ExperimentalVRFeatures",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 #if defined(OS_WIN)
 // Enables using GDI to print text as simply text.
@@ -492,7 +486,7 @@ const base::Feature kCrOSContainer{"CrOSContainer",
 
 // Enables or disables Instant Tethering on Chrome OS.
 const base::Feature kInstantTethering{"InstantTethering",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables EasyUnlock promotions on Chrome OS.
 const base::Feature kEasyUnlockPromotions{"EasyUnlockPromotions",

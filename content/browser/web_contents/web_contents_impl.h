@@ -454,9 +454,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   bool IsFullscreenForCurrentTab() const override;
   void ExitFullscreen(bool will_cause_resize) override;
   void ResumeLoadingCreatedWebContents() override;
-  void OnPasswordInputShownOnHttp() override;
-  void OnAllPasswordInputsHiddenOnHttp() override;
-  void OnCreditCardInputShownOnHttp() override;
   void SetIsOverlayContent(bool is_overlay_content) override;
   bool IsFocusedElementEditable() override;
   void ClearFocusedElement() override;
@@ -1317,6 +1314,9 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Sets the visibility of immediate child views, i.e. views whose parent view
   // is that of the main frame.
   void SetVisibilityForChildViews(bool visible);
+
+  // Reattaches this inner WebContents to its outer WebContents.
+  void ReattachToOuterWebContentsFrame();
 
   // Data for core operation ---------------------------------------------------
 

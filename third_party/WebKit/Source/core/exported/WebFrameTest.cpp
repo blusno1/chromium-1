@@ -73,9 +73,9 @@
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLIFrameElement.h"
-#include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageDocument.h"
 #include "core/html/forms/HTMLFormElement.h"
+#include "core/html/media/HTMLVideoElement.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/DevToolsEmulator.h"
 #include "core/layout/HitTestResult.h"
@@ -8772,8 +8772,8 @@ static void NodeImageTestValidation(const IntSize& reference_bitmap_size,
   EXPECT_EQ(reference_bitmap_size.Width(), drag_image->Size().Width());
   EXPECT_EQ(reference_bitmap_size.Height(), drag_image->Size().Height());
   const SkBitmap& drag_bitmap = drag_image->Bitmap();
-  EXPECT_EQ(
-      0, memcmp(bitmap.getPixels(), drag_bitmap.getPixels(), bitmap.getSize()));
+  EXPECT_EQ(0, memcmp(bitmap.getPixels(), drag_bitmap.getPixels(),
+                      bitmap.computeByteSize()));
 }
 
 TEST_P(ParameterizedWebFrameTest, NodeImageTestCSSTransformDescendant) {

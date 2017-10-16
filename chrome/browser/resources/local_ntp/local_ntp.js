@@ -89,7 +89,7 @@ var IDS = {
   LOGO_DEFAULT: 'logo-default',
   LOGO_DOODLE: 'logo-doodle',
   LOGO_DOODLE_IMAGE: 'logo-doodle-image',
-  LOGO_DOODLE_LINK: 'logo-doodle-link',
+  LOGO_DOODLE_BUTTON: 'logo-doodle-button',
   LOGO_DOODLE_NOTIFIER: 'logo-doodle-notifier',
   NOTIFICATION: 'mv-notice',
   NOTIFICATION_CLOSE_BUTTON: 'mv-notice-x',
@@ -674,6 +674,9 @@ function init() {
       state.notheme = true;
       window.history.replaceState(state, document.title);
       onThemeChange();
+      if (e.detail === 0) {  // Activated by keyboard.
+        $(IDS.LOGO_DOODLE_BUTTON).focus();
+      }
     });
   } else {
     document.body.classList.add(CLASSES.NON_GOOGLE_PAGE);
@@ -701,7 +704,6 @@ function init() {
   // Create the most visited iframe.
   var iframe = document.createElement('iframe');
   iframe.id = IDS.TILES_IFRAME;
-  iframe.tabIndex = 1;
   iframe.src = 'chrome-search://most-visited/single.html?' + args.join('&');
   $(IDS.TILES).appendChild(iframe);
 
@@ -909,26 +911,25 @@ var onDoodleTransitionEnd = function(e) {
 
 
 var applyDoodleMetadata = function(metadata) {
-  var logoDoodleLink = $(IDS.LOGO_DOODLE_LINK);
+  var logoDoodleButton = $(IDS.LOGO_DOODLE_BUTTON);
   var logoDoodleImage = $(IDS.LOGO_DOODLE_IMAGE);
 
   logoDoodleImage.title = metadata.altText;
 
   if (metadata.animatedUrl) {
-    logoDoodleLink.removeAttribute('href');
-    logoDoodleLink.onclick = function(e) {
+    logoDoodleButton.onclick = function(e) {
       ntpApiHandle.logEvent(LOG_TYPE.NTP_CTA_LOGO_CLICKED);
       e.preventDefault();
       logoDoodleImage.src = metadata.animatedUrl;
-      logoDoodleLink.href = metadata.onClickUrl;
-      logoDoodleLink.onclick = function() {
+      logoDoodleButton.onclick = function() {
         ntpApiHandle.logEvent(LOG_TYPE.NTP_ANIMATED_LOGO_CLICKED);
+        window.location = metadata.onClickUrl;
       };
     };
   } else {
-    logoDoodleLink.href = metadata.onClickUrl;
-    logoDoodleLink.onclick = function() {
+    logoDoodleButton.onclick = function() {
       ntpApiHandle.logEvent(LOG_TYPE.NTP_STATIC_LOGO_CLICKED);
+      window.location = metadata.onClickUrl;
     };
   }
 };

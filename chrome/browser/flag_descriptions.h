@@ -81,9 +81,6 @@ extern const char kBrowserTaskSchedulerDescription[];
 extern const char kBypassAppBannerEngagementChecksName[];
 extern const char kBypassAppBannerEngagementChecksDescription[];
 
-extern const char kCaptureThumbnailOnNavigatingAwayName[];
-extern const char kCaptureThumbnailOnNavigatingAwayDescription[];
-
 extern const char kCastStreamingHwEncodingName[];
 extern const char kCastStreamingHwEncodingDescription[];
 
@@ -183,9 +180,6 @@ extern const char kEmbeddedExtensionOptionsDescription[];
 extern const char kEnableAsmWasmName[];
 extern const char kEnableAsmWasmDescription[];
 
-extern const char kEnableAutofillCreditCardAblationExperimentDisplayName[];
-extern const char kEnableAutofillCreditCardAblationExperimentDescription[];
-
 extern const char kEnableAutofillCreditCardBankNameDisplayName[];
 extern const char kEnableAutofillCreditCardBankNameDisplayDescription[];
 
@@ -200,6 +194,9 @@ extern const char kEnableAutofillCreditCardUploadGoogleLogoDescription[];
 
 extern const char kEnableAutofillCreditCardUploadNewUiName[];
 extern const char kEnableAutofillCreditCardUploadNewUiDescription[];
+
+extern const char kEnableAutofillSendBillingCustomerNumberName[];
+extern const char kEnableAutofillSendBillingCustomerNumberDescription[];
 
 extern const char kEnableBreakingNewsPushName[];
 extern const char kEnableBreakingNewsPushDescription[];
@@ -350,6 +347,9 @@ extern const char kExperimentalKeyboardLockUiDescription[];
 
 extern const char kExperimentalSecurityFeaturesName[];
 extern const char kExperimentalSecurityFeaturesDescription[];
+
+extern const char kExperimentalVRFeaturesName[];
+extern const char kExperimentalVRFeaturesDescription[];
 
 extern const char kExperimentalWebPlatformFeaturesName[];
 extern const char kExperimentalWebPlatformFeaturesDescription[];
@@ -815,6 +815,7 @@ extern const char kTcpFastOpenDescription[];
 extern const char kTopChromeMd[];
 extern const char kTopChromeMdDescription[];
 extern const char kTopChromeMdMaterial[];
+extern const char kTopChromeMdMaterialAuto[];
 extern const char kTopChromeMdMaterialHybrid[];
 
 extern const char kThreadedScrollingName[];
@@ -1247,9 +1248,6 @@ extern const char kUseAndroidMidiApiDescription[];
 extern const char kThirdPartyDoodlesName[];
 extern const char kThirdPartyDoodlesDescription[];
 
-extern const char kXGEOVisibleNetworksName[];
-extern const char kXGEOVisibleNetworksDescription[];
-
 // Non-Android ----------------------------------------------------------------
 
 #else  // !defined(OS_ANDROID)
@@ -1445,9 +1443,6 @@ extern const char kCrosRegionsModeHide[];
 
 extern const char kDisableLockScreenAppsName[];
 extern const char kDisableLockScreenAppsDescription[];
-
-extern const char kDisableNewVirtualKeyboardBehaviorName[];
-extern const char kDisableNewVirtualKeyboardBehaviorDescription[];
 
 extern const char kDisableTabletAutohideTitlebarsName[];
 extern const char kDisableTabletAutohideTitlebarsDescription[];

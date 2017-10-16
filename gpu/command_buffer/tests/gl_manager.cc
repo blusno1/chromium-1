@@ -41,7 +41,6 @@
 #include "ui/gl/gl_image_ref_counted_memory.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_surface.h"
-#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
 #if defined(OS_MACOSX)
@@ -57,7 +56,7 @@ void InitializeGpuPreferencesForTestingFromCommandLine(
     GpuPreferences* preferences) {
   // Only initialize specific GpuPreferences members used for testing.
   preferences->use_passthrough_cmd_decoder =
-      gl::UsePassthroughCommandDecoder(&command_line);
+      gles2::UsePassthroughCommandDecoder(&command_line);
 }
 
 class GpuMemoryBufferImpl : public gfx::GpuMemoryBuffer {
@@ -483,7 +482,7 @@ int32_t GLManager::CreateImage(ClientBuffer buffer,
     IOSurfaceGpuMemoryBuffer* gpu_memory_buffer =
         IOSurfaceGpuMemoryBuffer::FromClientBuffer(buffer);
     scoped_refptr<gl::GLImageIOSurface> image(
-        new gl::GLImageIOSurface(size, internalformat));
+        gl::GLImageIOSurface::Create(size, internalformat));
     if (!image->Initialize(gpu_memory_buffer->iosurface(),
                            gfx::GenericSharedMemoryId(1),
                            gfx::BufferFormat::BGRA_8888)) {

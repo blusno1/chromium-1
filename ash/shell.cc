@@ -52,6 +52,7 @@
 #include "ash/media_controller.h"
 #include "ash/message_center/message_center_controller.h"
 #include "ash/new_window_controller.h"
+#include "ash/note_taking_controller.h"
 #include "ash/palette_delegate.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
@@ -81,6 +82,7 @@
 #include "ash/system/network/vpn_list.h"
 #include "ash/system/night_light/night_light_controller.h"
 #include "ash/system/palette/palette_tray.h"
+#include "ash/system/palette/palette_welcome_bubble.h"
 #include "ash/system/power/peripheral_battery_notifier.h"
 #include "ash/system/power/power_button_controller.h"
 #include "ash/system/power/power_event_observer.h"
@@ -344,13 +346,15 @@ void Shell::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 // static
 void Shell::RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   AccessibilityController::RegisterProfilePrefs(registry, for_test);
-  LogoutButtonTray::RegisterProfilePrefs(registry);
-  NightLightController::RegisterProfilePrefs(registry);
-  ShelfController::RegisterProfilePrefs(registry);
-  TrayCapsLock::RegisterProfilePrefs(registry, for_test);
   BluetoothPowerController::RegisterProfilePrefs(registry);
   LockScreenController::RegisterProfilePrefs(registry, for_test);
+  LogoutButtonTray::RegisterProfilePrefs(registry);
+  NightLightController::RegisterProfilePrefs(registry);
+  PaletteTray::RegisterProfilePrefs(registry);
+  PaletteWelcomeBubble::RegisterProfilePrefs(registry);
+  ShelfController::RegisterProfilePrefs(registry);
   TouchDevicesController::RegisterProfilePrefs(registry);
+  TrayCapsLock::RegisterProfilePrefs(registry, for_test);
 }
 
 views::NonClientFrameView* Shell::CreateDefaultNonClientFrameView(
@@ -614,6 +618,7 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
       new_window_controller_(std::make_unique<NewWindowController>()),
       session_controller_(std::make_unique<SessionController>(
           shell_delegate->GetShellConnector())),
+      note_taking_controller_(std::make_unique<NoteTakingController>()),
       shell_delegate_(std::move(shell_delegate)),
       shutdown_controller_(std::make_unique<ShutdownController>()),
       system_tray_controller_(std::make_unique<SystemTrayController>()),

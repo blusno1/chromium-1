@@ -96,10 +96,10 @@ crbug.com/549742 [ Mac ] virtual/gpu/fast/canvas/canvas-drawImage-video-imageSmo
 
 # SwiftShader Failures
 crbug.com/726075 [ Win Linux ] compositing/3d-cube.html [ Failure ]
-crbug.com/726075 [ Win ] virtual/gpu/fast/canvas/2d.fillText.gradient.html [ Failure ]
-crbug.com/726075 [ Win Linux ] external/wpt/webvtt/rendering/cues-with-video/processing-model/dom_override_remove_cue_while_paused.html [ Failure ]
-crbug.com/726075 [ Win Linux ] virtual/exotic-color-space/images/color-profile-border-fade.html [ Failure ]
 crbug.com/726075 [ Linux ] shapedetection/detection-HTMLVideoElement.html [ Timeout ]
+
+# Fails because of an 8bit precision error in the YUV -> RGB conversion matrix
+crbug.com/774567 [ Win Linux ] external/wpt/webvtt/rendering/cues-with-video/processing-model/dom_override_remove_cue_while_paused.html [ Failure ]
 
 # Fails because the manual test hasn't been automated yet
 crbug.com/762054 external/wpt/cssom-view/scrollBoundaryBehavior-manual.html [ Skip ]
@@ -118,6 +118,8 @@ crbug.com/713049 virtual/exotic-color-space/images/color-profile-reflection.html
 # Reftest with slightly different pixels values.
 # Should make a pixel test to keep coverage.
 crbug.com/713891 virtual/exotic-color-space/images/animated-png.html [ Pass Failure ]
+
+crbug.com/774873 [ Linux Win ] virtual/exotic-color-space/images/color-profile-border-fade.html [ Pass Failure ]
 
 # Flakily timing out or failing.
 # TODO(ccameron): Investigate this.
@@ -297,6 +299,8 @@ crbug.com/711704 virtual/layout_ng/external/wpt/css/CSS2/floats/floats-rule7-out
 crbug.com/711704 virtual/layout_ng/external/wpt/css/CSS2/floats/floats-rule7-outside-right-001.xht [ Failure ]
 crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats/floats-wrap-bfc-001-left-overflow.xht [ Failure ]
 crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats/floats-wrap-bfc-002-left-overflow.xht [ Failure ]
+crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats/floats-wrap-bfc-002-left-table.xht [ Failure ]
+crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats/floats-wrap-bfc-002-right-table.xht [ Failure ]
 crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats/floats-wrap-bfc-003-left-overflow.xht [ Failure ]
 crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats/floats-wrap-bfc-003-right-overflow.xht [ Failure ]
 crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats/floats-wrap-bfc-004.xht [ Failure ]
@@ -331,7 +335,6 @@ crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats-clear/floats-131
 crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats-clear/floats-137.xht [ Skip ]
 crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats-clear/floats-143.xht [ Failure ]
 crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats-clear/margin-collapse-157.xht [ Failure ]
-crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/floats-clear/margin-collapse-clear-008.xht [ Failure ]
 
 # Regressions while changing zero-block-size float behaviour.
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/001.html [ Failure ]
@@ -481,15 +484,12 @@ crbug.com/635619 virtual/layout_ng/fast/block/float/017.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/018.html [ Failure ]
 crbug.com/635619 [ Mac ] virtual/layout_ng/fast/block/float/020.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/022.html [ Failure ]
-crbug.com/635619 virtual/layout_ng/fast/block/float/025.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/026.html [ Failure ]
-crbug.com/635619 virtual/layout_ng/fast/block/float/027.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/028.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/031.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/035.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/assert-when-moving-float.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/assert-when-moving-float-2.html [ Failure ]
-crbug.com/635619 virtual/layout_ng/fast/block/float/avoiding-float-centered.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/block-with-negative-margin-clears-float.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/br-with-clear-2.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/centered-float-avoidance-complexity.html [ Failure ]
@@ -542,14 +542,12 @@ crbug.com/635619 virtual/layout_ng/fast/block/float/rubybase-children-moved-cras
 crbug.com/635619 virtual/layout_ng/fast/block/float/rubybase-children-moved-crash.html [ Crash Pass ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/shrink-to-avoid-float-complexity.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/trailing-float-with-columns.html [ Crash Failure ]
-crbug.com/635619 virtual/layout_ng/fast/block/float/width-update-after-clear.html [ Failure ]
 
 ### virtual/layout_ng/fast/block/margin-collapse
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/032.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/033.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/057.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/103.html [ Failure ]
-crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/bfc-beside-float-complex-margin-collapsing.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/self-collapsing-cols-creates-block-formatting-context.html [ Failure ]
 
 ### virtual/layout_ng/fast/block/margin-collapse/block-inside-inline
@@ -561,7 +559,6 @@ crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/block-inside-inlin
 
 ### virtual/layout_ng/fast/block/margin-collapse
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/clear-nested-float-more-than-one-previous-sibling-away.html [ Failure ]
-crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/empty-clear-blocks.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/webkit-margin-collapse-container.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/webkit-margin-collapse-separate-position.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/webkit-margin-collapse-siblings.html [ Failure ]
@@ -1452,9 +1449,6 @@ crbug.com/591500 [ Win10 ] printing/fixed-positioned-headers-and-footers-clipped
 crbug.com/591500 [ Win10 ] virtual/threaded/printing/ellipsis-printing-style.html [ Skip ]
 crbug.com/591500 [ Win10 ] printing/ellipsis-printing-style.html [ Skip ]
 
-crbug.com/750287 http/tests/devtools/sources/debugger/live-edit.html [ NeedsManualRebaseline ]
-crbug.com/667560 virtual/mojo-loading/http/tests/devtools/sources/debugger/live-edit.html [ NeedsManualRebaseline ]
-
 crbug.com/618082 [ Win10 ] printing/thead-repeats-at-top-of-each-page.html [ Failure ]
 crbug.com/618082 [ Win10 ] virtual/threaded/printing/thead-repeats-at-top-of-each-page.html [ Failure ]
 
@@ -1505,9 +1499,6 @@ crbug.com/564109 [ Win ]  virtual/mojo-loading/http/tests/webfont/font-display-i
 crbug.com/399951 http/tests/mime/javascript-mimetype-usecounters.html [ Pass Failure ]
 crbug.com/399951 virtual/mojo-loading/http/tests/mime/javascript-mimetype-usecounters.html [ Pass Failure ]
 
-crbug.com/572723 http/tests/devtools/sources/debugger/debugger-uncaught-promise-on-pause.html [ Timeout Pass ]
-crbug.com/667560 virtual/mojo-loading/http/tests/devtools/sources/debugger/debugger-uncaught-promise-on-pause.html [ Timeout Pass ]
-
 crbug.com/594672 fast/events/iframe-object-onload.html [ Failure Pass ]
 crbug.com/594672 fast/events/scale-and-scroll-iframe-body.html [ Failure Pass ]
 crbug.com/594672 fast/events/updateLayoutForHitTest.html [ Failure Pass ]
@@ -1520,13 +1511,13 @@ crbug.com/453002 [ Win ] fast/text/orientation-sideways.html [ Failure Pass ]
 crbug.com/605525 [ Win ] http/tests/xmlhttprequest/redirect-cross-origin-post.html [ Failure Pass ]
 
 crbug.com/600248 external/wpt/web-animations/interfaces/Animation/oncancel.html [ Pass Failure ]
-crbug.com/600248 external/wpt/web-animations/interfaces/Animation/onfinish.html [ Failure ]
-crbug.com/600248 external/wpt/web-animations/interfaces/Animation/finish.html [ Pass Failure ]
-crbug.com/600248 external/wpt/web-animations/timing-model/animations/updating-the-finished-state.html [ Timeout ]
-crbug.com/600248 external/wpt/web-animations/animation-model/animation-types/interpolation-per-property.html [ Timeout ]
-crbug.com/600248 external/wpt/web-animations/animation-model/animation-types/addition-per-property.html [ Timeout ]
-crbug.com/600248 external/wpt/web-animations/timing-model/animations/current-time.html [ Failure ]
-crbug.com/600248 external/wpt/web-animations/timing-model/animations/set-the-animation-start-time.html [ Failure ]
+crbug.com/771977 external/wpt/web-animations/interfaces/Animation/onfinish.html [ Failure ]
+crbug.com/772076 external/wpt/web-animations/interfaces/Animation/finish.html [ Pass Failure ]
+crbug.com/772048 crbug.com/772060 external/wpt/web-animations/timing-model/animations/updating-the-finished-state.html [ Timeout ]
+crbug.com/772014 external/wpt/web-animations/animation-model/animation-types/interpolation-per-property.html [ Timeout ]
+crbug.com/772014 external/wpt/web-animations/animation-model/animation-types/addition-per-property.html [ Timeout ]
+crbug.com/771722 external/wpt/web-animations/timing-model/animations/current-time.html [ Failure ]
+crbug.com/771722 crbug.com/771751 crbug.com/772060 external/wpt/web-animations/timing-model/animations/set-the-animation-start-time.html [ Failure ]
 
 crbug.com/611658 [ Win7 ] fast/forms/text/text-font-height-mismatch.html [ Failure ]
 crbug.com/611658 [ Win ] fast/text/emphasis-combined-text.html [ Failure ]
@@ -1739,6 +1730,21 @@ crbug.com/751952 virtual/origin-trials-runtimeflags-disabled/http/tests/origin_t
 crbug.com/771729 [ Win Debug ] external/wpt/html/semantics/scripting-1/the-script-element/execution-timing/039.html [ Pass Failure ]
 
 # ====== New tests from wpt-importer added here ======
+crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/webvtt/rendering/cues-with-video/processing-model/selectors/cue-region/font_properties.html [ Failure ]
+crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/webvtt/rendering/cues-with-video/processing-model/selectors/cue-region_function/font_properties.html [ Failure ]
+crbug.com/626703 external/wpt/html/editing/dnd/events/drag-event-div-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/events/drag-event-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/events/dragend-event-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/events/dragenter-event-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/events/dragleave-event-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/events/dragover-event-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/events/dragstart-event-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/events/drop-event-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/the-datatransfer-interface/effectAllowed-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/the-datatransfer-interface/files-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/the-datatransfer-interface/setData-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/editing/dnd/the-datatransfer-interface/types-manual.html [ Skip ]
+crbug.com/626703 external/wpt/html/browsers/browsing-the-web/navigating-across-documents/javascript-url-global-scope.html [ Timeout ]
 crbug.com/626703 external/wpt/entries-api/filesystemdirectoryentry-attributes-manual.html [ Skip ]
 crbug.com/626703 external/wpt/entries-api/filesystemdirectoryentry-createReader-manual.html [ Skip ]
 crbug.com/626703 external/wpt/entries-api/filesystemdirectoryentry-getParent-manual.html [ Skip ]
@@ -2293,8 +2299,8 @@ crbug.com/675540 external/wpt/service-workers/service-worker/claim-with-redirect
 crbug.com/435547 http/tests/cachestorage/serviceworker/ignore-search-with-credentials.html [ Skip ]
 crbug.com/435547 virtual/mojo-loading/http/tests/cachestorage/serviceworker/ignore-search-with-credentials.html [ Skip ]
 
-crbug.com/697971 [ Mac10.12 ] fast/text/flexbox-selection-nested.html [ Skip ]
-crbug.com/697971 [ Mac10.12 ] fast/text/flexbox-selection.html [ Skip ]
+crbug.com/697971 [ Mac10.12 ] fast/text/selection/flexbox-selection-nested.html [ Skip ]
+crbug.com/697971 [ Mac10.12 ] fast/text/selection/flexbox-selection.html [ Skip ]
 crbug.com/678481 http/tests/devtools/appcache/appcache-manifest-with-non-existing-file.html [ Timeout Failure Pass ]
 crbug.com/678481 http/tests/devtools/appcache/appcache-iframe-manifests.html [ Timeout Failure Pass ]
 crbug.com/678481 virtual/mojo-loading/http/tests/devtools/appcache/appcache-iframe-manifests.html [ Timeout Failure Pass ]
@@ -2480,7 +2486,7 @@ crbug.com/663585 editing/pasteboard/data-transfer-items-image-png.html [ Pass Fa
 crbug.com/652536 fast/events/mouse-cursor.html [ Pass Failure ]
 crbug.com/671478 fast/table/percent-height-replaced-content-in-cell.html [ Pass Failure ]
 crbug.com/671478 virtual/mojo-loading/fast/table/percent-height-replaced-content-in-cell.html [ Pass Failure ]
-crbug.com/663858 fast/text/emphasis.html [ Pass Failure ]
+crbug.com/663858 fast/text/selection/emphasis.html [ Pass Failure ]
 crbug.com/663858 fast/text/emphasis-vertical.html [ Pass Failure ]
 crbug.com/663876 http/tests/loading/doc-write-sync-third-party-script-block-effectively-2g.html [ Pass Failure ]
 crbug.com/663876 virtual/mojo-loading/http/tests/loading/doc-write-sync-third-party-script-block-effectively-2g.html [ Pass Failure ]
@@ -3061,6 +3067,15 @@ crbug.com/630695 fast/css/transformed-mask.html [ NeedsManualRebaseline ]
 crbug.com/773013 virtual/gpu-rasterization/images/color-profile-background-image-cross-fade-png.html [ NeedsManualRebaseline ]
 crbug.com/773013 virtual/gpu-rasterization/images/color-profile-background-image-cross-fade.html [ NeedsManualRebaseline ]
 crbug.com/773013 virtual/gpu-rasterization/images/color-profile-mask-image-svg.html [ NeedsManualRebaseline ]
+
+crbug.com/774474 virtual/gpu-rasterization/images/imagemap-focus-ring-in-positioned-container.html [ NeedsManualRebaseline ]
+crbug.com/774474 virtual/gpu-rasterization/images/imagemap-focus-ring-outline-color-explicitly-inherited-from-map.html [ NeedsManualRebaseline ]
+crbug.com/774474 virtual/gpu-rasterization/images/imagemap-focus-ring-outline-color-not-inherited-from-map.html [ NeedsManualRebaseline ]
+crbug.com/774474 virtual/gpu-rasterization/images/imagemap-focus-ring-outline-color.html [ NeedsManualRebaseline ]
+crbug.com/774474 virtual/gpu-rasterization/images/imagemap-focus-ring-with-paint-root-offset.html [ NeedsManualRebaseline ]
+crbug.com/774474 virtual/gpu-rasterization/images/imagemap-focus-ring.html [ NeedsManualRebaseline ]
+crbug.com/774474 virtual/gpu-rasterization/images/imagemap-overflowing-polygon-focus-ring.html [ NeedsManualRebaseline ]
+crbug.com/774474 virtual/gpu-rasterization/images/imagemap-polygon-focus-ring.html [ NeedsManualRebaseline ]
 
 # Sheriff failures 2017-07-20
 crbug.com/747163 [ Linux ] imagecapture/MediaStreamTrack-applyConstraints.html [ Pass Crash ]
@@ -3746,3 +3761,11 @@ crbug.com/773122 [ Win7 ] virtual/gpu/fast/canvas/canvas-lost-gpu-context.html [
 
 # Sheriff failures 2017-10-11
 crbug.com/772411 [ Mac ] virtual/mojo-loading/http/tests/media/autoplay-crossorigin.html [ Timeout Failure Pass ]
+
+# Sheriff failures 2017-10-13
+crbug.com/774437 paint/invalidation/selection-partial-invalidation-between-blocks.html [ Pass Failure ]
+crbug.com/774463 [ Win7 Debug ] fast/events/autoscroll-should-not-stop-on-keypress.html [ Failure Pass ]
+crbug.com/774688 [ Mac ] fast/spatial-navigation/snav-container-white-space.html [ Pass Failure ]
+crbug.com/774751 [ Mac ] virtual/gpu/fast/canvas/canvas-text-baseline.html [ Failure ]
+crbug.com/774751 [ Mac ] virtual/gpu/fast/canvas/canvas-transforms-during-path.html [ Failure ]
+crbug.com/774751 [ Mac ] virtual/gpu/fast/canvas/quadraticCurveTo.xml [ Failure ]

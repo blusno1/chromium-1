@@ -313,15 +313,16 @@ void WindowTreeClient::SetCursor(WindowMus* window,
   tree_->SetCursor(change_id, window->server_id(), new_cursor);
 }
 
-void WindowTreeClient::SetWindowTextInputState(WindowMus* window,
-                                               mojo::TextInputStatePtr state) {
+void WindowTreeClient::SetWindowTextInputState(
+    WindowMus* window,
+    ui::mojom::TextInputStatePtr state) {
   DCHECK(tree_);
   tree_->SetWindowTextInputState(window->server_id(), std::move(state));
 }
 
 void WindowTreeClient::SetImeVisibility(WindowMus* window,
                                         bool visible,
-                                        mojo::TextInputStatePtr state) {
+                                        ui::mojom::TextInputStatePtr state) {
   DCHECK(tree_);
   tree_->SetImeVisibility(window->server_id(), visible, std::move(state));
 }
@@ -564,9 +565,6 @@ std::unique_ptr<WindowTreeHostMus> WindowTreeClient::CreateWindowTreeHost(
   WindowMus* window = WindowMus::Get(window_tree_host->window());
 
   SetWindowBoundsFromServer(window, window_data.bounds, local_surface_id);
-  ui::Compositor* compositor =
-      window_tree_host->window()->GetHost()->compositor();
-  compositor->AddObserver(this);
   return window_tree_host;
 }
 
@@ -763,7 +761,11 @@ void WindowTreeClient::ScheduleInFlightBoundsChange(
       window->window_mus_type() == WindowMusType::DISPLAY_MANUALLY_CREATED ||
       window->HasLocalLayerTreeFrameSink()) {
     local_surface_id = window->GetOrAllocateLocalSurfaceId(new_bounds.size());
-    synchronizing_with_child_on_next_frame_ = true;
+    // |window_tree_host| may be null if this is called during creation of
+    // the window associated with the WindowTreeHostMus.
+    WindowTreeHost* window_tree_host = window->GetWindow()->GetHost();
+    if (window_tree_host)
+      window_tree_host->compositor()->OnChildResizing();
   }
   tree_->SetWindowBounds(change_id, window->server_id(), new_bounds,
                          local_surface_id);
@@ -2343,39 +2345,6 @@ uint32_t WindowTreeClient::CreateChangeIdForCapture(WindowMus* window) {
 uint32_t WindowTreeClient::CreateChangeIdForFocus(WindowMus* window) {
   return ScheduleInFlightChange(base::MakeUnique<InFlightFocusChange>(
       this, focus_synchronizer_.get(), window));
-}
-
-void WindowTreeClient::OnCompositingDidCommit(ui::Compositor* compositor) {}
-
-void WindowTreeClient::OnCompositingStarted(ui::Compositor* compositor,
-                                            base::TimeTicks start_time) {
-  if (!synchronizing_with_child_on_next_frame_)
-    return;
-  synchronizing_with_child_on_next_frame_ = false;
-  WindowTreeHost* host =
-      WindowTreeHost::GetForAcceleratedWidget(compositor->widget());
-  // Unit tests have a null widget and thus may not have an associated
-  // WindowTreeHost.
-  if (host) {
-    host->dispatcher()->HoldPointerMoves();
-    holding_pointer_moves_ = true;
-  }
-}
-
-void WindowTreeClient::OnCompositingEnded(ui::Compositor* compositor) {
-  if (!holding_pointer_moves_)
-    return;
-  WindowTreeHost* host =
-      WindowTreeHost::GetForAcceleratedWidget(compositor->widget());
-  host->dispatcher()->ReleasePointerMoves();
-  holding_pointer_moves_ = false;
-}
-
-void WindowTreeClient::OnCompositingLockStateChanged(
-    ui::Compositor* compositor) {}
-
-void WindowTreeClient::OnCompositingShuttingDown(ui::Compositor* compositor) {
-  compositor->RemoveObserver(this);
 }
 
 }  // namespace aura

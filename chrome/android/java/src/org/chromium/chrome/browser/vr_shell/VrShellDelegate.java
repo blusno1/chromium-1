@@ -548,7 +548,7 @@ public class VrShellDelegate
     /**
      * @return Whether or not VR Shell is currently enabled.
      */
-    private static boolean isVrShellEnabled(int vrSupportLevel) {
+    /* package */ static boolean isVrShellEnabled(int vrSupportLevel) {
         // Only enable ChromeVR (VrShell) on Daydream devices as it currently needs a Daydream
         // controller.
         if (vrSupportLevel != VR_DAYDREAM) return false;
@@ -707,6 +707,11 @@ public class VrShellDelegate
                 mVrDaydreamApi, mVrCoreVersionChecker, mActivity.getActivityTab());
         if (supportLevel == mVrSupportLevel) return;
         mVrSupportLevel = supportLevel;
+    }
+
+    @VrSupportLevel
+    /* package */ int getVrSupportLevel() {
+        return mVrSupportLevel;
     }
 
     private void onVrServicesMaybeUpdated() {
@@ -878,6 +883,9 @@ public class VrShellDelegate
         if (!VrIntentUtils.isVrIntent(intent)) return;
         VrShellDelegate instance = getInstance(activity);
         if (instance == null) return;
+        // TODO(ymalik): This should use isTrustedAutopresentIntent once the Daydream Home change
+        // that adds the autopresent intent extra rolls out on most devices. This will allow us to
+        // differentiate trusted auto-present intents from Chrome VR intents.
         if (VrIntentUtils.getHandlerInstance().isTrustedDaydreamIntent(intent)) {
             assert activitySupportsAutopresentation(activity);
             instance.mAutopresentWebVr = true;

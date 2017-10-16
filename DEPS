@@ -55,11 +55,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'e60ca7eae432bbff7d2213920cbfb8f3aa9a9c28',
+  'skia_revision': '9ef6de782413a3b785ce12fb4b6ea782e72e8805',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '094a7c93dcdcd921de3883ba4674b7e1a0feffbe',
+  'v8_revision': '92bd58d7d807d0bb88a486a1ab08dfd43e72c21f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -67,7 +67,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '852fe87341b2a90a5ea12df93e91662235d045dc',
+  'angle_revision': 'c3bc984156967837f0b17b866aca0b12a2edf0e6',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -79,7 +79,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'fb6165ff8f8ad1d7725f63e509eb7f7543df231e',
+  'pdfium_revision': '5d98f3044ed5fd3e41d1e764351a8829e1a47e4b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -107,11 +107,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype
   # and whatever else without interference from each other.
-  'freetype_revision': 'c3a51e430ca5c7a9cc047548b446b044196da995',
+  'freetype_revision': 'ae7dc1f62d826083d418e86cce3f66a76dff038a',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '67c01572b02248ec553a2064be7e5e065fb494b8',
+  'catapult_revision': 'c0f385be003d039ffcedc767230514eb4fdbf139',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -173,7 +173,7 @@ deps = {
   },
 
   'src/ios/third_party/material_components_ios/src': {
-      'url': Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + '0de8fc584658c8fb88a507981181e6dc999c3a78',
+      'url': Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + 'f754315c1986ab41de55e038420e5154612660ea',
       'condition': 'checkout_ios',
   },
 
@@ -198,7 +198,7 @@ deps = {
   },
 
   'src/ios/third_party/ochamcrest/src': {
-      'url': Var('chromium_git') + '/external/github.com/hamcrest/OCHamcrest.git' + '@' + 'd7ee4ecfb6bd13c3c8d364682b6228ccd86e1e1a',
+      'url': Var('chromium_git') + '/external/github.com/hamcrest/OCHamcrest.git' + '@' + '92d9c14d13bb864255e65c09383564653896916b',
       'condition': 'checkout_ios',
   },
 
@@ -251,7 +251,7 @@ deps = {
 
   # Build tools for Chrome OS. Note: This depends on third_party/pyelftools.
   'src/third_party/chromite': {
-      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '66814c3bbbd2068dd34af9df2f677316bf081752',
+      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '85c606aae820e29d6ccfa5589af365536eaf9ad1',
       'condition': 'checkout_linux',
   },
 
@@ -279,7 +279,7 @@ deps = {
   },
 
   'src/third_party/depot_tools':
-    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'b40a45149a73a6b00e92fd1d2df4c0b1543d0005',
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'f424d357ecc424dde7c5abfd4f07c28c99397b8b',
 
   # DevTools node modules. Used on Linux buildbots only.
   'src/third_party/devtools-node-modules': {
@@ -301,7 +301,7 @@ deps = {
   },
 
   'src/third_party/ffmpeg':
-    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '62ff55193a061c21c039a2ba0b39641136912c2e',
+    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '3098b6a24547c66d20ffd8448f6a719f41f87b95',
 
   'src/third_party/findbugs': {
       'url': Var('chromium_git') + '/chromium/deps/findbugs.git' + '@' + '57f05238d3ac77ea0a194813d3065dd780c6e566',
@@ -357,7 +357,7 @@ deps = {
   },
 
   'src/third_party/hunspell_dictionaries':
-    Var('chromium_git') + '/chromium/deps/hunspell_dictionaries.git' + '@' + 'dc6e7c25bf47cbfb466e0701fd2728b4a12e79d5',
+    Var('chromium_git') + '/chromium/deps/hunspell_dictionaries.git' + '@' + 'a9bac57ce6c9d390a52ebaad3259f5fdb871210e',
 
   'src/third_party/icu':
     Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '21d33b1a09a77f033478ea4ffffb61e6970f83bd',
@@ -425,7 +425,7 @@ deps = {
   },
 
   'src/third_party/libvpx/source/libvpx':
-    Var('chromium_git') + '/webm/libvpx.git' + '@' +  'fe7b869104806752a26a262dc60923639d9a384f',
+    Var('chromium_git') + '/webm/libvpx.git' + '@' +  'caa116c9be96508c18d533dedc95b2df4f8e3812',
 
   'src/third_party/libwebm/source':
     Var('chromium_git') + '/webm/libwebm.git' + '@' + '4956b2dec65352af32dc71bab553acb631c64177',
@@ -524,7 +524,7 @@ deps = {
     Var('chromium_git') + '/external/github.com/google/pywebsocket.git' + '@' + '2d7b73c3acbd0f41dcab487ae5c97c6feae06ce2',
 
   'src/third_party/re2/src':
-    Var('chromium_git') + '/external/github.com/google/re2.git' + '@' + 'ae9cb49a2e2ba95de4f0c6ec5a8afd039996d2c7',
+    Var('chromium_git') + '/external/github.com/google/re2.git' + '@' + '4be7a14432ff0a2ed88fd884fd76a63f0a3a6127',
 
   'src/third_party/requests/src': {
       'url': Var('chromium_git') + '/external/github.com/kennethreitz/requests.git' + '@' + 'f172b30356d821d180fa4ecfa3e71c7274a32de4',
@@ -590,7 +590,7 @@ deps = {
     Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '34842fa3c36988840c89f5bc6a68503175acf7d9',
 
   'src/third_party/webrtc':
-    Var('webrtc_git') + '/src.git' + '@' + 'bef8a5d2ca5413c680995584b8c0976852ba5f25', # commit position 20237
+    Var('webrtc_git') + '/src.git' + '@' + '9827ed7d886965f833bd756104578ec738cce03e', # commit position 20237
 
   'src/third_party/xdg-utils': {
       'url': Var('chromium_git') + '/chromium/deps/xdg-utils.git' + '@' + 'd80274d5869b17b8c9067a1022e4416ee7ed5e0d',
@@ -728,7 +728,7 @@ hooks = [
     # Update the Mac toolchain if necessary.
     'name': 'mac_toolchain',
     'pattern': '.',
-    'condition': 'checkout_mac',
+    'condition': 'checkout_ios or checkout_mac',
     'action': ['python', 'src/build/mac_toolchain.py'],
   },
   # Pull binutils for linux, enabled debug fission for faster linking /
@@ -1385,6 +1385,24 @@ hooks = [
       'python',
       'src/build/fuchsia/update_sdk.py',
       'bb7a8c4be8001868468ba0a76389ce4ee111620c',
+    ],
+  },
+
+  # Download and initialize "vpython" VirtualEnv environment packages.
+  {
+    'name': 'vpython_common',
+    'pattern': '.',
+    'action': [ 'vpython',
+                '-vpython-spec', 'src/.vpython',
+                '-vpython-tool', 'install',
+    ],
+  },
+  {
+    'name': 'vpython_webkitpy',
+    'pattern': '.',
+    'action': [ 'vpython',
+                '-vpython-spec', 'src/third_party/WebKit/Tools/Scripts/common.vpython',
+                '-vpython-tool', 'install',
     ],
   },
 ]

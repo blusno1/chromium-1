@@ -5,6 +5,7 @@
 #include "core/layout/ng/inline/ng_inline_node.h"
 
 #include "core/layout/BidiRun.h"
+#include "core/layout/LayoutMultiColumnFlowThread.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTextFragment.h"
@@ -568,19 +569,25 @@ static LayoutUnit ComputeContentSize(NGInlineNode node,
   container_builder.SetBfcOffset(NGBfcOffset{LayoutUnit(), LayoutUnit()});
 
   Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats;
-  NGLineBreaker line_breaker(node, *space, &container_builder,
-                             &unpositioned_floats);
 
+  RefPtr<NGInlineBreakToken> break_token;
   NGLineInfo line_info;
   NGExclusionSpace empty_exclusion_space;
   LayoutUnit result;
-  while (line_breaker.NextLine(NGLogicalOffset(), empty_exclusion_space,
-                               &line_info)) {
+  while (!break_token || !break_token->IsFinished()) {
+    NGLineBreaker line_breaker(node, *space, &container_builder,
+                               &unpositioned_floats, break_token.get());
+    if (!line_breaker.NextLine(NGLogicalOffset(), empty_exclusion_space,
+                               &line_info))
+      break;
+
+    break_token = line_breaker.CreateBreakToken();
     LayoutUnit inline_size = line_info.TextIndent();
     for (const NGInlineItemResult item_result : line_info.Results())
       inline_size += item_result.inline_size;
     result = std::max(inline_size, result);
   }
+
   return result;
 }
 
@@ -622,7 +629,12 @@ NGLayoutInputNode NGInlineNode::NextSibling() {
 void NGInlineNode::CopyFragmentDataToLayoutBox(
     const NGConstraintSpace& constraint_space,
     NGLayoutResult* layout_result) {
-  LayoutNGBlockFlow* block_flow = GetLayoutBlockFlow();
+  LayoutBlockFlow* block_flow = GetLayoutBlockFlow();
+
+  // If we have a flow thread, that's where to put the line boxes.
+  if (auto* flow_thread = block_flow->MultiColumnFlowThread())
+    block_flow = flow_thread;
+
   block_flow->DeleteLineBoxTree();
 
   const Vector<NGInlineItem>& items = Data().items_;

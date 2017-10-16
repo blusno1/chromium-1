@@ -691,11 +691,14 @@ WebContentsImpl* WebContentsImpl::CreateWithOpener(
   // See https://html.spec.whatwg.org/#attr-iframe-sandbox.
   FrameTreeNode* new_root = new_contents->GetFrameTree()->root();
   if (opener) {
-    blink::WebSandboxFlags opener_flags = opener->effective_sandbox_flags();
+    blink::WebSandboxFlags opener_flags =
+        opener->effective_frame_policy().sandbox_flags;
     const blink::WebSandboxFlags inherit_flag =
         blink::WebSandboxFlags::kPropagatesToAuxiliaryBrowsingContexts;
     if ((opener_flags & inherit_flag) == inherit_flag) {
-      new_root->SetPendingSandboxFlags(opener_flags);
+      // TODO(iclelland): Transfer correct container policy from opener as well.
+      // https://crbug.com/774620
+      new_root->SetPendingFramePolicy({opener_flags, {}});
       new_root->CommitPendingFramePolicy();
     }
   }
@@ -1631,24 +1634,13 @@ void WebContentsImpl::AttachToOuterWebContentsFrame(
   render_manager->CreateOuterDelegateProxy(
       outer_contents_frame->GetSiteInstance(), outer_contents_frame_impl);
 
-  render_manager->SetRWHViewForInnerContents(
-      render_manager->GetRenderWidgetHostView());
-
-  static_cast<RenderWidgetHostViewChildFrame*>(
-      render_manager->GetRenderWidgetHostView())
-      ->RegisterFrameSinkId();
+  ReattachToOuterWebContentsFrame();
 
   if (outer_web_contents_impl->frame_tree_.GetFocusedFrame() ==
       outer_contents_frame_impl->frame_tree_node()) {
     SetFocusedFrame(frame_tree_.root(),
                     outer_contents_frame->GetSiteInstance());
   }
-
-  // Set up the the guest's AX tree to point back at the embedder's AX tree.
-  auto* parent_frame = outer_contents_frame->GetParent();
-  GetMainFrame()->set_browser_plugin_embedder_ax_tree_id(
-      parent_frame->GetAXTreeID());
-  GetMainFrame()->UpdateAXTreeData();
 
   // At this point, we should destroy the TextInputManager which will notify all
   // the RWHV in this WebContents. The RWHV in this WebContents should use the
@@ -1658,6 +1650,24 @@ void WebContentsImpl::AttachToOuterWebContentsFrame(
   // state tracking from inner WebContents's TextInputManager to that of the
   // outer WebContent (crbug.com/609846)?
   text_input_manager_.reset(nullptr);
+}
+
+void WebContentsImpl::ReattachToOuterWebContentsFrame() {
+  DCHECK(node_.outer_web_contents());
+  auto* render_manager = GetRenderManager();
+  auto* parent_frame =
+      node_.OuterContentsFrameTreeNode()->current_frame_host()->GetParent();
+  render_manager->SetRWHViewForInnerContents(
+      render_manager->GetRenderWidgetHostView());
+
+  static_cast<RenderWidgetHostViewChildFrame*>(
+      render_manager->GetRenderWidgetHostView())
+      ->RegisterFrameSinkId();
+
+  // Set up the the guest's AX tree to point back at the embedder's AX tree.
+  GetMainFrame()->set_browser_plugin_embedder_ax_tree_id(
+      parent_frame->GetAXTreeID());
+  GetMainFrame()->UpdateAXTreeData();
 }
 
 void WebContentsImpl::DidChangeVisibleSecurityState() {
@@ -4287,18 +4297,6 @@ void WebContentsImpl::OnUpdateFaviconURL(
     observer.DidUpdateFaviconURL(candidates);
 }
 
-void WebContentsImpl::OnPasswordInputShownOnHttp() {
-  controller_.ssl_manager()->DidShowPasswordInputOnHttp();
-}
-
-void WebContentsImpl::OnAllPasswordInputsHiddenOnHttp() {
-  controller_.ssl_manager()->DidHideAllPasswordInputsOnHttp();
-}
-
-void WebContentsImpl::OnCreditCardInputShownOnHttp() {
-  controller_.ssl_manager()->DidShowCreditCardInputOnHttp();
-}
-
 void WebContentsImpl::SetIsOverlayContent(bool is_overlay_content) {
   is_overlay_content_ = is_overlay_content;
 }
@@ -5532,6 +5530,9 @@ bool WebContentsImpl::CreateRenderViewForRenderManager(
                               created_with_opener_)) {
     return false;
   }
+
+  if (proxy_routing_id == MSG_ROUTING_NONE && node_.outer_web_contents())
+    ReattachToOuterWebContentsFrame();
 
   SetHistoryOffsetAndLengthForView(render_view_host,
                                    controller_.GetLastCommittedEntryIndex(),

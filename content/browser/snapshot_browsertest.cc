@@ -50,6 +50,7 @@ static const char kCanvasPageString[] =
     "      offset += 50;"
     "      window.domAutomationController.send(true);"
     "    }"
+    "    window.document.title = \"Ready\";"
     "  </script>"
     "</body>";
 }
@@ -105,6 +106,18 @@ class SnapshotBrowserTest : public ContentBrowserTest {
     http_response->set_content(kCanvasPageString);
     http_response->set_content_type("text/html");
     return http_response;
+  }
+
+  void WaitForAllWindowsToBeReady() {
+    const base::string16 expected_title = base::UTF8ToUTF16("Ready");
+    // The subordinate windows may load asynchronously. Wait for all of
+    // them to execute their script before proceeding.
+    auto browser_list = Shell::windows();
+    for (Shell* browser : browser_list) {
+      TitleWatcher watcher(GetWebContents(browser), expected_title);
+      const base::string16& actual_title = watcher.WaitAndGetTitle();
+      EXPECT_EQ(expected_title, actual_title);
+    }
   }
 
   struct ExpectedColor {
@@ -236,13 +249,7 @@ IN_PROC_BROWSER_TEST_F(SnapshotBrowserTest, SingleWindowTest) {
   }
 }
 
-// Seen to time out / fail on debug Mac; crbug.com/771119, crbug.com/774050.
-#if defined(NDEBUG) && !defined(OS_MACOSX)
-#define MAYBE_SyncMultiWindowTest SyncMultiWindowTest
-#else
-#define MAYBE_SyncMultiWindowTest DISABLED_SyncMultiWindowTest
-#endif
-IN_PROC_BROWSER_TEST_F(SnapshotBrowserTest, MAYBE_SyncMultiWindowTest) {
+IN_PROC_BROWSER_TEST_F(SnapshotBrowserTest, SyncMultiWindowTest) {
   SetupTestServer();
 
   for (int i = 0; i < 3; ++i) {
@@ -253,6 +260,8 @@ IN_PROC_BROWSER_TEST_F(SnapshotBrowserTest, MAYBE_SyncMultiWindowTest) {
   }
 
   base::RunLoop().RunUntilIdle();
+
+  WaitForAllWindowsToBeReady();
 
   auto browser_list = Shell::windows();
   EXPECT_EQ(4u, browser_list.size());
@@ -297,7 +306,7 @@ IN_PROC_BROWSER_TEST_F(SnapshotBrowserTest, MAYBE_SyncMultiWindowTest) {
 
 // Seen to time out / fail on Mac and Win bots; crbug.com/772379,
 // crbug.com/771119.
-IN_PROC_BROWSER_TEST_F(SnapshotBrowserTest, DISABLED_AsyncMultiWindowTest) {
+IN_PROC_BROWSER_TEST_F(SnapshotBrowserTest, AsyncMultiWindowTest) {
   SetupTestServer();
 
   for (int i = 0; i < 3; ++i) {
@@ -308,6 +317,8 @@ IN_PROC_BROWSER_TEST_F(SnapshotBrowserTest, DISABLED_AsyncMultiWindowTest) {
   }
 
   base::RunLoop().RunUntilIdle();
+
+  WaitForAllWindowsToBeReady();
 
   auto browser_list = Shell::windows();
   EXPECT_EQ(4u, browser_list.size());

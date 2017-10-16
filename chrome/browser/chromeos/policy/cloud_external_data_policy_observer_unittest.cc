@@ -24,7 +24,6 @@
 #include "chrome/browser/chromeos/policy/device_local_account_policy_provider.h"
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
 #include "chrome/browser/chromeos/policy/fake_affiliated_invalidation_service_provider.h"
-#include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
@@ -44,6 +43,7 @@
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
+#include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/policy/proto/cloud_policy.pb.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -283,7 +283,7 @@ void CloudExternalDataPolicyObserverTest::AddDeviceLocalAccount(
   account->set_type(
       em::DeviceLocalAccountInfoProto::ACCOUNT_TYPE_PUBLIC_SESSION);
   device_policy_.Build();
-  device_settings_test_helper_.set_policy_blob(device_policy_.GetBlob());
+  device_settings_test_helper_.set_device_policy(device_policy_.GetBlob());
   ReloadDeviceSettings();
 }
 
@@ -305,7 +305,7 @@ void CloudExternalDataPolicyObserverTest::RemoveDeviceLocalAccount(
         em::DeviceLocalAccountInfoProto::ACCOUNT_TYPE_PUBLIC_SESSION);
   }
   device_policy_.Build();
-  device_settings_test_helper_.set_policy_blob(device_policy_.GetBlob());
+  device_settings_test_helper_.set_device_policy(device_policy_.GetBlob());
   ReloadDeviceSettings();
 }
 

@@ -454,6 +454,8 @@ const FeatureEntry::Choice kTopChromeMaterialDesignChoices[] = {
      switches::kTopChromeMDMaterial},
     {flag_descriptions::kTopChromeMdMaterialHybrid, switches::kTopChromeMD,
      switches::kTopChromeMDMaterialHybrid},
+    {flag_descriptions::kTopChromeMdMaterialAuto, switches::kTopChromeMD,
+     switches::kTopChromeMDMaterialAuto},
 };
 
 #if defined(OS_CHROMEOS)
@@ -2207,6 +2209,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kWebvrExperimentalRenderingName,
      flag_descriptions::kWebvrExperimentalRenderingDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(features::kWebVRExperimentalRendering)},
+    {"enable-experimental-vr-features",
+     flag_descriptions::kExperimentalVRFeaturesName,
+     flag_descriptions::kExperimentalVRFeaturesDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kExperimentalVRFeatures)},
 #if defined(OS_ANDROID)
     {"enable-vr-shell", flag_descriptions::kEnableVrShellName,
      flag_descriptions::kEnableVrShellDescription, kOsAndroid,
@@ -2843,9 +2849,6 @@ const FeatureEntry kFeatureEntries[] = {
      kOsAndroid,
      FEATURE_VALUE_TYPE(
          offline_pages::kOfflinePagesSvelteConcurrentLoadingFeature)},
-    {"xgeo-visible-networks", flag_descriptions::kXGEOVisibleNetworksName,
-     flag_descriptions::kXGEOVisibleNetworksDescription, kOsAndroid,
-     FEATURE_VALUE_TYPE(chrome::android::kXGEOVisibleNetworks)},
 #endif  // !defined(OS_ANDROID)
     {"cross-process-guests",
      flag_descriptions::kCrossProcessGuestViewIsolationName,
@@ -2920,15 +2923,14 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableAutofillCreditCardUploadNewUiName,
      flag_descriptions::kEnableAutofillCreditCardUploadNewUiDescription,
      kOsDesktop, FEATURE_VALUE_TYPE(autofill::kAutofillUpstreamShowNewUi)},
-    {"enable-autofill-credit-card-ablation-experiment",
-     flag_descriptions::kEnableAutofillCreditCardAblationExperimentDisplayName,
-     flag_descriptions::kEnableAutofillCreditCardAblationExperimentDescription,
-     kOsAll,
-     FEATURE_VALUE_TYPE(autofill::kAutofillCreditCardAblationExperiment)},
     {"enable-autofill-credit-card-bank-name-display",
      flag_descriptions::kEnableAutofillCreditCardBankNameDisplayName,
      flag_descriptions::kEnableAutofillCreditCardBankNameDisplayDescription,
      kOsAll, FEATURE_VALUE_TYPE(autofill::kAutofillCreditCardBankNameDisplay)},
+    {"enable-autofill-send-billing-customer-number",
+     flag_descriptions::kEnableAutofillSendBillingCustomerNumberName,
+     flag_descriptions::kEnableAutofillSendBillingCustomerNumberDescription,
+     kOsAll, FEATURE_VALUE_TYPE(autofill::kAutofillSendBillingCustomerNumber)},
 
 #if defined(OS_WIN)
     {"windows10-custom-titlebar",
@@ -3238,10 +3240,6 @@ const FeatureEntry kFeatureEntries[] = {
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_CHROMEOS)
-    {"disable-new-virtual-keyboard-behavior",
-     flag_descriptions::kDisableNewVirtualKeyboardBehaviorName,
-     flag_descriptions::kDisableNewVirtualKeyboardBehaviorDescription, kOsCrOS,
-     SINGLE_DISABLE_VALUE_TYPE(switches::kDisableNewVirtualKeyboardBehavior)},
     {"enable-per-user-timezone", flag_descriptions::kEnablePerUserTimezoneName,
      flag_descriptions::kEnablePerUserTimezoneDescription, kOsCrOS,
      SINGLE_DISABLE_VALUE_TYPE(chromeos::switches::kDisablePerUserTimezone)},
@@ -3324,12 +3322,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-async-image-decoding", flag_descriptions::kAsyncImageDecodingName,
      flag_descriptions::kAsyncImageDecodingDescription, kOsAll,
      MULTI_VALUE_TYPE(kAsyncImageDecodingChoices)},
-
-    {"capture-thumbnail-on-navigating-away",
-     flag_descriptions::kCaptureThumbnailOnNavigatingAwayName,
-     flag_descriptions::kCaptureThumbnailOnNavigatingAwayDescription,
-     kOsDesktop,
-     FEATURE_VALUE_TYPE(features::kCaptureThumbnailOnNavigatingAway)},
 
 #if defined(OS_CHROMEOS)
     {"disable-lock-screen-apps", flag_descriptions::kDisableLockScreenAppsName,

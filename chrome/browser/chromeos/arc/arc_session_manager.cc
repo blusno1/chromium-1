@@ -165,22 +165,37 @@ ArcSessionManager* ArcSessionManager::Get() {
 
 // static
 bool ArcSessionManager::IsOobeOptInActive() {
-  // Check if ARC ToS screen for OOBE or OPA OptIn flow is currently showing.
+  // Check if Chrome OS OOBE or OPA OptIn flow is currently showing.
   // TODO(b/65861628): Rename the method since it is no longer accurate.
   // Redesign the OptIn flow since there is no longer reason to have two
   // different OptIn flows.
   chromeos::LoginDisplayHost* host = chromeos::LoginDisplayHost::default_host();
   if (!host)
     return false;
-  const chromeos::WizardController* wizard_controller =
-      host->GetWizardController();
-  if (!wizard_controller)
+
+  // Make sure the wizard controller is active and have the ARC ToS screen
+  // showing for the voice interaction OptIn flow.
+  if (host->IsVoiceInteractionOobe()) {
+    const chromeos::WizardController* wizard_controller =
+        host->GetWizardController();
+    if (!wizard_controller)
+      return false;
+    const chromeos::BaseScreen* screen = wizard_controller->current_screen();
+    if (!screen)
+      return false;
+    return screen->screen_id() ==
+           chromeos::OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE;
+  }
+
+  // Use the legacy logic for first sign-in OOBE OptIn flow. Make sure the user
+  // is new and the swtich is appended.
+  if (!user_manager::UserManager::Get()->IsCurrentUserNew())
     return false;
-  const chromeos::BaseScreen* screen = wizard_controller->current_screen();
-  if (!screen)
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kEnableArcOOBEOptIn)) {
     return false;
-  return screen->screen_id() ==
-         chromeos::OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE;
+  }
+  return true;
 }
 
 // static
@@ -534,14 +549,13 @@ void ArcSessionManager::CancelAuthCode() {
   }
 
   // If ARC failed to boot normally, stop ARC. Similarly, if the current page is
-  // LSO or ACTIVE_DIRECTORY_AUTH, closing the window should stop ARC since the
-  // user chooses to not sign in. In any other case, ARC is booting normally and
+  // ACTIVE_DIRECTORY_AUTH, closing the window should stop ARC since the user
+  // chooses to not sign in. In any other case, ARC is booting normally and
   // the instance should not be stopped.
   if ((state_ != State::NEGOTIATING_TERMS_OF_SERVICE &&
        state_ != State::CHECKING_ANDROID_MANAGEMENT) &&
       (!support_host_ ||
        (support_host_->ui_page() != ArcSupportHost::UIPage::ERROR &&
-        support_host_->ui_page() != ArcSupportHost::UIPage::LSO &&
         support_host_->ui_page() !=
             ArcSupportHost::UIPage::ACTIVE_DIRECTORY_AUTH))) {
     return;

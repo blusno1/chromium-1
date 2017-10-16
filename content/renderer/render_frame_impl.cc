@@ -62,6 +62,7 @@
 #include "content/common/edit_command.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
+#include "content/common/frame_policy.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
 #include "content/common/navigation_params.h"
@@ -1009,7 +1010,7 @@ RenderFrameImpl* RenderFrameImpl::CreateMainFrame(
       // This conversion is a little sad, as this often comes from a
       // WebString...
       WebString::FromUTF8(replicated_state.name),
-      replicated_state.sandbox_flags);
+      replicated_state.frame_policy.sandbox_flags);
   render_frame->render_widget_ = RenderWidget::CreateForFrame(
       widget_routing_id, hidden, screen_info, compositor_deps, web_frame);
   // TODO(avi): This DCHECK is to track cleanup for https://crbug.com/545684
@@ -1063,10 +1064,11 @@ void RenderFrameImpl::CreateFrame(
         replicated_state.unique_name);
     web_frame = parent_web_frame->CreateLocalChild(
         replicated_state.scope, WebString::FromUTF8(replicated_state.name),
-        replicated_state.sandbox_flags, render_frame,
+        replicated_state.frame_policy.sandbox_flags, render_frame,
         render_frame->blink_interface_registry_.get(),
         previous_sibling_web_frame,
-        FeaturePolicyHeaderToWeb(replicated_state.container_policy),
+        FeaturePolicyHeaderToWeb(
+            replicated_state.frame_policy.container_policy),
         ConvertFrameOwnerPropertiesToWebFrameOwnerProperties(
             frame_owner_properties),
         ResolveOpener(opener_routing_id));
@@ -1091,8 +1093,9 @@ void RenderFrameImpl::CreateFrame(
     proxy->set_provisional_frame_routing_id(routing_id);
     web_frame = blink::WebLocalFrame::CreateProvisional(
         render_frame, render_frame->blink_interface_registry_.get(),
-        proxy->web_frame(), replicated_state.sandbox_flags,
-        FeaturePolicyHeaderToWeb(replicated_state.container_policy));
+        proxy->web_frame(), replicated_state.frame_policy.sandbox_flags,
+        FeaturePolicyHeaderToWeb(
+            replicated_state.frame_policy.container_policy));
   }
   CHECK(parent_routing_id != MSG_ROUTING_NONE || !web_frame->Parent());
 
@@ -2310,11 +2313,10 @@ void RenderFrameImpl::OnUpdateOpener(int opener_routing_id) {
   frame_->SetOpener(opener);
 }
 
-void RenderFrameImpl::OnDidUpdateFramePolicy(
-    blink::WebSandboxFlags flags,
-    const ParsedFeaturePolicyHeader& container_policy) {
-  frame_->SetFrameOwnerPolicy(flags,
-                              FeaturePolicyHeaderToWeb(container_policy));
+void RenderFrameImpl::OnDidUpdateFramePolicy(const FramePolicy& frame_policy) {
+  frame_->SetFrameOwnerPolicy(
+      frame_policy.sandbox_flags,
+      FeaturePolicyHeaderToWeb(frame_policy.container_policy));
 }
 
 void RenderFrameImpl::OnSetFrameOwnerProperties(
@@ -3179,8 +3181,8 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
   // browsing context name, only unique name generation.
   params.frame_unique_name = unique_name_helper_.GenerateNameForNewChildFrame(
       params.frame_name.empty() ? fallback_name.Utf8() : params.frame_name);
-  params.sandbox_flags = sandbox_flags;
-  params.container_policy = FeaturePolicyHeaderFromWeb(container_policy);
+  params.frame_policy = {sandbox_flags,
+                         FeaturePolicyHeaderFromWeb(container_policy)};
   params.frame_owner_properties =
       ConvertWebFrameOwnerPropertiesToFrameOwnerProperties(
           frame_owner_properties);
@@ -3319,8 +3321,8 @@ void RenderFrameImpl::DidChangeFramePolicy(
     blink::WebSandboxFlags flags,
     const blink::WebParsedFeaturePolicy& container_policy) {
   Send(new FrameHostMsg_DidChangeFramePolicy(
-      routing_id_, RenderFrame::GetRoutingIdForWebFrame(child_frame), flags,
-      FeaturePolicyHeaderFromWeb(container_policy)));
+      routing_id_, RenderFrame::GetRoutingIdForWebFrame(child_frame),
+      {flags, FeaturePolicyHeaderFromWeb(container_policy)}));
 }
 
 void RenderFrameImpl::DidSetFeaturePolicyHeader(
@@ -5189,6 +5191,7 @@ bool RenderFrameImpl::SwapIn() {
     render_view_->main_render_frame_ = this;
     if (render_view_->is_swapped_out())
       render_view_->SetSwappedOut(false);
+    render_view_->UpdateWebViewWithDeviceScaleFactor();
   }
 
   return true;
@@ -5395,23 +5398,26 @@ void RenderFrameImpl::OnFailedNavigation(
   if (request_params.page_state.IsValid())
     history_entry = PageStateToHistoryEntry(request_params.page_state);
 
+  // The load of the error page can result in this frame being removed.
+  // Use a WeakPtr as an easy way to detect whether this has occured. If so,
+  // this method should return immediately and not touch any part of the object,
+  // otherwise it will result in a use-after-free bug.
+  base::WeakPtr<RenderFrameImpl> weak_this = weak_factory_.GetWeakPtr();
+
   // For renderer initiated navigations, we send out a didFailProvisionalLoad()
   // notification.
   bool had_provisional_document_loader = frame_->GetProvisionalDocumentLoader();
   if (request_params.nav_entry_id == 0) {
     DidFailProvisionalLoad(error, replace ? blink::kWebHistoryInertCommit
                                           : blink::kWebStandardCommit);
+    if (!weak_this)
+      return;
   }
 
   // If we didn't call didFailProvisionalLoad or there wasn't a
   // GetProvisionalDocumentLoader(), LoadNavigationErrorPage wasn't called, so
   // do it now.
-  // Note: the load of the error page can result in this frame being removed.
-  // Use a WeakPtr as an easy way to detect whether this has occured. If so,
-  // this method should return immediately and not touch any part of the object,
-  // otherwise it will result in a use-after-free bug.
   if (request_params.nav_entry_id != 0 || !had_provisional_document_loader) {
-    base::WeakPtr<RenderFrameImpl> weak_this = weak_factory_.GetWeakPtr();
     LoadNavigationErrorPage(failed_request, error, replace,
                             history_entry.get());
     if (!weak_this)

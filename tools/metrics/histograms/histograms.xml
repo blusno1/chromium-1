@@ -688,6 +688,43 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>The reason the bottom sheet was opened.</summary>
 </histogram>
 
+<histogram name="Android.ChromeHome.Promo.Result.Menu"
+    enum="ChromeHomePromoResult">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The result of showing the Chrome Home promo when launched from the overflow
+    menu. This action can only be performed if Chrome Home is enabled.
+  </summary>
+</histogram>
+
+<histogram name="Android.ChromeHome.Promo.Result.NTP"
+    enum="ChromeHomePromoResult">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The result of showing the Chrome Home promo when launched from the NTP. This
+    action can only be performed if Chrome Home is disabled.
+  </summary>
+</histogram>
+
+<histogram name="Android.ChromeHome.Promo.Result.Startup"
+    enum="ChromeHomePromoResult">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The result of showing the Chrome Home promo when launched from startup. This
+    action can only be performed if Chrome Home is disabled.
+  </summary>
+</histogram>
+
+<histogram name="Android.ChromeHome.Promo.ShowReason"
+    enum="ChromeHomePromoShowReason">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>The reason the Chrome Home promo was shown.</summary>
+</histogram>
+
 <histogram name="Android.ChromeHome.TimeBetweenCloseAndNextOpen" units="ms">
   <owner>mdjones@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
@@ -703,6 +740,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The time between app creation and the first open of the Chrome Home bottom
     sheet for this run of Chrome.
+  </summary>
+</histogram>
+
+<histogram name="Android.ChromeHome.UserPreference.Enabled"
+    enum="BooleanEnabled">
+  <owner>mdjones@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    Records whether or not the user preference for Chrome Home is set to
+    enabled. This is recorded whenever the browser is restarted and the state of
+    Chrome Home is first checked. This metric is only recorded if the user's
+    preference is set.
   </summary>
 </histogram>
 
@@ -2133,6 +2182,25 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Elapsed time from the policy update notification sent to ARC to the
     corresponding successfully obtained compliance report from CloudDPS.
+  </summary>
+</histogram>
+
+<histogram name="Arc.ContainerLifetimeEvent" enum="ArcContainerLifetimeEvent">
+  <owner>elijahtaylor@google.com</owner>
+  <owner>yusukes@google.com</owner>
+  <summary>
+    The number of ARC container lifetime events. One START event and up to one
+    non-START event are recorded per ARC session, which ends when the user opts
+    out from ARC or signs out.
+  </summary>
+</histogram>
+
+<histogram name="Arc.ContainerRestartAfterCrashCount">
+  <owner>elijahtaylor@google.com</owner>
+  <owner>yusukes@google.com</owner>
+  <summary>
+    The number of times ARC container crashes and automatically restarts in one
+    ARC session, which ends when the user opts out from ARC or signs out.
   </summary>
 </histogram>
 
@@ -6084,6 +6152,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="Blink.Canvas.ToDataURL" units="microseconds">
   <owner>junov@chromium.org</owner>
   <summary>Time spent on 2D canvas toDataURL API call.</summary>
+</histogram>
+
+<histogram name="Blink.CheckerableImageCount" enum="CheckerableImageType">
+  <owner>khushalsagar@chromium.org</owner>
+  <summary>
+    The number of images which could have been checkered (async decoded) for a
+    performance gain, split by the DOM element type on which they were used.
+    This is recorded each time an image for an element created by the page is
+    loaded, either from the network or the local cache. The browser heuristics
+    define an image to be checkerable if it is expected to have a long decode
+    duration. Since these images may be on the rendering critical path, decoding
+    them asychronously from painting other content can provide better
+    performance be reducing overall content checkerboarding.
+  </summary>
 </histogram>
 
 <histogram name="Blink.ColorGamut.Destination" enum="Gamut">
@@ -18376,6 +18458,23 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="EnterpriseCheck.IsLocalMachine" enum="Boolean">
+  <owner>mad@chromium.org</owner>
+  <summary>
+    Whether the full machine name is the same as the short one, identifying a
+    local machine. This check is performed once at start-up on Windows.
+  </summary>
+</histogram>
+
+<histogram name="EnterpriseCheck.IsLocalUser" enum="Boolean">
+  <owner>mad@chromium.org</owner>
+  <summary>
+    Whether the currently logged in user is a local user or not, based on its
+    SAM compatible user name and machine name. This check is performed once at
+    start-up on Windows.
+  </summary>
+</histogram>
+
 <histogram name="EnterpriseCheck.IsManaged" enum="BooleanEnabled">
   <owner>rogerta@chromium.org</owner>
   <summary>
@@ -24270,6 +24369,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="FileBrowser.OpenFiles.RootType" enum="FileManagerRootType">
+  <owner>fukino@chromium.com</owner>
+  <summary>
+    Chrome OS File Browser: The locations (root types) of files which are opened
+    by the file picker.
+  </summary>
+</histogram>
+
 <histogram name="FileBrowser.OpeningFileType" enum="FileType">
   <obsolete>
     Deprecated 4/2013, and replaced by FileBrowser.ViewingFileType.
@@ -29026,6 +29133,26 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="InstantTethering.UserPreference.OnStartup"
+    enum="BooleanEnabled">
+  <owner>hansberry@chromium.com</owner>
+  <summary>
+    Provides the count of the number of users who have the Instant Tethering
+    toggle enabled vs. disabled on startup. This metric is logged each time a
+    user logs into a Chromebook.
+  </summary>
+</histogram>
+
+<histogram name="InstantTethering.UserPreference.OnToggle"
+    enum="BooleanEnabled">
+  <owner>hansberry@chromium.com</owner>
+  <summary>
+    Provides the count of the number of times users have enabled or disabled the
+    user preference for Mobile data. This metric is logged each time the value
+    is toggled.
+  </summary>
+</histogram>
+
 <histogram name="interstitial.authority_invalid_time" units="ms">
   <obsolete>
     Removed on 8/1/13.
@@ -29819,6 +29946,22 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>The result of an open attempt of a leveldb.</summary>
 </histogram>
 
+<histogram name="LevelDB.SharedCache.BytesUsed" units="Bytes">
+  <owner>cmumford@chromium.org</owner>
+  <summary>
+    The estimated size (in bytes) of the leveldb shared cache. Recorded once per
+    UMA ping.
+  </summary>
+</histogram>
+
+<histogram name="LevelDB.SharedCache.DBCount" units="count">
+  <owner>cmumford@chromium.org</owner>
+  <summary>
+    The number of databases currently using the shared block cache. Recorded
+    once per UMA ping.
+  </summary>
+</histogram>
+
 <histogram name="LevelDBEnv.All.SafeThreadAccess" units="accesses">
   <obsolete>
     Deprecated 2013-10. No thread-unsafety was found.
@@ -30261,6 +30404,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Time (in ms) to load HTML5 LocalStorage into the renderer-side cache using
     Mojo implementation, split by size.
+  </summary>
+</histogram>
+
+<histogram name="LocalStorage.RendererAreaCacheHit"
+    enum="LocalStorageRendererAreaCacheHitEnum">
+  <owner>ssid@chromium.org</owner>
+  <summary>
+    The renderer side cache hit rate metrics for new HTML5 LocalStorage DB
+    opened.
   </summary>
 </histogram>
 
@@ -34356,6 +34508,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>btolsch@chromium.org</owner>
   <summary>
     Time between network change events reported by DiscoveryNetworkMonitor.
+  </summary>
+</histogram>
+
+<histogram name="MediaRouter.PresentationRequest.AvailabilityUrlType"
+    enum="PresentationUrlType">
+  <owner>imcheng@chromium.org</owner>
+  <summary>
+    The type of Presentation URL used in a PresentationRequest by a web page.
   </summary>
 </histogram>
 
@@ -50338,6 +50498,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The actions taken on notifications, recorded every time they happen.  This
     histogram will record every single event that happens separately.
+  </summary>
+</histogram>
+
+<histogram name="Notifications.Android.JobStartDelay" units="ms">
+  <owner>awdf@chromium.org</owner>
+  <summary>
+    Records the delay between scheduling a job with the JobScheduler (with a
+    desired latency of 0ms, in response to a notification click) and receiving
+    the onStartJob callback. Only measured on Android N and above.
   </summary>
 </histogram>
 
@@ -84182,16 +84351,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     units="ms">
   <owner>fmeawad@chromium.org</owner>
   <summary>
-    The expected queueing duration of tasks in a foreground tab when the browser
-    is in background tab opening session, which is the duration from the time
-    when the browser starts to open background tabs until the time when browser
-    has finished loading those tabs or paused loading due to memory pressure. A
-    new session starts when the browser resumes loading background tabs when
-    memory pressure returns to normal. The metric reflects the responsiveness of
-    a tab. A lower value means the tab will respond to inputs faster. This
-    metric is equal to RendererScheduler.ExpectedTaskQueueingDuration. It is
-    emitted once for all tasks in each 1000-ms window. The metric is not
-    recorded when the session overlaps with session restore.
+    The expected queueing duration of tasks in a foreground tab during a
+    background tab opening session (the duration of time from when the browser
+    starts to open background tabs until the time the browser has finished
+    loading those tabs or otherwise decided to stop loading them). The metric
+    reflects the responsiveness of a tab. A lower value means the tab will
+    respond to inputs faster. This metric is equivalent to
+    RendererScheduler.ExpectedTaskQueueingDuration. It is emitted once for all
+    tasks in each 1000-ms window. The metric is not recorded when the session
+    overlaps with session restore.
   </summary>
 </histogram>
 
@@ -84199,17 +84367,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     enum="TabLoadingState">
   <owner>zhenw@chromium.org</owner>
   <summary>
-    The loading state of a tab at the time the user switches to it when the
-    browser is in background tab opening session, which is the duration from the
-    time when the browser starts to open background tabs until the time when
-    browser has finished loading those tabs or paused loading due to memory
-    pressure. A new session starts when the browser resumes loading background
-    tabs when memory pressure returns to normal. The metric is only recorded
-    when a tab is switched to from another tab within the same tabstrip. As a
-    result, the case when switching between different windows is not included,
-    either between two tabs in different browser windows, or when switching to a
-    different application and switching back to the browser. The metric is not
-    recorded when the session overlaps with session restore.
+    The loading state of a tab at the time the user switches to it during a
+    background tab opening session (the duration of time from when the browser
+    starts to open background tabs until the time the browser has finished
+    loading those tabs or otherwise decided to stop loading them). The metric is
+    only recorded when a tab is switched to from another tab within the same
+    tabstrip. As a result, the case when switching between different windows is
+    not included, either between two tabs in different browser windows, or when
+    switching to a different application and switching back to the browser. The
+    metric is not recorded when the session overlaps with session restore.
   </summary>
 </histogram>
 
@@ -84217,13 +84383,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>zhenw@chromium.org</owner>
   <summary>
     The max number of background tabs pending or loading when opening background
-    tabs. This is recorded at the end of background tab opening session, which
-    is defined as the duration from the time when the browser starts to open
-    background tabs until the time when browser has finished loading those tabs
-    or paused loading due to memory pressure. A new session starts when the
-    browser resumes loading background tabs when memory pressure returns to
-    normal. The metric is not recorded when the session overlaps with session
-    restore.
+    tabs. This is recorded at the end of the background tab opening session (the
+    duration of time from when the browser starts to open background tabs until
+    the time the browser has finished loading those tabs or otherwise decided to
+    stop loading them). The metric is not recorded when the session overlaps
+    with session restore.
   </summary>
 </histogram>
 
@@ -84233,12 +84397,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The number of background tabs whose loading was triggered by TabManager
     automatically when opening background tabs. This is recorded at the end of
-    background tab opening session, which is defined as the duration from the
-    time when the browser starts to open background tabs until the time when
-    browser has finished loading those tabs or paused loading due to memory
-    pressure. A new session starts when the browser resumes loading background
-    tabs when memory pressure returns to normal. The metric is not recorded when
-    the session overlaps with session restore.
+    the background tab opening session (the duration of time from when the
+    browser starts to open background tabs until the time the browser has
+    finished loading those tabs or otherwise decided to stop loading them). The
+    metric is not recorded when the session overlaps with session restore.
   </summary>
 </histogram>
 
@@ -84249,13 +84411,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     The number of background tabs whose loading was triggered by user action
     when opening background tabs. For example, when the user selects a
     background tab and brings it to foreground, that tab will start to load
-    immediately if not already loading. This is recorded at the end of
-    background tab opening session, which is defined as the duration from the
-    time when the browser starts to open background tabs until the time when
-    browser has finished loading those tabs or paused loading due to memory
-    pressure. A new session starts when the browser resumes loading background
-    tabs when memory pressure returns to normal. The metric is not recorded when
-    the session overlaps with session restore.
+    immediately if not already loading. This is recorded at the end of the
+    background tab opening session (the duration of time from when the browser
+    starts to open background tabs until the time the browser has finished
+    loading those tabs or otherwise decided to stop loading them). The metric is
+    not recorded when the session overlaps with session restore.
   </summary>
 </histogram>
 
@@ -84263,13 +84423,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>zhenw@chromium.org</owner>
   <summary>
     The max number of background tabs paused to load due to memory pressure when
-    opening background tabs. This is recorded at the end of background tab
-    opening session, which is defined as the duration from the time when the
-    browser starts to open background tabs until the time when browser has
-    finished loading those tabs or paused loading them all due to memory
-    pressure. A new session starts when the browser resumes loading background
-    tabs when memory pressure returns to normal. The metric is not recorded when
-    the session overlaps with session restore.
+    opening background tabs. This is recorded at the end of the background tab
+    opening session during a background tab opening session (the duration of
+    time from when the browser starts to open background tabs until the time the
+    browser has finished loading those tabs or otherwise decided to stop loading
+    them). The metric is not recorded when the session overlaps with session
+    restore.
   </summary>
 </histogram>
 
@@ -84367,16 +84526,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>fmeawad@chromium.org</owner>
   <summary>
     The number of pages compressed per second when opening background tabs. This
-    is recorded at the end of background tab opening session as an average over
-    the entire period, which is defined as the duration from the time when the
-    browser starts to open background tabs until the time when browser has
-    finished loading those tabs or paused loading due to memory pressure. A new
-    session starts when the browser resumes loading background tabs when memory
-    pressure returns to normal. The metric is not recorded when the session
-    overlaps with session restore. Only recorded on macOS. Warning: This metric
-    is a ratio and the session interval differs for each session. It is hard to
-    tell if it is average rate for each second in the interval or it has a huge
-    spike.
+    is recorded at the end of the background tab opening session as an average
+    over the entire period (the duration of time from when the browser starts to
+    open background tabs until the time the browser has finished loading those
+    tabs or otherwise decided to stop loading them). The metric is not recorded
+    when the session overlaps with session restore. Only recorded on macOS.
+    Warning: This metric is a ratio and the session interval differs for each
+    session. It is hard to tell if it is average rate for each second in the
+    interval or it has a huge spike.
   </summary>
 </histogram>
 
@@ -84386,16 +84543,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>fmeawad@chromium.org</owner>
   <summary>
     The number of pages decompressed per second when opening background tabs.
-    This is recorded at the end of background tab opening session as an average
-    over the entire period, which is defined as the duration from the time when
-    the browser starts to open background tabs until the time when browser has
-    finished loading those tabs or paused loading due to memory pressure. A new
-    session starts when the browser resumes loading background tabs when memory
-    pressure returns to normal. The metric is not recorded when the session
-    overlaps with session restore. Only recorded on macOS. Warning: This metric
-    is a ratio and the session interval differs for each session. It is hard to
-    tell if it is average rate for each second in the interval or it has a huge
-    spike.
+    This is recorded at the end of the background tab opening session as an
+    average over the entire period (the duration of time from when the browser
+    starts to open background tabs until the time the browser has finished
+    loading those tabs or otherwise decided to stop loading them). The metric is
+    not recorded when the session overlaps with session restore. Only recorded
+    on macOS. Warning: This metric is a ratio and the session interval differs
+    for each session. It is hard to tell if it is average rate for each second
+    in the interval or it has a huge spike.
   </summary>
 </histogram>
 
@@ -84404,15 +84559,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>fmeawad@chromium.org</owner>
   <summary>
     The number of swap-ins per second when opening background tabs. This is
-    recorded at the end of background tab opening session as an average over the
-    entire period, which is defined as the duration from the time when the
-    browser starts to open background tabs until the time when browser has
-    finished loading those tabs or paused loading due to memory pressure. A new
-    session starts when the browser resumes loading background tabs when memory
-    pressure returns to normal. The metric is not recorded when the session
-    overlaps with session restore. Warning: This metric is a ratio and the
-    session interval differs for each session. It is hard to tell if it is
-    average rate for each second in the interval or it has a huge spike.
+    recorded at the end of the background tab opening session as an average over
+    the entire period (the duration of time from when the browser starts to open
+    background tabs until the time the browser has finished loading those tabs
+    or otherwise decided to stop loading them). The metric is not recorded when
+    the session overlaps with session restore. Warning: This metric is a ratio
+    and the session interval differs for each session. It is hard to tell if it
+    is average rate for each second in the interval or it has a huge spike.
   </summary>
 </histogram>
 
@@ -84421,15 +84574,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>fmeawad@chromium.org</owner>
   <summary>
     The number of swap-outs per second when opening background tabs. This is
-    recorded at the end of background tab opening session as an average over the
-    entire period, which is defined as the duration from the time when the
-    browser starts to open background tabs until the time when browser has
-    finished loading those tabs or paused loading due to memory pressure. A new
-    session starts when the browser resumes loading background tabs when memory
-    pressure returns to normal. The metric is not recorded when the session
-    overlaps with session restore. Warning: This metric is a ratio and the
-    session interval differs for each session. It is hard to tell if it is
-    average rate for each second in the interval or it has a huge spike.
+    recorded at the end of the background tab opening session as an average over
+    the entire period (the duration of time from when the browser starts to open
+    background tabs until the time the browser has finished loading those tabs
+    or otherwise decided to stop loading them). The metric is not recorded when
+    the session overlaps with session restore. Warning: This metric is a ratio
+    and the session interval differs for each session. It is hard to tell if it
+    is average rate for each second in the interval or it has a huge spike.
   </summary>
 </histogram>
 
@@ -84442,20 +84593,19 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </obsolete>
   <owner>zhenw@chromium.org</owner>
   <summary>
-    The tab load time of a tab that is switched to when the browser is in
-    background tab opening session, which is the duration from the time when the
-    browser starts to open background tabs until the time when browser has
-    finished loading those tabs or paused loading due to memory pressure. A new
-    session starts when the browser resumes loading background tabs when memory
-    pressure returns to normal. Tab load time is defined as the time between
-    when the user switches to a backround tab, and the time when that tab
-    finishes loading in the foreground. If the user switches away before the tab
-    finishes loading, a metric will not be recorded unless the user switches
-    back, in which case the tab load time is measured from that point in time.
-    The metric is only recorded when a tab is switched to from another tab
-    within the same tabstrip. As a result, the initial forground tab is not
-    included in this metric since it was not switched to from another tab. The
-    metric is not recorded when the session overlaps with session restore.
+    The tab load time of a tab that is switched to during a background tab
+    opening session (the duration of time from when the browser starts to open
+    background tabs until the time the browser has finished loading those tabs
+    or otherwise decided to stop loading them). Tab load time is defined as the
+    time between when the user switches to a backround tab, and the time when
+    that tab finishes loading in the foreground. If the user switches away
+    before the tab finishes loading, a metric will not be recorded unless the
+    user switches back, in which case the tab load time is measured from that
+    point in time. The metric is only recorded when a tab is switched to from
+    another tab within the same tabstrip. As a result, the initial forground tab
+    is not included in this metric since it was not switched to from another
+    tab. The metric is not recorded when the session overlaps with session
+    restore.
   </summary>
 </histogram>
 
@@ -84464,20 +84614,19 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     units="ms">
   <owner>zhenw@chromium.org</owner>
   <summary>
-    The tab load time of a tab that is switched to when the browser is in
-    background tab opening session, which is the duration from the time when the
-    browser starts to open background tabs until the time when browser has
-    finished loading those tabs or paused loading due to memory pressure. A new
-    session starts when the browser resumes loading background tabs when memory
-    pressure returns to normal. Tab load time is defined as the time between
-    when the user switches to a backround tab, and the time when that tab
-    finishes loading in the foreground. If the user switches away before the tab
-    finishes loading, a metric will not be recorded unless the user switches
-    back, in which case the tab load time is measured from that point in time.
-    The metric is only recorded when a tab is switched to from another tab
-    within the same tabstrip. As a result, the initial forground tab is not
-    included in this metric since it was not switched to from another tab. The
-    metric is not recorded when the session overlaps with session restore.
+    The tab load time of a tab that is switched to during a background tab
+    opening session (the duration of time from when the browser starts to open
+    background tabs until the time the browser has finished loading those tabs
+    or otherwise decided to stop loading them). Tab load time is defined as the
+    time between when the user switches to a backround tab, and the time when
+    that tab finishes loading in the foreground. If the user switches away
+    before the tab finishes loading, a metric will not be recorded unless the
+    user switches back, in which case the tab load time is measured from that
+    point in time. The metric is only recorded when a tab is switched to from
+    another tab within the same tabstrip. As a result, the initial forground tab
+    is not included in this metric since it was not switched to from another
+    tab. The metric is not recorded when the session overlaps with session
+    restore.
   </summary>
 </histogram>
 
@@ -84692,12 +84841,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Whether background tab opening session is overlapped with other types of
     session, e.g., session restore. Background tab opening session is the
-    duration from the time when the browser starts to open background tabs until
-    the time when browser has finished loading those tabs or paused loading due
-    to memory pressure. A new background tab opening session starts when the
-    browser resumes loading background tabs when memory pressure returns to
-    normal. This metric helps to understand how often background tab opening has
-    overlap with other sessions.
+    duration of time from when the browser starts to open background tabs until
+    the time the browser has finished loading those tabs or otherwise decided to
+    stop loading them. This metric helps to understand how often background tab
+    opening has overlap with other sessions.
   </summary>
 </histogram>
 
@@ -85548,6 +85695,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="ThirdPartyModules.InputMethodEditorsCount" units="counts">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    The number of registered input method editors found on the user's machine.
+    This is emitted shortly after startup when the IME enumeration takes place.
+  </summary>
+</histogram>
+
 <histogram name="ThirdPartyModules.InstalledPrograms.DataSize" units="KB">
   <owner>pmonette@chromium.org</owner>
   <summary>
@@ -85619,7 +85774,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="ThirdPartyModules.ShellExtensionsCount" units="counts">
   <owner>pmonette@chromium.org</owner>
   <summary>
-    The number of registered shell extensions found on the user's machine.
+    The number of registered shell extensions found on the user's machine. This
+    is emitted shortly after startup when the shell extensions enumeration takes
+    place.
   </summary>
 </histogram>
 
@@ -89810,6 +89967,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="VoiceInteraction.OpenDuration" units="ms">
+  <owner>xiaohuic@chromium.org</owner>
+  <summary>
+    Records the time between a voice interaction session start and end.
+  </summary>
+</histogram>
+
 <histogram name="VoiceInteraction.UserInteractionToRequestArrival" units="ms">
   <owner>muyuanli@chromium.org</owner>
   <summary>
@@ -89846,6 +90010,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     The result of calls to VRDisplay::requestPresent().  Reported twice per
     requestPresent() call, once to record the call, and once to record the
     result.
+  </summary>
+</histogram>
+
+<histogram name="VRFreNotComplete" enum="BooleanHit">
+  <owner>ymalik@chromium.org</owner>
+  <summary>
+    Whether the user had been through the FRE when Chrome is launched in VR
+    mode.
   </summary>
 </histogram>
 
@@ -90881,9 +91053,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="WebCore.IndexedDB.Context.ForcedCloseReason"
+<histogram name="WebCore.IndexedDB.Context.ForceCloseReason"
     enum="IDBContextForcedCloseReason">
-  <owner>dgrogan@chromium.org</owner>
+  <owner>cmumford@chromium.org</owner>
   <summary>The reason that a forced-close of a backing store occurred.</summary>
 </histogram>
 
@@ -97388,6 +97560,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram_suffixes name="Download.Service.Client" separator=".">
   <suffix name="OfflinePage" label="Offline page prefetch."/>
+  <suffix name="BackgroundFetch" label="Background fetch."/>
+  <suffix name="Debugging" label="Debugging client."/>
   <affected-histogram name="Download.Service.Request.ClientAction"/>
   <affected-histogram name="Download.Service.Request.StartResponse"/>
   <affected-histogram name="Download.Service.Request.StartResult"/>
@@ -98627,7 +98801,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <affected-histogram name="LevelDBEnv.TimeUntilSuccessFor"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="LevelDBOpenResults" separator="_">
+<histogram_suffixes name="LevelDBOpenResults" separator=".">
   <suffix name="DomDistillerStore" label="Databases for DomDistillerStore"/>
   <suffix name="GCMKeyStore" label="Databases for GCMKeyStore"/>
   <suffix name="ImageManager" label="Databases for ImageManager"/>
@@ -98643,6 +98817,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <suffix name="FeatureEngagementTrackerAvailabilityStore"
       label="Database for FeatureEngagementTracker feature availability."/>
   <affected-histogram name="LevelDB.Open"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="LevelDBSharedCache" separator=".">
+  <owner>cmumford@chromium.org</owner>
+  <suffix name="Browser"
+      label="Cache shared databases whose access pattern is dictated by
+             browser code."/>
+  <suffix name="Web"
+      label="whose access pattern is directly influenced by Web APIs, like
+             Indexed DB, etc."/>
+  <suffix name="Unified" label="Cache shared by both web and browser."/>
+  <suffix name="InMemory" label="Cache shared all in-memory databases."/>
+  <affected-histogram name="LevelDB.SharedCache.BytesUsed"/>
+  <affected-histogram name="LevelDB.SharedCache.DBCount"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="LocalNetReqsLocalhostResources" separator=".">
@@ -103048,6 +103236,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <suffix name="LitePage" label="Lite page previews"/>
   <suffix name="LoFi" label="Server LoFi previews"/>
   <suffix name="AMPRedirection" label="AMP Redirection previews"/>
+  <suffix name="NoScript" label="NoScript previews"/>
   <affected-histogram name="Previews.EligibilityReason"/>
   <affected-histogram name="Previews.InfoBarAction"/>
   <affected-histogram name="Previews.OptOut.UserOptedOut"/>
@@ -105342,6 +105531,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <suffix name="Vp9.S2"
       label="Video codec: VP9. QP range: 0-255. Spatial layer 2."/>
   <affected-histogram name="WebRTC.Video.Encoded.Qp"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="VRFreNotCompleteType" separator=".">
+  <suffix name="VrBrowser" label="FRE not complete when starting Chrome"/>
+  <suffix name="WebVRAutopresent"
+      label="FRE not complete when starting WebVR auto-presentation"/>
+  <affected-histogram name="VRFreNotComplete"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="VRRuntimeVersionGVRHeadset" separator=".">

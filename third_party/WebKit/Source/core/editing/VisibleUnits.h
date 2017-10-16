@@ -82,8 +82,6 @@ CORE_EXPORT int CaretMaxOffset(const Node*);
 // last position in the last atomic node in boundary for all of the positions
 // in boundary after the last candidate, where
 // endsOfNodeAreVisuallyDistinctPositions(boundary).
-// FIXME: This function should never be called when the line box tree is dirty.
-// See https://bugs.webkit.org/show_bug.cgi?id=97264
 CORE_EXPORT Position MostBackwardCaretPosition(
     const Position&,
     EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
@@ -240,15 +238,11 @@ VisiblePosition NextParagraphPosition(const VisiblePosition&, LayoutUnit x);
 CORE_EXPORT bool IsStartOfParagraph(
     const VisiblePosition&,
     EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
-CORE_EXPORT bool IsStartOfParagraph(
-    const VisiblePositionInFlatTree&,
-    EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
+CORE_EXPORT bool IsStartOfParagraph(const VisiblePositionInFlatTree&);
 CORE_EXPORT bool IsEndOfParagraph(
     const VisiblePosition&,
     EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
-CORE_EXPORT bool IsEndOfParagraph(
-    const VisiblePositionInFlatTree&,
-    EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
+CORE_EXPORT bool IsEndOfParagraph(const VisiblePositionInFlatTree&);
 bool InSameParagraph(const VisiblePosition&,
                      const VisiblePosition&,
                      EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);

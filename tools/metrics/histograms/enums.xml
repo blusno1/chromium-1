@@ -1294,6 +1294,13 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="4" label="Account check failed"/>
 </enum>
 
+<enum name="ArcContainerLifetimeEvent">
+  <int value="0" label="Starting"/>
+  <int value="1" label="Failed to start"/>
+  <int value="2" label="Crashed early"/>
+  <int value="3" label="Crashed"/>
+</enum>
+
 <enum name="ArcIntentHandlerAction">
   <summary>Defines Arc intent handler actions</summary>
   <int value="0" label="Error"/>
@@ -2747,6 +2754,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="177" label="SWDH_PROVIDER_CREATED_BAD_ID"/>
   <int value="178" label="RFH_KEEP_ALIVE_HANDLE_REQUESTED_INCORRECTLY"/>
   <int value="179" label="BFSI_INVALID_UNIQUE_ID"/>
+  <int value="180" label="BPE_UNEXPECTED_MESSAGE_BEFORE_BPGM_CREATION"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions">
@@ -4355,6 +4363,13 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="3" label="Stream was never read at all"/>
 </enum>
 
+<enum name="CheckerableImageType">
+  <int value="0" label="Checkerable image was used with an img tag"/>
+  <int value="1" label="Checkerable image was used with an svg tag"/>
+  <int value="2" label="Checkerable image was used with a css style property"/>
+  <int value="3" label="Not checkerable image"/>
+</enum>
+
 <enum name="CheckerImagingDecision">
   <int value="0" label="Can decode asynchronously."/>
   <int value="1" label="Image is animated."/>
@@ -4401,6 +4416,20 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2" label="New Tab Creation"/>
   <int value="3" label="Expand Button Pressed"/>
   <int value="4" label="Browser Startup"/>
+</enum>
+
+<enum name="ChromeHomePromoResult">
+  <int value="0" label="Enabled Chome Home"/>
+  <int value="1" label="Disabled Chome Home"/>
+  <int value="2" label="Chrome Home remained enabled"/>
+  <int value="3" label="Chrome Home remained disabled"/>
+  <int value="4" label="No action"/>
+</enum>
+
+<enum name="ChromeHomePromoShowReason">
+  <int value="0" label="NTP"/>
+  <int value="1" label="Menu"/>
+  <int value="2" label="Startup"/>
 </enum>
 
 <enum name="ChromeNotifierServiceActionType">
@@ -11567,10 +11596,9 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="387" label="DeviceNativePrintersAccessMode"/>
   <int value="388" label="DeviceNativePrintersBlacklist"/>
   <int value="389" label="DeviceNativePrintersWhitelist"/>
-  <int value="390" label="TPMFirmwareUpdateSettings"/>
+  <int value="390" label="DeviceTPMFirmwareUpdateSettings"/>
   <int value="391" label="RunAllFlashInAllowMode"/>
   <int value="392" label="AutoFillCreditCardEnabled"/>
-  <int value="393" label="AllowUserAvatarVideos"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations">
@@ -16555,6 +16583,11 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2184" label="CrossOriginWorkerTextHtml"/>
   <int value="2185" label="CrossOriginWorkerTextPlain"/>
   <int value="2186" label="CrossOriginWorkerTextXml"/>
+  <int value="2187" label="ImageCaptureSetOptions"/>
+  <int value="2188" label="PerformanceObserverForWindow"/>
+  <int value="2189" label="PerformanceObserverForWorker"/>
+  <int value="2190" label="PaintTimingObserved"/>
+  <int value="2191" label="PaintTimingRequested"/>
 </enum>
 
 <enum name="FeedbackSource">
@@ -17400,6 +17433,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="10" label="DRIVE_SHARED_WITH_ME"/>
   <int value="11" label="DRIVE_RECENT"/>
   <int value="12" label="MEDIA_VIEW"/>
+  <int value="13" label="RECENT"/>
 </enum>
 
 <enum name="FileManagerVolumeType">
@@ -19770,6 +19804,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-2055973512" label="Login.ConsumerNewUsersAllowed"/>
   <int value="-2021219906"
       label="DataUse.MessageSize.AllServices.Downstream.Foreground.NotCellular"/>
+  <int value="-1724216561"
+      label="Extensions.Functions.SucceededTime.LessThan1ms"/>
   <int value="-1620411628"
       label="DataUse.MessageSize.AllServices.Downstream.Unknown.NotCellular"/>
   <int value="-1607339868"
@@ -19796,6 +19832,7 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="DataUse.MessageSize.AllServices.Downstream.Unknown.Cellular"/>
   <int value="424952287"
       label="Network.Shill.Wifi.LinkMonitorResponseTimeSample"/>
+  <int value="433324211" label="Extensions.FunctionCalls"/>
   <int value="628921860"
       label="Network.Shill.Ethernet.LinkMonitorResponseTimeSample"/>
   <int value="662206917"
@@ -19804,6 +19841,7 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="DataUse.MessageSize.AllServices.Upstream.Foreground.Cellular"/>
   <int value="1370064090"
       label="DataUse.MessageSize.AllServices.Upstream.Background.Cellular"/>
+  <int value="1514844119" label="DataUse.Sync.Upload.Bytes"/>
   <int value="1753226325"
       label="DataUse.MessageSize.AllServices.Downstream.Foreground.Cellular"/>
   <int value="1977321258"
@@ -23256,6 +23294,12 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="4" label="Success"/>
 </enum>
 
+<enum name="LocalStorageRendererAreaCacheHitEnum">
+  <int value="0" label="Area was not present in cache"/>
+  <int value="1" label="Area with no references loaded from cache"/>
+  <int value="2" label="Area with references loaded"/>
+</enum>
+
 <enum name="LockScreenActionAvailability">
   <int value="0" label="Available"/>
   <int value="1" label="Not available - no action handler app"/>
@@ -23464,6 +23508,7 @@ from previous Chrome versions.
   <int value="-1860481724" label="ChromeHomeExpandButton:enabled"/>
   <int value="-1856902397" label="LoadingWithMojo:enabled"/>
   <int value="-1849706663" label="enable-password-force-saving:disabled"/>
+  <int value="-1847888049" label="AutofillSendBillingCustomerNumber:enabled"/>
   <int value="-1847835522" label="disable-touch-adjustment"/>
   <int value="-1847776781"
       label="enable-loading-ipc-optimization-for-small-resources"/>
@@ -23572,6 +23617,7 @@ from previous Chrome versions.
   <int value="-1510839574" label="disable-sync-synced-notifications"/>
   <int value="-1508852757" label="CreditCardAutofillTouchBar:disabled"/>
   <int value="-1504305449" label="NTPPhysicalWebPageSuggestions:enabled"/>
+  <int value="-1498334893" label="ExperimentalVRFeatures:enabled"/>
   <int value="-1497338981" label="disable-accelerated-overflow-scroll"/>
   <int value="-1492589689" label="ContentSuggestionsCategories:enabled"/>
   <int value="-1491417046" label="enable-fullscreen-toolbar-reveal"/>
@@ -23608,8 +23654,6 @@ from previous Chrome versions.
   <int value="-1426817842" label="BlockTabUnders:enabled"/>
   <int value="-1426034869" label="NoCreditCardAbort:enabled"/>
   <int value="-1419788257" label="enable-experimental-hotwording"/>
-  <int value="-1417122729"
-      label="AutofillCreditCardAblationExperiment:disabled"/>
   <int value="-1416754663" label="enable-mac-views-native-app-windows"/>
   <int value="-1416184931" label="TranslateRankerEnforcement:enabled"/>
   <int value="-1411003295" label="disable-encrypted-media"/>
@@ -23855,6 +23899,7 @@ from previous Chrome versions.
   <int value="-697751423" label="disable-quickoffice-component-app"/>
   <int value="-684900739" label="disable-merge-key-char-events"/>
   <int value="-684223908" label="enable-android-wallpapers-app"/>
+  <int value="-680787130" label="ExperimentalVRFeatures:disabled"/>
   <int value="-680589442" label="MacRTL:disabled"/>
   <int value="-671992446" label="TranslateRankerEnforcement:disabled"/>
   <int value="-667517406" label="overscroll-history-navigation"/>
@@ -23984,7 +24029,6 @@ from previous Chrome versions.
       label="CrossOriginMediaPlaybackRequiresUserGesture:disabled"/>
   <int value="-290672626" label="enable-asm-wasm"/>
   <int value="-288316828" label="enable-delegated-renderer"/>
-  <int value="-281844827" label="AutofillCreditCardAblationExperiment:enabled"/>
   <int value="-279920685" label="affiliation-based-matching:enabled"/>
   <int value="-279493876" label="WebVRExperimentalRendering:enabled"/>
   <int value="-278347667" label="default-tile-height"/>
@@ -24150,6 +24194,7 @@ from previous Chrome versions.
   <int value="278756320" label="disable-app-list-app-info"/>
   <int value="280644887" label="mash"/>
   <int value="283232244" label="OmniboxUIExperimentNarrowDropdown:enabled"/>
+  <int value="293134455" label="AutofillSendBillingCustomerNumber:disabled"/>
   <int value="301869874" label="NTPPhysicalWebPageSuggestions:disabled"/>
   <int value="303058039" label="AccountConsistency:disabled"/>
   <int value="304901781" label="NewUsbBackend:enabled"/>
@@ -27123,8 +27168,11 @@ from previous Chrome versions.
       label="Persistent sparse histogram accumulated a negative count that
              caused a negative value."/>
   <int value="7"
-      label="Persistent sparse histogram active sample overflowed during
-             accumulation and became negative."/>
+      label="Persistent sparse histogram active sample was negative after
+             accumulation (deprecated)."/>
+  <int value="8"
+      label="Persistent sparse histogram active sample wrapped 2^31 during
+             accumulation."/>
 </enum>
 
 <enum name="NetCacheState">
@@ -28818,6 +28866,9 @@ from previous Chrome versions.
   </int>
   <int value="1000" label="STALE_AT_DOWNLOADING">
     Entry became stale while at the DOWNLOADING state.
+  </int>
+  <int value="1050" label="STALE_AT_IMPORTING">
+    Entry became stale while at the IMPORTING state.
   </int>
   <int value="1100" label="STALE_AT_UNKNOWN">
     Entry became stale at an unknown state.
@@ -31890,6 +31941,17 @@ from previous Chrome versions.
   <int value="12" label="RequestDenied"/>
 </enum>
 
+<enum name="PresentationUrlType">
+  <int value="0" label="Other"/>
+  <int value="1" label="Cast"/>
+  <int value="2" label="CastDial"/>
+  <int value="3" label="CastLegacy"/>
+  <int value="4" label="Dial"/>
+  <int value="5" label="Http"/>
+  <int value="6" label="Https"/>
+  <int value="7" label="RemotePlayback"/>
+</enum>
+
 <enum name="PreTapEvents">
   <int value="0" label="no event"/>
   <int value="1" label="tapdown"/>
@@ -33648,6 +33710,7 @@ from previous Chrome versions.
   <int value="88" label="IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN"/>
   <int value="89" label="IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP"/>
   <int value="90" label="IDC_CONTENT_CONTEXT_SHOWALLSAVEDPASSWORDS"/>
+  <int value="91" label="IDC_CONTENT_CONTENT_PICTUREINPICTURE"/>
 </enum>
 
 <enum name="ReportingHeaderEndpointOutcome">

@@ -628,7 +628,8 @@ bool WindowTree::SetWindowVisibility(const ClientWindowId& window_id,
     DVLOG(1) << "SetWindowVisibility failed (no window)";
     return false;
   }
-  if (!access_policy_->CanChangeWindowVisibility(window)) {
+  if (!access_policy_->CanChangeWindowVisibility(window) ||
+      (!can_change_root_window_visibility_ && HasRoot(window))) {
     DVLOG(1) << "SetWindowVisibility failed (access policy denied change)";
     return false;
   }
@@ -1842,7 +1843,7 @@ void WindowTree::AttachCompositorFrameSink(
 }
 
 void WindowTree::SetWindowTextInputState(Id transport_window_id,
-                                         mojo::TextInputStatePtr state) {
+                                         ui::mojom::TextInputStatePtr state) {
   ServerWindow* window =
       GetWindowByClientId(MakeClientWindowId(transport_window_id));
   bool success = window && access_policy_->CanSetWindowTextInputState(window);
@@ -1852,7 +1853,7 @@ void WindowTree::SetWindowTextInputState(Id transport_window_id,
 
 void WindowTree::SetImeVisibility(Id transport_window_id,
                                   bool visible,
-                                  mojo::TextInputStatePtr state) {
+                                  ui::mojom::TextInputStatePtr state) {
   ServerWindow* window =
       GetWindowByClientId(MakeClientWindowId(transport_window_id));
   bool success = window && access_policy_->CanSetWindowTextInputState(window);

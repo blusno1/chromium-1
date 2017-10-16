@@ -14,8 +14,22 @@
 
 namespace blink {
 
+// static
+Image::ImageDecodingMode ImageElementBase::ParseImageDecodingMode(
+    const AtomicString& async_attr_value) {
+  if (async_attr_value.IsNull())
+    return Image::kUnspecifiedDecode;
+
+  const auto& value = async_attr_value.LowerASCII();
+  if (value == "" || value == "on")
+    return Image::kAsyncDecode;
+  if (value == "off")
+    return Image::kSyncDecode;
+  return Image::kUnspecifiedDecode;
+}
+
 ImageResourceContent* ImageElementBase::CachedImage() const {
-  return GetImageLoader().GetImage();
+  return GetImageLoader().GetContent();
 }
 
 const Element& ImageElementBase::GetElement() const {
@@ -104,22 +118,6 @@ bool ImageElementBase::IsAccelerated() const {
 
 const KURL& ImageElementBase::SourceURL() const {
   return CachedImage()->GetResponse().Url();
-}
-
-int ImageElementBase::SourceWidth() {
-  SourceImageStatus status;
-  RefPtr<Image> image = GetSourceImageForCanvas(&status, kPreferNoAcceleration,
-                                                kSnapshotReasonUnknown,
-                                                SourceDefaultObjectSize());
-  return image->width();
-}
-
-int ImageElementBase::SourceHeight() {
-  SourceImageStatus status;
-  RefPtr<Image> image = GetSourceImageForCanvas(&status, kPreferNoAcceleration,
-                                                kSnapshotReasonUnknown,
-                                                SourceDefaultObjectSize());
-  return image->height();
 }
 
 bool ImageElementBase::IsOpaque() const {

@@ -220,6 +220,7 @@ AutofillManager::AutofillManager(
       client_(client),
       payments_client_(base::MakeUnique<payments::PaymentsClient>(
           driver->GetURLRequestContext(),
+          client->GetPrefs(),
           this)),
       app_locale_(app_locale),
       personal_data_(client->GetPersonalDataManager()),
@@ -247,7 +248,6 @@ AutofillManager::AutofillManager(
       found_cvc_field_(false),
       found_value_in_cvc_field_(false),
       found_cvc_value_in_non_cvc_field_(false),
-      enable_ablation_logging_(false),
       external_delegate_(NULL),
       test_delegate_(NULL),
 #if defined(OS_ANDROID) || defined(OS_IOS)
@@ -270,6 +270,9 @@ AutofillManager::~AutofillManager() {}
 // static
 void AutofillManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterDoublePref(
+      prefs::kAutofillBillingCustomerNumber, 0.0,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
   // This pref is not synced because it's for a signin promo, which by
   // definition will not be synced.
   registry->RegisterIntegerPref(
@@ -443,9 +446,9 @@ bool AutofillManager::OnFormSubmitted(const FormData& form) {
     }
   }
 
-  address_form_event_logger_->OnFormSubmitted(/*force_logging=*/false);
+  address_form_event_logger_->OnFormSubmitted();
   if (IsCreditCardAutofillEnabled())
-    credit_card_form_event_logger_->OnFormSubmitted(enable_ablation_logging_);
+    credit_card_form_event_logger_->OnFormSubmitted();
 
   // Update Personal Data with the form's submitted data.
   if (submitted_form->IsAutofillable())
@@ -628,16 +631,6 @@ void AutofillManager::OnQueryFormFieldAutofillImpl(
     } else {
       suggestions =
           GetProfileSuggestions(*form_structure, field, *autofill_field);
-    }
-
-    // Logic for disabling/ablating credit card autofill.
-    if (base::FeatureList::IsEnabled(kAutofillCreditCardAblationExperiment) &&
-        is_filling_credit_card && !suggestions.empty()) {
-      suggestions.clear();
-      autocomplete_history_manager_->CancelPendingQuery();
-      external_delegate_->OnSuggestionsReturned(query_id, suggestions);
-      enable_ablation_logging_ = true;
-      return;
     }
 
     if (!suggestions.empty()) {
@@ -1203,6 +1196,11 @@ void AutofillManager::OnUserDidAcceptUpload() {
       upload_request_.cvc =
           client_->GetSaveCardBubbleController()->GetCvcEnteredByUser();
     }
+    if (IsAutofillSendBillingCustomerNumberExperimentEnabled()) {
+      upload_request_.billing_customer_number =
+          static_cast<int64_t>(payments_client_->GetPrefService()->GetDouble(
+              prefs::kAutofillBillingCustomerNumber));
+    }
     payments_client_->UploadCard(upload_request_);
   }
 }
@@ -1217,6 +1215,11 @@ void AutofillManager::OnDidGetUploadRiskData(const std::string& risk_data) {
       DCHECK(client_->GetSaveCardBubbleController());
       upload_request_.cvc =
           client_->GetSaveCardBubbleController()->GetCvcEnteredByUser();
+    }
+    if (IsAutofillSendBillingCustomerNumberExperimentEnabled()) {
+      upload_request_.billing_customer_number =
+          static_cast<int64_t>(payments_client_->GetPrefService()->GetDouble(
+              prefs::kAutofillBillingCustomerNumber));
     }
     payments_client_->UploadCard(upload_request_);
   }
@@ -1620,7 +1623,6 @@ void AutofillManager::Reset() {
   user_did_type_ = false;
   user_did_autofill_ = false;
   user_did_edit_autofilled_field_ = false;
-  enable_ablation_logging_ = false;
   masked_card_ = CreditCard();
   unmasking_query_id_ = -1;
   unmasking_form_ = FormData();
@@ -1637,6 +1639,7 @@ AutofillManager::AutofillManager(AutofillDriver* driver,
       client_(client),
       payments_client_(base::MakeUnique<payments::PaymentsClient>(
           driver->GetURLRequestContext(),
+          client->GetPrefs(),
           this)),
       app_locale_("en-US"),
       personal_data_(personal_data),

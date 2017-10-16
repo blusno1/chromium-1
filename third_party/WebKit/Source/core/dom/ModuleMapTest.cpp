@@ -102,7 +102,7 @@ class ModuleMapTestModulator final : public DummyModulator {
 
   struct TestRequest : public GarbageCollectedFinalized<TestRequest> {
     KURL url;
-    String nonce;
+    ScriptFetchOptions options;
     Member<ModuleScriptLoaderClient> client;
 
     DEFINE_INLINE_TRACE() { visitor->Trace(client); }
@@ -127,16 +127,15 @@ void ModuleMapTestModulator::FetchNewSingleModule(
     ModuleScriptLoaderClient* client) {
   TestRequest* test_request = new TestRequest;
   test_request->url = request.Url();
-  test_request->nonce = request.Nonce();
+  test_request->options = request.Options();
   test_request->client = client;
   test_requests_.push_back(test_request);
 }
 
 void ModuleMapTestModulator::ResolveFetches() {
   for (const auto& test_request : test_requests_) {
-    ModuleScript* module_script = ModuleScript::CreateForTest(
-        this, ScriptModule(), test_request->url, test_request->nonce,
-        kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
+    auto* module_script = ModuleScript::CreateForTest(
+        this, ScriptModule(), test_request->url, test_request->options);
     TaskRunner()->PostTask(
         BLINK_FROM_HERE,
         WTF::Bind(&ModuleScriptLoaderClient::NotifyNewSingleModuleFinished,
@@ -169,8 +168,7 @@ TEST_F(ModuleMapTest, sequentialRequests) {
   platform->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings
 
   KURL url(NullURL(), "https://example.com/foo.js");
-  ModuleScriptFetchRequest module_request(
-      url, String(), kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
+  ModuleScriptFetchRequest module_request(url, ScriptFetchOptions());
 
   // First request
   TestSingleModuleClient* client = new TestSingleModuleClient;
@@ -212,8 +210,7 @@ TEST_F(ModuleMapTest, concurrentRequestsShouldJoin) {
   platform->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings
 
   KURL url(NullURL(), "https://example.com/foo.js");
-  ModuleScriptFetchRequest module_request(
-      url, String(), kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
+  ModuleScriptFetchRequest module_request(url, ScriptFetchOptions());
 
   // First request
   TestSingleModuleClient* client = new TestSingleModuleClient;

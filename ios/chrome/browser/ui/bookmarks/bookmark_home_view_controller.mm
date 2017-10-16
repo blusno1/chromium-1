@@ -387,6 +387,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 #pragma mark - Navigation Bar Callbacks
 
 - (void)navigationBarCancel:(id)sender {
+  [self.bookmarksTableView navigateAway];
   [self dismissWithURL:GURL()];
 }
 
@@ -409,6 +410,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   [self presentViewController:navController animated:YES completion:NULL];
 }
 
+// Back button callback for the old ui.
 - (void)navigationBarBack:(id)sender {
   DCHECK([self shouldShowBackButtonOnNavigationBar]);
 
@@ -1047,7 +1049,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 // Set up navigation bar for the new UI.
 - (void)setupNavigationBar {
   self.navigationController.navigationBarHidden = YES;
-
   self.appBar = [[MDCAppBar alloc] init];
   [self addChildViewController:_appBar.headerViewController];
   ConfigureAppBarWithCardStyle(self.appBar);
@@ -1058,6 +1059,10 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       self.appBar.headerViewController.headerView;
 
   [self.appBar addSubviewsToParent];
+  // Prevent the touch events on appBar from being forwarded to the tableView.
+  // See https://crbug.com/773580
+  [self.appBar.headerViewController.headerView
+      stopForwardingTouchEventsForView:self.appBar.navigationBar];
 
   if (self.navigationController.viewControllers.count > 1) {
     // Add custom back button.
@@ -1075,7 +1080,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   self.navigationItem.rightBarButtonItem = [self customizedDoneButton];
 }
 
+// Back button callback for the new ui.
 - (void)back {
+  [self.bookmarksTableView navigateAway];
   [self.navigationController popViewControllerAnimated:YES];
 }
 

@@ -1704,7 +1704,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"cookieMediaLicense", IDS_SETTINGS_COOKIES_MEDIA_LICENSE},
     {"cookiePlural", IDS_SETTINGS_COOKIES_PLURAL_COOKIES},
     {"cookieServiceWorker", IDS_SETTINGS_COOKIES_SERVICE_WORKER},
-    {"cookieSingular", IDS_SETTINGS_COOKIES_SINGLE_COOKIE},
     {"embeddedOnAnyHost", IDS_SETTINGS_EXCEPTIONS_EMBEDDED_ON_ANY_HOST},
     {"embeddedOnHost", IDS_SETTINGS_EXCEPTIONS_EMBEDDED_ON_HOST},
     {"editSiteTitle", IDS_SETTINGS_EDIT_SITE_TITLE},
@@ -1778,6 +1777,10 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"siteSettingsImages", IDS_SETTINGS_SITE_SETTINGS_IMAGES},
     {"siteSettingsJavascript", IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT},
     {"siteSettingsSound", IDS_SETTINGS_SITE_SETTINGS_SOUND},
+    {"siteSettingsSoundAllow", IDS_SETTINGS_SITE_SETTINGS_SOUND_ALLOW},
+    {"siteSettingsSoundAllowRecommended",
+     IDS_SETTINGS_SITE_SETTINGS_SOUND_ALLOW_RECOMMENDED},
+    {"siteSettingsSoundBlock", IDS_SETTINGS_SITE_SETTINGS_SOUND_BLOCK},
     {"siteSettingsFlash", IDS_SETTINGS_SITE_SETTINGS_FLASH},
     {"siteSettingsPdfDocuments", IDS_SETTINGS_SITE_SETTINGS_PDF_DOCUMENTS},
     {"siteSettingsPdfDownloadPdfs",
@@ -2119,6 +2122,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   chromeos::network_element::AddOncLocalizedStrings(html_source);
   chromeos::network_element::AddDetailsLocalizedStrings(html_source);
   chromeos::network_element::AddConfigLocalizedStrings(html_source);
+  chromeos::network_element::AddErrorLocalizedStrings(html_source);
 #endif
   policy_indicator::AddLocalizedStrings(html_source);
 

@@ -1474,7 +1474,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // View coordinates means the coordinate space of |view()|.
   LayoutRect SelectionRectInViewCoordinates() const;
 
-  virtual bool CanBeSelectionLeaf() const { return false; }
+  bool CanBeSelectionLeaf() const;
   bool HasSelectedChildren() const {
     return GetSelectionState() != SelectionState::kNone;
   }
@@ -2097,6 +2097,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   virtual bool VisualRectRespectsVisibility() const { return true; }
   virtual LayoutRect LocalVisualRectIgnoringVisibility() const;
+
+  virtual bool CanBeSelectionLeafInternal() const { return false; }
 
  private:
   // Used only by applyFirstLineChanges to get a first line style based off of a
@@ -2790,8 +2792,14 @@ inline double AdjustScrollForAbsoluteZoom(double value,
   return AdjustScrollForAbsoluteZoom(value, layout_object.StyleRef());
 }
 
-CORE_EXPORT const LayoutObject* AssociatedLayoutObjectOf(const Node&,
-                                                         int offset_in_node);
+enum class LayoutObjectSide {
+  kRemainingTextIfOnBoundary,
+  kFirstLetterIfOnBoundary
+};
+CORE_EXPORT const LayoutObject* AssociatedLayoutObjectOf(
+    const Node&,
+    int offset_in_node,
+    LayoutObjectSide = LayoutObjectSide::kRemainingTextIfOnBoundary);
 
 #define DEFINE_LAYOUT_OBJECT_TYPE_CASTS(thisType, predicate)           \
   DEFINE_TYPE_CASTS(thisType, LayoutObject, object, object->predicate, \

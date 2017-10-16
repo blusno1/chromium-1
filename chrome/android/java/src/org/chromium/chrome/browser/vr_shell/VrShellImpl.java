@@ -328,10 +328,11 @@ public class VrShellImpl
         float displayHeightMeters = (dm.heightPixels / dm.ydpi) * INCHES_TO_METERS;
 
         mContentVrWindowAndroid = new VrWindowAndroid(mActivity, mContentVirtualDisplay);
+        boolean browsingDisabled = !VrShellDelegate.isVrShellEnabled(mDelegate.getVrSupportLevel());
         mNativeVrShell = nativeInit(mDelegate, mContentVrWindowAndroid.getNativePointer(), forWebVr,
-                webVrAutopresentationExpected, inCct, getGvrApi().getNativeGvrContext(),
-                mReprojectedRendering, displayWidthMeters, displayHeightMeters, dm.widthPixels,
-                dm.heightPixels);
+                webVrAutopresentationExpected, inCct, browsingDisabled,
+                getGvrApi().getNativeGvrContext(), mReprojectedRendering, displayWidthMeters,
+                displayHeightMeters, dm.widthPixels, dm.heightPixels);
 
         reparentAllTabs(mContentVrWindowAndroid);
         swapToTab(currentTab);
@@ -428,7 +429,7 @@ public class VrShellImpl
     // the security icon in the URL bar.
     @CalledByNative
     public void onUnhandledPageInfo() {
-        mDelegate.requestToExitVr(new OnExitVrRequestListener() {
+        VrShellDelegate.requestToExitVr(new OnExitVrRequestListener() {
             @Override
             public void onSucceeded() {
                 PageInfoPopup.show(
@@ -665,10 +666,7 @@ public class VrShellImpl
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        // TODO(mthiesse): For now we don't need to handle this because we exit VR on activity pause
-        // (which destroys the surface). If in the future we don't destroy VR Shell on exiting,
-        // we will need to handle this, or at least properly handle surfaceCreated being called
-        // multiple times.
+        nativeSetSurface(mNativeVrShell, null);
     }
 
     private void createTabModelSelectorTabObserver() {
@@ -828,9 +826,10 @@ public class VrShellImpl
     }
 
     private native long nativeInit(VrShellDelegate delegate, long nativeWindowAndroid,
-            boolean forWebVR, boolean webVrAutopresentationExpected, boolean inCct, long gvrApi,
-            boolean reprojectedRendering, float displayWidthMeters, float displayHeightMeters,
-            int displayWidthPixels, int displayHeightPixels);
+            boolean forWebVR, boolean webVrAutopresentationExpected, boolean inCct,
+            boolean browsingDisabled, long gvrApi, boolean reprojectedRendering,
+            float displayWidthMeters, float displayHeightMeters, int displayWidthPixels,
+            int displayHeightPixels);
     private native void nativeSetSurface(long nativeVrShell, Surface surface);
     private native void nativeSwapContents(
             long nativeVrShell, Tab tab, AndroidUiGestureTarget androidUiGestureTarget);

@@ -183,8 +183,10 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   void SetBlendMode(WebBlendMode);
   void SetIsRootForIsolatedGroup(bool);
 
-  void SetShouldHitTest(bool);
-  bool GetShouldHitTestForTesting() { return should_hit_test_; }
+  void SetHitTestableWithoutDrawsContent(bool);
+  bool GetHitTestableWithoutDrawsContentForTesting() {
+    return hit_testable_without_draws_content_;
+  }
 
   void SetFilters(CompositorFilterOperations);
   void SetBackdropFilters(CompositorFilterOperations);
@@ -211,6 +213,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   // Layer contents
   void SetContentsToImage(
       Image*,
+      Image::ImageDecodingMode decode_mode,
       RespectImageOrientationEnum = kDoNotRespectImageOrientation);
   void SetContentsToPlatformLayer(WebLayer* layer) { SetContentsTo(layer); }
   bool HasContentsLayer() const { return contents_layer_; }
@@ -289,6 +292,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
 
   friend class CompositedLayerMappingTest;
   friend class PaintControllerPaintTestBase;
+  friend class GraphicsLayerTest;
 
  private:
   // WebContentLayerClient implementation.
@@ -362,7 +366,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   bool draws_content_ : 1;
   bool contents_visible_ : 1;
   bool is_root_for_isolated_group_ : 1;
-  bool should_hit_test_ : 1;
+  bool hit_testable_without_draws_content_ : 1;
 
   bool has_scroll_parent_ : 1;
   bool has_clip_parent_ : 1;

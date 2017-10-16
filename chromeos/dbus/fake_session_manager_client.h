@@ -82,16 +82,19 @@ class FakeSessionManagerClient : public SessionManagerClient {
                         bool enable_vendor_privileged,
                         bool native_bridge_experiment,
                         const StartArcInstanceCallback& callback) override;
-  void StopArcInstance(const ArcCallback& callback) override;
+  void StopArcInstance(VoidDBusMethodCallback callback) override;
   void SetArcCpuRestriction(
       login_manager::ContainerCpuRestrictionState restriction_state,
-      const ArcCallback& callback) override;
+      VoidDBusMethodCallback callback) override;
   void EmitArcBooted(const cryptohome::Identification& cryptohome_id,
-                     const ArcCallback& callback) override;
+                     VoidDBusMethodCallback callback) override;
   void GetArcStartTime(DBusMethodCallback<base::TimeTicks> callback) override;
   void RemoveArcData(const cryptohome::Identification& cryptohome_id,
-                     const ArcCallback& callback) override;
+                     VoidDBusMethodCallback callback) override;
 
+  void set_store_device_policy_success(bool success) {
+    store_device_policy_success_ = success;
+  }
   const std::string& device_policy() const;
   void set_device_policy(const std::string& policy_blob);
 
@@ -142,6 +145,7 @@ class FakeSessionManagerClient : public SessionManagerClient {
   void set_arc_available(bool available) { arc_available_ = available; }
 
  private:
+  bool store_device_policy_success_ = true;
   std::string device_policy_;
   std::map<cryptohome::Identification, std::string> user_policies_;
   std::map<cryptohome::Identification, std::string>

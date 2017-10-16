@@ -250,8 +250,8 @@
       'CrWinGomaStaging': 'release_bot_x86_minimal_symbols',
       'Chromium Linux Goma GCE Staging': 'release_bot',
       'Chromium Mac Goma GCE Staging': 'release_bot',
-      'CrWinGomaGCEStaging': 'release_bot_x86_minimal_symbols',
-      'CrWinClangGomaGCEStaging': 'win_clang_release_bot',
+      'CrWinGomaGCEStaging': 'release_bot_x86_minimal_symbols_disable_nacl',
+      'CrWinClangGomaGCEStaging': 'win_clang_release_bot_disable_nacl',
     },
 
     'chromium.gpu': {
@@ -319,6 +319,7 @@
       'Linux Builder': 'release_bot',
       'Deterministic Linux': 'release_bot',
       'Fuchsia Compile': 'release_bot_fuchsia',
+      'Fuchsia ARM64': 'release_bot_fuchsia_arm64',
     },
 
     'chromium.lkgr': {
@@ -567,6 +568,7 @@
       'chromium_presubmit': 'presubmit',
       'closure_compilation': 'closure_compilation',
       'fuchsia': 'release_trybot_fuchsia',
+      'fuchsia_arm64': 'release_trybot_fuchsia_arm64',
       'fuchsia_compile': 'release_trybot_fuchsia',
       # TODO(kjellander): Remove linux_arm after tryserver restart.
       'linux_arm': 'release_trybot_arm',
@@ -605,13 +607,7 @@
       'linux_chromium_rel_ng': 'gpu_tests_release_trybot',
       'linux_chromium_tsan_rel_ng': 'tsan_disable_nacl_release_trybot',
       'linux_chromium_ubsan_rel_ng': 'ubsan_vptr_release_trybot',
-
-      # These are 'release_bot' rather than 'release_trybot' because
-      # 'release_trybot' includes 'dcheck_always_on', which might cause
-      # some layout test results to be different than for normal release
-      # builds (and we only store baselines for release builds).
-      'linux_layout_tests_layout_ng': 'release_bot',
-
+      'linux_layout_tests_layout_ng': 'release_trybot',
       'linux_mojo': 'release_trybot',
       'linux_mojo_chromeos': 'chromeos_with_codecs_release_trybot',
       'linux_nacl_sdk_build': 'release_bot',
@@ -1506,6 +1502,10 @@
       'release_bot', 'fuchsia',
     ],
 
+    'release_bot_fuchsia_arm64': [
+      'release_bot', 'fuchsia', 'arm64',
+    ],
+
     'release_bot_mac_new_sdk': [
       'release_bot', 'mac_new_sdk',
     ],
@@ -1523,6 +1523,11 @@
     # both MSVC and clang.
     'release_bot_minimal_symbols': [ 'release_bot', 'minimal_symbols' ],
     'release_bot_x86_minimal_symbols': [ 'release_bot', 'x86', 'minimal_symbols' ],
+
+    # TODO(tikuta): Remove this once gcp goma backend supports all windows nacl compilers.
+    'release_bot_x86_minimal_symbols_disable_nacl': [
+      'release_bot', 'x86', 'minimal_symbols', 'disable_nacl'
+    ],
 
     'release_libfuzzer_asan': [
       'release', 'libfuzzer', 'asan', 'chromeos_codecs', 'pdf_xfa', 'disable_nacl', 'optimize_for_fuzzing',
@@ -1562,6 +1567,10 @@
 
     'release_trybot_fuchsia': [
       'release_trybot', 'fuchsia',
+    ],
+
+    'release_trybot_fuchsia_arm64': [
+      'release_trybot', 'fuchsia', 'arm64',
     ],
 
     'release_trybot_x86': [
@@ -1622,6 +1631,11 @@
 
     'win_clang_release_bot': [
       'clang', 'release_bot', 'minimal_symbols',
+    ],
+
+    # TODO(tikuta): Remove this once gcp goma backend supports all windows nacl compilers.
+    'win_clang_release_bot_disable_nacl': [
+      'clang', 'release_bot', 'minimal_symbols', 'disable_nacl',
     ],
 
     'windows_analyze': [
