@@ -8,6 +8,7 @@
 #include "base/strings/string_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/network/network_context.h"
 #include "content/network/network_service_impl.h"
 #include "content/public/common/network_service.mojom.h"
@@ -106,11 +107,12 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
     service_factory_bindings_.AddBinding(this, std::move(request));
   }
 
+  std::unique_ptr<service_manager::ServiceContext> service_context_;
+
  private:
   service_manager::BinderRegistry registry_;
   mojo::BindingSet<service_manager::mojom::ServiceFactory>
       service_factory_bindings_;
-  std::unique_ptr<service_manager::ServiceContext> service_context_;
 };
 
 }  // namespace
@@ -135,10 +137,6 @@ class NetworkServiceTestWithService
 
   void StartLoadingURL(const ResourceRequest& request, uint32_t process_id) {
     client_.reset(new TestURLLoaderClient());
-    mojom::NetworkContextParamsPtr context_params =
-        mojom::NetworkContextParams::New();
-    network_service_->CreateNetworkContext(mojo::MakeRequest(&network_context_),
-                                           std::move(context_params));
     mojom::URLLoaderFactoryPtr loader_factory;
     network_context_->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
                                              process_id);
@@ -153,6 +151,7 @@ class NetworkServiceTestWithService
   TestURLLoaderClient* client() { return client_.get(); }
   mojom::URLLoader* loader() { return loader_.get(); }
   mojom::NetworkService* service() { return network_service_.get(); }
+  mojom::NetworkContext* context() { return network_context_.get(); }
 
  private:
   std::unique_ptr<service_manager::Service> CreateService() override {
@@ -165,6 +164,10 @@ class NetworkServiceTestWithService
     ASSERT_TRUE(test_server_.Start());
     service_manager::test::ServiceTest::SetUp();
     connector()->BindInterface(mojom::kNetworkServiceName, &network_service_);
+    mojom::NetworkContextParamsPtr context_params =
+        mojom::NetworkContextParams::New();
+    network_service_->CreateNetworkContext(mojo::MakeRequest(&network_context_),
+                                           std::move(context_params));
   }
 
   net::EmbeddedTestServer test_server_;
@@ -266,6 +269,162 @@ TEST_F(NetworkServiceTestWithService, RawRequestAccessControl) {
   StartLoadingURL(request, process_id);
   client()->RunUntilComplete();
   EXPECT_FALSE(client()->response_head().devtools_info.get());
+}
+
+TEST_F(NetworkServiceTestWithService, SetNetworkConditions) {
+  mojom::NetworkConditionsPtr network_conditions =
+      mojom::NetworkConditions::New();
+  network_conditions->offline = true;
+  context()->SetNetworkConditions("42", std::move(network_conditions));
+
+  ResourceRequest request;
+  request.url = test_server()->GetURL("/nocache.html");
+  request.method = "GET";
+
+  StartLoadingURL(request, 0);
+  client()->RunUntilComplete();
+  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+
+  request.headers.AddHeaderFromString(
+      "X-DevTools-Emulate-Network-Conditions-Client-Id: 42");
+  StartLoadingURL(request, 0);
+  client()->RunUntilComplete();
+  EXPECT_EQ(net::ERR_INTERNET_DISCONNECTED,
+            client()->completion_status().error_code);
+
+  network_conditions = mojom::NetworkConditions::New();
+  network_conditions->offline = false;
+  context()->SetNetworkConditions("42", std::move(network_conditions));
+  StartLoadingURL(request, 0);
+  client()->RunUntilComplete();
+  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+
+  network_conditions = mojom::NetworkConditions::New();
+  network_conditions->offline = true;
+  context()->SetNetworkConditions("42", std::move(network_conditions));
+
+  request.headers.AddHeaderFromString(
+      "X-DevTools-Emulate-Network-Conditions-Client-Id: 42");
+  StartLoadingURL(request, 0);
+  client()->RunUntilComplete();
+  EXPECT_EQ(net::ERR_INTERNET_DISCONNECTED,
+            client()->completion_status().error_code);
+  context()->SetNetworkConditions("42", nullptr);
+  StartLoadingURL(request, 0);
+  client()->RunUntilComplete();
+  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+}
+
+class TestNetworkChangeManagerClient
+    : public mojom::NetworkChangeManagerClient {
+ public:
+  explicit TestNetworkChangeManagerClient(
+      mojom::NetworkService* network_service)
+      : connection_type_(mojom::ConnectionType::CONNECTION_UNKNOWN),
+        binding_(this) {
+    mojom::NetworkChangeManagerPtr manager_ptr;
+    mojom::NetworkChangeManagerRequest request(mojo::MakeRequest(&manager_ptr));
+    network_service->GetNetworkChangeManager(std::move(request));
+
+    mojom::NetworkChangeManagerClientPtr client_ptr;
+    mojom::NetworkChangeManagerClientRequest client_request(
+        mojo::MakeRequest(&client_ptr));
+    binding_.Bind(std::move(client_request));
+    manager_ptr->RequestNotifications(std::move(client_ptr));
+  }
+
+  ~TestNetworkChangeManagerClient() override {}
+
+  // NetworkChangeManagerClient implementation:
+  void OnInitialConnectionType(mojom::ConnectionType type) override {
+    if (type == connection_type_)
+      run_loop_.Quit();
+  }
+
+  void OnNetworkChanged(mojom::ConnectionType type) override {
+    if (type == connection_type_)
+      run_loop_.Quit();
+  }
+
+  // Waits for the desired |connection_type| notification.
+  void WaitForNotification(mojom::ConnectionType type) {
+    connection_type_ = type;
+    run_loop_.Run();
+  }
+
+ private:
+  base::RunLoop run_loop_;
+  mojom::ConnectionType connection_type_;
+  mojo::Binding<mojom::NetworkChangeManagerClient> binding_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestNetworkChangeManagerClient);
+};
+
+// mojom:NetworkChangeManager currently doesn't support ChromeOS, which has a
+// different code path to set up net::NetworkChangeNotifier.
+#if defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
+#define MAYBE_NetworkChangeManagerRequest DISABLED_NetworkChangeManagerRequest
+#else
+#define MAYBE_NetworkChangeManagerRequest NetworkChangeManagerRequest
+#endif
+TEST_F(NetworkServiceTest, MAYBE_NetworkChangeManagerRequest) {
+  TestNetworkChangeManagerClient manager_client(service());
+  net::NetworkChangeNotifier::NotifyObserversOfNetworkChangeForTests(
+      net::NetworkChangeNotifier::CONNECTION_3G);
+  manager_client.WaitForNotification(mojom::ConnectionType::CONNECTION_3G);
+}
+
+class NetworkServiceNetworkChangeTest
+    : public service_manager::test::ServiceTest {
+ public:
+  NetworkServiceNetworkChangeTest()
+      : ServiceTest("content_unittests",
+                    false,
+                    base::test::ScopedTaskEnvironment::MainThreadType::IO) {}
+  ~NetworkServiceNetworkChangeTest() override {}
+
+  mojom::NetworkService* service() { return network_service_.get(); }
+
+ private:
+  // A ServiceTestClient that broadcasts a network change notification in the
+  // network service's process.
+  class ServiceTestClientWithNetworkChange : public ServiceTestClient {
+   public:
+    explicit ServiceTestClientWithNetworkChange(
+        service_manager::test::ServiceTest* test)
+        : ServiceTestClient(test) {}
+    ~ServiceTestClientWithNetworkChange() override {}
+
+   protected:
+    void CreateService(service_manager::mojom::ServiceRequest request,
+                       const std::string& name) override {
+      if (name == mojom::kNetworkServiceName) {
+        service_context_.reset(new service_manager::ServiceContext(
+            NetworkServiceImpl::CreateForTesting(), std::move(request)));
+        // Send a broadcast after NetworkServiceImpl is actually created.
+        // Otherwise, this NotifyObservers is a no-op.
+        net::NetworkChangeNotifier::NotifyObserversOfNetworkChangeForTests(
+            net::NetworkChangeNotifier::CONNECTION_3G);
+      }
+    }
+  };
+  std::unique_ptr<service_manager::Service> CreateService() override {
+    return std::make_unique<ServiceTestClientWithNetworkChange>(this);
+  }
+
+  void SetUp() override {
+    service_manager::test::ServiceTest::SetUp();
+    connector()->BindInterface(mojom::kNetworkServiceName, &network_service_);
+  }
+
+  mojom::NetworkServicePtr network_service_;
+
+  DISALLOW_COPY_AND_ASSIGN(NetworkServiceNetworkChangeTest);
+};
+
+TEST_F(NetworkServiceNetworkChangeTest, MAYBE_NetworkChangeManagerRequest) {
+  TestNetworkChangeManagerClient manager_client(service());
+  manager_client.WaitForNotification(mojom::ConnectionType::CONNECTION_3G);
 }
 
 }  // namespace

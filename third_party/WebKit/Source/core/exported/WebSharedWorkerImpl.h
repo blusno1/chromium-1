@@ -81,6 +81,7 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   void ResumeStartup() override;
   WebDevToolsAgentClient::WebKitClientMessageLoop* CreateClientMessageLoop()
       override;
+  const WebString& GetInstrumentationToken() override;
 
   // WebSharedWorker methods:
   void StartWorkerContext(
@@ -90,16 +91,15 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
       WebContentSecurityPolicyType,
       WebAddressSpace,
       bool data_saver_enabled,
+      const WebString& instrumentation_token,
       mojo::ScopedMessagePipeHandle content_settings_handle,
       mojo::ScopedMessagePipeHandle interface_provider) override;
   void Connect(MessagePortChannel) override;
   void TerminateWorkerContext() override;
 
   void PauseWorkerContextOnStart() override;
-  void AttachDevTools(const WebString& host_id, int session_id) override;
-  void ReattachDevTools(const WebString& host_id,
-                        int sesion_id,
-                        const WebString& saved_state) override;
+  void AttachDevTools(int session_id) override;
+  void ReattachDevTools(int sesion_id, const WebString& saved_state) override;
   void DetachDevTools(int session_id) override;
   void DispatchDevToolsMessage(int session_id,
                                int call_id,
@@ -126,6 +126,9 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   void ConnectTaskOnWorkerThread(MessagePortChannel);
 
   std::unique_ptr<WorkerShadowPage> shadow_page_;
+  // Unique worker token used by DevTools to attribute different instrumentation
+  // to the same worker.
+  WebString instrumentation_token_;
 
   std::unique_ptr<WebServiceWorkerNetworkProvider> network_provider_;
 
@@ -142,7 +145,7 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   bool is_paused_on_start_ = false;
 
   // Kept around only while main script loading is ongoing.
-  RefPtr<WorkerScriptLoader> main_script_loader_;
+  scoped_refptr<WorkerScriptLoader> main_script_loader_;
 
   WebURL url_;
   WebString name_;

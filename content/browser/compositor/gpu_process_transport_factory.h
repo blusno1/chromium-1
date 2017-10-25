@@ -42,12 +42,12 @@ class ContextProviderCommandBuffer;
 }
 
 namespace viz {
+class OutputDeviceBacking;
 class SoftwareOutputDevice;
 class VulkanInProcessContextProvider;
 }
 
 namespace content {
-class OutputDeviceBacking;
 
 class GpuProcessTransportFactory : public ui::ContextFactory,
                                    public ui::ContextFactoryPrivate,
@@ -108,11 +108,10 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
 
   PerCompositorData* CreatePerCompositorData(ui::Compositor* compositor);
   std::unique_ptr<viz::SoftwareOutputDevice> CreateSoftwareOutputDevice(
-      ui::Compositor* compositor);
+      gfx::AcceleratedWidget widget);
   void EstablishedGpuChannel(
       base::WeakPtr<ui::Compositor> compositor,
       bool create_gpu_output_surface,
-      int num_attempts,
       scoped_refptr<gpu::GpuChannelHost> established_channel_host);
 
   void OnLostMainThreadSharedContextInsideCallback();
@@ -125,7 +124,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
 
 #if defined(OS_WIN)
   // Used by output surface, stored in PerCompositorData.
-  std::unique_ptr<OutputDeviceBacking> software_backing_;
+  std::unique_ptr<viz::OutputDeviceBacking> software_backing_;
 #endif
 
   // Depends on SurfaceManager.

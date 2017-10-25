@@ -10,6 +10,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/WorkerFetchContext.h"
 #include "core/probe/CoreProbes.h"
+#include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/CrossThreadFunctional.h"
@@ -101,7 +102,22 @@ void WorkerOrWorkletGlobalScope::Dispose() {
   }
 }
 
-DEFINE_TRACE(WorkerOrWorkletGlobalScope) {
+scoped_refptr<WebTaskRunner> WorkerOrWorkletGlobalScope::GetTaskRunner(
+    TaskType type) {
+  DCHECK(IsContextThread());
+  if (IsMainThreadWorkletGlobalScope()) {
+    // MainThreadWorkletGlobalScope lives on the main thread and its GetThread()
+    // doesn't return a valid worker thread. Instead, retrieve a task runner
+    // from the frame.
+    return ToMainThreadWorkletGlobalScope(this)
+        ->GetFrame()
+        ->FrameScheduler()
+        ->GetTaskRunner(type);
+  }
+  return TaskRunnerHelper::Get(type, GetThread());
+}
+
+void WorkerOrWorkletGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(resource_fetcher_);
   visitor->Trace(script_controller_);
   ExecutionContext::Trace(visitor);

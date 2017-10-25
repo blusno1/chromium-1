@@ -200,6 +200,10 @@ void WebRuntimeFeatures::EnableModuleScriptsDynamicImport(bool enable) {
   RuntimeEnabledFeatures::SetModuleScriptsDynamicImportEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableModuleScriptsImportMetaUrl(bool enable) {
+  RuntimeEnabledFeatures::SetModuleScriptsImportMetaUrlEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableMojoBlobs(bool enable) {
   RuntimeEnabledFeatures::SetMojoBlobsEnabled(enable);
 }
@@ -264,6 +268,10 @@ void WebRuntimeFeatures::EnablePassiveDocumentEventListeners(bool enable) {
   RuntimeEnabledFeatures::SetPassiveDocumentEventListenersEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnablePaymentApp(bool enable) {
+  RuntimeEnabledFeatures::SetPaymentAppEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnablePaymentRequest(bool enable) {
   RuntimeEnabledFeatures::SetPaymentRequestEnabled(enable);
 }
@@ -280,12 +288,12 @@ void WebRuntimeFeatures::EnableScriptedSpeech(bool enable) {
   RuntimeEnabledFeatures::SetScriptedSpeechEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableSkipCompositingSmallScrollers(bool enable) {
-  RuntimeEnabledFeatures::SetSkipCompositingSmallScrollersEnabled(enable);
-}
-
 void WebRuntimeFeatures::EnableSlimmingPaintV2(bool enable) {
   RuntimeEnabledFeatures::SetSlimmingPaintV2Enabled(enable);
+}
+
+void WebRuntimeFeatures::EnableUserActivationV2(bool enable) {
+  RuntimeEnabledFeatures::SetUserActivationV2Enabled(enable);
 }
 
 void WebRuntimeFeatures::EnableTouchEventFeatureDetection(bool enable) {
@@ -320,10 +328,6 @@ void WebRuntimeFeatures::EnableOverlayScrollbars(bool enable) {
 
 void WebRuntimeFeatures::ForceOverlayFullscreenVideo(bool enable) {
   RuntimeEnabledFeatures::SetForceOverlayFullscreenVideoEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableSharedArrayBuffer(bool enable) {
-  RuntimeEnabledFeatures::SetSharedArrayBufferEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableSharedWorker(bool enable) {
@@ -472,6 +476,10 @@ void WebRuntimeFeatures::EnableV8ContextSnapshot(bool enable) {
 
 void WebRuntimeFeatures::EnableAutomationControlled(bool enable) {
   RuntimeEnabledFeatures::SetAutomationControlledEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableWorkStealingInScriptRunner(bool enable) {
+  RuntimeEnabledFeatures::SetWorkStealingInScriptRunnerEnabled(enable);
 }
 
 }  // namespace blink

@@ -21,8 +21,8 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "components/signin/core/browser/test_signin_client.h"
-#include "components/signin/core/common/signin_pref_names.h"
 #include "google_apis/gaia/fake_oauth2_token_service.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -681,7 +681,7 @@ TEST_F(GaiaCookieManagerServiceTest, ExternalCcResultFetcher) {
 
   // Simulate a successful completion of GetCheckConnctionInfo.
   net::TestURLFetcher* fetcher = factory()->GetFetcherByID(0);
-  ASSERT_TRUE(NULL != fetcher);
+  ASSERT_TRUE(nullptr != fetcher);
   SimulateGetCheckConnctionInfoSuccess(
       fetcher,
       "[{\"carryBackToken\": \"yt\", \"url\": \"http://www.yt.com\"},"
@@ -711,7 +711,7 @@ TEST_F(GaiaCookieManagerServiceTest, ExternalCcResultFetcherTimeout) {
 
   // Simulate a successful completion of GetCheckConnctionInfo.
   net::TestURLFetcher* fetcher = factory()->GetFetcherByID(0);
-  ASSERT_TRUE(NULL != fetcher);
+  ASSERT_TRUE(nullptr != fetcher);
   SimulateGetCheckConnctionInfoSuccess(
       fetcher,
       "[{\"carryBackToken\": \"yt\", \"url\": \"http://www.yt.com\"},"
@@ -744,7 +744,7 @@ TEST_F(GaiaCookieManagerServiceTest, ExternalCcResultFetcherTruncate) {
 
   // Simulate a successful completion of GetCheckConnctionInfo.
   net::TestURLFetcher* fetcher = factory()->GetFetcherByID(0);
-  ASSERT_TRUE(NULL != fetcher);
+  ASSERT_TRUE(nullptr != fetcher);
   SimulateGetCheckConnctionInfoSuccess(
       fetcher,
       "[{\"carryBackToken\": \"yt\", \"url\": \"http://www.yt.com\"}]");
@@ -771,7 +771,7 @@ TEST_F(GaiaCookieManagerServiceTest, UbertokenSuccessFetchesExternalCC) {
 
   // Check there is now a fetcher that belongs to the ExternalCCResultFetcher.
   net::TestURLFetcher* fetcher = factory()->GetFetcherByID(0);
-  ASSERT_TRUE(NULL != fetcher);
+  ASSERT_TRUE(nullptr != fetcher);
   SimulateGetCheckConnctionInfoSuccess(
       fetcher,
       "[{\"carryBackToken\": \"bl\", \"url\": \"http://www.bl.com\"}]");

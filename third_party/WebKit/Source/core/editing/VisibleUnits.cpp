@@ -147,7 +147,8 @@ static PositionType CanonicalPosition(const PositionType& position) {
     return PositionType();
 
   // The new position should be in the same block flow element. Favor that.
-  Element* const original_block = node ? EnclosingBlockFlowElement(*node) : 0;
+  Element* const original_block =
+      node ? EnclosingBlockFlowElement(*node) : nullptr;
   const bool next_is_outside_original_block =
       !next_node->IsDescendantOf(original_block) && next_node != original_block;
   const bool prev_is_outside_original_block =
@@ -538,7 +539,7 @@ VisiblePosition StartOfBlock(const VisiblePosition& visible_position,
   Element* start_block =
       position.ComputeContainerNode()
           ? EnclosingBlock(position.ComputeContainerNode(), rule)
-          : 0;
+          : nullptr;
   return start_block ? VisiblePosition::FirstPositionInNode(*start_block)
                      : VisiblePosition();
 }
@@ -550,7 +551,7 @@ VisiblePosition EndOfBlock(const VisiblePosition& visible_position,
   Element* end_block =
       position.ComputeContainerNode()
           ? EnclosingBlock(position.ComputeContainerNode(), rule)
-          : 0;
+          : nullptr;
   return end_block ? VisiblePosition::LastPositionInNode(*end_block)
                    : VisiblePosition();
 }
@@ -769,13 +770,15 @@ static LayoutUnit BoundingBoxLogicalHeight(LayoutObject* o,
 // TODO(crbug.com/766448): Change parameter type to |const LayoutObject*|.
 bool HasRenderedNonAnonymousDescendantsWithHeight(LayoutObject* layout_object) {
   LayoutObject* stop = layout_object->NextInPreOrderAfterChildren();
+  // TODO(editing-dev): Avoid single-character parameter names.
   for (LayoutObject* o = layout_object->SlowFirstChild(); o && o != stop;
        o = o->NextInPreOrder()) {
     if (o->NonPseudoNode()) {
-      if ((o->IsText() &&
-           BoundingBoxLogicalHeight(o, ToLayoutText(o)->LinesBoundingBox())) ||
+      if ((o->IsText() && ToLayoutText(o)->HasNonCollapsedText()) ||
           (o->IsBox() && ToLayoutBox(o)->PixelSnappedLogicalHeight()) ||
           (o->IsLayoutInline() && IsEmptyInline(LineLayoutItem(o)) &&
+           // TODO(crbug.com/771398): Find alternative ways to check whether an
+           // empty LayoutInline is rendered, without checking InlineBox.
            BoundingBoxLogicalHeight(o, ToLayoutInline(o)->LinesBoundingBox())))
         return true;
     }
@@ -826,24 +829,15 @@ static bool InRenderedText(const PositionTemplate<Strategy>& position) {
   const LayoutText* text_layout_object = ToLayoutText(layout_object);
   const int text_offset =
       offset_in_node - text_layout_object->TextStartOffset();
-  for (InlineTextBox* box : InlineTextBoxesOf(*text_layout_object)) {
-    if (text_offset < static_cast<int>(box->Start()) &&
-        !text_layout_object->ContainsReversedText()) {
-      // The offset we're looking for is before this node
-      // this means the offset must be in content that is
-      // not laid out. Return false.
-      return false;
-    }
-    if (box->ContainsCaretOffset(text_offset)) {
-      // Return false for offsets inside composed characters.
-      return text_offset == text_layout_object->CaretMinOffset() ||
-             text_offset == NextGraphemeBoundaryOf(
-                                *anchor_node, PreviousGraphemeBoundaryOf(
-                                                  *anchor_node, text_offset));
-    }
-  }
-
-  return false;
+  if (!text_layout_object->ContainsCaretOffset(text_offset))
+    return false;
+  // Return false for offsets inside composed characters.
+  // TODO(editing-dev): Previous/NextGraphemeBoundaryOf() work on DOM offsets,
+  // So they should use |offset_in_node| instead of |text_offset|.
+  return text_offset == text_layout_object->CaretMinOffset() ||
+         text_offset == NextGraphemeBoundaryOf(*anchor_node,
+                                               PreviousGraphemeBoundaryOf(
+                                                   *anchor_node, text_offset));
 }
 
 static FloatQuad LocalToAbsoluteQuadOf(const LocalCaretRect& caret_rect) {
@@ -1019,79 +1013,14 @@ static PositionTemplate<Strategy> MostBackwardCaretPosition(
           current_node, layout_object->CaretMaxOffset() + text_start_offset);
     }
 
-    if (CanBeBackwardCaretPosition(text_layout_object,
-                                   current_pos.OffsetInLeafNode())) {
+    DCHECK_GE(current_pos.OffsetInLeafNode(),
+              static_cast<int>(text_layout_object->TextStartOffset()));
+    if (text_layout_object->IsAfterNonCollapsedCharacter(
+            current_pos.OffsetInLeafNode() -
+            text_layout_object->TextStartOffset()))
       return current_pos.ComputePosition();
-    }
   }
   return last_visible.DeprecatedComputePosition();
-}
-
-// Returns true if |box| at |text_offset| can not continue on next line.
-static bool CanNotContinueOnNextLine(const LayoutText& text_layout_object,
-                                     InlineBox* box,
-                                     unsigned text_offset) {
-  InlineTextBox* const last_text_box = text_layout_object.LastTextBox();
-  if (box == last_text_box)
-    return true;
-  return LineLayoutAPIShim::LayoutObjectFrom(box->GetLineLayoutItem()) ==
-             text_layout_object &&
-         ToInlineTextBox(box)->Start() >= text_offset;
-}
-
-// The text continues on the next line only if the last text box is not on this
-// line and none of the boxes on this line have a larger start offset.
-static bool DoesContinueOnNextLine(const LayoutText& text_layout_object,
-                                   InlineBox* box,
-                                   unsigned text_offset) {
-  InlineTextBox* const last_text_box = text_layout_object.LastTextBox();
-  DCHECK_NE(box, last_text_box);
-  for (InlineBox* runner = box->NextLeafChild(); runner;
-       runner = runner->NextLeafChild()) {
-    if (CanNotContinueOnNextLine(text_layout_object, runner, text_offset))
-      return false;
-  }
-
-  for (InlineBox* runner = box->PrevLeafChild(); runner;
-       runner = runner->PrevLeafChild()) {
-    if (CanNotContinueOnNextLine(text_layout_object, runner, text_offset))
-      return false;
-  }
-
-  return true;
-}
-
-// Returns true when both of the following hold:
-// (i)  |offset_in_node| is not the first offset in |text_layout_object|
-// (ii) |offset_in_node| and |offset_in_node - 1| are different caret positions
-static bool CanBeBackwardCaretPosition(const LayoutText* text_layout_object,
-                                       int offset_in_node) {
-  const unsigned text_start_offset = text_layout_object->TextStartOffset();
-  DCHECK_GE(offset_in_node, static_cast<int>(text_start_offset));
-  const unsigned text_offset = offset_in_node - text_start_offset;
-  InlineTextBox* const last_text_box = text_layout_object->LastTextBox();
-  for (InlineTextBox* box : InlineTextBoxesOf(*text_layout_object)) {
-    if (text_offset == box->Start())
-      continue;
-    if (text_offset <= box->Start() + box->Len()) {
-      if (text_offset > box->Start())
-        return true;
-      continue;
-    }
-
-    if (box == last_text_box || text_offset != box->Start() + box->Len() + 1)
-      continue;
-
-    // Now that |text_offset == box->Start() + box->Len() + 1|, check if this is
-    // the end offset of a whitespace collapsed due to line wrapping, e.g.
-    // <div style="width: 100px">foooooooooooooooo baaaaaaaaaaaaaaaaaaaar</div>
-    // The whitespace is collapsed away due to line wrapping, while the two
-    // positions next to it are still different caret positions. Hence, when the
-    // offset is at "...oo |baa...", we should return true.
-    if (DoesContinueOnNextLine(*text_layout_object, box, text_offset + 1))
-      return true;
-  }
-  return false;
 }
 
 Position MostBackwardCaretPosition(const Position& position,
@@ -1197,43 +1126,14 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
           current_node, layout_object->CaretMinOffset() + text_start_offset);
     }
 
-    if (CanBeForwardCaretPosition(text_layout_object,
-                                  current_pos.OffsetInLeafNode())) {
+    DCHECK_GE(current_pos.OffsetInLeafNode(),
+              static_cast<int>(text_layout_object->TextStartOffset()));
+    if (text_layout_object->IsBeforeNonCollapsedCharacter(
+            current_pos.OffsetInLeafNode() -
+            text_layout_object->TextStartOffset()))
       return current_pos.ComputePosition();
-    }
   }
   return last_visible.DeprecatedComputePosition();
-}
-
-// Returns true when both of the following hold:
-// (i)  |offset_in_node| is not the last offset in |text_layout_object|
-// (ii) |offset_in_node| and |offset_in_node + 1| are different caret positions
-static bool CanBeForwardCaretPosition(const LayoutText* text_layout_object,
-                                      int offset_in_node) {
-  const unsigned text_start_offset = text_layout_object->TextStartOffset();
-  DCHECK_GE(offset_in_node, static_cast<int>(text_start_offset));
-  const unsigned text_offset = offset_in_node - text_start_offset;
-  InlineTextBox* const last_text_box = text_layout_object->LastTextBox();
-  for (InlineTextBox* box : InlineTextBoxesOf(*text_layout_object)) {
-    if (text_offset <= box->end()) {
-      if (text_offset >= box->Start())
-        return true;
-      continue;
-    }
-
-    if (box == last_text_box || text_offset != box->Start() + box->Len())
-      continue;
-
-    // Now that |text_offset == box->Start() + box->Len()|, check if this is the
-    // start offset of a whitespace collapsed due to line wrapping, e.g.
-    // <div style="width: 100px">foooooooooooooooo baaaaaaaaaaaaaaaaaaaar</div>
-    // The whitespace is collapsed away due to line wrapping, while the two
-    // positions next to it are still different caret positions. Hence, when the
-    // offset is at "...oo| baa...", we should return true.
-    if (DoesContinueOnNextLine(*text_layout_object, box, text_offset))
-      return true;
-  }
-  return false;
 }
 
 Position MostForwardCaretPosition(const Position& position,

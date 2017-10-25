@@ -9,7 +9,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/wtf/RefPtr.h"
 
@@ -43,10 +43,10 @@ class FakeWebTaskRunner : public WebTaskRunner {
 
   class Data;
   class BaseTaskRunner;
-  RefPtr<Data> data_;
+  scoped_refptr<Data> data_;
   scoped_refptr<BaseTaskRunner> base_task_runner_;
 
-  FakeWebTaskRunner(RefPtr<Data> data,
+  FakeWebTaskRunner(scoped_refptr<Data> data,
                     scoped_refptr<BaseTaskRunner> base_task_runner);
 
   DISALLOW_COPY_AND_ASSIGN(FakeWebTaskRunner);

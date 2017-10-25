@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
@@ -20,13 +21,14 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_features.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "ui/base/ui_base_switches.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_features.h"
 
 using testing::Eq;
@@ -69,14 +71,19 @@ class ManagePasswordsBubbleViewTest : public ManagePasswordsTest {
   ManagePasswordsBubbleViewTest() {}
   ~ManagePasswordsBubbleViewTest() override {}
 
-  // content::BrowserTestBase:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
+  // ManagePasswordsTest:
+  void SetUp() override {
 #if defined(OS_MACOSX)
-    command_line->AppendSwitch(switches::kExtendMdToSecondaryUi);
+    scoped_feature_list_.InitWithFeatures(
+        {features::kSecondaryUiMd, features::kShowAllDialogsWithViewsToolkit},
+        {});
 #endif
+    ManagePasswordsTest::SetUp();
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(ManagePasswordsBubbleViewTest);
 };
 

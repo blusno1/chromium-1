@@ -63,12 +63,26 @@ class CONTENT_EXPORT ServiceWorkerRegistrationHandle
 
   // Implements blink::mojom::ServiceWorkerRegistrationObjectHost.
   void Update(UpdateCallback callback) override;
+  void Unregister(UnregisterCallback callback) override;
+  void EnableNavigationPreload(
+      bool enable,
+      EnableNavigationPreloadCallback callback) override;
 
   // Called back from ServiceWorkerContextCore when an update is complete.
   void UpdateComplete(UpdateCallback callback,
                       ServiceWorkerStatusCode status,
                       const std::string& status_message,
                       int64_t registration_id);
+  // Called back from ServiceWorkerContextCore when the unregistration is
+  // complete.
+  void UnregistrationComplete(UnregisterCallback callback,
+                              ServiceWorkerStatusCode status);
+  // Called back from ServiceWorkerStorage when setting navigation preload is
+  // complete.
+  void DidUpdateNavigationPreloadEnabled(
+      bool enable,
+      EnableNavigationPreloadCallback callback,
+      ServiceWorkerStatusCode status);
 
   // Sets the corresponding version field to the given version or if the given
   // version is nullptr, clears the field.
@@ -80,6 +94,15 @@ class CONTENT_EXPORT ServiceWorkerRegistrationHandle
 
   void OnConnectionError();
 
+  // Perform common checks that need to run before RegistrationObjectHost
+  // methods that come from a child process are handled. Returns true if all
+  // checks have passed. If anything looks wrong |callback| will run with an
+  // error message prefixed by |error_prefix| and |args|, and false is returned.
+  template <typename CallbackType, typename... Args>
+  bool CanServeRegistrationObjectHostMethods(CallbackType* callback,
+                                             const char* error_prefix,
+                                             Args... args);
+
   // |dispatcher_host_| is valid throughout lifetime of |this| because it owns
   // |this|.
   ServiceWorkerDispatcherHost* dispatcher_host_;
@@ -89,6 +112,11 @@ class CONTENT_EXPORT ServiceWorkerRegistrationHandle
   const int handle_id_;
   mojo::AssociatedBindingSet<blink::mojom::ServiceWorkerRegistrationObjectHost>
       bindings_;
+  // Mojo connection to the content::WebServiceWorkerRegistrationImpl in the
+  // renderer, which corresponds to the ServiceWorkerRegistration JavaScript
+  // object.
+  blink::mojom::ServiceWorkerRegistrationObjectAssociatedPtr
+      remote_registration_;
 
   // This handle is the primary owner of this registration.
   scoped_refptr<ServiceWorkerRegistration> registration_;

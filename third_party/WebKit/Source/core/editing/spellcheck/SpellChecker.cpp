@@ -586,7 +586,7 @@ void SpellChecker::RemoveSpellingMarkersUnderWords(
 static Node* FindFirstMarkable(Node* node) {
   while (node) {
     if (!node->GetLayoutObject())
-      return 0;
+      return nullptr;
     if (node->GetLayoutObject()->IsText())
       return node;
     if (node->GetLayoutObject()->IsTextControl())
@@ -601,7 +601,7 @@ static Node* FindFirstMarkable(Node* node) {
       node = node->nextSibling();
   }
 
-  return 0;
+  return nullptr;
 }
 
 bool SpellChecker::SelectionStartHasMarkerFor(
@@ -648,7 +648,7 @@ void SpellChecker::DocumentAttached(Document* document) {
   idle_spell_check_callback_->DocumentAttached(document);
 }
 
-DEFINE_TRACE(SpellChecker) {
+void SpellChecker::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(spell_check_requester_);
   visitor->Trace(idle_spell_check_callback_);

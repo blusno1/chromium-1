@@ -489,8 +489,7 @@ void GpuControlList::Entry::GetFeatureNames(
 }
 
 GpuControlList::GpuControlList(const GpuControlListData& data)
-    : version_(data.version),
-      entry_count_(data.entry_count),
+    : entry_count_(data.entry_count),
       entries_(data.entries),
       max_entry_id_(0),
       needs_more_info_(false),
@@ -602,16 +601,16 @@ void GpuControlList::GetReasons(base::ListValue* problem_list,
   for (auto index : entries) {
     DCHECK_LT(index, entry_count_);
     const Entry& entry = entries_[index];
-    auto problem = base::MakeUnique<base::DictionaryValue>();
+    auto problem = std::make_unique<base::DictionaryValue>();
 
     problem->SetString("description", entry.description);
 
-    auto cr_bugs = base::MakeUnique<base::ListValue>();
+    auto cr_bugs = std::make_unique<base::ListValue>();
     for (size_t jj = 0; jj < entry.cr_bug_size; ++jj)
       cr_bugs->AppendInteger(entry.cr_bugs[jj]);
     problem->Set("crBugs", std::move(cr_bugs));
 
-    auto features = base::MakeUnique<base::ListValue>();
+    auto features = std::make_unique<base::ListValue>();
     entry.GetFeatureNames(features.get(), feature_map_);
     problem->Set("affectedGpuSettings", std::move(features));
 
@@ -628,10 +627,6 @@ size_t GpuControlList::num_entries() const {
 
 uint32_t GpuControlList::max_entry_id() const {
   return max_entry_id_;
-}
-
-std::string GpuControlList::version() const {
-  return version_;
 }
 
 // static

@@ -51,11 +51,11 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "components/sync/driver/sync_error_controller.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -678,11 +678,6 @@ void ProfileChooserView::ShowView(profiles::BubbleViewMode view_to_display,
       layout = CreateSingleColumnLayout(this, kFixedMenuWidth);
       sub_view = CreateProfileChooserView(avatar_menu);
       break;
-    case profiles::BUBBLE_VIEW_MODE_SWITCH_USER:
-      // This is kept to avoid warnings until http://crrev.com/c/706776 has
-      // landed.
-      NOTREACHED();
-      break;
   }
 
   layout->StartRow(1, 0);
@@ -1256,21 +1251,11 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
     layout->StartRow(1, 0);
     layout->AddView(lock_button_);
   } else if (!is_guest) {
-    int num_browsers = 0;
-    for (auto* browser : *BrowserList::GetInstance()) {
-      if (browser->profile()->GetOriginalProfile() ==
-          browser_->profile()->GetOriginalProfile())
-        num_browsers++;
-    }
-    if (num_browsers > 1) {
-      close_all_windows_button_ = new BackgroundColorHoverButton(
-          this,
-          l10n_util::GetStringUTF16(IDS_PROFILES_CLOSE_ALL_WINDOWS_BUTTON),
-          gfx::CreateVectorIcon(kCloseAllIcon, kIconSize,
-                                gfx::kChromeIconGrey));
-      layout->StartRow(1, 0);
-      layout->AddView(close_all_windows_button_);
-    }
+    close_all_windows_button_ = new BackgroundColorHoverButton(
+        this, l10n_util::GetStringUTF16(IDS_PROFILES_CLOSE_ALL_WINDOWS_BUTTON),
+        gfx::CreateVectorIcon(kCloseAllIcon, kIconSize, gfx::kChromeIconGrey));
+    layout->StartRow(1, 0);
+    layout->AddView(close_all_windows_button_);
   }
 
   layout->StartRowWithPadding(1, 0, 0, vertical_spacing);

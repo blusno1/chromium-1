@@ -380,7 +380,7 @@ TEST_F(DataReductionProxyConfigTest, WarmupURL) {
     base::FieldTrialList::CreateFieldTrial(params::GetQuicFieldTrialName(),
                                            "Enabled");
 
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
+    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, nullptr);
     TestDataReductionProxyConfig config(task_runner(), nullptr, configurator(),
                                         event_creator());
 
@@ -614,10 +614,8 @@ TEST_F(DataReductionProxyConfigTest, AreProxiesBypassed) {
     if (tests[i].fallback_origin)
       retry_map[fallback_origin] = retry_info;
 
-    bool was_bypassed = config->AreProxiesBypassed(retry_map,
-                                                   rules,
-                                                   tests[i].is_https,
-                                                   NULL);
+    bool was_bypassed = config->AreProxiesBypassed(retry_map, rules,
+                                                   tests[i].is_https, nullptr);
 
     EXPECT_EQ(tests[i].expected_result, was_bypassed) << i;
   }
@@ -663,10 +661,8 @@ TEST_F(DataReductionProxyConfigTest, AreProxiesBypassedRetryDelay) {
   retry_info.bad_until = base::TimeTicks();
   retry_map[fallback_origin] = retry_info;
 
-  bool was_bypassed = config->AreProxiesBypassed(retry_map,
-                                                 rules,
-                                                 false,
-                                                 NULL);
+  bool was_bypassed =
+      config->AreProxiesBypassed(retry_map, rules, false, nullptr);
 
   EXPECT_FALSE(was_bypassed);
 
@@ -853,10 +849,13 @@ TEST_F(DataReductionProxyConfigTest, ShouldEnableLoFi) {
   request->SetLoadFlags(request->load_flags() |
                         net::LOAD_MAIN_FRAME_DEPRECATED);
   std::unique_ptr<TestPreviewsDecider> previews_decider =
-      base::MakeUnique<TestPreviewsDecider>(false);
-
+      base::MakeUnique<TestPreviewsDecider>(true);
   EXPECT_TRUE(
       config()->ShouldEnableLoFi(*request.get(), *previews_decider.get()));
+
+  previews_decider = base::MakeUnique<TestPreviewsDecider>(false);
+  EXPECT_FALSE(
+      config()->ShouldEnableLitePages(*request.get(), *previews_decider.get()));
 }
 
 TEST_F(DataReductionProxyConfigTest, ShouldEnableLitePages) {
@@ -874,9 +873,12 @@ TEST_F(DataReductionProxyConfigTest, ShouldEnableLitePages) {
   request->SetLoadFlags(request->load_flags() |
                         net::LOAD_MAIN_FRAME_DEPRECATED);
   std::unique_ptr<TestPreviewsDecider> previews_decider =
-      base::MakeUnique<TestPreviewsDecider>(false);
-
+      base::MakeUnique<TestPreviewsDecider>(true);
   EXPECT_TRUE(
+      config()->ShouldEnableLitePages(*request.get(), *previews_decider.get()));
+
+  previews_decider = base::MakeUnique<TestPreviewsDecider>(false);
+  EXPECT_FALSE(
       config()->ShouldEnableLitePages(*request.get(), *previews_decider.get()));
 }
 
@@ -904,7 +906,7 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
                                                   *previews_decider.get()));
 
   // Verify false for kill switch.
-  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, nullptr);
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kDataReductionProxyLoFi,
       switches::kDataReductionProxyLoFiValueDisabled);
@@ -915,7 +917,7 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
       0 /* NOT_ACCEPTING_TRANSFORM_DISABLED */, 1);
 
   // Verify true for Slow Connection flag.
-  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, nullptr);
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kDataReductionProxyLoFi,
       switches::kDataReductionProxyLoFiValueSlowConnectionsOnly);
@@ -923,7 +925,7 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
                                                   *previews_decider.get()));
 
   // Verify false for Cellular Only flag and WIFI connection.
-  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, nullptr);
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kDataReductionProxyLoFi,
       switches::kDataReductionProxyLoFiValueCellularOnly);
@@ -951,16 +953,10 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
   previews_decider = base::MakeUnique<TestPreviewsDecider>(true);
 
   // Verfiy true for always on.
-  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, nullptr);
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kDataReductionProxyLoFi,
       switches::kDataReductionProxyLoFiValueAlwaysOn);
-  EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
-                                                  *previews_decider.get()));
-
-  // DataReductionProxyPreviewsBlackListTransition should not be affected by
-  // lofi being off by the prefs rules.
-  config()->SetLoFiModeOff();
   EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
                                                   *previews_decider.get()));
 }

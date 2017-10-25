@@ -52,7 +52,7 @@
 #include "core/svg/graphics/SVGImageChromeClient.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/LengthFunctions.h"
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -696,7 +696,7 @@ void SVGImage::LoadCompleted() {
                             ToLocalFrame(page_->MainFrame()))
           ->PostTask(BLINK_FROM_HERE,
                      WTF::Bind(&SVGImage::NotifyAsyncLoadCompleted,
-                               RefPtr<SVGImage>(this)));
+                               scoped_refptr<SVGImage>(this)));
       break;
 
     case kDataChangedNotStarted:
@@ -775,7 +775,7 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
     TRACE_EVENT0("blink", "SVGImage::dataChanged::createFrame");
     DCHECK(!frame_client_);
     frame_client_ = new SVGImageLocalFrameClient(this);
-    frame = LocalFrame::Create(frame_client_, *page, 0);
+    frame = LocalFrame::Create(frame_client_, *page, nullptr);
     frame->SetView(LocalFrameView::Create(*frame));
     frame->Init();
   }

@@ -59,14 +59,13 @@
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/ignore_errors_cert_verifier.h"
 #include "content/public/browser/network_quality_observer_factory.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
+#include "content/public/network/ignore_errors_cert_verifier.h"
 #include "content/public/network/url_request_context_builder_mojo.h"
 #include "extensions/features/features.h"
-#include "net/base/logging_network_change_observer.h"
 #include "net/cert/caching_cert_verifier.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_proc.h"
@@ -353,16 +352,25 @@ IOThread::IOThread(
           local_state,
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
-  base::Value* dns_client_enabled_default =
-      new base::Value(base::FeatureList::IsEnabled(features::kAsyncDns));
-  local_state->SetDefaultPrefValue(prefs::kBuiltInDnsClientEnabled,
-                                   dns_client_enabled_default);
+  local_state->SetDefaultPrefValue(
+      prefs::kBuiltInDnsClientEnabled,
+      base::Value(base::FeatureList::IsEnabled(features::kAsyncDns)));
 
   dns_client_enabled_.Init(prefs::kBuiltInDnsClientEnabled,
                            local_state,
                            base::Bind(&IOThread::UpdateDnsClientEnabled,
                                       base::Unretained(this)));
   dns_client_enabled_.MoveToThread(io_thread_proxy);
+
+#if defined(OS_POSIX)
+  local_state->SetDefaultPrefValue(
+      prefs::kNtlmV2Enabled,
+      base::Value(base::FeatureList::IsEnabled(features::kNtlmV2Enabled)));
+  ntlm_v2_enabled_.Init(
+      prefs::kNtlmV2Enabled, local_state,
+      base::Bind(&IOThread::UpdateNtlmV2Enabled, base::Unretained(this)));
+  ntlm_v2_enabled_.MoveToThread(io_thread_proxy);
+#endif
 
   quick_check_enabled_.Init(prefs::kQuickCheckEnabled,
                             local_state);
@@ -445,12 +453,6 @@ void IOThread::Init() {
 
   DCHECK(!globals_);
   globals_ = new Globals;
-
-  // Add an observer that will emit network change events to the ChromeNetLog.
-  // Assuming NetworkChangeNotifier dispatches in FIFO order, we should be
-  // logging the network change before other IO thread consumers respond to it.
-  network_change_observer_.reset(
-      new net::LoggingNetworkChangeObserver(net_log_));
 
   // Setup the HistogramWatcher to run on the IO thread.
   net::NetworkChangeNotifier::InitHistogramWatcher();
@@ -583,9 +585,6 @@ void IOThread::CleanUp() {
   // Shutdown the HistogramWatcher on the IO thread.
   net::NetworkChangeNotifier::ShutdownHistogramWatcher();
 
-  // This must be reset before the ChromeNetLog is destroyed.
-  network_change_observer_.reset();
-
   system_proxy_config_service_.reset();
   delete globals_;
   globals_ = NULL;
@@ -613,15 +612,18 @@ void IOThread::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kBuiltInDnsClientEnabled, true);
   registry->RegisterBooleanPref(prefs::kQuickCheckEnabled, true);
   registry->RegisterBooleanPref(prefs::kPacHttpsUrlStrippingEnabled, true);
+#if defined(OS_POSIX)
+  registry->RegisterBooleanPref(prefs::kNtlmV2Enabled, false);
+#endif
 }
 
 void IOThread::UpdateServerWhitelist() {
-  globals_->http_auth_preferences->set_server_whitelist(
+  globals_->http_auth_preferences->SetServerWhitelist(
       auth_server_whitelist_.GetValue());
 }
 
 void IOThread::UpdateDelegateWhitelist() {
-  globals_->http_auth_preferences->set_delegate_whitelist(
+  globals_->http_auth_preferences->SetDelegateWhitelist(
       auth_delegate_whitelist_.GetValue());
 }
 
@@ -642,25 +644,34 @@ void IOThread::UpdateNegotiateEnablePort() {
       negotiate_enable_port_.GetValue());
 }
 
+#if defined(OS_POSIX)
+void IOThread::UpdateNtlmV2Enabled() {
+  globals_->http_auth_preferences->set_ntlm_v2_enabled(
+      ntlm_v2_enabled_.GetValue());
+}
+#endif
+
 std::unique_ptr<net::HttpAuthHandlerFactory>
 IOThread::CreateDefaultAuthHandlerFactory(net::HostResolver* host_resolver) {
   std::vector<std::string> supported_schemes = base::SplitString(
       auth_schemes_, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  globals_->http_auth_preferences.reset(new net::HttpAuthPreferences(
-      supported_schemes
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
-      ,
-      gssapi_library_name_
-#endif
+  globals_->http_auth_preferences =
+      std::make_unique<net::HttpAuthPreferences>(supported_schemes
 #if defined(OS_CHROMEOS)
-      ,
-      allow_gssapi_library_load_
+                                                 ,
+                                                 allow_gssapi_library_load_
+#elif defined(OS_POSIX) && !defined(OS_ANDROID)
+                                                 ,
+                                                 gssapi_library_name_
 #endif
-      ));
+                                                 );
   UpdateServerWhitelist();
   UpdateDelegateWhitelist();
   UpdateNegotiateDisableCnameLookup();
   UpdateNegotiateEnablePort();
+#if defined(OS_POSIX)
+  UpdateNtlmV2Enabled();
+#endif
 #if defined(OS_ANDROID)
   UpdateAndroidAuthNegotiateAccountType();
 #endif
@@ -764,7 +775,6 @@ void IOThread::ConstructSystemRequestContext() {
   builder->set_network_delegate(
       globals_->data_use_ascriber->CreateNetworkDelegate(
           std::move(chrome_network_delegate), GetMetricsDataUseForwarder()));
-  builder->set_net_log(net_log_);
   std::unique_ptr<net::HostResolver> host_resolver(
       CreateGlobalHostResolver(net_log_));
 
@@ -805,7 +815,7 @@ void IOThread::ConstructSystemRequestContext() {
   SetUpProxyConfigService(builder.get(),
                           std::move(system_proxy_config_service_));
 
-  globals_->network_service = content::NetworkService::Create();
+  globals_->network_service = content::NetworkService::Create(net_log_);
   if (!is_quic_allowed_on_init_)
     globals_->network_service->DisableQuic();
 

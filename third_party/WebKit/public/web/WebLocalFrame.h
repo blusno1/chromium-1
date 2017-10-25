@@ -13,11 +13,11 @@
 #include "WebHistoryItem.h"
 #include "WebImeTextSpan.h"
 #include "public/platform/TaskType.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebFocusType.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "public/platform/scheduler/single_thread_task_runner.h"
 #include "public/platform/site_engagement.mojom-shared.h"
 #include "public/web/WebSandboxFlags.h"
@@ -50,7 +50,7 @@ class WebSpellCheckPanelHostClient;
 class WebString;
 class WebTextCheckClient;
 class WebURL;
-class WebURLLoader;
+class WebURLLoaderFactory;
 class WebView;
 enum class WebTreeScopeType;
 struct WebAssociatedURLLoaderOptions;
@@ -180,7 +180,7 @@ class WebLocalFrame : public WebFrame {
 
   // Returns a WebURLRequest corresponding to the load of the WebHistoryItem.
   virtual WebURLRequest RequestFromHistoryItem(const WebHistoryItem&,
-                                               WebCachePolicy) const = 0;
+                                               mojom::FetchCacheMode) const = 0;
 
   // Returns a WebURLRequest corresponding to the reload of the current
   // HistoryItem.
@@ -258,7 +258,7 @@ class WebLocalFrame : public WebFrame {
   // Navigation State -------------------------------------------------------
 
   // Returns true if the current frame's load event has not completed.
-  virtual bool IsLoading() const = 0;
+  bool IsLoading() const override = 0;
 
   // Returns true if there is a pending redirect or location change
   // within specified interval (in seconds). This could be caused by:
@@ -718,11 +718,9 @@ class WebLocalFrame : public WebFrame {
 
   // Loading ------------------------------------------------------------------
 
-  // Creates and returns a loader. This function can be called only when this
-  // frame is attached to a document.
-  virtual std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const WebURLRequest&,
-      SingleThreadTaskRunnerRefPtr) = 0;
+  // Creates and returns a new WebURLLoaderFactory. This function can be called
+  // only when this frame is attached to a document.
+  virtual std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() = 0;
 
   // Returns an AssociatedURLLoader that is associated with this frame.  The
   // loader will, for example, be cancelled when WebFrame::stopLoading is

@@ -46,7 +46,7 @@ NGOutOfFlowLayoutPart::NGOutOfFlowLayoutPart(
   icb_size_ = container_space.InitialContainingBlockSize();
 }
 
-void NGOutOfFlowLayoutPart::Run() {
+void NGOutOfFlowLayoutPart::Run(bool update_legacy) {
   Vector<NGOutOfFlowPositionedDescendant> descendant_candidates;
   container_builder_->GetAndClearOutOfFlowDescendantCandidates(
       &descendant_candidates);
@@ -55,9 +55,11 @@ void NGOutOfFlowLayoutPart::Run() {
     for (auto& candidate : descendant_candidates) {
       if (IsContainingBlockForDescendant(candidate.node.Style())) {
         NGLogicalOffset offset;
-        RefPtr<NGLayoutResult> result = LayoutDescendant(
+        scoped_refptr<NGLayoutResult> result = LayoutDescendant(
             candidate.node, candidate.static_position, &offset);
         container_builder_->AddChild(std::move(result), offset);
+        if (update_legacy)
+          candidate.node.UseOldOutOfFlowPositioning();
       } else {
         container_builder_->AddOutOfFlowDescendant(candidate);
       }
@@ -70,7 +72,7 @@ void NGOutOfFlowLayoutPart::Run() {
   }
 }
 
-RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::LayoutDescendant(
+scoped_refptr<NGLayoutResult> NGOutOfFlowLayoutPart::LayoutDescendant(
     NGBlockNode descendant,
     NGStaticPosition static_position,
     NGLogicalOffset* offset) {
@@ -87,7 +89,7 @@ RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::LayoutDescendant(
   static_position.offset -= content_physical_offset_;
 
   // The block estimate is in the descendant's writing mode.
-  RefPtr<NGConstraintSpace> descendant_constraint_space =
+  scoped_refptr<NGConstraintSpace> descendant_constraint_space =
       NGConstraintSpaceBuilder(container_writing_mode, icb_size_)
           .SetTextDirection(container_style_.Direction())
           .SetAvailableSize(container_size_)
@@ -96,7 +98,7 @@ RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::LayoutDescendant(
   Optional<MinMaxSize> min_max_size;
   Optional<LayoutUnit> block_estimate;
 
-  RefPtr<NGLayoutResult> layout_result = nullptr;
+  scoped_refptr<NGLayoutResult> layout_result = nullptr;
 
   if (AbsoluteNeedsChildInlineSize(descendant.Style()) ||
       NeedMinMaxSize(descendant.Style())) {
@@ -156,7 +158,7 @@ bool NGOutOfFlowLayoutPart::IsContainingBlockForDescendant(
 //    container's available size.
 // 2. To compute final fragment, when block size is known from the absolute
 //    position calculation.
-RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::GenerateFragment(
+scoped_refptr<NGLayoutResult> NGOutOfFlowLayoutPart::GenerateFragment(
     NGBlockNode descendant,
     const Optional<LayoutUnit>& block_estimate,
     const NGAbsolutePhysicalPosition node_position) {
@@ -185,7 +187,8 @@ RefPtr<NGLayoutResult> NGOutOfFlowLayoutPart::GenerateFragment(
       .SetIsFixedSizeInline(true);
   if (block_estimate)
     builder.SetIsFixedSizeBlock(true);
-  RefPtr<NGConstraintSpace> space = builder.ToConstraintSpace(writing_mode);
+  scoped_refptr<NGConstraintSpace> space =
+      builder.ToConstraintSpace(writing_mode);
 
   return descendant.Layout(*space);
 }

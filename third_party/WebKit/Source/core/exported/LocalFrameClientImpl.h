@@ -46,6 +46,7 @@ namespace blink {
 class WebDevToolsAgentImpl;
 class WebLocalFrameImpl;
 class WebSpellCheckPanelHostClient;
+struct WebRemoteScrollProperties;
 
 class LocalFrameClientImpl final : public LocalFrameClient {
  public:
@@ -53,7 +54,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   ~LocalFrameClientImpl() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   WebLocalFrameImpl* GetWebFrame() const override;
 
@@ -234,8 +235,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   TextCheckerClient& GetTextCheckerClient() const override;
 
-  std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequest&,
-                                                WebTaskRunner*) override;
+  std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() override;
 
   service_manager::InterfaceProvider* GetInterfaceProvider() override;
 
@@ -243,7 +243,11 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   void DidBlockFramebust(const KURL&) override;
 
-  String GetDevToolsFrameToken() override;
+  String GetInstrumentationToken() override;
+
+  void ScrollRectToVisibleInParentFrame(
+      const WebRect&,
+      const WebRemoteScrollProperties&) override;
 
  private:
   explicit LocalFrameClientImpl(WebLocalFrameImpl*);

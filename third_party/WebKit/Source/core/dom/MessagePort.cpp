@@ -64,7 +64,7 @@ MessagePort::~MessagePort() {
 }
 
 void MessagePort::postMessage(ScriptState* script_state,
-                              RefPtr<SerializedScriptValue> message,
+                              scoped_refptr<SerializedScriptValue> message,
                               const MessagePortArray& ports,
                               ExceptionState& exception_state) {
   if (!IsEntangled())
@@ -287,7 +287,7 @@ MojoHandle MessagePort::EntangledHandleForTesting() const {
   return channel_.GetHandle().get().value();
 }
 
-DEFINE_TRACE(MessagePort) {
+void MessagePort::Trace(blink::Visitor* visitor) {
   ContextLifecycleObserver::Trace(visitor);
   EventTargetWithInlineData::Trace(visitor);
 }

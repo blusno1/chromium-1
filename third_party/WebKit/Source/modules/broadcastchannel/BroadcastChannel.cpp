@@ -61,7 +61,7 @@ void BroadcastChannel::postMessage(const ScriptValue& message,
     exception_state.ThrowDOMException(kInvalidStateError, "Channel is closed");
     return;
   }
-  RefPtr<SerializedScriptValue> value = SerializedScriptValue::Serialize(
+  scoped_refptr<SerializedScriptValue> value = SerializedScriptValue::Serialize(
       message.GetIsolate(), message.V8Value(),
       SerializedScriptValue::SerializeOptions(), exception_state);
   if (exception_state.HadException())
@@ -90,7 +90,7 @@ void BroadcastChannel::ContextDestroyed(ExecutionContext*) {
   close();
 }
 
-DEFINE_TRACE(BroadcastChannel) {
+void BroadcastChannel::Trace(blink::Visitor* visitor) {
   ContextLifecycleObserver::Trace(visitor);
   EventTargetWithInlineData::Trace(visitor);
 }

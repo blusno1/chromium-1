@@ -7,7 +7,6 @@
 #include "base/i18n/string_compare.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "components/metrics/proto/translate_event.pb.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/translate_client.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -17,6 +16,7 @@
 #include "components/translate/core/common/translate_constants.h"
 #include "components/variations/variations_associated_data.h"
 #include "third_party/icu/source/i18n/unicode/coll.h"
+#include "third_party/metrics_proto/translate_event.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {
@@ -289,6 +289,10 @@ void TranslateUIDelegate::SetLanguageBlocked(bool value) {
 bool TranslateUIDelegate::IsSiteBlacklisted() {
   std::string host = GetPageHost();
   return !host.empty() && prefs_->IsSiteBlacklisted(host);
+}
+
+bool TranslateUIDelegate::CanBlacklistSite() {
+  return !GetPageHost().empty();
 }
 
 void TranslateUIDelegate::SetSiteBlacklist(bool value) {

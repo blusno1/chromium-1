@@ -39,7 +39,10 @@ enum DisplayType {
   ANGLE_OPENGL = 5,
   ANGLE_OPENGLES = 6,
   ANGLE_NULL = 7,
-  DISPLAY_TYPE_MAX = 8,
+  ANGLE_D3D11_NULL = 8,
+  ANGLE_OPENGL_NULL = 9,
+  ANGLE_OPENGLES_NULL = 10,
+  DISPLAY_TYPE_MAX = 11,
 };
 
 GL_EXPORT void GetEGLInitDisplays(bool supports_angle_d3d,
@@ -79,6 +82,7 @@ class GL_EXPORT GLSurfaceEGL : public GLSurface {
   static bool IsRobustResourceInitSupported();
   static bool IsDisplayTextureShareGroupSupported();
   static bool IsCreateContextClientArraysSupported();
+  static bool IsAndroidNativeFenceSyncSupported();
 
  protected:
   ~GLSurfaceEGL() override;

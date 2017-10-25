@@ -31,10 +31,10 @@
 #include "core/clipboard/DataTransferAccessPolicy.h"
 #include "core/editing/EditingBehavior.h"
 #include "core/editing/EditingStyle.h"
-#include "core/editing/FindOptions.h"
 #include "core/editing/Forward.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/WritingDirection.h"
+#include "core/editing/finder/FindOptions.h"
 #include "core/events/InputEvent.h"
 #include "core/layout/ScrollAlignment.h"
 #include "platform/PasteMode.h"
@@ -302,7 +302,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
     explicit RevealSelectionScope(Editor*);
     ~RevealSelectionScope();
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*);
 
    private:
     Member<Editor> editor_;
@@ -313,7 +313,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   void SetTypingStyle(EditingStyle*);
   void ClearTypingStyle();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   Member<LocalFrame> frame_;

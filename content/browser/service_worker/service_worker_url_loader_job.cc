@@ -87,7 +87,7 @@ ServiceWorkerURLLoaderJob::ServiceWorkerURLLoaderJob(
 ServiceWorkerURLLoaderJob::~ServiceWorkerURLLoaderJob() {}
 
 void ServiceWorkerURLLoaderJob::FallbackToNetwork() {
-  response_type_ = FALLBACK_TO_NETWORK;
+  response_type_ = ResponseType::FALLBACK_TO_NETWORK;
   // This could be called multiple times in some cases because we simply
   // call this synchronously here and don't wait for a separate async
   // StartRequest cue like what URLRequestJob case does.
@@ -102,12 +102,12 @@ void ServiceWorkerURLLoaderJob::FallbackToNetworkOrRenderer() {
 }
 
 void ServiceWorkerURLLoaderJob::ForwardToServiceWorker() {
-  response_type_ = FORWARD_TO_SERVICE_WORKER;
+  response_type_ = ResponseType::FORWARD_TO_SERVICE_WORKER;
   StartRequest();
 }
 
 bool ServiceWorkerURLLoaderJob::ShouldFallbackToNetwork() {
-  return response_type_ == FALLBACK_TO_NETWORK;
+  return response_type_ == ResponseType::FALLBACK_TO_NETWORK;
 }
 
 ui::PageTransition ServiceWorkerURLLoaderJob::GetPageTransition() {
@@ -141,7 +141,7 @@ bool ServiceWorkerURLLoaderJob::WasCanceled() const {
 }
 
 void ServiceWorkerURLLoaderJob::StartRequest() {
-  DCHECK_EQ(FORWARD_TO_SERVICE_WORKER, response_type_);
+  DCHECK_EQ(ResponseType::FORWARD_TO_SERVICE_WORKER, response_type_);
   DCHECK_EQ(Status::kNotStarted, status_);
   status_ = Status::kStarted;
 
@@ -195,7 +195,7 @@ ServiceWorkerURLLoaderJob::CreateRequestBodyBlob() {
       blob_storage_context_->AddFinishedBlob(&blob_builder);
   // TODO(emim): Return a network error when the blob is broken.
   CHECK(!request_body_blob_data_handle->IsBroken());
-  storage::mojom::BlobPtr blob_ptr;
+  blink::mojom::BlobPtr blob_ptr;
   storage::BlobImpl::Create(std::move(request_body_blob_data_handle),
                             MakeRequest(&blob_ptr));
   return base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
@@ -238,7 +238,7 @@ void ServiceWorkerURLLoaderJob::DidDispatchFetchEvent(
     ServiceWorkerFetchEventResult fetch_result,
     const ServiceWorkerResponse& response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-    storage::mojom::BlobPtr body_as_blob,
+    blink::mojom::BlobPtr body_as_blob,
     const scoped_refptr<ServiceWorkerVersion>& version) {
   ServiceWorkerMetrics::URLRequestJobResult result =
       ServiceWorkerMetrics::REQUEST_JOB_ERROR_BAD_DELEGATE;
@@ -289,7 +289,7 @@ void ServiceWorkerURLLoaderJob::StartResponse(
     const ServiceWorkerResponse& response,
     scoped_refptr<ServiceWorkerVersion> version,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-    storage::mojom::BlobPtr body_as_blob,
+    blink::mojom::BlobPtr body_as_blob,
     mojom::URLLoaderRequest request,
     mojom::URLLoaderClientPtr client) {
   DCHECK(!binding_.is_bound());

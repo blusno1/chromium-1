@@ -24,7 +24,7 @@ AudioWorkletHandler::AudioWorkletHandler(
     AudioNode& node,
     float sample_rate,
     String name,
-    HashMap<String, RefPtr<AudioParamHandler>> param_handler_map,
+    HashMap<String, scoped_refptr<AudioParamHandler>> param_handler_map,
     const AudioWorkletNodeOptions& options)
     : AudioHandler(kNodeTypeAudioWorklet, node, sample_rate),
       name_(name),
@@ -57,11 +57,11 @@ AudioWorkletHandler::~AudioWorkletHandler() {
   Uninitialize();
 }
 
-RefPtr<AudioWorkletHandler> AudioWorkletHandler::Create(
+scoped_refptr<AudioWorkletHandler> AudioWorkletHandler::Create(
     AudioNode& node,
     float sample_rate,
     String name,
-    HashMap<String, RefPtr<AudioParamHandler>> param_handler_map,
+    HashMap<String, scoped_refptr<AudioParamHandler>> param_handler_map,
     const AudioWorkletNodeOptions& options) {
   return WTF::AdoptRef(new AudioWorkletHandler(
       node, sample_rate, name, param_handler_map, options));
@@ -108,6 +108,26 @@ void AudioWorkletHandler::Process(size_t frames_to_process) {
   }
 }
 
+void AudioWorkletHandler::CheckNumberOfChannelsForInput(AudioNodeInput* input) {
+  DCHECK(Context()->IsAudioThread());
+  DCHECK(Context()->IsGraphOwner());
+  DCHECK(input);
+
+  // Dynamic channel count only works when the node has 1 input and 1 output.
+  // Otherwise the channel count(s) should not be dynamically changed.
+  if (NumberOfInputs() == 1 && NumberOfOutputs() == 1) {
+    DCHECK_EQ(input, &this->Input(0));
+    unsigned number_of_input_channels = Input(0).NumberOfChannels();
+    if (number_of_input_channels != Output(0).NumberOfChannels()) {
+      // This will propagate the channel count to any nodes connected further
+      // downstream in the graph.
+      Output(0).SetNumberOfChannels(number_of_input_channels);
+    }
+  }
+
+  AudioHandler::CheckNumberOfChannelsForInput(input);
+}
+
 double AudioWorkletHandler::TailTime() const {
   DCHECK(Context()->IsAudioThread());
   return tail_time_;
@@ -139,16 +159,16 @@ AudioWorkletNode::AudioWorkletNode(
     const Vector<CrossThreadAudioParamInfo> param_info_list)
     : AudioNode(context) {
   HeapHashMap<String, Member<AudioParam>> audio_param_map;
-  HashMap<String, RefPtr<AudioParamHandler>> param_handler_map;
+  HashMap<String, scoped_refptr<AudioParamHandler>> param_handler_map;
   for (const auto& param_info : param_info_list) {
     String param_name = param_info.Name().IsolatedCopy();
-    AudioParam* audio_param = AudioParam::Create(context,
-                                                 kParamTypeAudioWorklet,
-                                                 param_info.DefaultValue(),
-                                                 param_info.MinValue(),
-                                                 param_info.MaxValue());
+    AudioParam* audio_param =
+        AudioParam::Create(context, kParamTypeAudioWorklet,
+                           "AudioWorklet(\"" + name + "\")." + param_name,
+                           param_info.DefaultValue(), param_info.MinValue(),
+                           param_info.MaxValue());
     audio_param_map.Set(param_name, audio_param);
-    param_handler_map.Set(param_name, WrapRefPtr(&audio_param->Handler()));
+    param_handler_map.Set(param_name, WrapRefCounted(&audio_param->Handler()));
 
     if (options.hasParameterData()) {
       for (const auto& key_value_pair : options.parameterData()) {
@@ -267,7 +287,7 @@ AudioWorkletHandler& AudioWorkletNode::GetWorkletHandler() const {
   return static_cast<AudioWorkletHandler&>(Handler());
 }
 
-DEFINE_TRACE(AudioWorkletNode) {
+void AudioWorkletNode::Trace(blink::Visitor* visitor) {
   visitor->Trace(parameter_map_);
   AudioNode::Trace(visitor);
 }

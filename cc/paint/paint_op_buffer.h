@@ -10,6 +10,7 @@
 #include <string>
 #include <type_traits>
 
+#include "base/containers/stack_container.h"
 #include "base/debug/alias.h"
 #include "base/logging.h"
 #include "base/memory/aligned_memory.h"
@@ -840,7 +841,7 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
     OffsetIterator(const PaintOpBuffer* buffer,
                    const std::vector<size_t>* offsets)
         : buffer_(buffer), ptr_(buffer_->data_.get()), offsets_(offsets) {
-      if (offsets->empty()) {
+      if (!offsets || offsets->empty()) {
         *this = end();
         return;
       }
@@ -941,37 +942,36 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
     base::Optional<Iterator> iter_;
   };
 
-  // Returns a stream of non-DrawRecord ops from a top level pob with indices.
-  // Upon encountering DrawRecord ops, it returns ops from inside them
-  // without returning the DrawRecord op itself.  It does this recursively.
-  class CC_PAINT_EXPORT FlatteningIterator {
+  class PlaybackFoldingIterator {
    public:
-    // Offsets and paint op buffer must come from the same DisplayItemList.
-    FlatteningIterator(const PaintOpBuffer* buffer,
-                       const std::vector<size_t>* offsets);
-    ~FlatteningIterator();
+    PlaybackFoldingIterator(const PaintOpBuffer* buffer,
+                            const std::vector<size_t>* offsets);
+    ~PlaybackFoldingIterator();
 
-    PaintOp* operator->() const {
-      return nested_iter_.empty() ? *top_level_iter_ : *nested_iter_.back();
-    }
-    PaintOp* operator*() const { return operator->(); }
+    const PaintOp* operator->() const { return current_op_; }
+    const PaintOp* operator*() const { return current_op_; }
 
-    FlatteningIterator& operator++() {
-      if (nested_iter_.empty())
-        ++top_level_iter_;
-      else
-        ++nested_iter_.back();
-      FlattenCurrentOpIfNeeded();
+    PlaybackFoldingIterator& operator++() {
+      FindNextOp();
       return *this;
     }
 
-    operator bool() const { return top_level_iter_; }
+    operator bool() const { return !!current_op_; }
+
+    // Guaranteed to be 255 for all ops without flags.
+    uint8_t alpha() const { return current_alpha_; }
 
    private:
-    void FlattenCurrentOpIfNeeded();
+    void FindNextOp();
+    const PaintOp* NextUnfoldedOp();
 
-    PaintOpBuffer::OffsetIterator top_level_iter_;
-    std::vector<Iterator> nested_iter_;
+    PaintOpBuffer::CompositeIterator iter_;
+
+    // FIFO queue of paint ops that have been peeked at.
+    base::StackVector<const PaintOp*, 3> stack_;
+    DrawColorOp folded_draw_color_;
+    const PaintOp* current_op_ = nullptr;
+    uint8_t current_alpha_ = 255;
   };
 
  private:

@@ -41,7 +41,6 @@ class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
 class ServiceWorkerRegistrationHandle;
 class ServiceWorkerVersion;
-struct ServiceWorkerObjectInfo;
 struct ServiceWorkerVersionAttributes;
 
 // ServiceWorkerDispatcherHost is the browser-side endpoint for several IPC
@@ -147,15 +146,6 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
   void OnProviderCreated(ServiceWorkerProviderHostInfo info) override;
 
   // IPC Message handlers
-  void OnUnregisterServiceWorker(int thread_id,
-                                 int request_id,
-                                 int provider_id,
-                                 int64_t registration_id);
-  void OnEnableNavigationPreload(int thread_id,
-                                 int request_id,
-                                 int provider_id,
-                                 int64_t registration_id,
-                                 bool enable);
   void OnGetNavigationPreloadState(int thread_id,
                                    int request_id,
                                    int provider_id,
@@ -207,16 +197,16 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
       const SourceInfo& source_info,
       const StatusCallback& callback,
       ServiceWorkerStatusCode status);
+  bool IsValidSourceInfo(const ServiceWorkerClientInfo& source_info);
+  bool IsValidSourceInfo(
+      const blink::mojom::ServiceWorkerObjectInfo& source_info);
   void ReleaseSourceInfo(const ServiceWorkerClientInfo& source_info);
-  void ReleaseSourceInfo(const ServiceWorkerObjectInfo& source_info);
+  void ReleaseSourceInfo(
+      const blink::mojom::ServiceWorkerObjectInfo& source_info);
 
   ServiceWorkerRegistrationHandle* FindRegistrationHandle(
       int provider_id,
       int64_t registration_id);
-
-  void UnregistrationComplete(int thread_id,
-                              int request_id,
-                              ServiceWorkerStatusCode status);
 
   ServiceWorkerContextCore* GetContext();
   // Returns the provider host with id equal to |provider_id|, or nullptr
@@ -226,11 +216,6 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
       ProviderStatus* out_status,
       int provider_id);
 
-  void DidUpdateNavigationPreloadEnabled(int thread_id,
-                                         int request_id,
-                                         int registration_id,
-                                         bool enable,
-                                         ServiceWorkerStatusCode status);
   void DidUpdateNavigationPreloadHeader(int thread_id,
                                         int request_id,
                                         int registration_id,

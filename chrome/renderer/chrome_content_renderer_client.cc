@@ -85,7 +85,6 @@
 #include "components/safe_browsing/renderer/renderer_url_loader_throttle.h"
 #include "components/safe_browsing/renderer/threat_dom_details.h"
 #include "components/safe_browsing/renderer/websocket_sb_handshake_throttle.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "components/startup_metric_utils/common/startup_metric.mojom.h"
 #include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
@@ -120,13 +119,13 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebCache.h"
-#include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
+#include "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer_process_type.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
@@ -197,7 +196,6 @@ using autofill::PasswordGenerationAgent;
 using base::ASCIIToUTF16;
 using base::UserMetricsAction;
 using blink::WebCache;
-using blink::WebCachePolicy;
 using blink::WebConsoleMessage;
 using blink::WebDocument;
 using blink::WebFrame;
@@ -212,6 +210,7 @@ using blink::WebURLError;
 using blink::WebURLRequest;
 using blink::WebURLResponse;
 using blink::WebVector;
+using blink::mojom::FetchCacheMode;
 using content::PluginInstanceThrottler;
 using content::RenderFrame;
 using content::RenderThread;
@@ -479,8 +478,6 @@ void ChromeContentRendererClient::RenderThreadStarted() {
     thread->RegisterExtension(extensions_v8::BenchmarkingExtension::Get());
   if (command_line->HasSwitch(switches::kEnableNetBenchmarking))
     thread->RegisterExtension(extensions_v8::NetBenchmarkingExtension::Get());
-  if (command_line->HasSwitch(switches::kInstantProcess))
-    thread->RegisterExtension(extensions_v8::SearchBoxExtension::Get());
 
   // chrome-search: and chrome-distiller: pages  should not be accessible by
   // normal content, and should also be unable to script anything but themselves
@@ -636,10 +633,6 @@ void ChromeContentRendererClient::RenderFrameCreated(
 
 void ChromeContentRendererClient::RenderViewCreated(
     content::RenderView* render_view) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  ChromeExtensionsRendererClient::GetInstance()->RenderViewCreated(render_view);
-#endif
-
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   // This is a workaround keeping the behavior that, the Blink side spellcheck
   // enabled state is initialized on RenderView creation.
@@ -1194,7 +1187,7 @@ void ChromeContentRendererClient::GetNavigationErrorStringsInternal(
     base::string16* error_description) {
   bool is_post = failed_request.HttpMethod().Ascii() == "POST";
   bool is_ignoring_cache =
-      failed_request.GetCachePolicy() == WebCachePolicy::kBypassingCache;
+      failed_request.GetCacheMode() == FetchCacheMode::kBypassCache;
   if (error_html) {
     NetErrorHelper::Get(render_frame)
         ->GetErrorHTML(error, is_post, is_ignoring_cache, error_html);
@@ -1703,6 +1696,6 @@ bool ChromeContentRendererClient::OverrideLegacySymantecCertConsoleMessage(
       " will be distrusted %s. Once distrusted, users will be prevented from "
       "loading these resources. See https://g.co/chrome/symantecpkicerts for "
       "more information.",
-      url::Origin(url).Serialize().c_str(), in_future_string);
+      url::Origin::Create(url).Serialize().c_str(), in_future_string);
   return true;
 }

@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Multiply-included file, no traditional include guard.
+#ifndef CHROME_COMMON_RENDER_MESSAGES_H_
+#define CHROME_COMMON_RENDER_MESSAGES_H_
+
 #include <stdint.h>
 #include <string>
 #include <vector>
@@ -12,15 +14,11 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/common/features.h"
-#include "chrome/common/instant_struct_traits.h"
-#include "chrome/common/search/instant_types.h"
-#include "chrome/common/search/ntp_logging_events.h"
 #include "chrome/common/web_application_info.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/offline_pages/features/features.h"
-#include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/common/browser_controls_state.h"
 #include "content/public/common/webplugininfo.h"
 #include "ipc/ipc_channel_handle.h"
@@ -29,14 +27,13 @@
 #include "media/media_features.h"
 #include "ppapi/features/features.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 #include "url/ipc/url_param_traits.h"
 #include "url/origin.h"
 
 // Singly-included section for enums and custom IPC traits.
-#ifndef CHROME_COMMON_RENDER_MESSAGES_H_
-#define CHROME_COMMON_RENDER_MESSAGES_H_
+#ifndef INTERNAL_CHROME_COMMON_RENDER_MESSAGES_H_
+#define INTERNAL_CHROME_COMMON_RENDER_MESSAGES_H_
 
 // These are only used internally, so the order does not matter.
 enum class ChromeViewHostMsg_GetPluginInfo_Status {
@@ -62,15 +59,12 @@ enum class ChromeViewHostMsg_GetPluginInfo_Status {
   kUnauthorized,
 };
 
-#endif  // CHROME_COMMON_RENDER_MESSAGES_H_
+#endif  // INTERNAL_CHROME_COMMON_RENDER_MESSAGES_H_
 
 #define IPC_MESSAGE_START ChromeMsgStart
 
 IPC_ENUM_TRAITS_MAX_VALUE(ChromeViewHostMsg_GetPluginInfo_Status,
                           ChromeViewHostMsg_GetPluginInfo_Status::kUnauthorized)
-IPC_ENUM_TRAITS_MAX_VALUE(ThemeBackgroundImageAlignment,
-                          THEME_BKGRND_IMAGE_ALIGN_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(ThemeBackgroundImageTiling, THEME_BKGRND_IMAGE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebConsoleMessage::Level,
                           blink::WebConsoleMessage::kLevelLast)
 IPC_ENUM_TRAITS_MAX_VALUE(content::BrowserControlsState,
@@ -84,13 +78,6 @@ IPC_STRUCT_BEGIN(ChromeViewHostMsg_GetPluginInfo_Output)
   IPC_STRUCT_MEMBER(std::string, group_identifier)
   IPC_STRUCT_MEMBER(base::string16, group_name)
 IPC_STRUCT_END()
-
-IPC_STRUCT_TRAITS_BEGIN(RGBAColor)
-  IPC_STRUCT_TRAITS_MEMBER(r)
-  IPC_STRUCT_TRAITS_MEMBER(g)
-  IPC_STRUCT_TRAITS_MEMBER(b)
-  IPC_STRUCT_TRAITS_MEMBER(a)
-IPC_STRUCT_TRAITS_END()
 
 IPC_ENUM_TRAITS_MAX_VALUE(WebApplicationInfo::MobileCapable,
                           WebApplicationInfo::MOBILE_CAPABLE_APPLE)
@@ -248,3 +235,5 @@ IPC_SYNC_MESSAGE_CONTROL0_1(ChromeViewHostMsg_IsCrashReportingEnabled,
 // Tells the browser to open a PDF file in a new tab. Used when no PDF Viewer is
 // available, and user clicks to view PDF.
 IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_OpenPDF, GURL /* url */)
+
+#endif  // CHROME_COMMON_RENDER_MESSAGES_H_

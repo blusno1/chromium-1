@@ -38,8 +38,7 @@ class ScriptStreamingTest : public ::testing::Test {
         settings_(Settings::Create()),
         dummy_document_(Document::CreateForTest()) {
     resource_ = ScriptResource::CreateForTest(
-        KURL(kParsedURLString, "http://www.streaming-test.com/"),
-        UTF8Encoding());
+        KURL("http://www.streaming-test.com/"), UTF8Encoding());
     resource_->SetStatus(ResourceStatus::kPending);
 
     MockScriptElementBase* element = MockScriptElementBase::Create();
@@ -98,7 +97,7 @@ class ScriptStreamingTest : public ::testing::Test {
     testing::RunPendingTasks();
   }
 
-  RefPtr<WebTaskRunner> loading_task_runner_;
+  scoped_refptr<WebTaskRunner> loading_task_runner_;
   std::unique_ptr<Settings> settings_;
   // The Resource and PendingScript where we stream from. These don't really
   // fetch any data outside the test; the test controls the data by calling

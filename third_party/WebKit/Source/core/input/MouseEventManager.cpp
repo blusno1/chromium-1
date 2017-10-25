@@ -115,7 +115,7 @@ void MouseEventManager::Clear() {
 
 MouseEventManager::~MouseEventManager() = default;
 
-DEFINE_TRACE(MouseEventManager) {
+void MouseEventManager::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(scroll_manager_);
   visitor->Trace(node_under_mouse_);
@@ -1012,12 +1012,12 @@ WebInputEventResult MouseEventManager::DispatchDragEvent(
   const bool cancelable = event_type != EventTypeNames::dragleave &&
                           event_type != EventTypeNames::dragend;
 
-  IntPoint position = FlooredIntPoint(event.PositionInRootFrame());
   IntPoint movement = FlooredIntPoint(event.MovementInRootFrame());
   DragEvent* me = DragEvent::Create(
       event_type, true, cancelable, frame_->GetDocument()->domWindow(), 0,
-      event.PositionInScreen().x, event.PositionInScreen().y, position.X(),
-      position.Y(), movement.X(), movement.Y(),
+      event.PositionInScreen().x, event.PositionInScreen().y,
+      event.PositionInRootFrame().x, event.PositionInRootFrame().y,
+      movement.X(), movement.Y(),
       static_cast<WebInputEvent::Modifiers>(event.GetModifiers()), 0,
       MouseEvent::WebInputEventModifiersToButtons(event.GetModifiers()),
       related_target, TimeTicks::FromSeconds(event.TimeStampSeconds()),

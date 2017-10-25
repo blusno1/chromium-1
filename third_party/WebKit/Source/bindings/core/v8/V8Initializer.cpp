@@ -184,7 +184,7 @@ namespace {
 
 static RejectedPromises& RejectedPromisesOnMainThread() {
   DCHECK(IsMainThread());
-  DEFINE_STATIC_LOCAL(RefPtr<RejectedPromises>, rejected_promises,
+  DEFINE_STATIC_LOCAL(scoped_refptr<RejectedPromises>, rejected_promises,
                       (RejectedPromises::Create()));
   return *rejected_promises;
 }
@@ -410,6 +410,29 @@ static v8::MaybeLocal<v8::Promise> HostImportModuleDynamically(
   return v8::Local<v8::Promise>::Cast(promise.V8Value());
 }
 
+// https://html.spec.whatwg.org/#hostgetimportmetaproperties
+static void HostGetImportMetaProperties(v8::Local<v8::Context> context,
+                                        v8::Local<v8::Module> module,
+                                        v8::Local<v8::Object> meta) {
+  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled() &&
+        RuntimeEnabledFeatures::ModuleScriptsImportMetaUrlEnabled());
+  ScriptState* script_state = ScriptState::From(context);
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::HandleScope handle_scope(isolate);
+
+  Modulator* modulator = Modulator::From(script_state);
+  if (!modulator)
+    return;
+
+  ModuleImportMeta host_meta =
+      modulator->HostGetImportMetaProperties(ScriptModule(isolate, module));
+
+  // 3. Return <<Record { [[Key]]: "url", [[Value]]: urlString }>>. [spec text]
+  v8::Local<v8::String> url_key = V8String(isolate, "url");
+  v8::Local<v8::String> url_value = V8String(isolate, host_meta.Url());
+  meta->CreateDataProperty(context, url_key, url_value).ToChecked();
+}
+
 static void InitializeV8Common(v8::Isolate* isolate) {
   isolate->AddGCPrologueCallback(V8GCController::GcPrologue);
   isolate->AddGCEpilogueCallback(V8GCController::GcEpilogue);
@@ -429,6 +452,11 @@ static void InitializeV8Common(v8::Isolate* isolate) {
       RuntimeEnabledFeatures::ModuleScriptsDynamicImportEnabled()) {
     isolate->SetHostImportModuleDynamicallyCallback(
         HostImportModuleDynamically);
+  }
+  if (RuntimeEnabledFeatures::ModuleScriptsEnabled() &&
+      RuntimeEnabledFeatures::ModuleScriptsImportMetaUrlEnabled()) {
+    isolate->SetHostInitializeImportMetaObjectCallback(
+        HostGetImportMetaProperties);
   }
 
   V8ContextSnapshot::EnsureInterfaceTemplates(isolate);
@@ -533,12 +561,8 @@ void V8Initializer::InitializeMainThread(const intptr_t* reference_table) {
   }
   V8ContextSnapshot::SetReferenceTable(reference_table);
 
-  // When timer task runner is used for PerIsolateData, GC tasks are getting
-  // throttled and memory usage goes up. For now we're using loading task queue
-  // to prevent this.
-  // TODO(altimin): Consider switching to timerTaskRunner here.
   v8::Isolate* isolate = V8PerIsolateData::Initialize(
-      scheduler ? scheduler->LoadingTaskRunner()
+      scheduler ? scheduler->V8TaskRunner()
                 : Platform::Current()->CurrentThread()->GetWebTaskRunner(),
       reference_table, v8_context_snapshot_mode);
 

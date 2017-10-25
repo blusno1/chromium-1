@@ -93,7 +93,7 @@ ImageBuffer::ImageBuffer(std::unique_ptr<ImageBufferSurface> surface)
     : weak_ptr_factory_(this),
       snapshot_state_(kInitialSnapshotState),
       surface_(std::move(surface)),
-      client_(0),
+      client_(nullptr),
       gpu_readback_invoked_in_current_frame_(false),
       gpu_readback_successive_frames_(0),
       gpu_memory_usage_(0) {
@@ -131,14 +131,6 @@ PaintCanvas* ImageBuffer::Canvas() const {
 
 void ImageBuffer::DisableDeferral(DisableDeferralReason reason) const {
   return surface_->DisableDeferral(reason);
-}
-
-bool ImageBuffer::WritePixels(const SkImageInfo& info,
-                              const void* pixels,
-                              size_t row_bytes,
-                              int x,
-                              int y) {
-  return surface_->WritePixels(info, pixels, row_bytes, x, y);
 }
 
 bool ImageBuffer::IsSurfaceValid() const {
@@ -183,7 +175,7 @@ void ImageBuffer::ResetCanvas(PaintCanvas* canvas) const {
     client_->RestoreCanvasMatrixClipStack(canvas);
 }
 
-RefPtr<StaticBitmapImage> ImageBuffer::NewImageSnapshot(
+scoped_refptr<StaticBitmapImage> ImageBuffer::NewImageSnapshot(
     AccelerationHint hint,
     SnapshotReason reason) const {
   if (snapshot_state_ == kInitialSnapshotState)
@@ -217,7 +209,7 @@ bool ImageBuffer::CopyToPlatformTexture(SnapshotReason reason,
   if (!IsSurfaceValid())
     return false;
 
-  RefPtr<StaticBitmapImage> image =
+  scoped_refptr<StaticBitmapImage> image =
       surface_->NewImageSnapshot(kPreferAcceleration, reason);
   if (!image || !image->IsTextureBacked() || !image->IsValid())
     return false;
@@ -355,7 +347,7 @@ bool ImageBuffer::GetImageData(Multiply multiplied,
 
   DCHECK(Canvas());
 
-  RefPtr<StaticBitmapImage> snapshot = surface_->NewImageSnapshot(
+  scoped_refptr<StaticBitmapImage> snapshot = surface_->NewImageSnapshot(
       kPreferNoAcceleration, kSnapshotReasonGetImageData);
   if (!snapshot)
     return false;
@@ -387,11 +379,6 @@ bool ImageBuffer::GetImageData(Multiply multiplied,
   SkImageInfo info =
       SkImageInfo::Make(rect.Width(), rect.Height(), color_type, alpha_type,
                         surface_->ColorParams().GetSkColorSpaceForSkSurfaces());
-
-  // If color correct rendering is enabled but color canvas extensions is not,
-  // unpremul must be done in gamma encoded color space.
-  if (!RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled())
-    info = info.makeColorSpace(nullptr);
   snapshot->PaintImageForCurrentFrame().GetSkImage()->readPixels(
       info, result.Data(), bytes_per_pixel * rect.Width(), rect.X(), rect.Y());
   gpu_readback_invoked_in_current_frame_ = true;
@@ -499,7 +486,7 @@ void ImageBuffer::DisableAcceleration() {
 }
 
 void ImageBuffer::SetSurface(std::unique_ptr<ImageBufferSurface> surface) {
-  RefPtr<StaticBitmapImage> image =
+  scoped_refptr<StaticBitmapImage> image =
       surface_->NewImageSnapshot(kPreferNoAcceleration, kSnapshotReasonPaint);
 
   // image can be null if alloaction failed in which case we should just

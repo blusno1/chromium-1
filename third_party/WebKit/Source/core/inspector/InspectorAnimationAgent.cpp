@@ -105,7 +105,7 @@ BuildObjectForAnimationEffect(KeyframeEffectReadOnly* effect,
     DCHECK(effect->Model()->IsKeyframeEffectModel());
     const KeyframeEffectModelBase* model =
         ToKeyframeEffectModelBase(effect->Model());
-    Vector<RefPtr<Keyframe>> keyframes =
+    Vector<scoped_refptr<Keyframe>> keyframes =
         KeyframeEffectModelBase::NormalizedKeyframesForInspector(
             model->GetFrames());
     if (keyframes.size() == 3) {
@@ -153,7 +153,7 @@ BuildObjectForAnimationKeyframes(const KeyframeEffectReadOnly* effect) {
     return nullptr;
   const KeyframeEffectModelBase* model =
       ToKeyframeEffectModelBase(effect->Model());
-  Vector<RefPtr<Keyframe>> normalized_keyframes =
+  Vector<scoped_refptr<Keyframe>> normalized_keyframes =
       KeyframeEffectModelBase::NormalizedKeyframesForInspector(
           model->GetFrames());
   std::unique_ptr<protocol::Array<protocol::Animation::KeyframeStyle>>
@@ -307,15 +307,6 @@ blink::Animation* InspectorAnimationAgent::AnimationClone(
       for (auto& old_keyframe : old_keyframes)
         new_keyframes.push_back(ToStringKeyframe(old_keyframe.get()));
       new_model = StringKeyframeEffectModel::Create(new_keyframes);
-    } else if (old_model->IsAnimatableValueKeyframeEffectModel()) {
-      AnimatableValueKeyframeEffectModel* old_animatable_value_keyframe_model =
-          ToAnimatableValueKeyframeEffectModel(old_model);
-      KeyframeVector old_keyframes =
-          old_animatable_value_keyframe_model->GetFrames();
-      AnimatableValueKeyframeVector new_keyframes;
-      for (auto& old_keyframe : old_keyframes)
-        new_keyframes.push_back(ToAnimatableValueKeyframe(old_keyframe.get()));
-      new_model = AnimatableValueKeyframeEffectModel::Create(new_keyframes);
     } else if (old_model->IsTransitionKeyframeEffectModel()) {
       TransitionKeyframeEffectModel* old_transition_keyframe_model =
           ToTransitionKeyframeEffectModel(old_model);
@@ -568,7 +559,7 @@ double InspectorAnimationAgent::NormalizedStartTime(
                                      1000 * ReferenceTimeline().PlaybackRate();
 }
 
-DEFINE_TRACE(InspectorAnimationAgent) {
+void InspectorAnimationAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(inspected_frames_);
   visitor->Trace(css_agent_);
   visitor->Trace(id_to_animation_);

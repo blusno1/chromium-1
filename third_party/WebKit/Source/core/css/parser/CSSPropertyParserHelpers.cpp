@@ -37,11 +37,12 @@ namespace CSSPropertyParserHelpers {
 namespace {
 
 // Add CSSVariableData to variableData vector.
-bool AddCSSPaintArgument(const Vector<CSSParserToken>& tokens,
-                         Vector<RefPtr<CSSVariableData>>* const variable_data) {
+bool AddCSSPaintArgument(
+    const Vector<CSSParserToken>& tokens,
+    Vector<scoped_refptr<CSSVariableData>>* const variable_data) {
   CSSParserTokenRange token_range(tokens);
   if (!token_range.AtEnd()) {
-    RefPtr<CSSVariableData> unparsed_css_variable_data =
+    scoped_refptr<CSSVariableData> unparsed_css_variable_data =
         CSSVariableData::Create(token_range, false, false);
     if (unparsed_css_variable_data.get()) {
       variable_data->push_back(std::move(unparsed_css_variable_data));
@@ -100,6 +101,11 @@ CSSFunctionValue* ConsumeFilterFunction(CSSParserTokenRange& range,
       if (!parsed_value) {
         parsed_value =
             CSSPropertyParserHelpers::ConsumeNumber(args, kValueRangeAll);
+      }
+      if (parsed_value &&
+          ToCSSPrimitiveValue(parsed_value)->GetDoubleValue() < 0) {
+        // crbug.com/776208: Negative values are not allowed by spec.
+        context.Count(WebFeature::kCSSFilterFunctionNegativeBrightness);
       }
     } else if (filter_type == CSSValueHueRotate) {
       parsed_value = CSSPropertyParserHelpers::ConsumeAngle(
@@ -1376,7 +1382,7 @@ static CSSValue* ConsumePaint(CSSParserTokenRange& args,
   // TODO(renjieliu): We may want to optimize the implementation by resolve
   // variables early if paint function is registered.
   Vector<CSSParserToken> argument_tokens;
-  Vector<RefPtr<CSSVariableData>> variable_data;
+  Vector<scoped_refptr<CSSVariableData>> variable_data;
   while (!args.AtEnd()) {
     if (args.Peek().GetType() != kCommaToken) {
       argument_tokens.AppendVector(ConsumeFunctionArgsOrNot(args));

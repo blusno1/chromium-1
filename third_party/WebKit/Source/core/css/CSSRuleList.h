@@ -32,8 +32,7 @@ namespace blink {
 class CSSRule;
 class CSSStyleSheet;
 
-class CSSRuleList : public GarbageCollected<CSSRuleList>,
-                    public ScriptWrappable {
+class CSSRuleList : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
   WTF_MAKE_NONCOPYABLE(CSSRuleList);
 
@@ -42,8 +41,6 @@ class CSSRuleList : public GarbageCollected<CSSRuleList>,
   virtual CSSRule* item(unsigned index) const = 0;
 
   virtual CSSStyleSheet* GetStyleSheet() const = 0;
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
 
  protected:
   CSSRuleList() {}
@@ -57,7 +54,7 @@ class StaticCSSRuleList final : public CSSRuleList {
 
   CSSStyleSheet* GetStyleSheet() const override { return 0; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   StaticCSSRuleList();
@@ -77,7 +74,7 @@ class LiveCSSRuleList final : public CSSRuleList {
     return new LiveCSSRuleList(rule);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(rule_);
     CSSRuleList::Trace(visitor);
   }

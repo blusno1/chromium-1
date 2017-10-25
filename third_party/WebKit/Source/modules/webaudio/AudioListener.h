@@ -43,8 +43,7 @@ class PannerHandler;
 // AudioListener maintains the state of the listener in the audio scene as
 // defined in the OpenAL specification.
 
-class AudioListener : public GarbageCollectedFinalized<AudioListener>,
-                      public ScriptWrappable {
+class AudioListener : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -129,7 +128,7 @@ class AudioListener : public GarbageCollectedFinalized<AudioListener>,
   bool IsHRTFDatabaseLoaded();
   void WaitForHRTFDatabaseLoaderThreadCompletion();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   AudioListener(BaseAudioContext&);
@@ -190,7 +189,7 @@ class AudioListener : public GarbageCollectedFinalized<AudioListener>,
   // unregisters it from m_panners.
   HashSet<PannerHandler*> panners_;
   // HRTF DB loader for panner node.
-  RefPtr<HRTFDatabaseLoader> hrtf_database_loader_;
+  scoped_refptr<HRTFDatabaseLoader> hrtf_database_loader_;
 };
 
 }  // namespace blink

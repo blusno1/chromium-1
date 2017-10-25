@@ -105,7 +105,7 @@ void BitmapImage::DestroyDecodedData() {
   NotifyMemoryChanged();
 }
 
-RefPtr<SharedBuffer> BitmapImage::Data() {
+scoped_refptr<SharedBuffer> BitmapImage::Data() {
   return decoder_ ? decoder_->Data() : nullptr;
 }
 
@@ -194,7 +194,7 @@ bool BitmapImage::GetHotSpot(IntPoint& hot_spot) const {
   return decoder_ && decoder_->HotSpot(hot_spot);
 }
 
-Image::SizeAvailability BitmapImage::SetData(RefPtr<SharedBuffer> data,
+Image::SizeAvailability BitmapImage::SetData(scoped_refptr<SharedBuffer> data,
                                              bool all_data_received) {
   if (!data)
     return kSizeAvailable;
@@ -410,7 +410,7 @@ PaintImage BitmapImage::PaintImageForCurrentFrame() {
   return FrameAtIndex(current_frame_index_);
 }
 
-RefPtr<Image> BitmapImage::ImageForDefaultFrame() {
+scoped_refptr<Image> BitmapImage::ImageForDefaultFrame() {
   if (FrameCount() > 1) {
     PaintImage paint_image = FrameAtIndex(PaintImage::kDefaultFrameIndex);
     if (paint_image.ShouldAnimate()) {
@@ -636,22 +636,8 @@ Optional<size_t> BitmapImage::StartAnimationInternal(const double time) {
   desired_frame_start_time_ -=
       FrameDurationAtIndex(current_frame_index_).InSecondsF();
 
-  // Set up the timer for the next frame if required. Note that we have
-  // already advanced to the current_frame_index_ after catching up. And in
-  // the loop above, we either could not advance the animation further or we
-  // advanced it up till the desired time for the current frame. This ensures
-  // that calling StartAnimationInternal here with the same |time| will not
-  // need to perform any catch up skipping.
-  StartAnimationInternal(time);
-
-  // At this point, we've advanced to the |current_frame_index_|, and requested
-  // an invalidation from the observers, and potentially scheduled a task for
-  // further advancing the animation. If the task runs before the next draw,
-  // current_frame_index_ will be skipped, if not, we will draw with it. For the
-  // purpose of keeping the UMA tracking simple, we always exclude the
-  // |current_frame_index_|, since if we do end up drawing before the task runs,
-  // we won't emit an UMA entry for advancing to the next frame with no
-  // skipping.
+  // Don't include the |current_frame_index_|, which will be used on the next
+  // paint, in the number of frames skipped.
   return Optional<size_t>(frames_advanced - 1);
 }
 

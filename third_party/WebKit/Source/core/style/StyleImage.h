@@ -74,11 +74,12 @@ class CORE_EXPORT StyleImage : public GarbageCollectedFinalized<StyleImage> {
   // which use custom paint. We pass a nullptr for other subclasses.
   // TODO(schenney): Pass the |container_size| unsnapped as a LayoutSize so that
   // we don't need to pass an additional parameter.
-  virtual RefPtr<Image> GetImage(const ImageResourceObserver&,
-                                 const Document&,
-                                 const ComputedStyle&,
-                                 const IntSize& container_size,
-                                 const LayoutSize* logical_size) const = 0;
+  virtual scoped_refptr<Image> GetImage(
+      const ImageResourceObserver&,
+      const Document&,
+      const ComputedStyle&,
+      const IntSize& container_size,
+      const LayoutSize* logical_size) const = 0;
   virtual WrappedImagePtr Data() const = 0;
   virtual float ImageScaleFactor() const { return 1; }
   virtual bool KnownToBeOpaque(const Document&, const ComputedStyle&) const = 0;
@@ -97,7 +98,7 @@ class CORE_EXPORT StyleImage : public GarbageCollectedFinalized<StyleImage> {
   // so that it can persist beyond a navigation.
   void FlagAsUserAgentResource();
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 
  protected:
   StyleImage()
@@ -116,7 +117,7 @@ class CORE_EXPORT StyleImage : public GarbageCollectedFinalized<StyleImage> {
 
   bool is_ua_css_resource_ = false;
 
-  static LayoutSize ApplyZoom(const LayoutSize&, float multiplier);
+  LayoutSize ApplyZoom(const LayoutSize&, float multiplier) const;
   LayoutSize ImageSizeForSVGImage(SVGImage*,
                                   float multiplier,
                                   const LayoutSize& default_object_size) const;

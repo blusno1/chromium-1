@@ -13,10 +13,10 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/trace_event/trace_log.h"
+#include "build/build_config.h"
 #include "device/base/synchronization/shared_memory_seqlock_buffer.h"
 #include "platform/PlatformExport.h"
 #include "platform/scheduler/base/pollable_thread_safe_flag.h"
-#include "platform/scheduler/base/queueing_time_estimator.h"
 #include "platform/scheduler/base/task_time_observer.h"
 #include "platform/scheduler/child/idle_canceled_delayed_task_sweeper.h"
 #include "platform/scheduler/child/idle_helper.h"
@@ -24,6 +24,7 @@
 #include "platform/scheduler/renderer/idle_time_estimator.h"
 #include "platform/scheduler/renderer/main_thread_scheduler_helper.h"
 #include "platform/scheduler/renderer/main_thread_task_queue.h"
+#include "platform/scheduler/renderer/queueing_time_estimator.h"
 #include "platform/scheduler/renderer/render_widget_signals.h"
 #include "platform/scheduler/renderer/renderer_metrics_helper.h"
 #include "platform/scheduler/renderer/task_cost_estimator.h"
@@ -111,6 +112,10 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   void DidAnimateForInputOnCompositorThread() override;
   void SetRendererHidden(bool hidden) override;
   void SetRendererBackgrounded(bool backgrounded) override;
+#if defined(OS_ANDROID)
+  void PauseTimersForAndroidWebView();
+  void ResumeTimersForAndroidWebView();
+#endif
   std::unique_ptr<RendererPauseHandle> PauseRenderer() override
       WARN_UNUSED_RESULT;
   void AddPendingNavigation(NavigatingFrameType type) override;
@@ -145,11 +150,15 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   // QueueingTimeEstimator::Client implementation:
   void OnQueueingTimeForWindowEstimated(base::TimeDelta queueing_time,
                                         bool is_disjoint_window) override;
+  void OnReportSplitExpectedQueueingTime(
+      const std::string& split_description,
+      base::TimeDelta queueing_time) override;
 
   scoped_refptr<MainThreadTaskQueue> DefaultTaskQueue();
   scoped_refptr<MainThreadTaskQueue> CompositorTaskQueue();
   scoped_refptr<MainThreadTaskQueue> LoadingTaskQueue();
   scoped_refptr<MainThreadTaskQueue> TimerTaskQueue();
+  scoped_refptr<MainThreadTaskQueue> V8TaskQueue();
 
   // Returns a new task queue created with given params.
   scoped_refptr<MainThreadTaskQueue> NewTaskQueue(
@@ -542,6 +551,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
 
   scoped_refptr<MainThreadTaskQueue> default_loading_task_queue_;
   scoped_refptr<MainThreadTaskQueue> default_timer_task_queue_;
+  scoped_refptr<MainThreadTaskQueue> v8_task_queue_;
 
   // Note |virtual_time_domain_| is lazily created.
   std::unique_ptr<AutoAdvancingVirtualTimeDomain> virtual_time_domain_;
@@ -600,6 +610,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     bool compositor_will_send_main_frame_not_expected;
     bool virtual_time_stopped;
     bool has_navigated;
+    bool pause_timers_for_webview;
     std::unique_ptr<base::SingleSampleMetric> max_queueing_time_metric;
     base::TimeDelta max_queueing_time;
     base::TimeTicks background_status_changed_at;

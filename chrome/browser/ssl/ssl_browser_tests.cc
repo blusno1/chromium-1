@@ -1665,7 +1665,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithClientCert, TestWSSClientCert) {
   base::FilePath cert_path = net::GetTestCertsDirectory().Append(
       FILE_PATH_LITERAL("websocket_client_cert.p12"));
   {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     EXPECT_TRUE(base::ReadFileToString(cert_path, &pkcs12_data));
   }
   EXPECT_EQ(net::OK,
@@ -1744,7 +1744,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestBadHTTPSDownload) {
   GURL url_non_dangerous = embedded_test_server()->GetURL("/title1.html");
   GURL url_dangerous =
       https_server_expired_.GetURL("/downloads/dangerous/dangerous.exe");
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir downloads_directory_;
 
   // Need empty temp dir to avoid having Chrome ask us for a new filename
@@ -2760,22 +2760,21 @@ class SSLUIWorkerFetchTest
           std::pair<OffMainThreadFetchMode, SSLUIWorkerFetchTestType>>,
       public SSLUITest {
  public:
-  SSLUIWorkerFetchTest() { EXPECT_TRUE(tmp_dir_.CreateUniqueTempDir()); }
-  ~SSLUIWorkerFetchTest() override {}
-  void SetUpCommandLine(base::CommandLine* command_line) override {
+  SSLUIWorkerFetchTest() {
+    EXPECT_TRUE(tmp_dir_.CreateUniqueTempDir());
     if (GetParam().first == OffMainThreadFetchMode::kEnabled) {
-      command_line->AppendSwitchASCII(switches::kEnableFeatures,
-                                      features::kOffMainThreadFetch.name);
+      scoped_feature_list_.InitAndEnableFeature(features::kOffMainThreadFetch);
     } else {
-      command_line->AppendSwitchASCII(switches::kDisableFeatures,
-                                      features::kOffMainThreadFetch.name);
+      scoped_feature_list_.InitAndDisableFeature(features::kOffMainThreadFetch);
     }
   }
+
+  ~SSLUIWorkerFetchTest() override {}
 
  protected:
   void WriteFile(const base::FilePath::StringType& filename,
                  base::StringPiece contents) {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     EXPECT_EQ(base::checked_cast<int>(contents.size()),
               base::WriteFile(tmp_dir_.GetPath().Append(filename),
                               contents.data(), contents.size()));
@@ -2922,6 +2921,10 @@ class SSLUIWorkerFetchTest
     CheckSecurityState(tab, CertError::NONE, security_state::NONE,
                        AuthState::NONE);
   }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(SSLUIWorkerFetchTest);
 };
 
 IN_PROC_BROWSER_TEST_P(SSLUIWorkerFetchTest,
@@ -3451,7 +3454,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestInterstitialJavaScriptProceeds) {
   content::WindowedNotificationObserver observer(
       content::NOTIFICATION_LOAD_STOP,
       content::Source<NavigationController>(&tab->GetController()));
-  int result = -1;
+  int result = security_interstitials::CMD_ERROR;
   const std::string javascript =
       base::StringPrintf("window.domAutomationController.send(%d);",
                          security_interstitials::CMD_PROCEED);
@@ -3486,7 +3489,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestInterstitialJavaScriptGoesBack) {
             interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
   content::RenderViewHost* interstitial_rvh =
       interstitial_page->GetMainFrame()->GetRenderViewHost();
-  int result = -1;
+  int result = security_interstitials::CMD_ERROR;
   const std::string javascript =
       base::StringPrintf("window.domAutomationController.send(%d);",
                          security_interstitials::CMD_DONT_PROCEED);
@@ -3607,7 +3610,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestInterstitialLinksOpenInNewTab) {
 
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
 
-  int result = -1;
+  int result = security_interstitials::CMD_ERROR;
   const std::string javascript =
       base::StringPrintf("window.domAutomationController.send(%d);",
                          security_interstitials::CMD_OPEN_HELP_CENTER);
@@ -3986,8 +3989,8 @@ class SSLNetworkTimeBrowserTest : public SSLUITest {
   }
 
  private:
-  DelayedNetworkTimeInterceptor* interceptor_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  DelayedNetworkTimeInterceptor* interceptor_;
 
   DISALLOW_COPY_AND_ASSIGN(SSLNetworkTimeBrowserTest);
 };
@@ -6178,7 +6181,7 @@ class SymantecMessageSSLUITest : public CertVerifierBrowserTest {
   void SetUpCertVerifier(bool use_chrome_66_date) {
     net::CertVerifyResult verify_result;
     {
-      base::ThreadRestrictions::ScopedAllowIO allow_io;
+      base::ScopedAllowBlockingForTesting allow_blocking;
       verify_result.verified_cert = net::CreateCertificateChainFromFile(
           net::GetTestCertsDirectory(),
           use_chrome_66_date ? "pre_june_2016.pem" : "post_june_2016.pem",

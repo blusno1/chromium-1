@@ -56,15 +56,16 @@ void AppendPrintersAndRunCallbackIfDone(base::ListValue* printers_out,
 }
 
 // Callback for PrinterProviderAPI::DispatchPrintRequested calls.
-// It copies |value| to |*result| and runs |callback|.
+// It fills the out params based on |status| and runs |callback|.
 void RecordPrintResultAndRunCallback(bool* result_success,
                                      std::string* result_status,
                                      const base::Closure& callback,
-                                     bool success,
-                                     const std::string& status) {
+                                     const base::Value& status) {
+  bool success = status.is_none();
+  std::string status_str = success ? "OK" : status.GetString();
   *result_success = success;
-  *result_status = status;
-  if (!callback.is_null())
+  *result_status = status_str;
+  if (callback)
     callback.Run();
 }
 
@@ -101,7 +102,7 @@ class PrinterProviderApiTest : public ShellApiTest {
 
   PrinterProviderApiTest() {}
   ~PrinterProviderApiTest() override {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     ignore_result(data_dir_.Delete());
   }
 
@@ -244,7 +245,7 @@ class PrinterProviderApiTest : public ShellApiTest {
         break;
       case PRINT_REQUEST_DATA_TYPE_FILE_DELETED: {
         ASSERT_TRUE(StartPrintRequestUsingFileInfo(extension_id, callback));
-        base::ThreadRestrictions::ScopedAllowIO allow_io;
+        base::ScopedAllowBlockingForTesting allow_blocking;
         ASSERT_TRUE(data_dir_.Delete());
         break;
       }
@@ -355,7 +356,7 @@ class PrinterProviderApiTest : public ShellApiTest {
                                   int size,
                                   base::FilePath* path,
                                   base::File::Info* file_info) {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     if (!data_dir_.IsValid() && !data_dir_.CreateUniqueTempDir())
       return false;
 

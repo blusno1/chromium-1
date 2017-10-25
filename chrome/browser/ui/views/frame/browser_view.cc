@@ -110,7 +110,7 @@
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/translate/core/browser/language_state.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
@@ -1208,6 +1208,7 @@ autofill::SaveCardBubbleView* BrowserView::ShowSaveCreditCardBubble(
 
   autofill::SaveCardBubbleViews* bubble = new autofill::SaveCardBubbleViews(
       anchor_view, gfx::Point(), web_contents, controller);
+  views::BubbleDialogDelegateView::CreateBubble(bubble);
   if (card_view)
     card_view->OnBubbleCreated(bubble);
   bubble->Show(user_gesture ? autofill::SaveCardBubbleViews::USER_GESTURE
@@ -2118,7 +2119,8 @@ void BrowserView::InitViews() {
   // TabStrip takes ownership of the controller.
   BrowserTabStripController* tabstrip_controller =
       new BrowserTabStripController(browser_->tab_strip_model(), this);
-  tabstrip_ = new TabStrip(tabstrip_controller);
+  tabstrip_ =
+      new TabStrip(std::unique_ptr<TabStripController>(tabstrip_controller));
   top_container_->AddChildView(tabstrip_);
   tabstrip_controller->InitFromModel(tabstrip_);
 

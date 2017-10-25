@@ -144,15 +144,15 @@ AXObject* AXObjectCacheImpl::FocusedImageMapUIElement(
   // Find the corresponding accessibility object for the HTMLAreaElement. This
   // should be in the list of children for its corresponding image.
   if (!area_element)
-    return 0;
+    return nullptr;
 
   HTMLImageElement* image_element = area_element->ImageElement();
   if (!image_element)
-    return 0;
+    return nullptr;
 
   AXObject* ax_layout_image = GetOrCreate(image_element);
   if (!ax_layout_image)
-    return 0;
+    return nullptr;
 
   const AXObject::AXObjectVector& image_children = ax_layout_image->Children();
   unsigned count = image_children.size();
@@ -165,7 +165,7 @@ AXObject* AXObjectCacheImpl::FocusedImageMapUIElement(
       return child;
   }
 
-  return 0;
+  return nullptr;
 }
 
 AXObject* AXObjectCacheImpl::FocusedObject() {
@@ -204,12 +204,12 @@ AXObject* AXObjectCacheImpl::FocusedObject() {
 
 AXObject* AXObjectCacheImpl::Get(LayoutObject* layout_object) {
   if (!layout_object)
-    return 0;
+    return nullptr;
 
   AXID ax_id = layout_object_mapping_.at(layout_object);
   DCHECK(!HashTraits<AXID>::IsDeletedValue(ax_id));
   if (!ax_id)
-    return 0;
+    return nullptr;
 
   return objects_.at(ax_id);
 }
@@ -229,7 +229,7 @@ static bool IsMenuListOption(const Node* node) {
 
 AXObject* AXObjectCacheImpl::Get(const Node* node) {
   if (!node)
-    return 0;
+    return nullptr;
 
   // Menu list option and HTML area elements are indexed by DOM node, never by
   // layout object.
@@ -248,38 +248,38 @@ AXObject* AXObjectCacheImpl::Get(const Node* node) {
     // laid out, but later something changes and it gets a layoutObject (like if
     // it's reparented).
     Remove(node_id);
-    return 0;
+    return nullptr;
   }
 
   if (layout_id)
     return objects_.at(layout_id);
 
   if (!node_id)
-    return 0;
+    return nullptr;
 
   return objects_.at(node_id);
 }
 
 AXObject* AXObjectCacheImpl::Get(AbstractInlineTextBox* inline_text_box) {
   if (!inline_text_box)
-    return 0;
+    return nullptr;
 
   AXID ax_id = inline_text_box_object_mapping_.at(inline_text_box);
   DCHECK(!HashTraits<AXID>::IsDeletedValue(ax_id));
   if (!ax_id)
-    return 0;
+    return nullptr;
 
   return objects_.at(ax_id);
 }
 
 AXObject* AXObjectCacheImpl::Get(AccessibleNode* accessible_node) {
   if (!accessible_node)
-    return 0;
+    return nullptr;
 
   AXID ax_id = accessible_node_mapping_.at(accessible_node);
   DCHECK(!HashTraits<AXID>::IsDeletedValue(ax_id));
   if (!ax_id)
-    return 0;
+    return nullptr;
 
   return objects_.at(ax_id);
 }
@@ -402,10 +402,10 @@ AXObject* AXObjectCacheImpl::GetOrCreate(AccessibleNode* accessible_node) {
 
 AXObject* AXObjectCacheImpl::GetOrCreate(Node* node) {
   if (!node)
-    return 0;
+    return nullptr;
 
   if (!node->IsElementNode() && !node->IsTextNode() && !node->IsDocumentNode())
-    return 0;  // Only documents, elements and text nodes get a11y objects
+    return nullptr;  // Only documents, elements and text nodes get a11y objects
 
   if (AXObject* obj = Get(node))
     return obj;
@@ -417,10 +417,10 @@ AXObject* AXObjectCacheImpl::GetOrCreate(Node* node) {
     return GetOrCreate(node->GetLayoutObject());
 
   if (!node->parentElement())
-    return 0;
+    return nullptr;
 
   if (IsHTMLHeadElement(node))
-    return 0;
+    return nullptr;
 
   AXObject* new_obj = CreateFromNode(node);
 
@@ -440,7 +440,7 @@ AXObject* AXObjectCacheImpl::GetOrCreate(Node* node) {
 
 AXObject* AXObjectCacheImpl::GetOrCreate(LayoutObject* layout_object) {
   if (!layout_object)
-    return 0;
+    return nullptr;
 
   if (AXObject* obj = Get(layout_object))
     return obj;
@@ -462,7 +462,7 @@ AXObject* AXObjectCacheImpl::GetOrCreate(LayoutObject* layout_object) {
 AXObject* AXObjectCacheImpl::GetOrCreate(
     AbstractInlineTextBox* inline_text_box) {
   if (!inline_text_box)
-    return 0;
+    return nullptr;
 
   if (AXObject* obj = Get(inline_text_box))
     return obj;
@@ -509,12 +509,29 @@ AXObject* AXObjectCacheImpl::GetOrCreate(AccessibilityRole role) {
   }
 
   if (!obj)
-    return 0;
+    return nullptr;
 
   GetOrCreateAXID(obj);
 
   obj->Init();
   return obj;
+}
+
+void AXObjectCacheImpl::InvalidateTableSubtree(AXObject* subtree) {
+  if (!subtree)
+    return;
+
+  LayoutObject* layout_object = subtree->GetLayoutObject();
+  if (layout_object) {
+    LayoutObject* layout_child = layout_object->SlowFirstChild();
+    while (layout_child) {
+      InvalidateTableSubtree(Get(layout_child));
+      layout_child = layout_child->NextSibling();
+    }
+  }
+
+  AXID ax_id = subtree->AxObjectID();
+  Remove(ax_id);
 }
 
 void AXObjectCacheImpl::Remove(AXID ax_id) {
@@ -862,18 +879,43 @@ void AXObjectCacheImpl::HandleActiveDescendantChanged(Node* node) {
     obj->HandleActiveDescendantChanged();
 }
 
-void AXObjectCacheImpl::HandleAriaRoleChanged(Node* node) {
-  if (AXObject* obj = GetOrCreate(node)) {
-    obj->UpdateAccessibilityRole();
+// Be as safe as possible about changes that could alter the accessibility role,
+// as this may require a different subclass of AXObject.
+// Role changes are disallowed by the spec but we must handle it gracefully, see
+// https://www.w3.org/TR/wai-aria-1.1/#h-roles for more information.
+void AXObjectCacheImpl::HandlePossibleRoleChange(Node* node) {
+  if (!node)
+    return;  // Virtual AOM node.
+
+  // Invalidate the current object and make the parent reconsider its children.
+  if (AXObject* obj = Get(node)) {
+    // Save parent for later use.
+    AXObject* parent = obj->ParentObject();
+
+    // If role changes on a table, invalidate the entire table subtree as many
+    // objects may suddenly need to change, because presentation is inherited
+    // from the table to rows and cells.
+    // TODO(aleventhal) A size change on a select means the children may need to
+    // switch between AXMenuListOption and AXListBoxOption.
+    // For some reason we don't get attribute changes for @size, though.
+    LayoutObject* layout_object = node->GetLayoutObject();
+    if (layout_object && layout_object->IsTable())
+      InvalidateTableSubtree(obj);
+    else
+      Remove(node);
+
+    // Parent object changed children, as the previous AXObject for this node
+    // was destroyed and a different one was created in its place.
+    if (parent)
+      ChildrenChanged(parent, parent->GetNode());
     modification_count_++;
-    obj->NotifyIfIgnoredValueChanged();
   }
 }
 
 void AXObjectCacheImpl::HandleAttributeChanged(const QualifiedName& attr_name,
                                                Element* element) {
-  if (attr_name == roleAttr)
-    HandleAriaRoleChanged(element);
+  if (attr_name == roleAttr || attr_name == typeAttr || attr_name == sizeAttr)
+    HandlePossibleRoleChange(element);
   else if (attr_name == altAttr || attr_name == titleAttr)
     TextChanged(element);
   else if (attr_name == forAttr && IsHTMLLabelElement(*element))
@@ -965,7 +1007,7 @@ const Element* AXObjectCacheImpl::RootAXEditableElement(const Node* node) {
 
 AXObject* AXObjectCacheImpl::FirstAccessibleObjectFromNode(const Node* node) {
   if (!node)
-    return 0;
+    return nullptr;
 
   AXObject* accessible_object = GetOrCreate(node->GetLayoutObject());
   while (accessible_object && accessible_object->AccessibilityIsIgnored()) {
@@ -975,7 +1017,7 @@ AXObject* AXObjectCacheImpl::FirstAccessibleObjectFromNode(const Node* node) {
       node = NodeTraversal::NextSkippingChildren(*node);
 
     if (!node)
-      return 0;
+      return nullptr;
 
     accessible_object = GetOrCreate(node->GetLayoutObject());
   }
@@ -1240,7 +1282,7 @@ void AXObjectCacheImpl::ContextDestroyed(ExecutionContext*) {
   permission_observer_binding_.Close();
 }
 
-DEFINE_TRACE(AXObjectCacheImpl) {
+void AXObjectCacheImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(accessible_node_mapping_);
   visitor->Trace(node_object_mapping_);

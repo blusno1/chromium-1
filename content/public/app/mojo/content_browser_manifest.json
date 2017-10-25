@@ -20,6 +20,7 @@
         "renderer": [
           "blink::mojom::BackgroundFetchService",
           "blink::mojom::BackgroundSyncService",
+          "blink::mojom::BlobRegistry",
           "blink::mojom::BroadcastChannelProvider",
           "blink::mojom::Hyphenation",
           "blink::mojom::MimeRegistry",
@@ -51,7 +52,6 @@
           "shape_detection::mojom::FaceDetectionProvider",
           "resource_coordinator::mojom::CoordinationUnit",
           "shape_detection::mojom::TextDetection",
-          "storage::mojom::BlobRegistry",
           "ui::mojom::Gpu",
           "viz::mojom::SharedBitmapAllocationNotifier"
         ],
@@ -120,6 +120,7 @@
           // impossible this week. Remove once sky/ken fix this.
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
+          "blink::mojom::DedicatedWorkerFactory",
           "blink::mojom::InsecureInputService",
           "blink::mojom::KeyboardLockService",
           "blink::mojom::MediaSessionService",
@@ -167,6 +168,24 @@
       },
       "requires": {
         "content_renderer": [ "browser" ]
+      }
+    },
+    "navigation:dedicated_worker": {
+      "provides": {
+        "renderer": [
+        ]
+      }
+    },
+    "navigation:service_worker": {
+      "provides": {
+        "renderer": [
+        ]
+      }
+    },
+    "navigation:shared_worker": {
+      "provides": {
+        "renderer": [
+        ]
       }
     }
   }

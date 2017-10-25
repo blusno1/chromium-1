@@ -77,9 +77,10 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   void OverrideTimeout(unsigned long timeout) override;
 
   void Cancel() override;
+  void Detach() override;
   void SetDefersLoading(bool);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   enum BlockingBehavior { kLoadSynchronously, kLoadAsynchronously };
@@ -250,7 +251,7 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // Corresponds to the CORS flag in the Fetch spec.
   bool cors_flag_;
   bool suborigin_force_credentials_;
-  RefPtr<SecurityOrigin> security_origin_;
+  scoped_refptr<SecurityOrigin> security_origin_;
 
   // Set to true when the response data is given to a data consumer handle.
   bool is_using_data_consumer_handle_;

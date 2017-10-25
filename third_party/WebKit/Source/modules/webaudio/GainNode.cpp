@@ -49,9 +49,9 @@ GainHandler::GainHandler(AudioNode& node,
   Initialize();
 }
 
-RefPtr<GainHandler> GainHandler::Create(AudioNode& node,
-                                        float sample_rate,
-                                        AudioParamHandler& gain) {
+scoped_refptr<GainHandler> GainHandler::Create(AudioNode& node,
+                                               float sample_rate,
+                                               AudioParamHandler& gain) {
   return WTF::AdoptRef(new GainHandler(node, sample_rate, gain));
 }
 
@@ -142,7 +142,7 @@ void GainHandler::CheckNumberOfChannelsForInput(AudioNodeInput* input) {
 
 GainNode::GainNode(BaseAudioContext& context)
     : AudioNode(context),
-      gain_(AudioParam::Create(context, kParamTypeGainGain, 1.0)) {
+      gain_(AudioParam::Create(context, kParamTypeGainGain, "Gain.gain", 1.0)) {
   SetHandler(
       GainHandler::Create(*this, context.sampleRate(), gain_->Handler()));
 }
@@ -178,7 +178,7 @@ AudioParam* GainNode::gain() const {
   return gain_;
 }
 
-DEFINE_TRACE(GainNode) {
+void GainNode::Trace(blink::Visitor* visitor) {
   visitor->Trace(gain_);
   AudioNode::Trace(visitor);
 }

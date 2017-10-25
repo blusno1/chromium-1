@@ -12,7 +12,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -96,8 +95,7 @@ PaymentRequest::PaymentRequest(
           GetAddressInputStorage()),
       address_normalization_manager_(
           &address_normalizer_,
-          autofill::AutofillCountry::CountryCodeForLocale(
-              GetApplicationContext()->GetApplicationLocale())),
+          GetApplicationContext()->GetApplicationLocale()),
       selected_shipping_profile_(nullptr),
       selected_contact_profile_(nullptr),
       selected_payment_method_(nullptr),
@@ -308,8 +306,10 @@ autofill::AutofillProfile* PaymentRequest::AddAutofillProfile(
 
 const PaymentDetailsModifier* PaymentRequest::GetApplicableModifier(
     PaymentInstrument* selected_instrument) const {
-  if (!selected_instrument)
+  if (!selected_instrument ||
+      !base::FeatureList::IsEnabled(features::kWebPaymentsModifiers)) {
     return nullptr;
+  }
 
   for (const auto& modifier : web_payment_request_.details.modifiers) {
     std::vector<std::string> supported_networks;

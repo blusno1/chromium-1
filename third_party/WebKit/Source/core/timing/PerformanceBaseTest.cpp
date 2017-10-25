@@ -37,7 +37,7 @@ class TestPerformanceBase : public PerformanceBase {
     return HasObserverFor(entry_type);
   }
 
-  DEFINE_INLINE_TRACE() { PerformanceBase::Trace(visitor); }
+  void Trace(blink::Visitor* visitor) { PerformanceBase::Trace(visitor); }
 };
 
 class PerformanceBaseTest : public ::testing::Test {
@@ -144,7 +144,7 @@ TEST_F(PerformanceBaseTest, AllowsTimingRedirect) {
   // When there are no cross-origin redirects.
   AtomicString origin_domain = "http://127.0.0.1:8000";
   Vector<ResourceResponse> redirect_chain;
-  KURL url(kParsedURLString, origin_domain + "/foo.html");
+  KURL url(origin_domain + "/foo.html");
   ResourceResponse final_response;
   ResourceResponse redirect_response1;
   redirect_response1.SetURL(url);
@@ -152,7 +152,7 @@ TEST_F(PerformanceBaseTest, AllowsTimingRedirect) {
   redirect_response2.SetURL(url);
   redirect_chain.push_back(redirect_response1);
   redirect_chain.push_back(redirect_response2);
-  RefPtr<SecurityOrigin> security_origin = SecurityOrigin::Create(url);
+  scoped_refptr<SecurityOrigin> security_origin = SecurityOrigin::Create(url);
   // When finalResponse is an empty object.
   EXPECT_FALSE(AllowsTimingRedirect(redirect_chain, final_response,
                                     *security_origin.get(),
@@ -163,7 +163,7 @@ TEST_F(PerformanceBaseTest, AllowsTimingRedirect) {
                                    GetExecutionContext()));
   // When there exist cross-origin redirects.
   AtomicString cross_origin_domain = "http://126.0.0.1:8000";
-  KURL redirect_url(kParsedURLString, cross_origin_domain + "/bar.html");
+  KURL redirect_url(cross_origin_domain + "/bar.html");
   ResourceResponse redirect_response3;
   redirect_response3.SetURL(redirect_url);
   redirect_chain.push_back(redirect_response3);

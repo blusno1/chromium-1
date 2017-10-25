@@ -59,7 +59,7 @@ class PermissionStatus final : public EventTargetWithInlineData,
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(change);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   PermissionStatus(ExecutionContext*,
@@ -69,7 +69,7 @@ class PermissionStatus final : public EventTargetWithInlineData,
   void StartListening();
   void StopListening();
 
-  void OnPermissionStatusChange(MojoPermissionStatus);
+  void OnPermissionStatusChange(MojoPermissionStatus) override;
 
   MojoPermissionStatus status_;
   MojoPermissionDescriptor descriptor_;

@@ -84,7 +84,7 @@ void PathBuilder::AppendPathElement(const PathElement* path_element) {
       break;
     // The points member will contain no values.
     case kPathElementCloseSubpath:
-      AppendPathCommandAndPoints("Z", 0, 0);
+      AppendPathCommandAndPoints("Z", nullptr, 0);
       break;
   }
 }
@@ -110,7 +110,7 @@ class ShapePathBuilder : public PathBuilder {
   }
 
  protected:
-  virtual FloatPoint TranslatePoint(const FloatPoint& point) {
+  FloatPoint TranslatePoint(const FloatPoint& point) override {
     FloatPoint layout_object_point =
         shape_outside_info_.ShapeToLayoutObjectPoint(point);
     return view_->ContentsToViewport(

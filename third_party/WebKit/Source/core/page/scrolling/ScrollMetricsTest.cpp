@@ -12,7 +12,6 @@
 #include "core/testing/sim/SimRequest.h"
 #include "core/testing/sim/SimTest.h"
 #include "platform/scroll/MainThreadScrollingReason.h"
-#include "platform/scroll/ScrollerSizeMetrics.h"
 #include "platform/testing/HistogramTester.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -120,95 +119,6 @@ void ScrollMetricsTest::SetUpHtml(const char* html_content) {
   LoadURL("https://example.com/test.html");
   request.Complete(html_content);
   Compositor().BeginFrame();
-}
-
-TEST_F(ScrollMetricsTest, ScrollerSizeOnPageLoadHistogramRecordingTest) {
-  HistogramTester histogram_tester;
-  SetUpHtml(
-      "<!DOCTYPE html>"
-      "<style>"
-      " .smallBox { overflow: scroll; width: 100px; height: 100px; }"
-      " .largeBox { overflow: auto; width: 500px; height: 500px; }"
-      " .nonScrollableBox { overflow: auto; width: 200px; height: 200px; }"
-      " .spacer { height: 1000px; }"
-      " body { height: 2000px; width: 1000px; }"
-      "</style>"
-      "<div class='smallBox'><div class='spacer'></div></div>"
-      "<div class='largeBox'><div class='spacer'></div></div>"
-      "<div class='notScrollableBox'></div>"
-      "<div style='width: 300px; height: 300px;'>"
-      " <div class='spacer'></div>"
-      "</div>");
-
-  testing::RunPendingTasks();
-
-  // SmallBox added to count.
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnLoad", 10000,
-                                     1);
-  // LargeBox added to count.
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnLoad",
-                                     kScrollerSizeLargestBucket, 1);
-
-  // Non-scrollable box is not added to count.
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnLoad", 40000,
-                                     0);
-
-  // The fourth div without "overflow: scroll" is not supposed to be added to
-  // count.
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnLoad", 90000,
-                                     0);
-  // Root scroller is not added to count.
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnLoad",
-                                     kScrollerSizeLargestBucket, 1);
-  histogram_tester.ExpectTotalCount("Event.Scroll.ScrollerSize.OnLoad", 2);
-}
-
-TEST_F(ScrollMetricsTest,
-       ScrollerSizeOfMainThreadScrollingHistogramRecordingTest) {
-  HistogramTester histogram_tester;
-  SetUpHtml(
-      "<!DOCTYPE html>"
-      "<style>"
-      " .container { width: 200px; height: 200px; overflow: scroll; }"
-      " .box { width: 100px; height: 100px; overflow: scroll; }"
-      " .spacer { height: 1000px; }"
-      " .target { width: 200px; height: 200px; }"
-      " body { height: 2000px; }"
-      "</style>"
-      "<div class='container'>"
-      " <div id='box' class='box'>"
-      "  <div id='content' class='spacer'></div>"
-      " </div>"
-      "</div>"
-      "<div id='target' class='target'></div>");
-
-  Element* box = GetDocument().getElementById("box");
-
-  // Test wheel scroll on the box.
-  Scroll(box, kWebGestureDeviceTouchpad);
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnScroll_Wheel",
-                                     10000, 1);
-  // Only the first scrollable area is recorded.
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnScroll_Wheel",
-                                     40000, 0);
-  histogram_tester.ExpectTotalCount("Event.Scroll.ScrollerSize.OnScroll_Wheel",
-                                    1);
-
-  // Test touch scroll.
-  Scroll(box, kWebGestureDeviceTouchscreen);
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnScroll_Touch",
-                                     10000, 1);
-  histogram_tester.ExpectTotalCount("Event.Scroll.ScrollerSize.OnScroll_Touch",
-                                    1);
-
-  // Scrolling the non-scrollable target leads to scroll the root layer which
-  // doesn't add to count.
-  Element* body_scroll_target = GetDocument().getElementById("target");
-  Scroll(body_scroll_target, kWebGestureDeviceTouchscreen);
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnScroll_Touch",
-                                     kScrollerSizeLargestBucket, 0);
-  histogram_tester.ExpectTotalCount("Event.Scroll.ScrollerSize.OnScroll_Touch",
-                                    1);
 }
 
 TEST_F(NonCompositedMainThreadScrollingReasonRecordTest,

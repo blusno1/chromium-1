@@ -641,7 +641,7 @@ void GLRenderer::DrawDebugBorderQuad(const DebugBorderDrawQuad* quad) {
 
   // The indices for the line are stored in the same array as the triangle
   // indices.
-  gl_->DrawElements(GL_LINE_LOOP, 4, GL_UNSIGNED_SHORT, 0);
+  gl_->DrawElements(GL_LINE_LOOP, 4, GL_UNSIGNED_SHORT, nullptr);
 }
 
 // Wrap a given texture in a Ganesh backend texture.
@@ -1025,6 +1025,12 @@ gfx::QuadF MapQuadToLocalSpace(const gfx::Transform& device_transform,
 }
 
 const TileDrawQuad* GLRenderer::CanPassBeDrawnDirectly(const RenderPass* pass) {
+#if defined(OS_MACOSX)
+  // On Macs, this path can sometimes lead to all black output.
+  // TODO(enne): investigate this and remove this hack.
+  return nullptr;
+#endif
+
   // Can only collapse a single tile quad.
   if (pass->quad_list.size() != 1)
     return nullptr;
@@ -1065,11 +1071,6 @@ const TileDrawQuad* GLRenderer::CanPassBeDrawnDirectly(const RenderPass* pass) {
       resource_provider_->GetResourceTextureTarget(tile_quad->resource_id());
   if (target != GL_TEXTURE_2D)
     return nullptr;
-#if defined(OS_MACOSX)
-  // On Macs, this path can sometimes lead to all black output.
-  // TODO(enne): investigate this and remove this hack.
-  return nullptr;
-#endif
 
   return tile_quad;
 }
@@ -1269,7 +1270,7 @@ bool GLRenderer::UpdateRPDQWithSkiaFilters(
     sk_sp<SkImageFilter> filter = cc::RenderSurfaceFilters::BuildImageFilter(
         *params->filters, gfx::SizeF(params->contents_texture->size()));
     if (filter) {
-      SkColorFilter* colorfilter_rawptr = NULL;
+      SkColorFilter* colorfilter_rawptr = nullptr;
       filter->asColorFilter(&colorfilter_rawptr);
       sk_sp<SkColorFilter> cf(colorfilter_rawptr);
 
@@ -1879,7 +1880,7 @@ void GLRenderer::DrawSolidColorQuad(const SolidColorDrawQuad* quad,
     SetShaderQuadF(local_quad);
     SetShaderMatrix(current_frame()->projection_matrix *
                     quad->shared_quad_state->quad_to_target_transform);
-    gl_->DrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+    gl_->DrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
     num_triangles_drawn_ += 2;
   }
   RestoreBlendFuncToDefault(quad->shared_quad_state->blend_mode);
@@ -2135,7 +2136,7 @@ void GLRenderer::DrawContentQuadNoAA(const ContentDrawQuadBase* quad,
   SetShaderMatrix(current_frame()->projection_matrix *
                   quad->shared_quad_state->quad_to_target_transform);
 
-  gl_->DrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+  gl_->DrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
   num_triangles_drawn_ += 2;
 }
 
@@ -2172,10 +2173,8 @@ void GLRenderer::DrawYUVVideoQuad(const YUVVideoDrawQuad* quad,
   // Invalid or unspecified color spaces should be treated as REC709.
   if (!src_color_space.IsValid())
     src_color_space = gfx::ColorSpace::CreateREC709();
-#if DCHECK_IS_ON()
-  else if (base::FeatureList::IsEnabled(media::kVideoColorManagement))
+  else
     DCHECK_EQ(src_color_space, y_plane_lock.color_space());
-#endif
 
   // The source color space should never be RGB.
   DCHECK_NE(src_color_space, src_color_space.GetAsFullRangeRGB());
@@ -2361,7 +2360,7 @@ void GLRenderer::DrawOverlayCandidateQuadBorder(float* gl_matrix) {
   gl_->LineWidth(cc::DebugColors::GLCompositedTextureQuadBoderWidth());
   // The indices for the line are stored in the same array as the triangle
   // indices.
-  gl_->DrawElements(GL_LINE_LOOP, 4, GL_UNSIGNED_SHORT, 0);
+  gl_->DrawElements(GL_LINE_LOOP, 4, GL_UNSIGNED_SHORT, nullptr);
 }
 
 void GLRenderer::FlushTextureQuadCache(BoundGeometry flush_binding) {
@@ -2426,7 +2425,7 @@ void GLRenderer::FlushTextureQuadCache(BoundGeometry flush_binding) {
   // Draw the quads!
   gl_->DrawElements(GL_TRIANGLES,
                     6 * static_cast<int>(draw_cache_.matrix_data.size()),
-                    GL_UNSIGNED_SHORT, 0);
+                    GL_UNSIGNED_SHORT, nullptr);
   num_triangles_drawn_ += 2 * static_cast<int>(draw_cache_.matrix_data.size());
 
   // Draw the border if requested.
@@ -2760,7 +2759,7 @@ void GLRenderer::DrawQuadGeometry(const gfx::Transform& projection_matrix,
   QuadRectTransform(&quad_rect_matrix, draw_transform, quad_rect);
   SetShaderMatrix(projection_matrix * quad_rect_matrix);
 
-  gl_->DrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+  gl_->DrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
   num_triangles_drawn_ += 2;
 }
 
@@ -3531,7 +3530,7 @@ void GLRenderer::FlushOverdrawFeedback(const gfx::Rect& output_rect) {
     gl_->StencilFunc(test.func, test.ref, 0xffffffff);
     // Transparent color unless color-coding of overdraw is enabled.
     SetShaderColor(settings_->show_overdraw_feedback ? test.color : 0, 1.f);
-    gl_->DrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+    gl_->DrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
 
     if (query) {
       gl_->EndQueryEXT(GL_SAMPLES_PASSED_ARB);

@@ -1153,7 +1153,6 @@
         'chrome/browser/notifications/|'\
         'chrome/test/data/notifications/|'\
         'content/browser/notifications/|'\
-        'content/child/notifications/|'\
         'content/common/platform_notification|'\
         'content/public/browser/platform_notification|'\
         'content/public/common/platform_notification|'\
@@ -1201,7 +1200,9 @@
       'filepath': 'chrome/android/java/src/org/chromium/chrome/browser/omnibox/|'\
                   'chrome/android/javatests/src/org/chromium/chrome/browser/omnibox/|'\
                   'chrome/browser/autocomplete/|'\
+                  'chrome/browser/ui/location_bar/|'\
                   'chrome/browser/ui/omnibox/|'\
+                  'chrome/browser/ui/.*/location_bar/|'\
                   'chrome/browser/ui/.*/omnibox/|'\
                   'components/omnibox/|'\
                   'ios/chrome/browser/ui/omnibox/'
@@ -1456,17 +1457,12 @@
                   '|components/proximity_auth/',
     },
     'textinput': {
-      'filepath': 'content/browser/renderer_host/gtk_im'\
-                  '|content/browser/renderer_host/gtk_key'\
+      'filepath': 'chrome/browser/ui/input_method'\
                   '|content/browser/renderer_host/render_widget_host_view'\
                   '|content/browser/renderer_host/text_input'\
                   '|ui/base/ime/'\
-                  '|ui/base/gtk/event'\
-                  '|ui/base/gtk/gtk_im'\
-                  '|ui/base/keycodes/'\
-                  '|ui/base/win/ime'\
                   '|ui/views/controls/textfield/'\
-                  '|ui/views/ime/'
+                  '|ui/wm/core/ime'
     },
     'textinput_chromeos': {
       'filepath': 'chrome/browser/chromeos/input_method/'\
@@ -1680,6 +1676,7 @@
                             'gab+watch@chromium.org',
                             'robliao+watch@chromium.org'],
     'base_win': ['grt+watch@chromium.org',
+                 'robliao+watch@chromium.org',
                  'wfh+watch@chromium.org'],
     'battery_status': ['timvolodine@chromium.org'],
     'binary_size': ['agrieve+watch@chromium.org',
@@ -1923,7 +1920,8 @@
     'chromeos_power': ['derat+watch@chromium.org'],
     'chromeos_timezone': ['alemate+watch@chromium.org'],
     'chromeos_webui': ['alemate+watch@chromium.org'],
-    'clang_update': ['dmikurube+clang@chromium.org',
+    'clang_update': ['dcheng@chromium.org',
+                     'dmikurube+clang@chromium.org',
                      'dsinclair@chromium.org',
                      'eugenis+clang@chromium.org',
                      'glider+clang@chromium.org',
@@ -2143,8 +2141,7 @@
                            'csharrison+watch@chromium.org',
                            'loading-reviews+metrics@chromium.org',
                            'speed-metrics-reviews@chromium.org'],
-    'panels': ['dcheng@chromium.org',
-               'dimich@chromium.org',
+    'panels': ['dimich@chromium.org',
                'jennb@chromium.org',
                'jianli@chromium.org'],
     'password_manager': ['gcasto+watchlist@chromium.org',
@@ -2246,9 +2243,11 @@
     'textinput': ['nona+watch@chromium.org',
                   'shuchen+watch@chromium.org',
                   'suzhe@chromium.org',
+                  'yhanada+watch@chromium.org',
                   'yusukes+watch@chromium.org'],
     'textinput_chromeos': ['nona+watch@chromium.org',
                            'shuchen+watch@chromium.org',
+                           'yhanada+watch@chromium.org',
                            'yusukes+watch@chromium.org'],
     'timers': ['chirantan+watch@chromium.org'],
     'tools_win_chromeexts': ['robliao+watch@chromium.org'],

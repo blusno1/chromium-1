@@ -49,11 +49,13 @@ bool AudioWorkletProcessor::Process(
       this, input_buses, output_buses, param_value_map, current_time);
 }
 
-DEFINE_TRACE(AudioWorkletProcessor) {
+void AudioWorkletProcessor::Trace(blink::Visitor* visitor) {
   visitor->Trace(global_scope_);
+  ScriptWrappable::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(AudioWorkletProcessor) {
+void AudioWorkletProcessor::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(instance_.Cast<v8::Value>());
 }
 

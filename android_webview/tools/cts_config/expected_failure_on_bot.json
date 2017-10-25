@@ -11,16 +11,16 @@
     {
       "name": "testJavascriptInterfaceCustomPropertiesClearedOnReload",
       "_bug_id": "crbug.com/767847"
-    },
-    {
-      "name": "testPauseResumeTimers",
-      "_bug_id": "crbug.com/773848"
     }
   ],
   "android.webkit.cts.WebSettingsTest": [
     {
       "name": "testLocalImageLoads",
       "_bug_id": "crbug.com/680759"
+    },
+    {
+      "name": "testAllowMixedMode",
+      "_bug_id": "crbug.com/777393"
     }
   ],
   "android.webkit.cts.WebViewClientTest": [

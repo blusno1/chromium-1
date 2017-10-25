@@ -47,8 +47,8 @@ struct CONTENT_EXPORT SourceLocation {
 };
 
 // The following structures hold parameters used during a navigation. In
-// particular they are used by FrameMsg_Navigate, FrameMsg_CommitNavigation and
-// FrameHostMsg_BeginNavigation.
+// particular they are used by FrameMsg_Navigate, FrameHostMsg_BeginNavigation,
+// and mojom::FrameNavigationControl.
 
 // Provided by the browser or the renderer -------------------------------------
 
@@ -70,7 +70,8 @@ struct CONTENT_EXPORT CommonNavigationParams {
                          std::string method,
                          const scoped_refptr<ResourceRequestBody>& post_data,
                          base::Optional<SourceLocation> source_location,
-                         CSPDisposition should_check_main_world_csp);
+                         CSPDisposition should_check_main_world_csp,
+                         bool started_from_context_menu);
   CommonNavigationParams(const CommonNavigationParams& other);
   ~CommonNavigationParams();
 
@@ -146,6 +147,9 @@ struct CONTENT_EXPORT CommonNavigationParams {
   // world which has initiated the navigation should be passed.
   // See https://crbug.com/702540
   CSPDisposition should_check_main_world_csp;
+
+  // Whether or not this navigation was started from a context menu.
+  bool started_from_context_menu;
 };
 
 // Provided by the renderer ----------------------------------------------------

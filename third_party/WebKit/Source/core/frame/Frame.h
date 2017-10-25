@@ -30,9 +30,11 @@
 #define Frame_h
 
 #include "core/CoreExport.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/FrameLifecycle.h"
 #include "core/frame/FrameTypes.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/UserActivationState.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/page/FrameTree.h"
 #include "platform/heap/Handle.h"
@@ -71,7 +73,7 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
  public:
   virtual ~Frame();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   virtual bool IsLocalFrame() const = 0;
   virtual bool IsRemoteFrame() const = 0;
@@ -145,10 +147,19 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
 
   void UpdateUserActivationInFrameTree();
 
-  bool HasReceivedUserGesture() const { return has_received_user_gesture_; }
-  void ClearDocumentHasReceivedUserGesture() {
-    has_received_user_gesture_ = false;
+  bool HasBeenActivated() const {
+    return user_activation_state_.HasBeenActive();
   }
+
+  bool HasTransientUserActivation() {
+    return user_activation_state_.IsActive();
+  }
+
+  bool ConsumeTransientUserActivation() {
+    return user_activation_state_.ConsumeIfActive();
+  }
+
+  void ClearActivation() { user_activation_state_.Clear(); }
 
   void SetDocumentHasReceivedUserGestureBeforeNavigation(bool value) {
     has_received_user_gesture_before_nav_ = value;
@@ -157,6 +168,33 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   bool HasReceivedUserGestureBeforeNavigation() const {
     return has_received_user_gesture_before_nav_;
   }
+
+  // Creates a |UserGestureIndicator| that contains a |UserGestureToken| with
+  // the given status.  Also activates the user activation state of the
+  // |LocalFrame| (provided it's non-null) and all its ancestors.
+  static std::unique_ptr<UserGestureIndicator> NotifyUserActivation(
+      Frame*,
+      UserGestureToken::Status = UserGestureToken::kPossiblyExistingGesture);
+
+  // Returns the transient user activation state of the |LocalFrame|, provided
+  // it is non-null.  Otherwise returns |false|.
+  //
+  // The |checkIfMainThread| parameter determines if the token based gestures
+  // (legacy code) must be used in a thread-safe manner.
+  //
+  // TODO(mustaq): clarify/enforce the relation between the two params after
+  // null-frame main-thread cases (crbug.com/730690) have been removed.
+  static bool HasTransientUserActivation(Frame*,
+                                         bool checkIfMainThread = false);
+
+  // Consumes the transient user activation state of the |LocalFrame|, provided
+  // the frame pointer is non-null and the state hasn't been consumed since
+  // activation.  Returns |true| if succesfully consumed the state.
+  //
+  // The |checkIfMainThread| parameter determines if the token based gestures
+  // (legacy code) must be used in a thread-safe manner.
+  static bool ConsumeTransientUserActivation(Frame*,
+                                             bool checkIfMainThread = false);
 
   bool IsAttached() const {
     return lifecycle_.GetState() == FrameLifecycle::kAttached;
@@ -181,7 +219,7 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   Member<FrameOwner> owner_;
   Member<DOMWindow> dom_window_;
 
-  bool has_received_user_gesture_ = false;
+  UserActivationState user_activation_state_;
   bool has_received_user_gesture_before_nav_ = false;
 
   FrameLifecycle lifecycle_;
@@ -192,6 +230,9 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   bool is_inert_ = false;
 
  private:
+  // Activates the user activation state of this frame and all its ancestors.
+  void NotifyUserActivation();
+
   Member<FrameClient> client_;
   const Member<WindowProxyManager> window_proxy_manager_;
   // TODO(sashab): Investigate if this can be represented with m_lifecycle.

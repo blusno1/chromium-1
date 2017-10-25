@@ -24,7 +24,7 @@
 #include "platform/Histogram.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
-#include "platform/http_names.h"
+#include "platform/network/http_names.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCache.h"
 
 namespace blink {
@@ -263,7 +263,7 @@ class Cache::FetchResolvedForAdd final : public ScriptFunction {
     return ScriptValue(GetScriptState(), put_promise.V8Value());
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(cache_);
     visitor->Trace(requests_);
     ScriptFunction::Trace(visitor);
@@ -322,7 +322,7 @@ class Cache::BarrierCallbackForPut final
         V8ThrowException::CreateTypeError(state->GetIsolate(), error_message));
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(cache_);
     visitor->Trace(resolver_);
   }
@@ -351,7 +351,8 @@ class Cache::BlobHandleCallbackForPut final
   }
   ~BlobHandleCallbackForPut() override {}
 
-  void DidFetchDataLoadedBlobHandle(RefPtr<BlobDataHandle> handle) override {
+  void DidFetchDataLoadedBlobHandle(
+      scoped_refptr<BlobDataHandle> handle) override {
     WebServiceWorkerCache::BatchOperation batch_operation;
     batch_operation.operation_type = WebServiceWorkerCache::kOperationTypePut;
     batch_operation.request = web_request_;
@@ -364,7 +365,7 @@ class Cache::BlobHandleCallbackForPut final
     barrier_callback_->OnError("network error");
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(barrier_callback_);
     FetchDataLoader::Client::Trace(visitor);
   }
@@ -514,8 +515,9 @@ Cache::Cache(GlobalFetch::ScopedFetcher* fetcher,
              std::unique_ptr<WebServiceWorkerCache> web_cache)
     : scoped_fetcher_(fetcher), web_cache_(std::move(web_cache)) {}
 
-DEFINE_TRACE(Cache) {
+void Cache::Trace(blink::Visitor* visitor) {
   visitor->Trace(scoped_fetcher_);
+  ScriptWrappable::Trace(visitor);
 }
 
 ScriptPromise Cache::MatchImpl(ScriptState* script_state,

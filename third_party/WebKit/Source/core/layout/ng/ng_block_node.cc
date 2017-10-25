@@ -10,6 +10,7 @@
 #include "core/layout/LayoutTable.h"
 #include "core/layout/MinMaxSize.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
+#include "core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/legacy_layout_tree_walking.h"
 #include "core/layout/ng/ng_block_break_token.h"
@@ -38,11 +39,12 @@ inline LayoutMultiColumnFlowThread* GetFlowThread(const LayoutBox& box) {
   return ToLayoutBlockFlow(box).MultiColumnFlowThread();
 }
 
-RefPtr<NGLayoutResult> LayoutWithAlgorithm(const ComputedStyle& style,
-                                           NGBlockNode node,
-                                           LayoutBox* box,
-                                           const NGConstraintSpace& space,
-                                           NGBreakToken* break_token) {
+scoped_refptr<NGLayoutResult> LayoutWithAlgorithm(
+    const ComputedStyle& style,
+    NGBlockNode node,
+    LayoutBox* box,
+    const NGConstraintSpace& space,
+    NGBreakToken* break_token) {
   auto* token = ToNGBlockBreakToken(break_token);
   // If there's a legacy layout box, we can only do block fragmentation if we
   // would have done block fragmentation with the legacy engine. Otherwise
@@ -74,7 +76,7 @@ void UpdateLegacyMultiColumnFlowThread(
   bool has_processed_first_child = false;
 
   // Stitch the columns together.
-  for (const RefPtr<NGPhysicalFragment> child : fragment.Children()) {
+  for (const scoped_refptr<NGPhysicalFragment> child : fragment.Children()) {
     NGFragment child_fragment(writing_mode, *child);
     flow_end += child_fragment.BlockSize();
     // Non-uniform fragmentainer widths not supported by legacy layout.
@@ -122,16 +124,16 @@ void UpdateLegacyMultiColumnFlowThread(
 
 NGBlockNode::NGBlockNode(LayoutBox* box) : NGLayoutInputNode(box, kBlock) {}
 
-RefPtr<NGLayoutResult> NGBlockNode::Layout(
+scoped_refptr<NGLayoutResult> NGBlockNode::Layout(
     const NGConstraintSpace& constraint_space,
     NGBreakToken* break_token) {
   // Use the old layout code and synthesize a fragment.
   if (!CanUseNewLayout()) {
     return RunOldLayout(constraint_space);
   }
-  RefPtr<NGLayoutResult> layout_result;
-  if (box_->IsLayoutNGBlockFlow()) {
-    layout_result = ToLayoutNGBlockFlow(box_)->CachedLayoutResult(
+  scoped_refptr<NGLayoutResult> layout_result;
+  if (box_->IsLayoutNGMixin()) {
+    layout_result = ToLayoutBlockFlow(box_)->CachedLayoutResult(
         constraint_space, break_token);
     if (layout_result)
       return layout_result;
@@ -139,14 +141,34 @@ RefPtr<NGLayoutResult> NGBlockNode::Layout(
 
   layout_result =
       LayoutWithAlgorithm(Style(), *this, box_, constraint_space, break_token);
-  if (box_->IsLayoutNGBlockFlow()) {
-    ToLayoutNGBlockFlow(box_)->SetCachedLayoutResult(
-        constraint_space, break_token, layout_result);
+  LayoutBlockFlow* block_flow =
+      box_->IsLayoutNGMixin() ? ToLayoutBlockFlow(box_) : nullptr;
+  if (block_flow) {
+    block_flow->SetCachedLayoutResult(constraint_space, break_token,
+                                      layout_result);
+    block_flow->ClearPaintFragment();
   }
 
   if (layout_result->Status() == NGLayoutResult::kSuccess &&
-      layout_result->UnpositionedFloats().IsEmpty())
+      layout_result->UnpositionedFloats().IsEmpty()) {
+    DCHECK(layout_result->PhysicalFragment());
+
+    NGLayoutInputNode first_child = FirstChild();
+    if (block_flow && first_child && first_child.IsInline()) {
+      if (!RuntimeEnabledFeatures::LayoutNGPaintFragmentsEnabled()) {
+        // TODO(ikilpatrick): Move line-box creation logic from
+        // NGInlineNode::CopyFragmentDataToLayoutBox to NGBlockNode.
+        NGInlineNode node = ToNGInlineNode(first_child);
+        node.CopyFragmentDataToLayoutBox(constraint_space, *layout_result);
+      }
+
+      block_flow->SetPaintFragment(layout_result->PhysicalFragment());
+    }
+
+    // TODO(kojii): Even when we paint fragments, there seem to be some data we
+    // need to copy to LayoutBox. Review if we can minimize the copy.
     CopyFragmentDataToLayoutBox(constraint_space, *layout_result);
+  }
 
   return layout_result;
 }
@@ -169,7 +191,7 @@ MinMaxSize NGBlockNode::ComputeMinMaxSize() {
     return sizes;
   }
 
-  RefPtr<NGConstraintSpace> constraint_space =
+  scoped_refptr<NGConstraintSpace> constraint_space =
       NGConstraintSpaceBuilder(
           FromPlatformWritingMode(Style().GetWritingMode()),
           /* icb_size */ {NGSizeIndefinite, NGSizeIndefinite})
@@ -183,7 +205,7 @@ MinMaxSize NGBlockNode::ComputeMinMaxSize() {
     return *maybe_sizes;
 
   // Have to synthesize this value.
-  RefPtr<NGLayoutResult> layout_result = Layout(*constraint_space);
+  scoped_refptr<NGLayoutResult> layout_result = Layout(*constraint_space);
   NGBoxFragment min_fragment(
       FromPlatformWritingMode(Style().GetWritingMode()),
       ToNGPhysicalBoxFragment(*layout_result->PhysicalFragment()));
@@ -234,17 +256,22 @@ NGLayoutInputNode NGBlockNode::NextSibling() const {
 }
 
 NGLayoutInputNode NGBlockNode::FirstChild() {
-  auto* block = ToLayoutNGBlockFlow(box_);
+  auto* block = ToLayoutBlockFlow(box_);
   auto* child = GetLayoutObjectForFirstChildNode(block);
   if (!child)
     return nullptr;
-  if (AreNGBlockFlowChildrenInline(block))
-    return NGInlineNode(block);
+  if (AreNGBlockFlowChildrenInline(block)) {
+    // TODO(kojii): Invalidate PrepareLayout() more efficiently.
+    NGInlineNode node(block);
+    node.InvalidatePrepareLayout();
+    node.PrepareLayout();
+    return node;
+  }
   return NGBlockNode(ToLayoutBox(child));
 }
 
 bool NGBlockNode::CanUseNewLayout() const {
-  if (!box_->IsLayoutNGBlockFlow())
+  if (!box_->IsLayoutNGMixin())
     return false;
 
   return RuntimeEnabledFeatures::LayoutNGEnabled();
@@ -328,7 +355,7 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
       intrinsic_block_size +=
           PreviouslyUsedBlockSpace(constraint_space, physical_fragment);
     }
-    block->LayoutPositionedObjects(true);
+    block->LayoutPositionedObjects(/* relayout_children */ false);
 
     if (flow_thread) {
       UpdateLegacyMultiColumnFlowThread(*this, flow_thread, constraint_space,
@@ -361,23 +388,11 @@ void NGBlockNode::PlaceChildrenInLayoutBox(
     auto* child_object = child_fragment->GetLayoutObject();
     DCHECK(child_fragment->IsPlaced());
 
-    // At the moment "anonymous" fragments for inline layout will have the same
-    // layout object as ourselves, we need to copy its floats across.
-    if (child_object == box_) {
-      for (const auto& maybe_float_fragment :
-           ToNGPhysicalBoxFragment(child_fragment.get())->Children()) {
-        // The child of the anonymous fragment might be just a line-box
-        // fragment - ignore.
-        if (IsFloatFragment(*maybe_float_fragment)) {
-          // We need to include the anonymous fragments offset here for the
-          // correct position.
-          CopyChildFragmentPosition(
-              ToNGPhysicalBoxFragment(*maybe_float_fragment),
-              offset_from_start + child_fragment->Offset());
-        }
-      }
+    // Skip any line-boxes we have as children, this is handled within
+    // NGInlineNode at the moment.
+    if (!child_fragment->IsBox())
       continue;
-    }
+
     const auto& box_fragment = *ToNGPhysicalBoxFragment(child_fragment.get());
     if (IsFirstFragment(constraint_space, box_fragment))
       CopyChildFragmentPosition(box_fragment, offset_from_start);
@@ -441,14 +456,16 @@ void NGBlockNode::CopyChildFragmentPosition(
     FloatingObject* floating_object =
         ToLayoutBlockFlow(box_)->InsertFloatingObject(*layout_box);
     floating_object->SetIsInPlacedTree(false);
-    floating_object->SetX(fragment.Offset().left + additional_offset.left);
-    floating_object->SetY(fragment.Offset().top + additional_offset.top);
+    floating_object->SetX(fragment.Offset().left + additional_offset.left -
+                          layout_box->MarginLeft());
+    floating_object->SetY(fragment.Offset().top + additional_offset.top -
+                          layout_box->MarginTop());
     floating_object->SetIsPlaced(true);
     floating_object->SetIsInPlacedTree(true);
   }
 }
 
-RefPtr<NGLayoutResult> NGBlockNode::LayoutAtomicInline(
+scoped_refptr<NGLayoutResult> NGBlockNode::LayoutAtomicInline(
     const NGConstraintSpace& parent_constraint_space,
     bool use_first_line_style) {
   NGConstraintSpaceBuilder space_builder(parent_constraint_space);
@@ -465,7 +482,7 @@ RefPtr<NGLayoutResult> NGBlockNode::LayoutAtomicInline(
   }
 
   const ComputedStyle& style = Style();
-  RefPtr<NGConstraintSpace> constraint_space =
+  scoped_refptr<NGConstraintSpace> constraint_space =
       space_builder.SetIsNewFormattingContext(true)
           .SetIsShrinkToFit(true)
           .SetAvailableSize(parent_constraint_space.AvailableSize())
@@ -476,7 +493,7 @@ RefPtr<NGLayoutResult> NGBlockNode::LayoutAtomicInline(
   return Layout(*constraint_space);
 }
 
-RefPtr<NGLayoutResult> NGBlockNode::RunOldLayout(
+scoped_refptr<NGLayoutResult> NGBlockNode::RunOldLayout(
     const NGConstraintSpace& constraint_space) {
   NGLogicalSize available_size = constraint_space.PercentageResolutionSize();
   LayoutObject* containing_block = box_->ContainingBlock();
@@ -517,8 +534,8 @@ RefPtr<NGLayoutResult> NGBlockNode::RunOldLayout(
             .ClampNegativeToZero());
   }
 
-  if (box_->IsLayoutNGBlockFlow() && box_->NeedsLayout()) {
-    ToLayoutNGBlockFlow(box_)->LayoutBlockFlow::UpdateBlockLayout(true);
+  if (box_->IsLayoutNGMixin() && box_->NeedsLayout()) {
+    ToLayoutBlockFlow(box_)->LayoutBlockFlow::UpdateBlockLayout(true);
   } else {
     box_->ForceLayout();
   }
@@ -526,6 +543,7 @@ RefPtr<NGLayoutResult> NGBlockNode::RunOldLayout(
   // TODO(kojii): Implement use_first_line_style.
   NGFragmentBuilder builder(*this, box_->Style(), writing_mode,
                             box_->StyleRef().Direction());
+  builder.SetBoxType(NGPhysicalFragment::NGBoxType::kOldLayoutRoot);
   builder.SetInlineSize(box_size.inline_size);
   builder.SetBlockSize(box_size.block_size);
 

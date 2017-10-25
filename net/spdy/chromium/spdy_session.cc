@@ -40,6 +40,7 @@
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_server.h"
+#include "net/quic/chromium/quic_http_utils.h"
 #include "net/socket/socket.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/spdy/chromium/header_coalescer.h"
@@ -702,15 +703,19 @@ bool SpdySession::CanPool(TransportSecurityState* transport_security_state,
   }
 
   // As with CheckPublicKeyPins above, disable Expect-CT reports.
-  if (transport_security_state->CheckCTRequirements(
-          HostPortPair(new_hostname, 0), ssl_info.is_issued_by_known_root,
-          ssl_info.public_key_hashes, ssl_info.cert.get(),
-          ssl_info.unverified_cert.get(),
-          ssl_info.signed_certificate_timestamps,
-          TransportSecurityState::DISABLE_EXPECT_CT_REPORTS,
-          ssl_info.ct_cert_policy_compliance) !=
-      TransportSecurityState::CT_REQUIREMENTS_MET) {
-    return false;
+  switch (transport_security_state->CheckCTRequirements(
+      HostPortPair(new_hostname, 0), ssl_info.is_issued_by_known_root,
+      ssl_info.public_key_hashes, ssl_info.cert.get(),
+      ssl_info.unverified_cert.get(), ssl_info.signed_certificate_timestamps,
+      TransportSecurityState::DISABLE_EXPECT_CT_REPORTS,
+      ssl_info.ct_cert_policy_compliance)) {
+    case TransportSecurityState::CT_REQUIREMENTS_NOT_MET:
+      return false;
+    case TransportSecurityState::CT_REQUIREMENTS_MET:
+    case TransportSecurityState::CT_NOT_REQUIRED:
+      // Intentional fallthrough; this case is just here to make sure that all
+      // possible values of CheckCTRequirements() are handled.
+      break;
   }
 
   return true;
@@ -723,6 +728,7 @@ SpdySession::SpdySession(
     const QuicTransportVersionVector& quic_supported_versions,
     bool enable_sending_initial_data,
     bool enable_ping_based_connection_checking,
+    bool support_ietf_format_quic_altsvc,
     size_t session_max_recv_window_size,
     const SettingsMap& initial_settings,
     TimeFunc time_func,
@@ -775,6 +781,7 @@ SpdySession::SpdySession(
       enable_sending_initial_data_(enable_sending_initial_data),
       enable_ping_based_connection_checking_(
           enable_ping_based_connection_checking),
+      support_ietf_format_quic_altsvc_(support_ietf_format_quic_altsvc),
       connection_at_risk_of_loss_time_(
           base::TimeDelta::FromSeconds(kDefaultConnectionAtRiskOfLossSeconds)),
       hung_interval_(base::TimeDelta::FromSeconds(kHungIntervalSeconds)),
@@ -2548,7 +2555,7 @@ void SpdySession::DeleteExpiredPushedStreams() {
       continue;
     bytes_pushed_and_unclaimed_count_ += active_it->second->recv_bytes();
 
-    LogAbandonedActiveStream(active_it, ERR_INVALID_SPDY_STREAM);
+    LogAbandonedActiveStream(active_it, ERR_TIMED_OUT);
     // CloseActiveStreamIterator() will remove the stream from
     // |unclaimed_pushed_streams_|.
     ResetStreamIterator(active_it, ERROR_CODE_REFUSED_STREAM,
@@ -2960,25 +2967,13 @@ void SpdySession::OnAltSvc(
     if (protocol == kProtoUnknown)
       continue;
 
-    // TODO(zhongyi): refactor the QUIC version filtering to a single function
-    // so that SpdySession::OnAltSvc and
-    // HttpStreamFactory::ProcessAlternativeServices
-    // could use the the same function.
     // Check if QUIC version is supported. Filter supported QUIC versions.
     QuicTransportVersionVector advertised_versions;
     if (protocol == kProtoQUIC && !altsvc.version.empty()) {
-      bool match_found = false;
-      for (const QuicTransportVersion& supported : quic_supported_versions_) {
-        for (const uint16_t& advertised : altsvc.version) {
-          if (supported == advertised) {
-            match_found = true;
-            advertised_versions.push_back(supported);
-          }
-        }
-      }
-      if (!match_found) {
+      advertised_versions = FilterSupportedAltSvcVersions(
+          altsvc, quic_supported_versions_, support_ietf_format_quic_altsvc_);
+      if (advertised_versions.empty())
         continue;
-      }
     }
 
     const AlternativeService alternative_service(protocol, altsvc.host,

@@ -57,7 +57,7 @@ class MODULES_EXPORT NotificationImageLoader final
   void DidFail(const ResourceError&) override;
   void DidFailRedirectCheck() override;
 
-  DEFINE_INLINE_TRACE() { visitor->Trace(threadable_loader_); }
+  void Trace(blink::Visitor* visitor) { visitor->Trace(threadable_loader_); }
 
  private:
   void RunCallbackWithEmptyBitmap();
@@ -65,7 +65,7 @@ class MODULES_EXPORT NotificationImageLoader final
   Type type_;
   bool stopped_;
   double start_time_;
-  RefPtr<SharedBuffer> data_;
+  scoped_refptr<SharedBuffer> data_;
   ImageCallback image_callback_;
   Member<ThreadableLoader> threadable_loader_;
 };

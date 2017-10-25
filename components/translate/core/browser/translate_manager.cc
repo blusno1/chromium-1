@@ -16,7 +16,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "components/language/core/browser/language_model.h"
-#include "components/metrics/proto/translate_event.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/page_translated_details.h"
@@ -40,6 +39,7 @@
 #include "net/base/network_change_notifier.h"
 #include "net/base/url_util.h"
 #include "net/http/http_status_code.h"
+#include "third_party/metrics_proto/translate_event.pb.h"
 
 namespace translate {
 
@@ -48,7 +48,7 @@ const base::Feature kTranslateLanguageByULP{"TranslateLanguageByULP",
 namespace {
 
 // Callbacks for translate errors.
-TranslateManager::TranslateErrorCallbackList* g_callback_list_ = NULL;
+TranslateManager::TranslateErrorCallbackList* g_callback_list_ = nullptr;
 
 const char kReportLanguageDetectionErrorURL[] =
     "https://translate.google.com/translate_error?client=cr&action=langidc";
@@ -360,7 +360,7 @@ void TranslateManager::TranslatePage(const std::string& original_source_lang,
       TranslateErrors::NONE, triggered_from_menu);
 
   TranslateScript* script = TranslateDownloadManager::GetInstance()->script();
-  DCHECK(script != NULL);
+  DCHECK(script != nullptr);
 
   const std::string& script_data = script->data();
   if (!script_data.empty()) {

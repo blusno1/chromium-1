@@ -146,7 +146,7 @@ const KURL& PasswordCredential::iconURL() const {
       ->IconURL();
 }
 
-RefPtr<EncodedFormData> PasswordCredential::EncodeFormData(
+scoped_refptr<EncodedFormData> PasswordCredential::EncodeFormData(
     String& content_type) const {
   if (additional_data_.IsURLSearchParams()) {
     // If |additionalData| is a 'URLSearchParams' object, build a urlencoded
@@ -185,13 +185,14 @@ RefPtr<EncodedFormData> PasswordCredential::EncodeFormData(
   form_data->append(idName(), id());
   form_data->append(passwordName(), password());
 
-  RefPtr<EncodedFormData> encoded_data = form_data->EncodeMultiPartFormData();
+  scoped_refptr<EncodedFormData> encoded_data =
+      form_data->EncodeMultiPartFormData();
   content_type = AtomicString("multipart/form-data; boundary=") +
                  encoded_data->Boundary().data();
   return encoded_data;
 }
 
-DEFINE_TRACE(PasswordCredential) {
+void PasswordCredential::Trace(blink::Visitor* visitor) {
   Credential::Trace(visitor);
   visitor->Trace(additional_data_);
 }

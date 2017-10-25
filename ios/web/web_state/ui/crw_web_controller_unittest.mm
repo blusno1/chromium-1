@@ -156,11 +156,14 @@ class CRWWebControllerTest : public WebTestWithWebController {
   UIView* CreateMockWebView() {
     id result = [OCMockObject mockForClass:[WKWebView class]];
 
-    if (base::ios::IsRunningOnIOS10OrLater()) {
+    if (@available(iOS 10, *)) {
       [[result stub] serverTrust];
-    } else {
+    }
+#if !defined(__IPHONE_10_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_10_0
+    else {
       [[result stub] certificateChain];
     }
+#endif
 
     [[result stub] backForwardList];
     [[[result stub] andReturn:[NSURL URLWithString:@(kTestURLString)]] URL];
@@ -814,7 +817,7 @@ TEST_F(CRWWebControllerTitleTest, TitleChange) {
     // Returns number of times |TitleWasSet| was called.
     int title_change_count() { return title_change_count_; }
     // WebStateObserver overrides:
-    void TitleWasSet() override { title_change_count_++; }
+    void TitleWasSet(WebState* web_state) override { title_change_count_++; }
 
    private:
     int title_change_count_ = 0;

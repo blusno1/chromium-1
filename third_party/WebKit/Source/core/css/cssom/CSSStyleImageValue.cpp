@@ -10,14 +10,14 @@ double CSSStyleImageValue::intrinsicWidth(bool& is_null) const {
   is_null = IsCachePending();
   if (is_null)
     return 0;
-  return ImageLayoutSize().Width().ToDouble();
+  return ImageSize().Width();
 }
 
 double CSSStyleImageValue::intrinsicHeight(bool& is_null) const {
   is_null = IsCachePending();
   if (is_null)
     return 0;
-  return ImageLayoutSize().Height().ToDouble();
+  return ImageSize().Height();
 }
 
 double CSSStyleImageValue::intrinsicRatio(bool& is_null) {
@@ -39,7 +39,7 @@ bool CSSStyleImageValue::IsAccelerated() const {
   return GetImage() && GetImage()->IsTextureBacked();
 }
 
-RefPtr<Image> CSSStyleImageValue::GetImage() const {
+scoped_refptr<Image> CSSStyleImageValue::GetImage() const {
   if (IsCachePending())
     return nullptr;
   // cachedImage can be null if image is StyleInvalidImage

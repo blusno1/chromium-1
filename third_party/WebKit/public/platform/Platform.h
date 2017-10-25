@@ -55,6 +55,7 @@
 #include "WebString.h"
 #include "WebURLError.h"
 #include "WebURLLoader.h"
+#include "WebURLLoaderFactory.h"
 #include "WebVector.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/time/time.h"
@@ -328,10 +329,11 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Network -------------------------------------------------------------
 
-  // Returns a new WebURLLoader instance.
-  virtual std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const WebURLRequest&,
-      SingleThreadTaskRunnerRefPtr) {
+  // Returns the platform's default URLLoaderFactory. It is expected that the
+  // returned value is stored and to be used for all the CreateURLLoader
+  // requests for the same loading context.
+  // TODO(kinuko): See if we can deprecate this too.
+  virtual std::unique_ptr<WebURLLoaderFactory> CreateDefaultURLLoaderFactory() {
     return nullptr;
   }
 
@@ -429,12 +431,21 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Must return non-null.
   virtual WebScrollbarBehavior* ScrollbarBehavior() { return nullptr; }
 
-  // Sudden Termination --------------------------------------------------
+  // Process lifetime management -----------------------------------------
 
   // Disable/Enable sudden termination on a process level. When possible, it
   // is preferable to disable sudden termination on a per-frame level via
   // WebFrameClient::SuddenTerminationDisablerChanged.
+  // This method should only be called on the main thread.
   virtual void SuddenTerminationChanged(bool enabled) {}
+
+  // Increase/decrease the process refcount. The process won't shut itself
+  // down until this refcount reaches 0. The browser might still shut down the
+  // renderer through fast shutdown. See SuddenTerminationChanged to disable
+  // that.
+  // These methods should only be called on the main thread.
+  virtual void AddRefProcess() {}
+  virtual void ReleaseRefProcess() {}
 
   // System --------------------------------------------------------------
 
@@ -457,6 +468,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Gets a pointer to URLLoaderMockFactory for testing. Will not be available
   // in production builds.
+  // TODO(kinuko,toyoshim): Deprecate this one. (crbug.com/751425)
   virtual WebURLLoaderMockFactory* GetURLLoaderMockFactory() { return nullptr; }
 
   // Record to a RAPPOR privacy-preserving metric, see:

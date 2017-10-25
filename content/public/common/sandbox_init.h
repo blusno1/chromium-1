@@ -52,7 +52,7 @@ CONTENT_EXPORT bool InitializeSandbox(
 // the handles.
 CONTENT_EXPORT sandbox::ResultCode StartSandboxedProcess(
     SandboxedProcessLauncherDelegate* delegate,
-    base::CommandLine* cmd_line,
+    base::CommandLine* child_command_line,
     const base::HandlesToInheritVector& handles_to_inherit,
     base::Process* process);
 
@@ -78,7 +78,7 @@ CONTENT_EXPORT bool InitializeSandbox();
 
 // Initializes the sandbox, as described above, but executes the callback after
 // warmup and before initialization.
-CONTENT_EXPORT bool InitializeSandboxWithPostWarmupHook(base::OnceClosure hook);
+CONTENT_EXPORT bool InitializeSandbox(base::OnceClosure post_warmup_hook);
 
 #elif defined(OS_LINUX) || defined(OS_NACL_NONSFI)
 

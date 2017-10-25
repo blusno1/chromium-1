@@ -18,48 +18,47 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "content/child/background_sync/background_sync_type_converters.h"
-#include "content/child/notifications/notification_data_conversions.h"
-#include "content/child/request_extra_data.h"
-#include "content/child/service_worker/service_worker_dispatcher.h"
-#include "content/child/service_worker/service_worker_handle_reference.h"
-#include "content/child/service_worker/service_worker_network_provider.h"
-#include "content/child/service_worker/service_worker_provider_context.h"
-#include "content/child/service_worker/web_service_worker_impl.h"
-#include "content/child/service_worker/web_service_worker_provider_impl.h"
-#include "content/child/service_worker/web_service_worker_registration_impl.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/child/web_data_consumer_handle_impl.h"
-#include "content/child/web_url_loader_impl.h"
 #include "content/common/devtools_messages.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/push_event_payload.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/service_names.mojom.h"
+#include "content/public/renderer/child_url_loader_factory_getter.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/document_state.h"
+#include "content/renderer/background_sync/background_sync_type_converters.h"
 #include "content/renderer/devtools/devtools_agent.h"
+#include "content/renderer/loader/request_extra_data.h"
+#include "content/renderer/loader/web_data_consumer_handle_impl.h"
+#include "content/renderer/loader/web_url_loader_impl.h"
+#include "content/renderer/notifications/notification_data_conversions.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
+#include "content/renderer/service_worker/controller_service_worker_impl.h"
 #include "content/renderer/service_worker/embedded_worker_devtools_agent.h"
 #include "content/renderer/service_worker/embedded_worker_instance_client_impl.h"
+#include "content/renderer/service_worker/service_worker_dispatcher.h"
 #include "content/renderer/service_worker/service_worker_fetch_context_impl.h"
+#include "content/renderer/service_worker/service_worker_handle_reference.h"
+#include "content/renderer/service_worker/service_worker_network_provider.h"
+#include "content/renderer/service_worker/service_worker_provider_context.h"
 #include "content/renderer/service_worker/service_worker_type_converters.h"
 #include "content/renderer/service_worker/service_worker_type_util.h"
+#include "content/renderer/service_worker/web_service_worker_impl.h"
+#include "content/renderer/service_worker/web_service_worker_provider_impl.h"
+#include "content/renderer/service_worker/web_service_worker_registration_impl.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
-#include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
 #include "storage/common/blob_storage/blob_handle.h"
-#include "storage/public/interfaces/blobs.mojom.h"
+#include "third_party/WebKit/common/blob/blob.mojom.h"
+#include "third_party/WebKit/common/blob/blob_registry.mojom.h"
 #include "third_party/WebKit/public/platform/InterfaceProvider.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
@@ -79,6 +78,7 @@
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "third_party/WebKit/public/web/modules/serviceworker/WebServiceWorkerContextClient.h"
 #include "third_party/WebKit/public/web/modules/serviceworker/WebServiceWorkerContextProxy.h"
@@ -117,12 +117,12 @@ class WebServiceWorkerNetworkProviderImpl
   std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
       const blink::WebURLRequest& request,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
-    RenderThreadImpl* child_thread = RenderThreadImpl::current();
-    if (child_thread && provider_->script_loader_factory() &&
+    RenderThreadImpl* render_thread = RenderThreadImpl::current();
+    if (render_thread && provider_->script_loader_factory() &&
         ServiceWorkerUtils::IsServicificationEnabled() &&
         IsScriptRequest(request)) {
       return base::MakeUnique<WebURLLoaderImpl>(
-          child_thread->resource_dispatcher(), std::move(task_runner),
+          render_thread->resource_dispatcher(), std::move(task_runner),
           provider_->script_loader_factory());
     }
     return nullptr;
@@ -284,9 +284,9 @@ void AbortPendingEventCallbacks(T& callbacks, TArgs... args) {
   }
 }
 
-void GetBlobRegistry(storage::mojom::BlobRegistryRequest request) {
-  ChildThreadImpl::current()->GetConnector()->BindInterface(
-      mojom::kBrowserServiceName, std::move(request));
+void OnResponseBlobDispatchDone(
+    const blink::WebServiceWorkerResponse& response) {
+  // This frees the ref to the internal data of |response|.
 }
 
 }  // namespace
@@ -336,6 +336,20 @@ struct ServiceWorkerContextClient::WorkerContextData {
 
   ~WorkerContextData() {
     DCHECK(thread_checker.CalledOnValidThread());
+
+    AbortPendingEventCallbacks(install_event_callbacks,
+                               false /* has_fetch_handler */);
+    AbortPendingEventCallbacks(activate_event_callbacks);
+    AbortPendingEventCallbacks(background_fetch_abort_event_callbacks);
+    AbortPendingEventCallbacks(background_fetch_click_event_callbacks);
+    AbortPendingEventCallbacks(background_fetch_fail_event_callbacks);
+    AbortPendingEventCallbacks(background_fetched_event_callbacks);
+    AbortPendingEventCallbacks(sync_event_callbacks);
+    AbortPendingEventCallbacks(notification_click_event_callbacks);
+    AbortPendingEventCallbacks(notification_close_event_callbacks);
+    AbortPendingEventCallbacks(push_event_callbacks);
+    AbortPendingEventCallbacks(fetch_event_callbacks);
+    AbortPendingEventCallbacks(message_event_callbacks);
   }
 
   mojo::Binding<mojom::ServiceWorkerEventDispatcher> event_dispatcher_binding;
@@ -432,6 +446,8 @@ struct ServiceWorkerContextClient::WorkerContextData {
   // Maps every install event id with its corresponding
   // mojom::ServiceWorkerInstallEventMethodsAssociatedPt.
   InstallEventMethodsMap install_methods_map;
+
+  std::unique_ptr<ControllerServiceWorkerImpl> controller_impl;
 
   base::ThreadChecker thread_checker;
   base::WeakPtrFactory<ServiceWorkerContextClient> weak_factory;
@@ -601,6 +617,7 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
     const GURL& script_url,
     bool is_script_streaming,
     mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+    mojom::ControllerServiceWorkerRequest controller_request,
     mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
     mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
     std::unique_ptr<EmbeddedWorkerInstanceClientImpl> embedded_worker_client)
@@ -613,6 +630,7 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
       io_thread_task_runner_(ChildThreadImpl::current()->GetIOTaskRunner()),
       proxy_(nullptr),
       pending_dispatcher_request_(std::move(dispatcher_request)),
+      pending_controller_request_(std::move(controller_request)),
       embedded_worker_client_(std::move(embedded_worker_client)) {
   instance_host_ =
       mojom::ThreadSafeEmbeddedWorkerInstanceHostAssociatedPtr::Create(
@@ -764,9 +782,16 @@ void ServiceWorkerContextClient::WorkerContextStarted(
             blink::mojom::kInvalidServiceWorkerRegistrationId);
 
   DCHECK(pending_dispatcher_request_.is_pending());
+  DCHECK(pending_controller_request_.is_pending());
   DCHECK(!context_->event_dispatcher_binding.is_bound());
+  DCHECK(!context_->controller_impl);
   context_->event_dispatcher_binding.Bind(
       std::move(pending_dispatcher_request_));
+
+  if (ServiceWorkerUtils::IsServicificationEnabled()) {
+    context_->controller_impl = std::make_unique<ControllerServiceWorkerImpl>(
+        std::move(pending_controller_request_), GetWeakPtr());
+  }
 
   SetRegistrationInServiceWorkerGlobalScope(std::move(registration_info),
                                             version_attrs);
@@ -811,20 +836,6 @@ void ServiceWorkerContextClient::WillDestroyWorkerContext(
 
   blob_registry_.reset();
 
-  AbortPendingEventCallbacks(context_->install_event_callbacks,
-                             false /* has_fetch_handler */);
-  AbortPendingEventCallbacks(context_->activate_event_callbacks);
-  AbortPendingEventCallbacks(context_->background_fetch_abort_event_callbacks);
-  AbortPendingEventCallbacks(context_->background_fetch_click_event_callbacks);
-  AbortPendingEventCallbacks(context_->background_fetch_fail_event_callbacks);
-  AbortPendingEventCallbacks(context_->background_fetched_event_callbacks);
-  AbortPendingEventCallbacks(context_->sync_event_callbacks);
-  AbortPendingEventCallbacks(context_->notification_click_event_callbacks);
-  AbortPendingEventCallbacks(context_->notification_close_event_callbacks);
-  AbortPendingEventCallbacks(context_->push_event_callbacks);
-  AbortPendingEventCallbacks(context_->fetch_event_callbacks);
-  AbortPendingEventCallbacks(context_->message_event_callbacks);
-
   // We have to clear callbacks now, as they need to be freed on the
   // same thread.
   context_.reset();
@@ -860,7 +871,6 @@ void ServiceWorkerContextClient::WorkerContextDestroyed() {
       FROM_HERE,
       base::BindOnce(&EmbeddedWorkerInstanceClientImpl::WorkerContextDestroyed,
                      base::Passed(&embedded_worker_client_)));
-  return;
 }
 
 void ServiceWorkerContextClient::CountFeature(uint32_t feature) {
@@ -1018,26 +1028,19 @@ void ServiceWorkerContextClient::RespondToFetchEvent(
       context_->fetch_response_callbacks[fetch_event_id];
 
   if (response.blob_uuid.size()) {
-    // TODO(kinuko): Remove this hack once kMojoBlobs is enabled by default
-    // and crbug.com/755523 is resolved.
-    storage::mojom::BlobPtr blob_ptr;
+    blink::mojom::BlobPtr blob_ptr;
     if (response.blob) {
       blob_ptr = response.blob->TakeBlobPtr();
       response.blob = nullptr;
+      response_callback->OnResponseBlob(
+          response, std::move(blob_ptr),
+          base::Time::FromDoubleT(event_dispatch_time));
     } else {
-      if (!blob_registry_) {
-        // TODO(kinuko): We should use per-frame / per-worker InterfaceProvider
-        // instead (crbug.com/734210).
-        main_thread_task_runner_->PostTask(
-            FROM_HERE,
-            base::BindOnce(&GetBlobRegistry, MakeRequest(&blob_registry_)));
-      }
-      blob_registry_->GetBlobFromUUID(MakeRequest(&blob_ptr),
-                                      response.blob_uuid);
+      // TODO(kinuko): Remove this hack once kMojoBlobs is enabled by default.
+      response_callback->OnResponseLegacyBlob(
+          response, base::Time::FromDoubleT(event_dispatch_time),
+          base::BindOnce(&OnResponseBlobDispatchDone, web_response));
     }
-    response_callback->OnResponseBlob(
-        response, std::move(blob_ptr),
-        base::Time::FromDoubleT(event_dispatch_time));
   } else {
     response_callback->OnResponse(response,
                                   base::Time::FromDoubleT(event_dispatch_time));
@@ -1387,12 +1390,9 @@ void ServiceWorkerContextClient::SetRegistrationInServiceWorkerGlobalScope(
 
   // Register a registration and its version attributes with the dispatcher
   // living on the worker thread.
-  scoped_refptr<WebServiceWorkerRegistrationImpl> registration(
+  proxy_->SetRegistration(WebServiceWorkerRegistrationImpl::CreateHandle(
       dispatcher->GetOrCreateRegistrationForServiceWorkerGlobalScope(
-          std::move(info), attrs, io_thread_task_runner_));
-
-  proxy_->SetRegistration(
-      WebServiceWorkerRegistrationImpl::CreateHandle(registration));
+          std::move(info), attrs, io_thread_task_runner_)));
 }
 
 void ServiceWorkerContextClient::DispatchActivateEvent(
@@ -1517,7 +1517,10 @@ void ServiceWorkerContextClient::DispatchExtendableMessageEvent(
     return;
   }
 
-  DCHECK(event->source.service_worker_info.IsValid());
+  DCHECK(event->source.service_worker_info.handle_id !=
+             blink::mojom::kInvalidServiceWorkerHandleId &&
+         event->source.service_worker_info.version_id !=
+             blink::mojom::kInvalidServiceWorkerVersionId);
   std::unique_ptr<ServiceWorkerHandleReference> handle =
       ServiceWorkerHandleReference::Adopt(event->source.service_worker_info,
                                           sender_.get());

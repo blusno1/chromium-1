@@ -63,7 +63,7 @@ ModuleTreeLinker::ModuleTreeLinker(Modulator* modulator,
   CHECK(client);
 }
 
-DEFINE_TRACE(ModuleTreeLinker) {
+void ModuleTreeLinker::Trace(blink::Visitor* visitor) {
   visitor->Trace(modulator_);
   visitor->Trace(registry_);
   visitor->Trace(client_);
@@ -71,7 +71,8 @@ DEFINE_TRACE(ModuleTreeLinker) {
   SingleModuleClient::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ModuleTreeLinker) {
+void ModuleTreeLinker::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(result_);
 }
 

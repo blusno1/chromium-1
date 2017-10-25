@@ -60,7 +60,7 @@ FrameCaret::FrameCaret(LocalFrame& frame,
 
 FrameCaret::~FrameCaret() = default;
 
-DEFINE_TRACE(FrameCaret) {
+void FrameCaret::Trace(blink::Visitor* visitor) {
   visitor->Trace(selection_editor_);
   visitor->Trace(frame_);
 }
@@ -237,7 +237,7 @@ void FrameCaret::ScheduleVisualUpdateForPaintInvalidationIfNeeded() {
 }
 
 void FrameCaret::RecreateCaretBlinkTimerForTesting(
-    RefPtr<WebTaskRunner> task_runner) {
+    scoped_refptr<WebTaskRunner> task_runner) {
   caret_blink_timer_.reset(new TaskRunnerTimer<FrameCaret>(
       std::move(task_runner), this, &FrameCaret::CaretBlinkTimerFired));
 }

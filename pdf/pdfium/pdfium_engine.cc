@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <set>
 
@@ -18,7 +19,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -51,6 +51,8 @@
 #include "printing/pdf_transform.h"
 #include "printing/units.h"
 #include "third_party/pdfium/public/fpdf_annot.h"
+#include "third_party/pdfium/public/fpdf_attachment.h"
+#include "third_party/pdfium/public/fpdf_catalog.h"
 #include "third_party/pdfium/public/fpdf_edit.h"
 #include "third_party/pdfium/public/fpdf_ext.h"
 #include "third_party/pdfium/public/fpdf_flatten.h"
@@ -72,6 +74,20 @@ using printing::kPixelsPerInch;
 
 namespace chrome_pdf {
 
+static_assert(static_cast<int>(PDFEngine::FormType::kNone) == FORMTYPE_NONE,
+              "None form types must match");
+static_assert(static_cast<int>(PDFEngine::FormType::kAcroForm) ==
+                  FORMTYPE_ACRO_FORM,
+              "AcroForm form types must match");
+static_assert(static_cast<int>(PDFEngine::FormType::kXFAFull) ==
+                  FORMTYPE_XFA_FULL,
+              "XFA full form types must match");
+static_assert(static_cast<int>(PDFEngine::FormType::kXFAForeground) ==
+                  FORMTYPE_XFA_FOREGROUND,
+              "XFA foreground form types must match");
+static_assert(static_cast<int>(PDFEngine::FormType::kCount) == FORMTYPE_COUNT,
+              "Form type counts must match");
+
 namespace {
 
 const int32_t kPageShadowTop = 3;
@@ -89,9 +105,10 @@ const uint32_t kPendingPageColor = 0xFFEEEEEE;
 const uint32_t kFormHighlightColor = 0xFFE4DD;
 const int32_t kFormHighlightAlpha = 100;
 
-const int32_t kMaxPasswordTries = 3;
+constexpr int kMaxPasswordTries = 3;
 
-const int32_t kTouchLongPressTimeoutMs = 300;
+constexpr base::TimeDelta kTouchLongPressTimeout =
+    base::TimeDelta::FromMilliseconds(300);
 
 // See Table 3.20 in
 // http://www.adobe.com/devnet/acrobat/pdfs/pdf_reference_1-7.pdf
@@ -104,7 +121,8 @@ const int32_t kLoadingTextVerticalOffset = 50;
 
 // The maximum amount of time we'll spend doing a paint before we give back
 // control of the thread.
-const int32_t kMaxProgressivePaintTimeMs = 300;
+constexpr base::TimeDelta kMaxProgressivePaintTime =
+    base::TimeDelta::FromMilliseconds(300);
 
 // The maximum amount of time we'll spend doing the first paint. This is less
 // than the above to keep things smooth if the user is scrolling quickly. This
@@ -117,7 +135,8 @@ const int32_t kMaxProgressivePaintTimeMs = 300;
 // the final painting can start.
 // The scrollbar will always be responsive since it is managed by a separate
 // process.
-const int32_t kMaxInitialProgressivePaintTimeMs = 250;
+constexpr base::TimeDelta kMaxInitialProgressivePaintTime =
+    base::TimeDelta::FromMilliseconds(250);
 
 PDFiumEngine* g_engine_for_fontmapper = nullptr;
 
@@ -452,6 +471,11 @@ void SetPageSizeAndContentRect(bool rotated,
   }
 }
 
+template <class S>
+bool IsAboveOrDirectlyLeftOf(const S& lhs, const S& rhs) {
+  return lhs.y() < rhs.y() || (lhs.y() == rhs.y() && lhs.x() < rhs.x());
+}
+
 // This formats a string with special 0xfffe end-of-line hyphens the same way
 // as Adobe Reader. When a hyphen is encountered, the next non-CR/LF whitespace
 // becomes CR+LF and the hyphen is erased. If there is no whitespace between
@@ -679,14 +703,13 @@ void ShutdownSDK() {
 }
 
 std::unique_ptr<PDFEngine> PDFEngine::Create(PDFEngine::Client* client) {
-  return base::MakeUnique<PDFiumEngine>(client);
+  return std::make_unique<PDFiumEngine>(client);
 }
 
 PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
     : client_(client),
       current_zoom_(1.0),
       current_rotation_(0),
-      password_tries_remaining_(0),
       doc_(nullptr),
       form_(nullptr),
       defer_page_unload_(false),
@@ -696,21 +719,14 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
       in_form_text_area_(false),
       editable_form_text_area_(false),
       mouse_left_button_down_(false),
-      next_page_to_search_(-1),
-      last_page_to_search_(-1),
-      last_character_index_to_search_(-1),
       permissions_(0),
       permissions_handler_revision_(-1),
       fpdf_availability_(nullptr),
-      next_formfill_timer_id_(0),
-      next_touch_timer_id_(0),
       last_page_mouse_down_(-1),
       most_visible_page_(-1),
       called_do_document_action_(false),
       render_grayscale_(false),
-      render_annots_(true),
-      progressive_paint_timeout_(0),
-      getting_password_(false) {
+      render_annots_(true) {
   find_factory_.Initialize(this);
   password_factory_.Initialize(this);
 
@@ -1015,6 +1031,7 @@ void PDFiumEngine::ScrolledToXPosition(int position) {
   position_.set_x(position);
   CalculateVisiblePages();
   client_->Scroll(pp::Point(old_x - position, 0));
+  OnSelectionChanged();
 }
 
 void PDFiumEngine::ScrolledToYPosition(int position) {
@@ -1024,6 +1041,7 @@ void PDFiumEngine::ScrolledToYPosition(int position) {
   position_.set_y(position);
   CalculateVisiblePages();
   client_->Scroll(pp::Point(0, old_y - position));
+  OnSelectionChanged();
 }
 
 void PDFiumEngine::PrePaint() {
@@ -1081,9 +1099,9 @@ void PDFiumEngine::Paint(const pp::Rect& rect,
 
       if (progressive == -1) {
         progressive = StartPaint(index, dirty_in_screen);
-        progressive_paint_timeout_ = kMaxInitialProgressivePaintTimeMs;
+        progressive_paint_timeout_ = kMaxInitialProgressivePaintTime;
       } else {
-        progressive_paint_timeout_ = kMaxProgressivePaintTimeMs;
+        progressive_paint_timeout_ = kMaxProgressivePaintTime;
       }
 
       progressive_paints_[progressive].painted_ = true;
@@ -1119,10 +1137,10 @@ bool PDFiumEngine::HandleDocumentLoad(const pp::URLLoader& loader) {
   password_tries_remaining_ = kMaxPasswordTries;
   process_when_pending_request_complete_ = true;
   auto loader_wrapper =
-      base::MakeUnique<URLLoaderWrapperImpl>(GetPluginInstance(), loader);
+      std::make_unique<URLLoaderWrapperImpl>(GetPluginInstance(), loader);
   loader_wrapper->SetResponseHeaders(headers_);
 
-  doc_loader_ = base::MakeUnique<DocumentLoader>(this);
+  doc_loader_ = std::make_unique<DocumentLoader>(this);
   if (doc_loader_->Init(std::move(loader_wrapper), url_)) {
     // request initial data.
     doc_loader_->RequestData(0, 1);
@@ -1136,7 +1154,7 @@ pp::Instance* PDFiumEngine::GetPluginInstance() {
 }
 
 std::unique_ptr<URLLoaderWrapper> PDFiumEngine::CreateURLLoader() {
-  return base::MakeUnique<URLLoaderWrapperImpl>(GetPluginInstance(),
+  return std::make_unique<URLLoaderWrapperImpl>(GetPluginInstance(),
                                                 client_->CreateURLLoader());
 }
 
@@ -1271,8 +1289,16 @@ void PDFiumEngine::FinishLoadingDocument() {
     FORM_DoPageAAction(new_page, form_, FPDFPAGE_AACTION_OPEN);
   }
 
-  if (doc_)  // This can only happen if loading |doc_| fails.
-    client_->DocumentLoadComplete(pages_.size());
+  if (doc_) {
+    DocumentFeatures document_features;
+    document_features.page_count = pages_.size();
+    document_features.has_attachments = (FPDFDoc_GetAttachmentCount(doc_) > 0);
+    document_features.is_linearized =
+        (FPDFAvail_IsLinearized(fpdf_availability_) == PDF_LINEARIZED);
+    document_features.is_tagged = FPDFCatalog_IsTagged(doc_);
+    document_features.form_type = static_cast<FormType>(FPDF_GetFormType(doc_));
+    client_->DocumentLoadComplete(document_features);
+  }
 }
 
 void PDFiumEngine::UnsupportedFeature(int type) {
@@ -1772,7 +1798,7 @@ bool PDFiumEngine::OnLeftMouseDown(const pp::MouseInputEvent& event) {
   SetMouseLeftButtonDown(true);
 
   auto selection_invalidator =
-      base::MakeUnique<SelectionChangeInvalidator>(this);
+      std::make_unique<SelectionChangeInvalidator>(this);
   selection_.clear();
 
   int page_index = -1;
@@ -2070,7 +2096,7 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
 
 bool PDFiumEngine::ExtendSelection(int page_index, int char_index) {
   // Check if the user has decreased their selection area and we need to remove
-  // pages from selection_.
+  // pages from |selection_|.
   for (size_t i = 0; i < selection_.size(); ++i) {
     if (selection_[i].page_index() == page_index) {
       // There should be no other pages after this.
@@ -2081,40 +2107,42 @@ bool PDFiumEngine::ExtendSelection(int page_index, int char_index) {
   if (selection_.empty())
     return false;
 
-  int last = selection_.size() - 1;
-  if (selection_[last].page_index() == page_index) {
+  PDFiumRange& last_selection = selection_.back();
+  const int last_page_index = last_selection.page_index();
+  const int last_char_index = last_selection.char_index();
+  if (last_page_index == page_index) {
     // Selecting within a page.
-    int count;
-    if (char_index >= selection_[last].char_index()) {
+    int count = char_index - last_char_index;
+    if (count >= 0) {
       // Selecting forward.
-      count = char_index - selection_[last].char_index() + 1;
+      ++count;
     } else {
-      count = char_index - selection_[last].char_index() - 1;
+      --count;
     }
-    selection_[last].SetCharCount(count);
-  } else if (selection_[last].page_index() < page_index) {
+    last_selection.SetCharCount(count);
+  } else if (last_page_index < page_index) {
     // Selecting into the next page.
 
     // First make sure that there are no gaps in selection, i.e. if mousedown on
     // page one but we only get mousemove over page three, we want page two.
-    for (int i = selection_[last].page_index() + 1; i < page_index; ++i) {
+    for (int i = last_page_index + 1; i < page_index; ++i) {
       selection_.push_back(
           PDFiumRange(pages_[i].get(), 0, pages_[i]->GetCharCount()));
     }
 
-    int count = pages_[selection_[last].page_index()]->GetCharCount();
-    selection_[last].SetCharCount(count - selection_[last].char_index());
+    int count = pages_[last_page_index]->GetCharCount();
+    last_selection.SetCharCount(count - last_char_index);
     selection_.push_back(PDFiumRange(pages_[page_index].get(), 0, char_index));
   } else {
     // Selecting into the previous page.
     // The selection's char_index is 0-based, so the character count is one
     // more than the index. The character count needs to be negative to
     // indicate a backwards selection.
-    selection_[last].SetCharCount(-(selection_[last].char_index() + 1));
+    last_selection.SetCharCount(-last_char_index - 1);
 
     // First make sure that there are no gaps in selection, i.e. if mousedown on
     // page three but we only get mousemove over page one, we want page two.
-    for (int i = selection_[last].page_index() - 1; i > page_index; --i) {
+    for (int i = last_page_index - 1; i > page_index; --i) {
       selection_.push_back(
           PDFiumRange(pages_[i].get(), 0, pages_[i]->GetCharCount()));
     }
@@ -2312,9 +2340,8 @@ void PDFiumEngine::SearchUsingICU(const base::string16& term,
                                  text_length + 1, data);
   api_string_adapter.Close(written);
 
-  std::vector<PDFEngine::Client::SearchStringResult> results;
-  client_->SearchString(page_text.c_str(), term.c_str(), case_sensitive,
-                        &results);
+  std::vector<PDFEngine::Client::SearchStringResult> results =
+      client_->SearchString(page_text.c_str(), term.c_str(), case_sensitive);
   for (const auto& result : results) {
     // Need to map the indexes from the page text, which may have generated
     // characters like space etc, to character indices from the page.
@@ -2489,15 +2516,15 @@ std::string PDFiumEngine::GetSelectedText() {
     return std::string();
 
   base::string16 result;
-  base::string16 new_line_char = base::UTF8ToUTF16("\n");
   for (size_t i = 0; i < selection_.size(); ++i) {
-    if (i > 0 && selection_[i - 1].page_index() > selection_[i].page_index()) {
-      result = selection_[i].GetText() + new_line_char + result;
-    } else {
-      if (i > 0)
-        result.append(new_line_char);
-      result.append(selection_[i].GetText());
+    static constexpr base::char16 kNewLineChar = L'\n';
+    base::string16 current_selection_text = selection_[i].GetText();
+    if (i != 0) {
+      if (selection_[i - 1].page_index() > selection_[i].page_index())
+        std::swap(current_selection_text, result);
+      result.push_back(kNewLineChar);
     }
+    result.append(current_selection_text);
   }
 
   FormatStringWithHyphens(&result);
@@ -2703,12 +2730,14 @@ void PDFiumEngine::SetGrayscale(bool grayscale) {
 }
 
 void PDFiumEngine::OnCallback(int id) {
-  if (!formfill_timers_.count(id))
+  auto it = formfill_timers_.find(id);
+  if (it == formfill_timers_.end())
     return;
 
-  formfill_timers_[id].second(id);
-  if (formfill_timers_.count(id))  // The callback might delete the timer.
-    client_->ScheduleCallback(id, formfill_timers_[id].first);
+  it->second.timer_callback(id);
+  it = formfill_timers_.find(id);  // The callback might delete the timer.
+  if (it != formfill_timers_.end())
+    client_->ScheduleCallback(id, it->second.timer_period);
 }
 
 void PDFiumEngine::OnTouchTimerCallback(int id) {
@@ -2834,7 +2863,7 @@ void PDFiumEngine::AppendBlankPages(int num_pages) {
     double height_in_points =
         ConvertUnitDouble(page_rect.height(), kPixelsPerInch, kPointsPerInch);
     FPDFPage_New(doc_, i, width_in_points, height_in_points);
-    pages_.push_back(base::MakeUnique<PDFiumPage>(this, i, page_rect, true));
+    pages_.push_back(std::make_unique<PDFiumPage>(this, i, page_rect, true));
   }
 
   CalculateVisiblePages();
@@ -3005,7 +3034,7 @@ void PDFiumEngine::LoadPageInfo(bool reload) {
       // The page is marked as not being available even if |doc_complete| is
       // true because FPDFAvail_IsPageAvail() still has to be called for this
       // page, which will be done in FinishLoadingDocument().
-      pages_.push_back(base::MakeUnique<PDFiumPage>(this, i, page_rect, false));
+      pages_.push_back(std::make_unique<PDFiumPage>(this, i, page_rect, false));
     }
   }
 
@@ -3787,7 +3816,7 @@ void PDFiumEngine::DrawPageShadow(const pp::Rect& page_rc,
 
   // We need to check depth only to verify our copy of shadow matrix is correct.
   if (!page_shadow_.get() || page_shadow_->depth() != depth) {
-    page_shadow_ = base::MakeUnique<ShadowMatrix>(
+    page_shadow_ = std::make_unique<ShadowMatrix>(
         depth, factor, client_->GetBackgroundColor());
   }
 
@@ -3832,16 +3861,13 @@ void PDFiumEngine::OnSelectionChanged() {
                 std::numeric_limits<int32_t>::max(), 0, 0);
   pp::Rect right;
   for (auto& sel : selection_) {
-    for (const auto& rect : sel.GetScreenRects(
-             GetVisibleRect().point(), current_zoom_, current_rotation_)) {
-      if (rect.y() < left.y() ||
-          (rect.y() == left.y() && rect.x() < left.x())) {
+    std::vector<pp::Rect> screen_rects = sel.GetScreenRects(
+        GetVisibleRect().point(), current_zoom_, current_rotation_);
+    for (const auto& rect : screen_rects) {
+      if (IsAboveOrDirectlyLeftOf(rect, left))
         left = rect;
-      }
-      if (rect.y() > right.y() ||
-          (rect.y() == right.y() && rect.right() > right.right())) {
+      if (IsAboveOrDirectlyLeftOf(right, rect))
         right = rect;
-      }
     }
   }
   right.set_x(right.x() + right.width());
@@ -3924,7 +3950,7 @@ bool PDFiumEngine::IsPointInEditableFormTextArea(FPDF_PAGE page,
 void PDFiumEngine::ScheduleTouchTimer(const pp::TouchInputEvent& evt) {
   touch_timers_[++next_touch_timer_id_] = evt;
   client_->ScheduleTouchTimerCallback(next_touch_timer_id_,
-                                      kTouchLongPressTimeoutMs);
+                                      kTouchLongPressTimeout);
 }
 
 void PDFiumEngine::KillTouchTimer(int timer_id) {
@@ -3982,9 +4008,13 @@ int PDFiumEngine::Form_SetTimer(FPDF_FORMFILLINFO* param,
                                 int elapse,
                                 TimerCallback timer_func) {
   PDFiumEngine* engine = static_cast<PDFiumEngine*>(param);
-  engine->formfill_timers_[++engine->next_formfill_timer_id_] =
-      std::pair<int, TimerCallback>(elapse, timer_func);
-  engine->client_->ScheduleCallback(engine->next_formfill_timer_id_, elapse);
+  base::TimeDelta elapse_time = base::TimeDelta::FromMilliseconds(elapse);
+  engine->formfill_timers_.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(++engine->next_formfill_timer_id_),
+      std::forward_as_tuple(elapse_time, timer_func));
+  engine->client_->ScheduleCallback(engine->next_formfill_timer_id_,
+                                    elapse_time);
   return engine->next_formfill_timer_id_;
 }
 
@@ -4223,8 +4253,8 @@ void PDFiumEngine::Form_GotoPage(IPDF_JSPLATFORM* param, int page_number) {
 
 FPDF_BOOL PDFiumEngine::Pause_NeedToPauseNow(IFSDK_PAUSE* param) {
   PDFiumEngine* engine = static_cast<PDFiumEngine*>(param);
-  return (base::Time::Now() - engine->last_progressive_start_time_)
-             .InMilliseconds() > engine->progressive_paint_timeout_;
+  return base::Time::Now() - engine->last_progressive_start_time_ >
+         engine->progressive_paint_timeout_;
 }
 
 void PDFiumEngine::SetCaretPosition(const pp::Point& position) {
@@ -4262,13 +4292,14 @@ void PDFiumEngine::MoveRangeSelectionExtent(const pp::Point& extent) {
 void PDFiumEngine::SetSelectionBounds(const pp::Point& base,
                                       const pp::Point& extent) {
   range_selection_base_ = base;
-  if (base.y() < extent.y() ||
-      (base.y() == extent.y() && base.x() < extent.x())) {
-    range_selection_direction_ = RangeSelectionDirection::Left;
-  } else {
-    range_selection_direction_ = RangeSelectionDirection::Right;
-  }
+  range_selection_direction_ = IsAboveOrDirectlyLeftOf(base, extent)
+                                   ? RangeSelectionDirection::Left
+                                   : RangeSelectionDirection::Right;
 }
+
+PDFiumEngine::FormFillTimerData::FormFillTimerData(base::TimeDelta period,
+                                                   TimerCallback callback)
+    : timer_period(period), timer_callback(callback) {}
 
 ScopedUnsupportedFeature::ScopedUnsupportedFeature(PDFiumEngine* engine)
     : old_engine_(g_engine_for_unsupported) {

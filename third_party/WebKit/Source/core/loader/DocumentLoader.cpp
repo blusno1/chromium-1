@@ -50,6 +50,7 @@
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/FrameFetchContext.h"
 #include "core/loader/FrameLoader.h"
+#include "core/loader/IdlenessDetector.h"
 #include "core/loader/LinkLoader.h"
 #include "core/loader/NetworkHintsInterface.h"
 #include "core/loader/ProgressTracker.h"
@@ -67,7 +68,6 @@
 #include "core/timing/Performance.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/feature_policy/FeaturePolicy.h"
-#include "platform/http_names.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/MemoryCache.h"
@@ -80,6 +80,7 @@
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/NetworkUtils.h"
+#include "platform/network/http_names.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/plugins/PluginData.h"
 #include "platform/weborigin/SchemeRegistry.h"
@@ -150,7 +151,7 @@ DocumentLoader::~DocumentLoader() {
   DCHECK_EQ(state_, kSentDidFinishLoad);
 }
 
-DEFINE_TRACE(DocumentLoader) {
+void DocumentLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(fetcher_);
   visitor->Trace(main_resource_);
@@ -287,7 +288,7 @@ static HistoryCommitType LoadTypeToCommitType(FrameLoadType type) {
 void DocumentLoader::UpdateForSameDocumentNavigation(
     const KURL& new_url,
     SameDocumentNavigationSource same_document_navigation_source,
-    RefPtr<SerializedScriptValue> data,
+    scoped_refptr<SerializedScriptValue> data,
     HistoryScrollRestorationType scroll_restoration_type,
     FrameLoadType type,
     Document* initiating_document) {
@@ -445,7 +446,7 @@ void DocumentLoader::FinishedLoading(double finish_time) {
     // If this is an empty document, it will not have actually been created yet.
     // Force a commit so that the Document actually gets created.
     if (state_ == kProvisional)
-      CommitData(0, 0);
+      CommitData(nullptr, 0);
   }
 
   if (!frame_)
@@ -471,7 +472,7 @@ bool DocumentLoader::RedirectReceived(
   // If the redirecting url is not allowed to display content from the target
   // origin, then block the redirect.
   const KURL& request_url = request_.Url();
-  RefPtr<SecurityOrigin> redirecting_origin =
+  scoped_refptr<SecurityOrigin> redirecting_origin =
       SecurityOrigin::Create(redirect_response.Url());
   if (!redirecting_origin->CanDisplay(request_url)) {
     frame_->Console().AddMessage(ConsoleMessage::Create(
@@ -807,7 +808,7 @@ bool DocumentLoader::MaybeCreateArchive() {
   if (!frame_)
     return false;
 
-  RefPtr<SharedBuffer> data(main_resource->Data());
+  scoped_refptr<SharedBuffer> data(main_resource->Data());
   data->ForEachSegment(
       [this](const char* segment, size_t segment_size, size_t segment_offset) {
         CommitData(segment, segment_size);
@@ -941,6 +942,7 @@ void DocumentLoader::WillCommitNavigation() {
   if (GetFrameLoader().StateMachine()->CreatingInitialEmptyDocument())
     return;
   probe::willCommitLoad(frame_, this);
+  frame_->GetIdlenessDetector()->WillCommitLoad();
 }
 
 void DocumentLoader::DidCommitNavigation() {
@@ -997,11 +999,12 @@ bool DocumentLoader::ShouldClearWindowName(
     const LocalFrame& frame,
     SecurityOrigin* previous_security_origin,
     const Document& new_document) {
-  if (!previous_security_origin || !frame.IsMainFrame() ||
-      frame.Loader().Opener() ||
-      (frame.GetPage() && frame.GetPage()->OpenedByDOM())) {
+  if (!previous_security_origin)
     return false;
-  }
+  if (!frame.IsMainFrame())
+    return false;
+  if (frame.Loader().Opener())
+    return false;
 
   return !new_document.GetSecurityOrigin()->IsSameSchemeHostPort(
       previous_security_origin);
@@ -1065,7 +1068,7 @@ void DocumentLoader::InstallNewDocument(
   if (!should_reuse_default_view)
     frame_->SetDOMWindow(LocalDOMWindow::Create(*frame_));
 
-  bool user_gesture_bit_set = frame_->HasReceivedUserGesture() ||
+  bool user_gesture_bit_set = frame_->HasBeenActivated() ||
                               frame_->HasReceivedUserGestureBeforeNavigation();
 
   if (reason == InstallNewDocumentReason::kNavigation)
@@ -1089,11 +1092,16 @@ void DocumentLoader::InstallNewDocument(
     // Clear the user gesture bit that is not persisted.
     // TODO(crbug.com/736415): Clear this bit unconditionally for all frames.
     if (frame_->IsMainFrame())
-      frame_->ClearDocumentHasReceivedUserGesture();
+      frame_->ClearActivation();
   }
 
   if (ShouldClearWindowName(*frame_, previous_security_origin, *document)) {
-    frame_->Tree().SetName(g_null_atom);
+    // TODO(andypaicu): experimentalSetNullName will just record the fact
+    // that the name would be nulled and if the name is accessed after we will
+    // fire a UseCounter. If we decide to move forward with this change, we'd
+    // actually clean the name here.
+    // frame_->tree().setName(g_null_atom);
+    frame_->Tree().ExperimentalSetNulledName();
   }
 
   if (!overriding_url.IsEmpty())

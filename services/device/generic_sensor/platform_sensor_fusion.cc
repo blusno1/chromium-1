@@ -5,6 +5,7 @@
 #include "services/device/generic_sensor/platform_sensor_fusion.h"
 
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "services/device/generic_sensor/platform_sensor_fusion_algorithm.h"
 #include "services/device/generic_sensor/platform_sensor_provider.h"
 
@@ -19,20 +20,7 @@ PlatformSensorFusion::PlatformSensorFusion(
                      std::move(mapping),
                      provider),
       callback_(callback),
-      fusion_algorithm_(std::move(fusion_algorithm)) {
-  if (!provider)
-    return;
-
-  for (mojom::SensorType type : fusion_algorithm_->source_types()) {
-    scoped_refptr<PlatformSensor> sensor = provider->GetSensor(type);
-    if (sensor) {
-      AddSourceSensor(std::move(sensor));
-    } else {
-      provider->CreateSensor(
-          type, base::Bind(&PlatformSensorFusion::CreateSensorCallback, this));
-    }
-  }
-}
+      fusion_algorithm_(std::move(fusion_algorithm)) {}
 
 // static
 void PlatformSensorFusion::Create(
@@ -40,10 +28,9 @@ void PlatformSensorFusion::Create(
     PlatformSensorProvider* provider,
     std::unique_ptr<PlatformSensorFusionAlgorithm> fusion_algorithm,
     const PlatformSensorProviderBase::CreateSensorCallback& callback) {
-  // TODO(Mikhail): Consider splitting PlatformSensorFusion construction and
-  // fetching source sensors.
-  scoped_refptr<PlatformSensor>(new PlatformSensorFusion(
-      std::move(mapping), provider, callback, std::move(fusion_algorithm)));
+  auto fusion_sensor = base::MakeRefCounted<PlatformSensorFusion>(
+      std::move(mapping), provider, callback, std::move(fusion_algorithm));
+  fusion_sensor->FetchSourceSensors(provider);
 }
 
 mojom::ReportingMode PlatformSensorFusion::GetReportingMode() {
@@ -133,6 +120,22 @@ PlatformSensorFusion::~PlatformSensorFusion() {
     pair.second->RemoveClient(this);
 }
 
+void PlatformSensorFusion::FetchSourceSensors(
+    PlatformSensorProvider* provider) {
+  if (!provider)
+    return;
+
+  for (mojom::SensorType type : fusion_algorithm_->source_types()) {
+    scoped_refptr<PlatformSensor> sensor = provider->GetSensor(type);
+    if (sensor) {
+      AddSourceSensor(std::move(sensor));
+    } else {
+      provider->CreateSensor(
+          type, base::Bind(&PlatformSensorFusion::CreateSensorCallback, this));
+    }
+  }
+}
+
 void PlatformSensorFusion::CreateSensorCallback(
     scoped_refptr<PlatformSensor> sensor) {
   if (sensor)
@@ -144,7 +147,8 @@ void PlatformSensorFusion::CreateSensorCallback(
 void PlatformSensorFusion::AddSourceSensor(
     scoped_refptr<PlatformSensor> sensor) {
   DCHECK(sensor);
-  source_sensors_[sensor->GetType()] = std::move(sensor);
+  mojom::SensorType type = sensor->GetType();
+  source_sensors_[type] = std::move(sensor);
 
   if (source_sensors_.size() != fusion_algorithm_->source_types().size())
     return;

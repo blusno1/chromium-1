@@ -26,7 +26,7 @@ class V8TestCallbackInterface final : public TestCallbackInterface {
 
   ~V8TestCallbackInterface() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   void voidMethod() override;
   bool booleanMethod() override;
@@ -42,7 +42,7 @@ class V8TestCallbackInterface final : public TestCallbackInterface {
   CORE_EXPORT V8TestCallbackInterface(v8::Local<v8::Function>, ScriptState*);
 
   ScopedPersistent<v8::Function> callback_;
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
 };
 }
 #endif  // V8TestCallbackInterface_h

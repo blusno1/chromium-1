@@ -59,7 +59,7 @@ class TextureHolder {
       : texture_(gl), size_(size) {
     ScopedTextureBinder<GL_TEXTURE_2D> texture_binder(gl, texture_);
     gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, size.width(), size.height(), 0,
-                   GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+                   GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
   }
 
   GLuint texture() const { return texture_.id(); }
@@ -76,7 +76,8 @@ class I420ConverterImpl : public I420Converter {
  public:
   I420ConverterImpl(GLES2Interface* gl,
                     GLHelperScaling* scaler_impl,
-                    bool flip_vertically,
+                    bool flipped_source,
+                    bool flip_output,
                     bool swizzle,
                     bool use_mrt);
 
@@ -84,12 +85,15 @@ class I420ConverterImpl : public I420Converter {
 
   void Convert(GLuint src_texture,
                const gfx::Size& src_texture_size,
+               const gfx::Vector2dF& src_offset,
                GLHelper::ScalerInterface* optional_scaler,
                const gfx::Rect& output_rect,
                GLuint y_plane_texture,
                GLuint u_plane_texture,
                GLuint v_plane_texture) override;
 
+  bool IsSamplingFlippedSource() const override;
+  bool IsFlippingOutput() const override;
   GLenum GetReadbackFormat() const override;
 
  protected:
@@ -382,11 +386,12 @@ std::unique_ptr<GLHelper::ScalerInterface> GLHelper::CreateScaler(
     ScalerQuality quality,
     const gfx::Vector2d& scale_from,
     const gfx::Vector2d& scale_to,
-    bool vertically_flip_texture,
+    bool flipped_source,
+    bool flip_output,
     bool swizzle) {
   InitScalerImpl();
   return scaler_impl_->CreateScaler(quality, scale_from, scale_to,
-                                    vertically_flip_texture, swizzle);
+                                    flipped_source, flip_output, swizzle);
 }
 
 GLuint GLHelper::CopyTextureToImpl::ScaleTexture(
@@ -413,14 +418,15 @@ GLuint GLHelper::CopyTextureToImpl::ScaleTexture(
       type = GL_UNSIGNED_SHORT_5_6_5;
     }
     gl_->TexImage2D(GL_TEXTURE_2D, 0, format, dst_size.width(),
-                    dst_size.height(), 0, format, type, NULL);
+                    dst_size.height(), 0, format, type, nullptr);
   }
 
   const std::unique_ptr<ScalerInterface> scaler = helper_->CreateScaler(
       quality, gfx::Vector2d(src_size.width(), src_size.height()),
-      gfx::Vector2d(dst_size.width(), dst_size.height()),
+      gfx::Vector2d(dst_size.width(), dst_size.height()), false,
       vertically_flip_texture, swizzle);
-  scaler->Scale(src_texture, src_size, dst_texture, gfx::Rect(dst_size));
+  scaler->Scale(src_texture, src_size, gfx::Vector2dF(), dst_texture,
+                gfx::Rect(dst_size));
   return dst_texture;
 }
 
@@ -439,14 +445,14 @@ GLuint GLHelper::CopyTextureToImpl::EncodeTextureAsGrayscale(
     ScopedTextureBinder<GL_TEXTURE_2D> texture_binder(gl_, dst_texture);
     gl_->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, encoded_texture_size->width(),
                     encoded_texture_size->height(), 0, GL_RGBA,
-                    GL_UNSIGNED_BYTE, NULL);
+                    GL_UNSIGNED_BYTE, nullptr);
   }
 
   helper_->InitScalerImpl();
   const std::unique_ptr<ScalerInterface> planerizer =
       helper_->scaler_impl_.get()->CreateGrayscalePlanerizer(
-          vertically_flip_texture, swizzle);
-  planerizer->Scale(src_texture, src_size, dst_texture,
+          false, vertically_flip_texture, swizzle);
+  planerizer->Scale(src_texture, src_size, gfx::Vector2dF(), dst_texture,
                     gfx::Rect(*encoded_texture_size));
   return dst_texture;
 }
@@ -469,13 +475,14 @@ void GLHelper::CopyTextureToImpl::ReadbackAsync(
   gl_->GenBuffers(1, &request->buffer);
   gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, request->buffer);
   gl_->BufferData(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM,
-                  bytes_per_pixel * dst_size.GetArea(), NULL, GL_STREAM_READ);
+                  bytes_per_pixel * dst_size.GetArea(), nullptr,
+                  GL_STREAM_READ);
 
   request->query = 0u;
   gl_->GenQueriesEXT(1, &request->query);
   gl_->BeginQueryEXT(GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM, request->query);
   gl_->ReadPixels(0, 0, dst_size.width(), dst_size.height(), format, type,
-                  NULL);
+                  nullptr);
   gl_->EndQueryEXT(GL_ASYNC_PIXEL_PACK_COMPLETED_CHROMIUM);
   gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, 0);
   context_support_->SignalQuery(
@@ -895,7 +902,7 @@ GLuint GLHelper::ConsumeMailboxToTexture(const gpu::Mailbox& mailbox,
 void GLHelper::ResizeTexture(GLuint texture, const gfx::Size& size) {
   ScopedTextureBinder<GL_TEXTURE_2D> texture_binder(gl_, texture);
   gl_->TexImage2D(GL_TEXTURE_2D, 0, GL_RGB, size.width(), size.height(), 0,
-                  GL_RGB, GL_UNSIGNED_BYTE, NULL);
+                  GL_RGB, GL_UNSIGNED_BYTE, nullptr);
 }
 
 void GLHelper::CopyTextureSubImage(GLuint texture, const gfx::Rect& rect) {
@@ -953,28 +960,35 @@ namespace {
 
 I420ConverterImpl::I420ConverterImpl(GLES2Interface* gl,
                                      GLHelperScaling* scaler_impl,
-                                     bool flip_vertically,
+                                     bool flipped_source,
+                                     bool flip_output,
                                      bool swizzle,
                                      bool use_mrt)
     : gl_(gl),
       y_planerizer_(
-          use_mrt
-              ? scaler_impl->CreateI420MrtPass1Planerizer(flip_vertically,
-                                                          swizzle)
-              : scaler_impl->CreateI420Planerizer(0, flip_vertically, swizzle)),
-      u_planerizer_(
-          use_mrt
-              ? scaler_impl->CreateI420MrtPass2Planerizer(false, swizzle)
-              : scaler_impl->CreateI420Planerizer(1, flip_vertically, swizzle)),
+          use_mrt ? scaler_impl->CreateI420MrtPass1Planerizer(flipped_source,
+                                                              flip_output,
+                                                              swizzle)
+                  : scaler_impl->CreateI420Planerizer(0,
+                                                      flipped_source,
+                                                      flip_output,
+                                                      swizzle)),
+      u_planerizer_(use_mrt ? scaler_impl->CreateI420MrtPass2Planerizer(swizzle)
+                            : scaler_impl->CreateI420Planerizer(1,
+                                                                flipped_source,
+                                                                flip_output,
+                                                                swizzle)),
       v_planerizer_(use_mrt ? nullptr
                             : scaler_impl->CreateI420Planerizer(2,
-                                                                flip_vertically,
+                                                                flipped_source,
+                                                                flip_output,
                                                                 swizzle)) {}
 
 I420ConverterImpl::~I420ConverterImpl() = default;
 
 void I420ConverterImpl::Convert(GLuint src_texture,
                                 const gfx::Size& src_texture_size,
+                                const gfx::Vector2dF& src_offset,
                                 GLHelper::ScalerInterface* optional_scaler,
                                 const gfx::Rect& output_rect,
                                 GLuint y_plane_texture,
@@ -994,7 +1008,7 @@ void I420ConverterImpl::Convert(GLuint src_texture,
     // The scaler should not be configured to do any swizzling.
     DCHECK_EQ(optional_scaler->GetReadbackFormat(),
               static_cast<GLenum>(GL_RGBA));
-    optional_scaler->Scale(src_texture, src_texture_size,
+    optional_scaler->Scale(src_texture, src_texture_size, src_offset,
                            intermediate_->texture(), output_rect);
   }
 
@@ -1003,21 +1017,30 @@ void I420ConverterImpl::Convert(GLuint src_texture,
       optional_scaler ? intermediate_->texture() : src_texture;
   const gfx::Size texture_size =
       optional_scaler ? intermediate_->size() : src_texture_size;
+  const gfx::Vector2dF offset = optional_scaler ? gfx::Vector2dF() : src_offset;
   if (use_mrt()) {
-    y_planerizer_->ScaleToMultipleOutputs(texture, texture_size,
+    y_planerizer_->ScaleToMultipleOutputs(texture, texture_size, offset,
                                           y_plane_texture, uv_->id(),
                                           gfx::Rect(y_texture_size));
-    u_planerizer_->ScaleToMultipleOutputs(uv_->id(), y_texture_size,
-                                          u_plane_texture, v_plane_texture,
-                                          gfx::Rect(chroma_texture_size));
+    u_planerizer_->ScaleToMultipleOutputs(
+        uv_->id(), y_texture_size, gfx::Vector2dF(), u_plane_texture,
+        v_plane_texture, gfx::Rect(chroma_texture_size));
   } else {
-    y_planerizer_->Scale(texture, texture_size, y_plane_texture,
+    y_planerizer_->Scale(texture, texture_size, offset, y_plane_texture,
                          gfx::Rect(y_texture_size));
-    u_planerizer_->Scale(texture, texture_size, u_plane_texture,
+    u_planerizer_->Scale(texture, texture_size, offset, u_plane_texture,
                          gfx::Rect(chroma_texture_size));
-    v_planerizer_->Scale(texture, texture_size, v_plane_texture,
+    v_planerizer_->Scale(texture, texture_size, offset, v_plane_texture,
                          gfx::Rect(chroma_texture_size));
   }
+}
+
+bool I420ConverterImpl::IsSamplingFlippedSource() const {
+  return y_planerizer_->IsSamplingFlippedSource();
+}
+
+bool I420ConverterImpl::IsFlippingOutput() const {
+  return y_planerizer_->IsFlippingOutput();
 }
 
 GLenum I420ConverterImpl::GetReadbackFormat() const {
@@ -1068,6 +1091,7 @@ GLHelper::CopyTextureToImpl::ReadbackYUVImpl::ReadbackYUVImpl(
     bool use_mrt)
     : I420ConverterImpl(gl,
                         scaler_impl,
+                        false,
                         flip_vertically,
                         swizzle == kSwizzleBGRA,
                         use_mrt),
@@ -1111,8 +1135,9 @@ void GLHelper::CopyTextureToImpl::ReadbackYUVImpl::ReadbackYUV(
 
   GLuint mailbox_texture =
       copy_impl_->ConsumeMailboxToTexture(mailbox, sync_token);
-  I420ConverterImpl::Convert(mailbox_texture, src_texture_size, scaler_.get(),
-                             output_rect, y_, u_, v_);
+  I420ConverterImpl::Convert(mailbox_texture, src_texture_size,
+                             gfx::Vector2dF(), scaler_.get(), output_rect, y_,
+                             u_, v_);
   gl_->DeleteTextures(1, &mailbox_texture);
 
   // Read back planes, one at a time. Keep the video frame alive while doing the
@@ -1151,13 +1176,14 @@ bool GLHelper::IsReadbackConfigSupported(SkColorType color_type) {
 }
 
 std::unique_ptr<I420Converter> GLHelper::CreateI420Converter(
-    bool vertically_flip_texture,
+    bool flipped_source,
+    bool flip_output,
     bool swizzle,
     bool use_mrt) {
   InitCopyTextToImpl();
   InitScalerImpl();
   return std::make_unique<I420ConverterImpl>(
-      gl_, scaler_impl_.get(), vertically_flip_texture, swizzle,
+      gl_, scaler_impl_.get(), flipped_source, flip_output, swizzle,
       use_mrt && (copy_texture_to_impl_->MaxDrawBuffers() >= 2));
 }
 

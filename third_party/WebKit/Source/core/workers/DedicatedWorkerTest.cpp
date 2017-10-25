@@ -14,7 +14,6 @@
 #include "core/workers/DedicatedWorkerThread.h"
 #include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/WorkerBackingThreadStartupData.h"
-#include "core/workers/WorkerInspectorProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "core/workers/WorkerThreadTestHelper.h"
 #include "platform/CrossThreadFunctional.h"
@@ -34,7 +33,7 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
 
   WorkerOrWorkletGlobalScope* CreateWorkerGlobalScope(
       std::unique_ptr<GlobalScopeCreationParams> creation_params) override {
-    auto global_scope = new DedicatedWorkerGlobalScope(
+    auto* global_scope = new DedicatedWorkerGlobalScope(
         std::move(creation_params), this, time_origin_);
     // Initializing a global scope with a dummy creation params may emit warning
     // messages (e.g., invalid CSP directives). Clear them here for tests that
@@ -69,7 +68,7 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
 
   void TestTaskRunner() {
     EXPECT_TRUE(IsCurrentThread());
-    RefPtr<WebTaskRunner> task_runner =
+    scoped_refptr<WebTaskRunner> task_runner =
         TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GlobalScope());
     EXPECT_TRUE(task_runner->RunsTasksInCurrentSequence());
     GetParentFrameTaskRunners()
@@ -119,7 +118,7 @@ class DedicatedWorkerMessagingProxyForTest
   ~DedicatedWorkerMessagingProxyForTest() override = default;
 
   void StartWithSourceCode(const String& source) {
-    KURL script_url(kParsedURLString, "http://fake.url/");
+    KURL script_url("http://fake.url/");
     security_origin_ = SecurityOrigin::Create(script_url);
     std::unique_ptr<Vector<CSPHeaderAndType>> headers =
         WTF::MakeUnique<Vector<CSPHeaderAndType>>();
@@ -129,10 +128,10 @@ class DedicatedWorkerMessagingProxyForTest
     auto worker_settings = std::make_unique<WorkerSettings>(
         ToDocument(GetExecutionContext())->GetSettings());
     InitializeWorkerThread(
-        WTF::MakeUnique<GlobalScopeCreationParams>(
+        std::make_unique<GlobalScopeCreationParams>(
             script_url, "fake user agent", source,
-            nullptr /* cached_meta_data */, kDontPauseWorkerGlobalScopeOnStart,
-            headers.get(), "" /* referrer_policy */, security_origin_.get(),
+            nullptr /* cached_meta_data */, headers.get(),
+            "" /* referrer_policy */, security_origin_.get(),
             nullptr /* worker_clients */, kWebAddressSpaceLocal,
             nullptr /* origin_trial_tokens */, std::move(worker_settings),
             kV8CacheOptionsDefault),
@@ -146,7 +145,7 @@ class DedicatedWorkerMessagingProxyForTest
     return static_cast<DedicatedWorkerThreadForTest*>(GetWorkerThread());
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(mock_worker_thread_lifecycle_observer_);
     DedicatedWorkerMessagingProxy::Trace(visitor);
   }
@@ -166,7 +165,7 @@ class DedicatedWorkerMessagingProxyForTest
 
   Member<MockWorkerThreadLifecycleObserver>
       mock_worker_thread_lifecycle_observer_;
-  RefPtr<SecurityOrigin> security_origin_;
+  scoped_refptr<SecurityOrigin> security_origin_;
 };
 
 class DedicatedWorkerTest : public ::testing::Test {

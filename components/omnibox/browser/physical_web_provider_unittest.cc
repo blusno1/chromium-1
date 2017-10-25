@@ -12,7 +12,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/mock_autocomplete_provider_client.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
@@ -24,6 +23,7 @@
 #include "components/variations/variations_associated_data.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/text_elider.h"
 #include "url/gurl.h"
@@ -76,9 +76,7 @@ class FakeAutocompleteProviderClient
 
 class PhysicalWebProviderTest : public testing::Test {
  protected:
-  PhysicalWebProviderTest() : provider_(NULL) {
-    ResetFieldTrialList();
-  }
+  PhysicalWebProviderTest() : provider_(nullptr) { ResetFieldTrialList(); }
 
   ~PhysicalWebProviderTest() override {}
 
@@ -89,9 +87,7 @@ class PhysicalWebProviderTest : public testing::Test {
     provider_ = PhysicalWebProvider::Create(client_.get(), nullptr);
   }
 
-  void TearDown() override {
-    provider_ = NULL;
-  }
+  void TearDown() override { provider_ = nullptr; }
 
   void ResetFieldTrialList() {
     // Destroy the existing FieldTrialList before creating a new one to avoid a

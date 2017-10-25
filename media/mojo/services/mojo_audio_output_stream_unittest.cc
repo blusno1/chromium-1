@@ -59,7 +59,7 @@ class MockDelegate : public AudioOutputDelegate {
   MockDelegate() {}
   ~MockDelegate() {}
 
-  MOCK_CONST_METHOD0(GetStreamId, int());
+  MOCK_METHOD0(GetStreamId, int());
   MOCK_METHOD0(OnPlayStream, void());
   MOCK_METHOD0(OnPauseStream, void());
   MOCK_METHOD1(OnSetVolume, void(double));
@@ -153,7 +153,7 @@ class MojoAudioOutputStreamTest : public Test {
         mojo::MakeRequest(&p), std::move(client_ptr_),
         base::BindOnce(&MockDelegateFactory::CreateDelegate,
                        base::Unretained(&mock_delegate_factory_)),
-        base::Bind(&MockClient::Initialized, base::Unretained(&client_)),
+        base::BindOnce(&MockClient::Initialized, base::Unretained(&client_)),
         base::BindOnce(&MockDeleter::Finished, base::Unretained(&deleter_)));
     EXPECT_TRUE(p.is_bound());
     return p;
@@ -191,7 +191,7 @@ TEST_F(MojoAudioOutputStreamTest, NoDelegate_SignalsError) {
   mojom::AudioOutputStreamPtr stream_ptr;
   MojoAudioOutputStream stream(
       mojo::MakeRequest(&stream_ptr), std::move(client_ptr_),
-      base::BindOnce(&CreateNoDelegate), base::Bind(&NotCalled),
+      base::BindOnce(&CreateNoDelegate), base::BindOnce(&NotCalled),
       base::BindOnce([](bool* p) { *p = true; }, &deleter_called));
   EXPECT_FALSE(deleter_called)
       << "Stream shouldn't call the deleter from its constructor.";

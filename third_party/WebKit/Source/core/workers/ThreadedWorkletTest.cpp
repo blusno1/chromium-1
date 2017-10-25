@@ -10,7 +10,6 @@
 #include "core/workers/ThreadedWorkletGlobalScope.h"
 #include "core/workers/ThreadedWorkletMessagingProxy.h"
 #include "core/workers/ThreadedWorkletObjectProxy.h"
-#include "core/workers/WorkerInspectorProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "core/workers/WorkerThreadTestHelper.h"
 #include "core/workers/WorkletThreadHolder.h"
@@ -57,7 +56,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
   ~ThreadedWorkletThreadForTest() override {}
 
   WorkerBackingThread& GetWorkerBackingThread() override {
-    auto worklet_thread_holder =
+    auto* worklet_thread_holder =
         WorkletThreadHolder<ThreadedWorkletThreadForTest>::GetInstance();
     DCHECK(worklet_thread_holder);
     return *worklet_thread_holder->GetThread();
@@ -74,6 +73,17 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
   static void ClearSharedBackingThread() {
     DCHECK(IsMainThread());
     WorkletThreadHolder<ThreadedWorkletThreadForTest>::ClearInstance();
+  }
+
+  void TestSecurityOrigin() {
+    WorkletGlobalScope* global_scope = ToWorkletGlobalScope(GlobalScope());
+    // The SecurityOrigin for a worklet should be a unique opaque origin, while
+    // the owner Document's SecurityOrigin shouldn't.
+    EXPECT_TRUE(global_scope->GetSecurityOrigin()->IsUnique());
+    EXPECT_FALSE(global_scope->DocumentSecurityOrigin()->IsUnique());
+    GetParentFrameTaskRunners()
+        ->Get(TaskType::kUnspecedTimer)
+        ->PostTask(BLINK_FROM_HERE, CrossThreadBind(&testing::ExitRunLoop));
   }
 
   // Emulates API use on ThreadedWorkletGlobalScope.
@@ -102,7 +112,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
 
   void TestTaskRunner() {
     EXPECT_TRUE(IsCurrentThread());
-    RefPtr<WebTaskRunner> task_runner =
+    scoped_refptr<WebTaskRunner> task_runner =
         TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GlobalScope());
     EXPECT_TRUE(task_runner->RunsTasksInCurrentSequence());
     GetParentFrameTaskRunners()
@@ -113,12 +123,8 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
  private:
   WorkerOrWorkletGlobalScope* CreateWorkerGlobalScope(
       std::unique_ptr<GlobalScopeCreationParams> creation_params) final {
-    RefPtr<SecurityOrigin> security_origin =
-        SecurityOrigin::Create(creation_params->script_url);
-    return new ThreadedWorkletGlobalScope(
-        creation_params->script_url, creation_params->user_agent,
-        std::move(security_origin), this->GetIsolate(), this,
-        creation_params->worker_clients);
+    return new ThreadedWorkletGlobalScope(std::move(creation_params),
+                                          GetIsolate(), this);
   }
 
   bool IsOwningBackingThread() const final { return false; }
@@ -137,7 +143,7 @@ class ThreadedWorkletMessagingProxyForTest
   ~ThreadedWorkletMessagingProxyForTest() override {}
 
   void Start() {
-    KURL script_url(kParsedURLString, "http://fake.url/");
+    KURL script_url("http://fake.url/");
     std::unique_ptr<Vector<char>> cached_meta_data = nullptr;
     Vector<CSPHeaderAndType> content_security_policy_headers;
     String referrer_policy = "";
@@ -146,13 +152,12 @@ class ThreadedWorkletMessagingProxyForTest
     Vector<String> origin_trial_tokens;
     std::unique_ptr<WorkerSettings> worker_settings = nullptr;
     InitializeWorkerThread(
-        WTF::MakeUnique<GlobalScopeCreationParams>(
+        std::make_unique<GlobalScopeCreationParams>(
             script_url, "fake user agent", "// fake source code",
-            std::move(cached_meta_data), kDontPauseWorkerGlobalScopeOnStart,
-            &content_security_policy_headers, referrer_policy,
-            security_origin_.get(), worker_clients, kWebAddressSpaceLocal,
-            &origin_trial_tokens, std::move(worker_settings),
-            kV8CacheOptionsDefault),
+            std::move(cached_meta_data), &content_security_policy_headers,
+            referrer_policy, security_origin_.get(), worker_clients,
+            kWebAddressSpaceLocal, &origin_trial_tokens,
+            std::move(worker_settings), kV8CacheOptionsDefault),
         WTF::nullopt, script_url);
   }
 
@@ -163,7 +168,7 @@ class ThreadedWorkletMessagingProxyForTest
     return WTF::MakeUnique<ThreadedWorkletThreadForTest>(WorkletObjectProxy());
   }
 
-  RefPtr<SecurityOrigin> security_origin_;
+  scoped_refptr<SecurityOrigin> security_origin_;
 };
 
 class ThreadedWorkletTest : public ::testing::Test {
@@ -198,6 +203,17 @@ class ThreadedWorkletTest : public ::testing::Test {
   std::unique_ptr<DummyPageHolder> page_;
   Persistent<ThreadedWorkletMessagingProxyForTest> messaging_proxy_;
 };
+
+TEST_F(ThreadedWorkletTest, SecurityOrigin) {
+  MessagingProxy()->Start();
+
+  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+      ->PostTask(
+          BLINK_FROM_HERE,
+          CrossThreadBind(&ThreadedWorkletThreadForTest::TestSecurityOrigin,
+                          CrossThreadUnretained(GetWorkerThread())));
+  testing::EnterRunLoop();
+}
 
 TEST_F(ThreadedWorkletTest, UseCounter) {
   MessagingProxy()->Start();

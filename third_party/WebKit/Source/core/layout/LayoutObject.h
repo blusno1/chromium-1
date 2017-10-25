@@ -41,6 +41,7 @@
 #include "core/layout/api/HitTestAction.h"
 #include "core/layout/api/SelectionState.h"
 #include "core/loader/resource/ImageResourceObserver.h"
+#include "core/paint/FragmentData.h"
 #include "core/paint/LayerHitTestRects.h"
 #include "core/paint/PaintPhase.h"
 #include "core/paint/RarePaintData.h"
@@ -66,10 +67,10 @@ class HitTestResult;
 class InlineBox;
 class LayoutBoxModelObject;
 class LayoutBlock;
+class LayoutBlockFlow;
 class LayoutFlowThread;
 class LayoutGeometryMap;
 class LayoutMultiColumnSpannerPlaceholder;
-class LayoutNGBlockFlow;
 class LayoutView;
 class ObjectPaintProperties;
 class PaintLayer;
@@ -222,15 +223,18 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   String DecoratedName() const;
 
   // DisplayItemClient methods.
-  LayoutRect VisualRect() const final { return visual_rect_; }
-  LayoutRect PartialInvalidationRect() const final {
-    return rare_paint_data_ ? rare_paint_data_->PartialInvalidationRect()
-                            : LayoutRect();
-  }
+
+  // Do not call VisualRect directly outside of the DisplayItemClient
+  // interface, use a per-fragment one on FragmentData instead.
+ private:
+  LayoutRect VisualRect() const final;
+
+ public:
   void ClearPartialInvalidationRect() const final {
-    DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+    DCHECK(RuntimeEnabledFeatures::SlimmingPaintV175Enabled());
     return GetMutableForPainting().SetPartialInvalidationRect(LayoutRect());
   }
+
   String DebugName() const final;
 
   LayoutObject* Parent() const { return parent_; }
@@ -284,6 +288,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // we should use the faster PaintInvalidatorContext::painting_layer instead.
   PaintLayer* PaintingLayer() const;
 
+  bool IsFixedPositionObjectInPagedMedia() const;
+
   // Scrolling is a LayoutBox concept, however some code just cares about
   // recursively scrolling our enclosing ScrollableArea(s).
   bool ScrollRectToVisible(
@@ -302,7 +308,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   LayoutBox* EnclosingScrollableBox() const;
 
   // Returns |EnclosingBox()| if it's a LayoutNGBlockFlow, or nullptr otherwise.
-  LayoutNGBlockFlow* EnclosingNGBlockFlow() const;
+  LayoutBlockFlow* EnclosingNGBlockFlow() const;
 
   // Function to return our enclosing flow thread if we are contained inside
   // one. This function follows the containing block chain.
@@ -412,8 +418,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void SetDangerousOneWayParent(LayoutObject*);
 
   UniqueObjectId UniqueId() const {
-    DCHECK(rare_paint_data_);
-    return rare_paint_data_ ? rare_paint_data_->UniqueId() : 0;
+    DCHECK(fragment_.GetRarePaintData());
+    return fragment_.GetRarePaintData()
+               ? fragment_.GetRarePaintData()->UniqueId()
+               : 0;
   }
 
  private:
@@ -505,6 +513,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool IsLayoutNGBlockFlow() const {
     return IsOfType(kLayoutObjectNGBlockFlow);
   }
+  bool IsLayoutNGMixin() const { return IsOfType(kLayoutObjectNGMixin); }
   bool IsLayoutNGListItem() const { return IsOfType(kLayoutObjectNGListItem); }
   bool IsLayoutTableCol() const {
     return IsOfType(kLayoutObjectLayoutTableCol);
@@ -878,7 +887,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   ComputedStyle* GetCachedPseudoStyle(
       PseudoId,
       const ComputedStyle* parent_style = nullptr) const;
-  RefPtr<ComputedStyle> GetUncachedPseudoStyle(
+  scoped_refptr<ComputedStyle> GetUncachedPseudoStyle(
       const PseudoStyleRequest&,
       const ComputedStyle* parent_style = nullptr) const;
 
@@ -1159,20 +1168,21 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       MarkingBehavior marking_behaviour = kMarkContainerChain);
 
   // Set the style of the object and update the state of the object accordingly.
-  void SetStyle(RefPtr<ComputedStyle>);
+  void SetStyle(scoped_refptr<ComputedStyle>);
 
   // Set the style of the object if it's generated content.
-  void SetPseudoStyle(RefPtr<ComputedStyle>);
+  void SetPseudoStyle(scoped_refptr<ComputedStyle>);
 
   // Updates only the local style ptr of the object.  Does not update the state
   // of the object, and so only should be called when the style is known not to
   // have changed (or from setStyle).
-  void SetStyleInternal(RefPtr<ComputedStyle> style) {
+  void SetStyleInternal(scoped_refptr<ComputedStyle> style) {
     style_ = std::move(style);
   }
 
-  void SetStyleWithWritingModeOf(RefPtr<ComputedStyle>, LayoutObject* parent);
-  void SetStyleWithWritingModeOfParent(RefPtr<ComputedStyle>);
+  void SetStyleWithWritingModeOf(scoped_refptr<ComputedStyle>,
+                                 LayoutObject* parent);
+  void SetStyleWithWritingModeOfParent(scoped_refptr<ComputedStyle>);
   void AddChildWithWritingModeOfParent(LayoutObject* new_child,
                                        LayoutObject* before_child);
 
@@ -1363,11 +1373,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   inline const ComputedStyle& StyleRef(bool first_line) const;
 
   static inline Color ResolveColor(const ComputedStyle& style_to_use,
-                                   int color_property) {
+                                   CSSPropertyID color_property) {
     return style_to_use.VisitedDependentColor(color_property);
   }
 
-  inline Color ResolveColor(int color_property) const {
+  inline Color ResolveColor(CSSPropertyID color_property) const {
     return Style()->VisitedDependentColor(color_property);
   }
 
@@ -1639,20 +1649,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // Called when the previous visual rect(s) is no longer valid.
   virtual void ClearPreviousVisualRects();
 
-  // Visual offset of this LayoutObject's top-left position from the
-  // "paint offset root":
-  // - In SPv1 mode, this is the containing composited PaintLayer, or
-  //   PaintLayer with a transform, whichever is nearer along the containing
-  //   block chain.
-  // - In SPv2 mode, this is the containing root PaintLayer of the
-  //   root LocalFrameView, or PaintLayer with a transform, whichever is nearer
-  //   along the containing block chain.
-  // LayoutObject::PaintOffset does not take into account fragmentation.
-  // See also FragmentData::PaintOffset, which does take it into account.
-  // TODO(chrishtr): remove this field in favor of FragmentData::PaintOffset
-  // once paint invalidation is fully implemented for fragmentation.
-  const LayoutPoint& PaintOffset() const { return paint_offset_; }
-
   PaintInvalidationReason FullPaintInvalidationReason() const {
     return bitfields_.FullPaintInvalidationReason();
   }
@@ -1725,9 +1721,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // debugging output
   virtual LayoutRect DebugRect() const;
 
-  FragmentData* FirstFragment() const {
-    return rare_paint_data_ ? rare_paint_data_->Fragment() : nullptr;
-  }
+  const FragmentData& FirstFragment() const { return fragment_; }
+
+  // Returns the bounding box of the visual rects of all fragments.
+  LayoutRect FragmentsVisualRectBoundingBox() const;
 
   // Painters can use const methods only, except for these explicitly declared
   // methods.
@@ -1760,20 +1757,15 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
     // The following setters store the current values as calculated during the
     // pre-paint tree walk. TODO(wangxianzhu): Add check of lifecycle states.
-    void SetVisualRect(const LayoutRect& r) { layout_object_.SetVisualRect(r); }
-    void SetPaintOffset(const LayoutPoint& p) {
-      DCHECK_EQ(layout_object_.GetDocument().Lifecycle().GetState(),
-                DocumentLifecycle::kInPrePaint);
-      layout_object_.paint_offset_ = p;
+    void SetVisualRect(const LayoutRect& r) {
+      layout_object_.fragment_.SetVisualRect(r);
     }
-    void SetLocationInBacking(const LayoutPoint& p) {
-      if (layout_object_.GetRarePaintData() ||
-          p != layout_object_.VisualRect().Location())
-        layout_object_.EnsureRarePaintData().SetLocationInBacking(p);
-    }
+
     void SetSelectionVisualRect(const LayoutRect& r) {
-      if (layout_object_.GetRarePaintData() || !r.IsEmpty())
-        layout_object_.EnsureRarePaintData().SetSelectionVisualRect(r);
+      if (layout_object_.fragment_.GetRarePaintData() || !r.IsEmpty()) {
+        layout_object_.fragment_.EnsureRarePaintData().SetSelectionVisualRect(
+            r);
+      }
     }
 
     void SetPreviousBackgroundObscured(bool b) {
@@ -1807,6 +1799,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 #endif
 
    protected:
+    friend class LayoutBoxModelObject;
+    friend class LayoutScrollbar;
+    friend class PaintInvalidationCapableScrollableArea;
+    friend class PaintInvalidator;
     friend class PaintPropertyTreeBuilder;
     friend class PrePaintTreeWalk;
     FRIEND_TEST_ALL_PREFIXES(AnimationCompositorAnimationsTest,
@@ -1814,13 +1810,16 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     FRIEND_TEST_ALL_PREFIXES(AnimationCompositorAnimationsTest,
                              canStartElementOnCompositorEffectSPv2);
     FRIEND_TEST_ALL_PREFIXES(PrePaintTreeWalkTest, ClipRects);
+    FRIEND_TEST_ALL_PREFIXES(LayoutObjectTest, VisualRect);
+    FRIEND_TEST_ALL_PREFIXES(LayoutObjectTest,
+                             LocationInBackingAndSelectionVisualRect);
+    FRIEND_TEST_ALL_PREFIXES(BoxPaintInvalidatorTest,
+                             ComputePaintInvalidationReasonBasic);
 
     // Each LayoutObject has one or more painting fragments (exactly one
     // in the absence of multicol/pagination).
     // See ../paint/README.md for more on fragments.
-    FragmentData* FirstFragment();
-    FragmentData& EnsureFirstFragment();
-    void ClearFirstFragment();
+    FragmentData& FirstFragment() { return layout_object_.fragment_; }
 
     friend class LayoutObject;
     MutableForPainting(const LayoutObject& layout_object)
@@ -1904,13 +1903,15 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return bitfields_.PreviousOutlineMayBeAffectedByDescendants();
   }
 
-  LayoutPoint LocationInBacking() const {
-    return rare_paint_data_ ? rare_paint_data_->LocationInBacking()
-                            : VisualRect().Location();
-  }
   LayoutRect SelectionVisualRect() const {
-    return rare_paint_data_ ? rare_paint_data_->SelectionVisualRect()
-                            : LayoutRect();
+    return fragment_.GetRarePaintData()
+               ? fragment_.GetRarePaintData()->SelectionVisualRect()
+               : LayoutRect();
+  }
+  LayoutRect PartialInvalidationRect() const {
+    return fragment_.GetRarePaintData()
+               ? fragment_.GetRarePaintData()->PartialInvalidationRect()
+               : LayoutRect();
   }
 
   void InvalidateIfControlStateChanged(ControlState);
@@ -1933,6 +1934,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectMedia,
     kLayoutObjectMenuList,
     kLayoutObjectNGBlockFlow,
+    kLayoutObjectNGMixin,
     kLayoutObjectNGListItem,
     kLayoutObjectProgress,
     kLayoutObjectQuote,
@@ -2047,10 +2049,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   virtual void ComputeSelfHitTestRects(Vector<LayoutRect>&,
                                        const LayoutPoint& layer_offset) const {}
 
-  void SetVisualRect(const LayoutRect& rect) { visual_rect_ = rect; }
   void SetPartialInvalidationRect(const LayoutRect& rect) {
-    if (GetRarePaintData() || !rect.IsEmpty())
-      EnsureRarePaintData().SetPartialInvalidationRect(rect);
+    if (fragment_.GetRarePaintData() || !rect.IsEmpty())
+      fragment_.EnsureRarePaintData().SetPartialInvalidationRect(rect);
   }
 
 #if DCHECK_IS_ON()
@@ -2058,9 +2059,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return BackgroundChangedSinceLastPaintInvalidation() ||
            ShouldCheckForPaintInvalidation() || ShouldInvalidateSelection() ||
            NeedsPaintOffsetAndVisualRectUpdate() ||
-           (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
-            rare_paint_data_ &&
-            !rare_paint_data_->PartialInvalidationRect().IsEmpty());
+           (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
+            fragment_.GetRarePaintData() &&
+            !fragment_.GetRarePaintData()->PartialInvalidationRect().IsEmpty());
   }
 #endif
 
@@ -2092,9 +2093,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     bitfields_.SetPreviousOutlineMayBeAffectedByDescendants(b);
   }
 
-  RarePaintData& EnsureRarePaintData();
-  RarePaintData* GetRarePaintData() const { return rare_paint_data_.get(); }
-
   virtual bool VisualRectRespectsVisibility() const { return true; }
   virtual LayoutRect LocalVisualRectIgnoringVisibility() const;
 
@@ -2103,13 +2101,13 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
  private:
   // Used only by applyFirstLineChanges to get a first line style based off of a
   // given new style, without accessing the cache.
-  RefPtr<ComputedStyle> UncachedFirstLineStyle() const;
+  scoped_refptr<ComputedStyle> UncachedFirstLineStyle() const;
 
-  // Adjusts a visual rect in the space of |visual_rect_| to be in the space of
+  // Adjusts a visual rect in the space of |visual_rect| to be in the space of
   // the |paint_invalidation_container|, if needed. They can be different only
   // if |paint_invalidation_container| is a composited scroller.
   void AdjustVisualRectForCompositedScrolling(
-      LayoutRect&,
+      LayoutRect& visual_rect,
       const LayoutBoxModelObject& paint_invalidation_container) const;
 
   FloatQuad LocalToAncestorQuadInternal(const FloatQuad&,
@@ -2176,7 +2174,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void ApplyPseudoStyleChanges(const ComputedStyle& old_style);
   void ApplyFirstLineChanges(const ComputedStyle& old_style);
 
-  RefPtr<ComputedStyle> style_;
+  scoped_refptr<ComputedStyle> style_;
 
   // Oilpan: This untraced pointer to the owning Node is considered safe.
   UntracedMember<Node> node_;
@@ -2580,22 +2578,12 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
 
  private:
+  friend class LineLayoutItem;
+
   // Store state between styleWillChange and styleDidChange
   static bool affects_parent_block_;
 
-  // This stores the visual rect computed by the latest paint invalidation.
-  // This rect does *not* account for composited scrolling. See
-  // adjustVisualRectForCompositedScrolling().
-  LayoutRect visual_rect_;
-
-  // This stores the paint offset computed by the latest paint property tree
-  // building. It is relative to the containing transform space. It is the same
-  // offset that will be used to paint the object on SPv2. It's used to detect
-  // paint offset change for paint invalidation on SPv2, and partial paint
-  // property tree update on SPv1 and SPv2.
-  LayoutPoint paint_offset_;
-
-  std::unique_ptr<RarePaintData> rare_paint_data_;
+  FragmentData fragment_;
 };
 
 // FIXME: remove this once the layout object lifecycle ASSERTS are no longer

@@ -70,10 +70,8 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
   void StartWorkerContext(const WebEmbeddedWorkerStartData&) override;
   void TerminateWorkerContext() override;
   void ResumeAfterDownload() override;
-  void AttachDevTools(const WebString& host_id, int session_id) override;
-  void ReattachDevTools(const WebString& host_id,
-                        int session_id,
-                        const WebString& saved_state) override;
+  void AttachDevTools(int session_id) override;
+  void ReattachDevTools(int session_id, const WebString& saved_state) override;
   void DetachDevTools(int session_id) override;
   void DispatchDevToolsMessage(int session_id,
                                int call_id,
@@ -104,6 +102,7 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
   void ResumeStartup() override;
   WebDevToolsAgentClient::WebKitClientMessageLoop* CreateClientMessageLoop()
       override;
+  const WebString& GetInstrumentationToken() override;
 
   void OnScriptLoaderFinished();
   void StartWorkerThread();
@@ -119,7 +118,7 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
   std::unique_ptr<ServiceWorkerContentSettingsProxy> content_settings_client_;
 
   // Kept around only while main script loading is ongoing.
-  RefPtr<WorkerScriptLoader> main_script_loader_;
+  scoped_refptr<WorkerScriptLoader> main_script_loader_;
 
   std::unique_ptr<WorkerThread> worker_thread_;
   Persistent<WorkerInspectorProxy> worker_inspector_proxy_;
@@ -136,7 +135,12 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
     kIsPausedAfterDownload
   } pause_after_download_state_;
 
+  // Whether to pause the initialization and wait for debugger to attach
+  // before proceeding. This technique allows debugging worker startup.
   WaitingForDebuggerState waiting_for_debugger_state_;
+  // Unique worker token used by DevTools to attribute different instrumentation
+  // to the same worker.
+  WebString instrumentation_token_;
 
   service_manager::mojom::blink::InterfaceProviderPtrInfo
       interface_provider_info_;

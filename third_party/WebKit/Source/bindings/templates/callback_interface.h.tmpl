@@ -18,7 +18,7 @@ class {{v8_class}} final : public {{cpp_class}} {
 
   ~{{v8_class}}() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
 {% for method in methods %}
   {{method.cpp_type}} {{method.name}}({{method.argument_declarations | join(', ')}}) override;
@@ -28,7 +28,7 @@ class {{v8_class}} final : public {{cpp_class}} {
   {{exported}}{{v8_class}}(v8::Local<v8::Function>, ScriptState*);
 
   ScopedPersistent<v8::Function> callback_;
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
 };
 
 }

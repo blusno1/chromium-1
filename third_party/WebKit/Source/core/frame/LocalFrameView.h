@@ -364,6 +364,9 @@ class CORE_EXPORT LocalFrameView final
   IntRect ConvertToLayoutItem(const LayoutItem&, const IntRect&) const;
   IntPoint ConvertFromLayoutItem(const LayoutItem&, const IntPoint&) const;
   IntPoint ConvertToLayoutItem(const LayoutItem&, const IntPoint&) const;
+  LayoutPoint ConvertFromLayoutItem(const LayoutItem&,
+                                    const LayoutPoint&) const;
+  LayoutPoint ConvertToLayoutItem(const LayoutItem&, const LayoutPoint&) const;
 
   bool IsFrameViewScrollCorner(LayoutScrollbarPart* scroll_corner) const {
     return scroll_corner_ == scroll_corner;
@@ -478,7 +481,7 @@ class CORE_EXPORT LocalFrameView final
   FloatQuad LocalToVisibleContentQuad(const FloatQuad&,
                                       const LayoutObject*,
                                       unsigned = 0) const final;
-  RefPtr<WebTaskRunner> GetTimerTaskRunner() const final;
+  scoped_refptr<WebTaskRunner> GetTimerTaskRunner() const final;
 
   LayoutRect ScrollIntoView(const LayoutRect& rect_in_content,
                             const ScrollAlignment& align_x,
@@ -622,14 +625,17 @@ class CORE_EXPORT LocalFrameView final
   // http://www.chromium.org/developers/design-documents/blink-coordinate-spaces
   IntPoint RootFrameToContents(const IntPoint&) const;
   FloatPoint RootFrameToContents(const FloatPoint&) const;
+  LayoutPoint RootFrameToContents(const LayoutPoint&) const;
   IntRect RootFrameToContents(const IntRect&) const;
   IntPoint ContentsToRootFrame(const IntPoint&) const;
+  LayoutPoint ContentsToRootFrame(const LayoutPoint&) const;
   IntRect ContentsToRootFrame(const IntRect&) const;
 
   IntRect ViewportToContents(const IntRect&) const;
   IntRect ContentsToViewport(const IntRect&) const;
   IntPoint ContentsToViewport(const IntPoint&) const;
   IntPoint ViewportToContents(const IntPoint&) const;
+  LayoutPoint ViewportToContents(const LayoutPoint&) const;
 
   // FIXME: Some external callers expect to get back a rect that's positioned
   // in viewport space, but sized in CSS pixels. This is an artifact of the
@@ -643,9 +649,12 @@ class CORE_EXPORT LocalFrameView final
   // relative to the document's top left corner and thus are not affected by
   // scroll offset.
   IntPoint ContentsToFrame(const IntPoint&) const;
+  LayoutPoint ContentsToFrame(const LayoutPoint&) const;
+  FloatPoint ContentsToFrame(const FloatPoint&) const;
   IntRect ContentsToFrame(const IntRect&) const;
   IntPoint FrameToContents(const IntPoint&) const;
   FloatPoint FrameToContents(const FloatPoint&) const;
+  LayoutPoint FrameToContents(const LayoutPoint&) const;
   IntRect FrameToContents(const IntRect&) const;
 
   // Functions for converting to screen coordinates.
@@ -657,9 +666,11 @@ class CORE_EXPORT LocalFrameView final
 
   IntRect ConvertToRootFrame(const IntRect&) const;
   IntPoint ConvertToRootFrame(const IntPoint&) const;
+  LayoutPoint ConvertToRootFrame(const LayoutPoint&) const;
   IntRect ConvertFromRootFrame(const IntRect&) const;
   IntPoint ConvertFromRootFrame(const IntPoint&) const override;
   FloatPoint ConvertFromRootFrame(const FloatPoint&) const;
+  LayoutPoint ConvertFromRootFrame(const LayoutPoint&) const;
   IntPoint ConvertSelfToChild(const EmbeddedContentView&,
                               const IntPoint&) const;
 
@@ -689,7 +700,7 @@ class CORE_EXPORT LocalFrameView final
 
   bool IsLocalFrameView() const override { return true; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
   void NotifyPageThatContentAreaWillPaint() const;
 
   // Returns the scrollable area for the frame. For the root frame, this will
@@ -728,25 +739,25 @@ class CORE_EXPORT LocalFrameView final
 
   void BeginLifecycleUpdates();
 
-  // Paint properties for SPv2 Only.
-  void SetPreTranslation(RefPtr<TransformPaintPropertyNode> pre_translation) {
+  void SetPreTranslation(
+      scoped_refptr<TransformPaintPropertyNode> pre_translation) {
     pre_translation_ = std::move(pre_translation);
   }
   TransformPaintPropertyNode* PreTranslation() const {
     return pre_translation_.get();
   }
-  void SetScrollNode(RefPtr<ScrollPaintPropertyNode> scroll_node) {
+  void SetScrollNode(scoped_refptr<ScrollPaintPropertyNode> scroll_node) {
     scroll_node_ = std::move(scroll_node);
   }
   ScrollPaintPropertyNode* ScrollNode() const { return scroll_node_.get(); }
   void SetScrollTranslation(
-      RefPtr<TransformPaintPropertyNode> scroll_translation) {
+      scoped_refptr<TransformPaintPropertyNode> scroll_translation) {
     scroll_translation_ = std::move(scroll_translation);
   }
   TransformPaintPropertyNode* ScrollTranslation() const {
     return scroll_translation_.get();
   }
-  void SetContentClip(RefPtr<ClipPaintPropertyNode> content_clip) {
+  void SetContentClip(scoped_refptr<ClipPaintPropertyNode> content_clip) {
     content_clip_ = std::move(content_clip);
   }
   ClipPaintPropertyNode* ContentClip() const { return content_clip_.get(); }
@@ -873,10 +884,22 @@ class CORE_EXPORT LocalFrameView final
   // LocalFrameView (or possibly the LocalFrameView itself).
   ScrollableArea* ScrollableAreaWithElementId(const CompositorElementId&);
 
+  // When the frame is a local root and not a main frame, any recursive
+  // scrolling should continue in the parent process.
+  void ScrollRectToVisibleInRemoteParent(const LayoutRect&,
+                                         const ScrollAlignment&,
+                                         const ScrollAlignment&,
+                                         ScrollType,
+                                         bool,
+                                         ScrollBehavior,
+                                         bool);
+
   PaintArtifactCompositor* GetPaintArtifactCompositorForTesting() {
     DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
     return paint_artifact_compositor_.get();
   }
+
+  ScrollbarTheme& GetPageScrollbarTheme() const override;
 
  protected:
   // Scroll the content via the compositor.
@@ -990,8 +1013,11 @@ class CORE_EXPORT LocalFrameView final
   // transforms into account.
   IntRect ConvertToContainingEmbeddedContentView(const IntRect&) const;
   IntPoint ConvertToContainingEmbeddedContentView(const IntPoint&) const;
+  LayoutPoint ConvertToContainingEmbeddedContentView(const LayoutPoint&) const;
   IntRect ConvertFromContainingEmbeddedContentView(const IntRect&) const;
   IntPoint ConvertFromContainingEmbeddedContentView(const IntPoint&) const;
+  LayoutPoint ConvertFromContainingEmbeddedContentView(
+      const LayoutPoint&) const;
 
   void DidChangeGlobalRootScroller() override;
 
@@ -1089,7 +1115,7 @@ class CORE_EXPORT LocalFrameView final
 
   LayoutSize size_;
 
-  typedef HashSet<RefPtr<LayoutEmbeddedObject>> EmbeddedObjectSet;
+  typedef HashSet<scoped_refptr<LayoutEmbeddedObject>> EmbeddedObjectSet;
   EmbeddedObjectSet part_update_set_;
 
   Member<LocalFrame> frame_;
@@ -1197,20 +1223,19 @@ class CORE_EXPORT LocalFrameView final
   bool subtree_throttled_;
   bool lifecycle_updates_throttled_;
 
-  // Paint properties for SPv2 Only.
   // The hierarchy of transform subtree created by a LocalFrameView.
   // [ preTranslation ]               The offset from LocalFrameView::FrameRect.
   //     |                            Establishes viewport.
   //     +---[ scrollTranslation ]    Frame scrolling.
   // TODO(trchen): These will not be needed once settings->rootLayerScrolls() is
   // enabled.
-  RefPtr<TransformPaintPropertyNode> pre_translation_;
-  RefPtr<TransformPaintPropertyNode> scroll_translation_;
-  RefPtr<ScrollPaintPropertyNode> scroll_node_;
+  scoped_refptr<TransformPaintPropertyNode> pre_translation_;
+  scoped_refptr<TransformPaintPropertyNode> scroll_translation_;
+  scoped_refptr<ScrollPaintPropertyNode> scroll_node_;
   // The content clip clips the document (= LayoutView) but not the scrollbars.
   // TODO(trchen): This will not be needed once settings->rootLayerScrolls() is
   // enabled.
-  RefPtr<ClipPaintPropertyNode> content_clip_;
+  scoped_refptr<ClipPaintPropertyNode> content_clip_;
   // The property tree state that should be used for painting contents. These
   // properties are either created by this LocalFrameView or are inherited from
   // an ancestor.

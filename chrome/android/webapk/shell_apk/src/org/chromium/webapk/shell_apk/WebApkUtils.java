@@ -37,6 +37,7 @@ import java.util.Set;
 public class WebApkUtils {
     public static final String SHARED_PREF_RUNTIME_HOST = "runtime_host";
 
+    private static final int MINIMUM_REQUIRED_CHROME_VERSION = 57;
     private static final String TAG = "cr_WebApkUtils";
 
     /**
@@ -129,37 +130,26 @@ public class WebApkUtils {
     }
 
     /**
-     * Returns the new intent url, rewrite if necessary.
-     * The WebAPK may have been launched as a result of an intent filter for a different
-     * scheme or top level domain. Rewrite the scheme and host name to the scope's
-     * scheme and host name in this case, and append orginal intent url if |loggedIntentUrlParam| is
-     * set.
+     * Returns the new intent url, rewrite if |loggedIntentUrlParam| is set. A query parameter with
+     * the original URL is appended to the URL. Note: if the intent url has been rewritten before,
+     * we don't rewrite it again.
      */
     public static String rewriteIntentUrlIfNecessary(String intentStartUrl, Bundle metadata) {
-        String scopeUrl = metadata.getString(WebApkMetaDataKeys.SCOPE);
         String startUrl = metadata.getString(WebApkMetaDataKeys.START_URL);
         String loggedIntentUrlParam =
                 metadata.getString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM);
 
-        if (TextUtils.isEmpty(scopeUrl) || TextUtils.isEmpty(loggedIntentUrlParam)) {
+        if (TextUtils.isEmpty(loggedIntentUrlParam)) return intentStartUrl;
+
+        if (intentStartUrl.startsWith(startUrl)
+                && !TextUtils.isEmpty(
+                           Uri.parse(intentStartUrl).getQueryParameter(loggedIntentUrlParam))) {
             return intentStartUrl;
         }
 
-        if (!isUrlInScope(intentStartUrl, scopeUrl)) {
-            Uri.Builder returnUrlBuilder = Uri.parse(startUrl).buildUpon();
-            returnUrlBuilder.appendQueryParameter(loggedIntentUrlParam, intentStartUrl);
-            return returnUrlBuilder.toString();
-        }
-
-        return intentStartUrl;
-    }
-
-    private static boolean isUrlInScope(String url, String scopeUrl) {
-        Uri parsedUrl = Uri.parse(url);
-        Uri parsedScopeUrl = Uri.parse(scopeUrl);
-        return parsedUrl.getScheme().equals(parsedScopeUrl.getScheme())
-                && parsedUrl.getHost().equals(parsedScopeUrl.getHost())
-                && parsedUrl.getPath().startsWith(parsedScopeUrl.getPath());
+        Uri.Builder returnUrlBuilder = Uri.parse(startUrl).buildUpon();
+        returnUrlBuilder.appendQueryParameter(loggedIntentUrlParam, intentStartUrl);
+        return returnUrlBuilder.toString();
     }
 
     /**
@@ -346,5 +336,14 @@ public class WebApkUtils {
         if (!file.delete()) {
             Log.e(TAG, "Failed to delete : " + file.getAbsolutePath());
         }
+    }
+
+    /** Returns whether a WebAPK should be launched as a tab. See crbug.com/772398. */
+    public static boolean shouldLaunchInTab(String versionName) {
+        int dotIndex = versionName.indexOf(".");
+        if (dotIndex == -1) return false;
+
+        int version = Integer.parseInt(versionName.substring(0, dotIndex));
+        return version < MINIMUM_REQUIRED_CHROME_VERSION;
     }
 }

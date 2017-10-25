@@ -42,10 +42,10 @@
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/testing/WebLayerTreeViewImplForTesting.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebMouseEvent.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebFrameOwnerProperties.h"
 #include "public/web/WebHistoryItem.h"
@@ -100,7 +100,7 @@ void LoadHTMLString(WebLocalFrame*,
 void LoadHistoryItem(WebLocalFrame*,
                      const WebHistoryItem&,
                      WebHistoryLoadType,
-                     WebCachePolicy);
+                     mojom::FetchCacheMode);
 // Same as above, but for WebLocalFrame::Reload().
 void ReloadFrame(WebLocalFrame*);
 void ReloadFrameBypassingCache(WebLocalFrame*);
@@ -155,7 +155,7 @@ WebLocalFrameImpl* CreateLocalChild(
 // Helper for creating a remote child frame of a remote parent frame.
 WebRemoteFrameImpl* CreateRemoteChild(WebRemoteFrame& parent,
                                       const WebString& name = WebString(),
-                                      RefPtr<SecurityOrigin> = nullptr,
+                                      scoped_refptr<SecurityOrigin> = nullptr,
                                       TestWebRemoteFrameClient* = nullptr);
 
 // Forces to use mocked overlay scrollbars instead of the default native theme
@@ -173,7 +173,6 @@ class UseMockScrollbarSettings {
             RuntimeEnabledFeatures::OverlayScrollbarsEnabled()) {
     Settings::SetMockScrollbarsEnabled(true);
     RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled(true);
-    EXPECT_TRUE(ScrollbarTheme::GetTheme().UsesOverlayScrollbars());
   }
 
   UseMockScrollbarSettings(bool use_mock, bool use_overlay)
@@ -285,7 +284,7 @@ class WebViewHelper {
   // nullptr as the SecurityOrigin results in a frame with a unique security
   // origin.
   WebViewImpl* InitializeRemote(TestWebRemoteFrameClient* = nullptr,
-                                RefPtr<SecurityOrigin> = nullptr,
+                                scoped_refptr<SecurityOrigin> = nullptr,
                                 TestWebViewClient* = nullptr);
 
   // Load the 'Ahem' font to this WebView.
@@ -347,11 +346,11 @@ class TestWebFrameClient : public WebFrameClient {
   service_manager::InterfaceProvider* GetInterfaceProvider() override {
     return interface_provider_.get();
   }
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
-      const blink::WebURLRequest& request,
-      SingleThreadTaskRunnerRefPtr task_runner) override {
-    // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
-    return Platform::Current()->CreateURLLoader(request, task_runner);
+  std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory()
+      override {
+    // TODO(kinuko,toyoshim): Stop using Platform's URLLoaderFactory, but create
+    // its own WebURLLoaderFactoryWithMock. (crbug.com/751425)
+    return Platform::Current()->CreateDefaultURLLoaderFactory();
   }
 
  private:

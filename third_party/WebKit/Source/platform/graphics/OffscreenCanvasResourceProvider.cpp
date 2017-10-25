@@ -47,7 +47,7 @@ void OffscreenCanvasResourceProvider::TransferResource(
 
 void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedBitmap(
     viz::TransferableResource& resource,
-    RefPtr<StaticBitmapImage> image) {
+    scoped_refptr<StaticBitmapImage> image) {
   std::unique_ptr<FrameResource> frame_resource =
       CreateOrRecycleFrameResource();
   if (!frame_resource->shared_bitmap_) {
@@ -75,7 +75,7 @@ void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedBitmap(
 
 void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedGPUContext(
     viz::TransferableResource& resource,
-    RefPtr<StaticBitmapImage> image) {
+    scoped_refptr<StaticBitmapImage> image) {
   DCHECK(!image->IsTextureBacked());
 
   // TODO(crbug.com/652707): When committing the first frame, there is no
@@ -103,13 +103,13 @@ void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedGPUContext(
   SkImageInfo info = SkImageInfo::Make(
       width_, height_, kN32_SkColorType,
       image->IsPremultiplied() ? kPremul_SkAlphaType : kUnpremul_SkAlphaType);
-  RefPtr<ArrayBuffer> dst_buffer =
+  scoped_refptr<ArrayBuffer> dst_buffer =
       ArrayBuffer::CreateOrNull(width_ * height_, info.bytesPerPixel());
   // If it fails to create a buffer for copying the pixel data, then exit early.
   if (!dst_buffer)
     return;
   unsigned byte_length = dst_buffer->ByteLength();
-  RefPtr<Uint8Array> dst_pixels =
+  scoped_refptr<Uint8Array> dst_pixels =
       Uint8Array::Create(std::move(dst_buffer), 0, byte_length);
   image->PaintImageForCurrentFrame().GetSkImage()->readPixels(
       info, dst_pixels->Data(), info.minRowBytes(), 0, 0);
@@ -125,7 +125,7 @@ void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedGPUContext(
     GLenum format =
         (kN32_SkColorType == kRGBA_8888_SkColorType) ? GL_RGBA : GL_BGRA_EXT;
     gl->TexImage2D(GL_TEXTURE_2D, 0, format, width_, height_, 0, format,
-                   GL_UNSIGNED_BYTE, 0);
+                   GL_UNSIGNED_BYTE, nullptr);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -154,7 +154,7 @@ void OffscreenCanvasResourceProvider::SetTransferableResourceToSharedGPUContext(
 void OffscreenCanvasResourceProvider::
     SetTransferableResourceToStaticBitmapImage(
         viz::TransferableResource& resource,
-        RefPtr<StaticBitmapImage> image) {
+        scoped_refptr<StaticBitmapImage> image) {
   DCHECK(image->IsTextureBacked());
   DCHECK(image->IsValid());
   image->EnsureMailbox(kVerifiedSyncToken);

@@ -132,7 +132,8 @@ class QuicChromiumClientSessionTest
         /*stream_factory=*/nullptr, &crypto_client_stream_factory_, &clock_,
         &transport_security_state_,
         base::WrapUnique(static_cast<QuicServerInfo*>(nullptr)), server_id_,
-        /*require_confirmation=*/false, kQuicYieldAfterPacketsRead,
+        /*require_confirmation=*/false, /*migrate_session_early*/ false,
+        /*migrate_session_on_network_change*/ false, kQuicYieldAfterPacketsRead,
         QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, DefaultQuicConfig(), &crypto_config_,
         "CONNECTION_UNKNOWN", base::TimeTicks::Now(), base::TimeTicks::Now(),
@@ -1153,8 +1154,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
       QuicIOVector(iov, arraysize(iov), 4), 0, 4);
   QuicStreamPeer::SetStreamBytesWritten(4, stream);
   session_->WritevData(stream, stream->id(),
-                       QuicIOVector(iov, arraysize(iov), 4), 0, NO_FIN,
-                       nullptr);
+                       QuicIOVector(iov, arraysize(iov), 4), 0, NO_FIN);
 
   EXPECT_TRUE(socket_data.AllReadDataConsumed());
   EXPECT_TRUE(socket_data.AllWriteDataConsumed());

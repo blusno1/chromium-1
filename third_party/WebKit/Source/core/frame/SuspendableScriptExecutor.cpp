@@ -31,7 +31,7 @@ class WebScriptExecutor : public SuspendableScriptExecutor::Executor {
 
   Vector<v8::Local<v8::Value>> Execute(LocalFrame*) override;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(sources_);
     SuspendableScriptExecutor::Executor::Trace(visitor);
   }
@@ -52,7 +52,7 @@ Vector<v8::Local<v8::Value>> WebScriptExecutor::Execute(LocalFrame* frame) {
   std::unique_ptr<UserGestureIndicator> indicator;
   if (user_gesture_) {
     indicator =
-        LocalFrame::CreateUserGesture(frame, UserGestureToken::kNewGesture);
+        Frame::NotifyUserActivation(frame, UserGestureToken::kNewGesture);
   }
 
   Vector<v8::Local<v8::Value>> results;
@@ -83,7 +83,7 @@ class V8FunctionExecutor : public SuspendableScriptExecutor::Executor {
   ScopedPersistent<v8::Function> function_;
   ScopedPersistent<v8::Value> receiver_;
   V8PersistentValueVector<v8::Value> args_;
-  RefPtr<UserGestureToken> gesture_token_;
+  scoped_refptr<UserGestureToken> gesture_token_;
 };
 
 V8FunctionExecutor::V8FunctionExecutor(v8::Isolate* isolate,
@@ -128,7 +128,7 @@ Vector<v8::Local<v8::Value>> V8FunctionExecutor::Execute(LocalFrame* frame) {
 
 SuspendableScriptExecutor* SuspendableScriptExecutor::Create(
     LocalFrame* frame,
-    RefPtr<DOMWrapperWorld> world,
+    scoped_refptr<DOMWrapperWorld> world,
     const HeapVector<ScriptSourceCode>& sources,
     bool user_gesture,
     WebScriptExecutionCallback* callback) {
@@ -242,7 +242,7 @@ void SuspendableScriptExecutor::Dispose() {
   Stop();
 }
 
-DEFINE_TRACE(SuspendableScriptExecutor) {
+void SuspendableScriptExecutor::Trace(blink::Visitor* visitor) {
   visitor->Trace(executor_);
   SuspendableTimer::Trace(visitor);
 }

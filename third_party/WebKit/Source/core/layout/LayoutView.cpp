@@ -347,9 +347,9 @@ void LayoutView::MapLocalToAncestor(const LayoutBoxModelObject* ancestor,
                                     TransformState& transform_state,
                                     MapCoordinatesFlags mode) const {
   if (!ancestor && mode & kUseTransforms &&
-      ShouldUseTransformFromContainer(0)) {
+      ShouldUseTransformFromContainer(nullptr)) {
     TransformationMatrix t;
-    GetTransformFromContainer(0, LayoutSize(), t);
+    GetTransformFromContainer(nullptr, LayoutSize(), t);
     transform_state.ApplyTransform(t);
   }
 
@@ -673,6 +673,13 @@ void LayoutView::CalculateScrollbarModes(ScrollbarMode& h_mode,
     // Framesets can't scroll.
     if (IsHTMLFrameSetElement(body) && body->GetLayoutObject())
       RETURN_SCROLLBAR_MODE(kScrollbarAlwaysOff);
+  }
+
+  if (document.Printing()) {
+    // When printing, frame-level scrollbars are never displayed.
+    // TODO(szager): Figure out the right behavior when printing an overflowing
+    // iframe.  https://bugs.chromium.org/p/chromium/issues/detail?id=777528
+    RETURN_SCROLLBAR_MODE(kScrollbarAlwaysOff);
   }
 
   if (LocalFrameView* frameView = GetFrameView()) {

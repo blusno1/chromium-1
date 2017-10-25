@@ -274,7 +274,7 @@ TEST_F(PaintInfoTest, LayerPaintInfo) {
     PaintInfo paint_info = PaintInfo::CreateChildPaintInfo(
         parent_paint_info, kViewBounds, gfx::Size(),
         PaintInfo::ScaleType::kScaleWithEdgeSnapping, true);
-    EXPECT_EQ(data.size, paint_info.paint_recording_size());
+    EXPECT_EQ(gfx::Rect(data.size), paint_info.paint_recording_bounds());
   }
 }
 

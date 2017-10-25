@@ -73,8 +73,8 @@ class CORE_EXPORT EventListenerMap {
 
   void CopyEventListenersNotCreatedFromMarkupToTarget(EventTarget*);
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   friend class EventListenerIterator;

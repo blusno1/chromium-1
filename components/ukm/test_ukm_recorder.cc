@@ -9,7 +9,10 @@
 
 #include "base/logging.h"
 #include "base/metrics/metrics_hashes.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/ukm/ukm_source.h"
+#include "services/metrics/public/cpp/delegating_ukm_recorder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ukm {
@@ -264,12 +267,12 @@ std::vector<int64_t> TestUkmRecorder::GetMetrics(
   return GetMetricValues(source.id(), event_name, metric_name);
 }
 
-TestAutoSetUkmRecorder::TestAutoSetUkmRecorder() {
-  UkmRecorder::Set(this);
+TestAutoSetUkmRecorder::TestAutoSetUkmRecorder() : self_ptr_factory_(this) {
+  DelegatingUkmRecorder::Get()->AddDelegate(self_ptr_factory_.GetWeakPtr());
 }
 
 TestAutoSetUkmRecorder::~TestAutoSetUkmRecorder() {
-  UkmRecorder::Set(nullptr);
+  DelegatingUkmRecorder::Get()->RemoveDelegate(this);
 };
 
 }  // namespace ukm

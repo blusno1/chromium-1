@@ -47,7 +47,7 @@ class VRDisplay final : public EventTargetWithInlineData,
   USING_PRE_FINALIZER(VRDisplay, Dispose);
 
  public:
-  ~VRDisplay();
+  ~VRDisplay() override;
 
   unsigned displayId() const { return display_id_; }
   const String& displayName() const { return display_name_; }
@@ -98,8 +98,8 @@ class VRDisplay final : public EventTargetWithInlineData,
 
   void OnMagicWindowVSync(double timestamp);
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*) override;
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  protected:
   friend class VRController;
@@ -131,8 +131,8 @@ class VRDisplay final : public EventTargetWithInlineData,
   void OnPresentChange();
 
   // VRSubmitFrameClient
-  void OnSubmitFrameTransferred();
-  void OnSubmitFrameRendered();
+  void OnSubmitFrameTransferred() override;
+  void OnSubmitFrameRendered() override;
 
   // VRDisplayClient
   void OnChanged(device::mojom::blink::VRDisplayInfoPtr) override;
@@ -198,7 +198,7 @@ class VRDisplay final : public EventTargetWithInlineData,
 
   // Used to keep the image alive until the next frame if using
   // waitForPreviousTransferToFinish.
-  RefPtr<Image> previous_image_;
+  scoped_refptr<Image> previous_image_;
 
   TraceWrapperMember<ScriptedAnimationController>
       scripted_animation_controller_;

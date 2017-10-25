@@ -7,11 +7,12 @@
 #include "core/layout/ng/inline/ng_bidi_paragraph.h"
 #include "core/layout/ng/inline/ng_inline_break_token.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
+#include "core/layout/ng/inline/ng_line_box_fragment_builder.h"
+#include "core/layout/ng/ng_base_fragment_builder.h"
 #include "core/layout/ng/ng_box_fragment.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_floats_utils.h"
-#include "core/layout/ng/ng_fragment_builder.h"
 #include "core/layout/ng/ng_length_utils.h"
 #include "core/layout/ng/ng_positioned_float.h"
 #include "core/style/ComputedStyle.h"
@@ -22,8 +23,8 @@ namespace blink {
 NGLineBreaker::NGLineBreaker(
     NGInlineNode node,
     const NGConstraintSpace& space,
-    NGFragmentBuilder* container_builder,
-    Vector<RefPtr<NGUnpositionedFloat>>* unpositioned_floats,
+    NGLineBoxFragmentBuilder* container_builder,
+    Vector<scoped_refptr<NGUnpositionedFloat>>* unpositioned_floats,
     const NGInlineBreakToken* break_token)
     : node_(node),
       constraint_space_(space),
@@ -378,7 +379,7 @@ void NGLineBreaker::BreakText(NGInlineItemResult* item_result,
     breaker.DisableSoftHyphen();
   available_width = std::max(LayoutUnit(0), available_width);
   ShapingLineBreaker::Result result;
-  RefPtr<ShapeResult> shape_result =
+  scoped_refptr<ShapeResult> shape_result =
       breaker.ShapeLine(item_result->start_offset, available_width, &result);
   if (result.has_hanging_spaces) {
     item_result->has_hanging_spaces = true;
@@ -435,7 +436,8 @@ void NGLineBreaker::AppendHyphen(const ComputedStyle& style,
   String hyphen_string = style.HyphenString();
   hyphen_string.Ensure16Bit();
   HarfBuzzShaper shaper(hyphen_string.Characters16(), hyphen_string.length());
-  RefPtr<ShapeResult> hyphen_result = shaper.Shape(&style.GetFont(), direction);
+  scoped_refptr<ShapeResult> hyphen_result =
+      shaper.Shape(&style.GetFont(), direction);
   line_info->SetLineEndShapeResult(std::move(hyphen_result), &style);
 }
 
@@ -539,12 +541,13 @@ NGLineBreaker::LineBreakState NGLineBreaker::HandleFloat(
 
   // TODO(ikilpatrick): Add support for float break tokens inside an inline
   // layout context.
-  RefPtr<NGUnpositionedFloat> unpositioned_float = NGUnpositionedFloat::Create(
-      constraint_space_.AvailableSize(),
-      constraint_space_.PercentageResolutionSize(),
-      constraint_space_.BfcOffset().line_offset,
-      constraint_space_.BfcOffset().line_offset, margins, node,
-      /* break_token */ nullptr);
+  scoped_refptr<NGUnpositionedFloat> unpositioned_float =
+      NGUnpositionedFloat::Create(constraint_space_.AvailableSize(),
+                                  constraint_space_.PercentageResolutionSize(),
+                                  constraint_space_.BfcOffset().line_offset,
+                                  constraint_space_.BfcOffset().line_offset,
+                                  margins, node,
+                                  /* break_token */ nullptr);
 
   LayoutUnit inline_size = ComputeInlineSizeForUnpositionedFloat(
       constraint_space_, unpositioned_float.get());
@@ -573,9 +576,7 @@ NGLineBreaker::LineBreakState NGLineBreaker::HandleFloat(
         PositionFloat(origin_block_offset, container_bfc_offset.block_offset,
                       unpositioned_float.get(), constraint_space_,
                       line_.exclusion_space.get());
-    container_builder_->AddChild(positioned_float.layout_result,
-                                 positioned_float.bfc_offset,
-                                 container_bfc_offset);
+    container_builder_->AddPositionedFloat(positioned_float);
 
     // We need to recalculate the available_width as the float probably
     // consumed space on the line.
@@ -793,7 +794,7 @@ void NGLineBreaker::TruncateOverflowingText(NGLineInfo* line_info) {
           ? String(&kHorizontalEllipsisCharacter, 1)
           : String(u"...");
   HarfBuzzShaper shaper(ellipsis.Characters16(), ellipsis.length());
-  RefPtr<ShapeResult> shape_result =
+  scoped_refptr<ShapeResult> shape_result =
       shaper.Shape(&font, line_info->BaseDirection());
 
   // Truncate the line to (available_width - ellipsis_width) using 'line-break:
@@ -880,12 +881,14 @@ void NGLineBreaker::SkipCollapsibleWhitespaces() {
   }
 }
 
-RefPtr<NGInlineBreakToken> NGLineBreaker::CreateBreakToken() const {
+scoped_refptr<NGInlineBreakToken> NGLineBreaker::CreateBreakToken(
+    std::unique_ptr<const NGInlineLayoutStateStack> state_stack) const {
   const Vector<NGInlineItem>& items = node_.Items();
   if (item_index_ >= items.size())
     return NGInlineBreakToken::Create(node_);
   return NGInlineBreakToken::Create(node_, item_index_, offset_,
-                                    line_.is_after_forced_break);
+                                    line_.is_after_forced_break,
+                                    std::move(state_stack));
 }
 
 }  // namespace blink

@@ -18,10 +18,10 @@ class PLATFORM_EXPORT CallbackFunctionBase
     : public GarbageCollectedFinalized<CallbackFunctionBase>,
       public TraceWrapperBase {
  public:
-  virtual ~CallbackFunctionBase();
+  virtual ~CallbackFunctionBase() = default;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor* visitor) {}
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
   v8::Local<v8::Function> v8Value(v8::Isolate* isolate) {
     return callback_.NewLocal(isolate);

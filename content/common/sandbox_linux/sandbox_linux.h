@@ -12,9 +12,8 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/posix/global_descriptors.h"
-#include "content/public/common/content_descriptors.h"
-#include "content/public/common/sandbox_linux.h"
-#include "gpu/config/gpu_info.h"
+#include "content/common/sandbox_linux/sandbox_seccomp_bpf_linux.h"
+#include "services/service_manager/sandbox/sandbox.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 
 #if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
@@ -33,10 +32,6 @@ namespace sandbox { class SetuidSandboxClient; }
 
 namespace content {
 
-inline int GetSandboxFD() {
-  return kSandboxIPCChannel + base::GlobalDescriptors::kBaseDescriptor;
-}
-
 // A singleton class to represent and change our sandboxing state for the
 // three main Linux sandboxes.
 // The sandboxing model allows using two layers of sandboxing. The first layer
@@ -47,7 +42,7 @@ inline int GetSandboxFD() {
 // InitializeSandbox(). InitializeSandbox() is also responsible for "sealing"
 // the first layer of sandboxing. That is, InitializeSandbox must always be
 // called to have any meaningful sandboxing at all.
-class LinuxSandbox {
+class SandboxLinux {
  public:
   // This is a list of sandbox IPC methods which the renderer may send to the
   // sandbox host. See https://chromium.googlesource.com/chromium/src/+/master/docs/linux_sandbox_ipc.md
@@ -63,7 +58,7 @@ class LinuxSandbox {
   };
 
   // Get our singleton instance.
-  static LinuxSandbox* GetInstance();
+  static SandboxLinux* GetInstance();
 
   // Do some initialization that can only be done before any of the sandboxes
   // are enabled. If using the setuid sandbox, this should be called manually
@@ -92,10 +87,11 @@ class LinuxSandbox {
   // an adequate policy depending on the process type and command line
   // arguments.
   // Currently the layer-2 sandbox is composed of seccomp-bpf and address space
-  // limitations. This will instantiate the LinuxSandbox singleton if it
+  // limitations. This will instantiate the SandboxLinux singleton if it
   // doesn't already exist.
   // This function should only be called without any thread running.
-  static bool InitializeSandbox(const gpu::GPUInfo* gpu_info = NULL);
+  static bool InitializeSandbox(SandboxSeccompBPF::PreSandboxHook hook,
+                                const SandboxSeccompBPF::Options& options);
 
   // Stop |thread| in a way that can be trusted by the sandbox.
   static void StopThread(base::Thread* thread);
@@ -123,11 +119,13 @@ class LinuxSandbox {
   // never be called with threads started. If we detect that threads have
   // started we will crash.
   bool StartSeccompBPF(service_manager::SandboxType sandbox_type,
-                       const gpu::GPUInfo* gpu_info);
+                       SandboxSeccompBPF::PreSandboxHook hook,
+                       const SandboxSeccompBPF::Options& options);
 
   // Limit the address space of the current process (and its children).
   // to make some vulnerabilities harder to exploit.
-  bool LimitAddressSpace(const std::string& process_type);
+  bool LimitAddressSpace(const std::string& process_type,
+                         const SandboxSeccompBPF::Options& options);
 
   // Returns a file descriptor to proc. The file descriptor is no longer valid
   // after the sandbox has been sealed.
@@ -143,20 +141,21 @@ class LinuxSandbox {
 #endif
 
  private:
-  friend struct base::DefaultSingletonTraits<LinuxSandbox>;
+  friend struct base::DefaultSingletonTraits<SandboxLinux>;
 
-  LinuxSandbox();
-  ~LinuxSandbox();
+  SandboxLinux();
+  ~SandboxLinux();
 
   // Some methods are static and get an instance of the Singleton. These
   // are the non-static implementations.
-  bool InitializeSandboxImpl(const gpu::GPUInfo* gpu_info);
+  bool InitializeSandboxImpl(SandboxSeccompBPF::PreSandboxHook hook,
+                             const SandboxSeccompBPF::Options& options);
   void StopThreadImpl(base::Thread* thread);
   // We must have been pre_initialized_ before using these.
   bool seccomp_bpf_supported() const;
   bool seccomp_bpf_with_tsync_supported() const;
   // Returns true if it can be determined that the current process has open
-  // directories that are not managed by the LinuxSandbox class. This would
+  // directories that are not managed by the SandboxLinux class. This would
   // be a vulnerability as it would allow to bypass the setuid sandbox.
   bool HasOpenDirectories() const;
   // The last part of the initialization is to make sure any temporary "hole"
@@ -187,7 +186,7 @@ class LinuxSandbox {
   std::unique_ptr<__sanitizer_sandbox_arguments> sanitizer_args_;
 #endif
 
-  DISALLOW_COPY_AND_ASSIGN(LinuxSandbox);
+  DISALLOW_COPY_AND_ASSIGN(SandboxLinux);
 };
 
 }  // namespace content

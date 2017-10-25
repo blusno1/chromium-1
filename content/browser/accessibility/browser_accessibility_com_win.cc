@@ -16,9 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/enum_variant.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/windows_version.h"
-#include "content/browser/accessibility/browser_accessibility_event_win.h"
 #include "content/browser/accessibility/browser_accessibility_manager_win.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/accessibility/browser_accessibility_win.h"
@@ -1715,30 +1713,10 @@ void BrowserAccessibilityComWin::ComputeStylesIfNeeded() {
   std::map<int, std::vector<base::string16>> attributes_map;
   if (owner()->PlatformIsLeaf() || owner()->IsSimpleTextControl()) {
     attributes_map[0] = ComputeTextAttributes();
-    std::map<int, std::vector<base::string16>> spelling_attributes =
+    const std::map<int, std::vector<base::string16>> spelling_attributes =
         GetSpellingAttributes();
-    for (auto& spelling_attribute : spelling_attributes) {
-      auto attributes_iterator = attributes_map.find(spelling_attribute.first);
-      if (attributes_iterator == attributes_map.end()) {
-        attributes_map[spelling_attribute.first] =
-            std::move(spelling_attribute.second);
-      } else {
-        std::vector<base::string16>& existing_attributes =
-            attributes_iterator->second;
-
-        // There might be a spelling attribute already in the list of text
-        // attributes, originating from "aria-invalid".
-        auto existing_spelling_attribute =
-            std::find(existing_attributes.begin(), existing_attributes.end(),
-                      L"invalid:false");
-        if (existing_spelling_attribute != existing_attributes.end())
-          existing_attributes.erase(existing_spelling_attribute);
-
-        existing_attributes.insert(existing_attributes.end(),
-                                   spelling_attribute.second.begin(),
-                                   spelling_attribute.second.end());
-      }
-    }
+    MergeSpellingIntoTextAttributes(spelling_attributes, 0 /* start_offset */,
+                                    &attributes_map);
     win_attributes_->offset_to_text_attributes.swap(attributes_map);
     return;
   }
@@ -1762,10 +1740,15 @@ void BrowserAccessibilityComWin::ComputeStylesIfNeeded() {
       }
     }
 
-    if (child->owner()->IsTextOnlyObject())
+    if (child->owner()->IsTextOnlyObject()) {
+      const std::map<int, std::vector<base::string16>> spelling_attributes =
+          child->GetSpellingAttributes();
+      MergeSpellingIntoTextAttributes(spelling_attributes, start_offset,
+                                      &attributes_map);
       start_offset += child->GetText().length();
-    else
+    } else {
       start_offset += 1;
+    }
   }
 
   win_attributes_->offset_to_text_attributes.swap(attributes_map);
@@ -1903,12 +1886,13 @@ void BrowserAccessibilityComWin::UpdateStep3FireEvents(
       FireNativeEvent(IA2_EVENT_TEXT_INSERTED);
     }
 
-    // Changing a static text node can affect the IAccessibleText hypertext
-    // of the parent node, so force an update on the parent.
+    // Changing a static text node can affect the IA2 hypertext of its parent
+    // and, if the node is in a simple text control, the hypertext of the text
+    // control itself.
     BrowserAccessibilityComWin* parent =
         ToBrowserAccessibilityComWin(owner()->PlatformGetParent());
-    if (parent && owner()->IsTextOnlyObject() &&
-        name() != old_win_attributes_->name) {
+    if (parent && (parent->owner()->HasState(ui::AX_STATE_EDITABLE) ||
+                   owner()->IsTextOnlyObject())) {
       parent->owner()->UpdatePlatformAttributes();
     }
   }
@@ -2211,6 +2195,39 @@ HRESULT BrowserAccessibilityComWin::GetStringAttributeAsBstr(
   return S_OK;
 }
 
+// static
+void BrowserAccessibilityComWin::MergeSpellingIntoTextAttributes(
+    const std::map<int, std::vector<base::string16>>& spelling_attributes,
+    int start_offset,
+    std::map<int, std::vector<base::string16>>* text_attributes) {
+  if (!text_attributes) {
+    NOTREACHED();
+    return;
+  }
+
+  for (const auto& spelling_attribute : spelling_attributes) {
+    int offset = start_offset + spelling_attribute.first;
+    const auto iterator = text_attributes->find(offset);
+    if (iterator == text_attributes->end()) {
+      text_attributes->emplace(offset, spelling_attribute.second);
+    } else {
+      std::vector<base::string16>& existing_attributes = iterator->second;
+      // There might be a spelling attribute already in the list of text
+      // attributes, originating from "aria-invalid", that is being overwritten
+      // by a spelling marker.
+      auto existing_spelling_attribute =
+          std::find(existing_attributes.begin(), existing_attributes.end(),
+                    L"invalid:false");
+      if (existing_spelling_attribute != existing_attributes.end())
+        existing_attributes.erase(existing_spelling_attribute);
+
+      existing_attributes.insert(existing_attributes.end(),
+                                 spelling_attribute.second.begin(),
+                                 spelling_attribute.second.end());
+    }
+  }
+}
+
 // Static
 void BrowserAccessibilityComWin::SanitizeStringAttributeForIA2(
     const base::string16& input,
@@ -2356,9 +2373,10 @@ bool BrowserAccessibilityComWin::IsListBoxOptionOrMenuListOption() {
 }
 
 void BrowserAccessibilityComWin::FireNativeEvent(LONG win_event_type) const {
-  (new BrowserAccessibilityEventWin(BrowserAccessibilityEvent::FromTreeChange,
-                                    ui::AX_EVENT_NONE, win_event_type, owner()))
-      ->Fire();
+  if (owner()->PlatformIsChildOfLeaf())
+    return;
+  Manager()->ToBrowserAccessibilityManagerWin()->FireWinAccessibilityEvent(
+      win_event_type, owner());
 }
 
 BrowserAccessibilityComWin* ToBrowserAccessibilityComWin(

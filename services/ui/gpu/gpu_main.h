@@ -80,7 +80,6 @@ class GpuMain : public gpu::GpuSandboxHelper, public mojom::GpuMain {
   // mojom::GpuMain implementation:
   void CreateGpuService(viz::mojom::GpuServiceRequest request,
                         viz::mojom::GpuHostPtr gpu_host,
-                        const gpu::GpuPreferences& preferences,
                         mojo::ScopedSharedBufferHandle activity_flags) override;
   void CreateFrameSinkManager(
       viz::mojom::FrameSinkManagerRequest request,
@@ -104,7 +103,8 @@ class GpuMain : public gpu::GpuSandboxHelper, public mojom::GpuMain {
   // gpu::GpuSandboxHelper:
   void PreSandboxStartup() override;
   bool EnsureSandboxInitialized(gpu::GpuWatchdogThread* watchdog_thread,
-                                const gpu::GPUInfo* gpu_info) override;
+                                const gpu::GPUInfo* gpu_info,
+                                const gpu::GpuPreferences& gpu_prefs) override;
 
   Delegate* const delegate_;
 

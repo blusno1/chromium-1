@@ -20,6 +20,7 @@
 
 namespace cc {
 namespace {
+const int kMaxRegionComplexity = 256;
 
 SkRect MapRect(const SkMatrix& matrix, const SkRect& src) {
   SkRect dst;
@@ -88,8 +89,12 @@ class DiscardableImageGenerator {
   std::vector<std::pair<DrawImage, gfx::Rect>> TakeImages() {
     return std::move(image_set_);
   }
-  base::flat_map<PaintImage::Id, gfx::Rect> TakeImageIdToRectMap() {
-    return std::move(image_id_to_rect_);
+  base::flat_map<PaintImage::Id, Region> TakeImageIdToRegionMap() {
+    return std::move(image_id_to_region_);
+  }
+  base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
+  TakeDecodingModeMap() {
+    return std::move(decoding_mode_map_);
   }
   std::vector<DiscardableImageMap::AnimatedImageMetadata>
   TakeAnimatedImagesMetadata() {
@@ -290,7 +295,20 @@ class DiscardableImageGenerator {
       color_stats_srgb_image_count_++;
     }
 
-    image_id_to_rect_[paint_image.stable_id()].Union(image_rect);
+    auto& region = image_id_to_region_[paint_image.stable_id()];
+    region.Union(image_rect);
+    if (region.GetRegionComplexity() >= kMaxRegionComplexity)
+      region = region.bounds();
+
+    auto decoding_mode_it = decoding_mode_map_.find(paint_image.stable_id());
+    // Use the decoding mode if we don't have one yet, otherwise use the more
+    // conservative one of the two existing ones.
+    if (decoding_mode_it == decoding_mode_map_.end()) {
+      decoding_mode_map_[paint_image.stable_id()] = paint_image.decoding_mode();
+    } else {
+      decoding_mode_it->second = PaintImage::GetConservative(
+          decoding_mode_it->second, paint_image.decoding_mode());
+    }
 
     if (paint_image.ShouldAnimate()) {
       animated_images_metadata_.emplace_back(
@@ -305,9 +323,10 @@ class DiscardableImageGenerator {
   }
 
   std::vector<std::pair<DrawImage, gfx::Rect>> image_set_;
-  base::flat_map<PaintImage::Id, gfx::Rect> image_id_to_rect_;
+  base::flat_map<PaintImage::Id, Region> image_id_to_region_;
   std::vector<DiscardableImageMap::AnimatedImageMetadata>
       animated_images_metadata_;
+  base::flat_map<PaintImage::Id, PaintImage::DecodingMode> decoding_mode_map_;
 
   // Statistics about the number of images and pixels that will require color
   // conversion if the target color space is not sRGB.
@@ -332,8 +351,9 @@ void DiscardableImageMap::Generate(const PaintOpBuffer* paint_op_buffer,
   DiscardableImageGenerator generator(bounds.right(), bounds.bottom(),
                                       paint_op_buffer);
   generator.RecordColorHistograms();
-  image_id_to_rect_ = generator.TakeImageIdToRectMap();
+  image_id_to_region_ = generator.TakeImageIdToRegionMap();
   animated_images_metadata_ = generator.TakeAnimatedImagesMetadata();
+  decoding_mode_map_ = generator.TakeDecodingModeMap();
   all_images_are_srgb_ = generator.all_images_are_srgb();
   auto images = generator.TakeImages();
   images_rtree_.Build(
@@ -344,20 +364,27 @@ void DiscardableImageMap::Generate(const PaintOpBuffer* paint_op_buffer,
          size_t index) { return items[index].first; });
 }
 
+base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
+DiscardableImageMap::TakeDecodingModeMap() {
+  return std::move(decoding_mode_map_);
+}
+
 void DiscardableImageMap::GetDiscardableImagesInRect(
     const gfx::Rect& rect,
     std::vector<const DrawImage*>* images) const {
   *images = images_rtree_.SearchRefs(rect);
 }
 
-gfx::Rect DiscardableImageMap::GetRectForImage(PaintImage::Id image_id) const {
-  const auto& it = image_id_to_rect_.find(image_id);
-  return it == image_id_to_rect_.end() ? gfx::Rect() : it->second;
+const Region& DiscardableImageMap::GetRegionForImage(
+    PaintImage::Id image_id) const {
+  static const Region kEmptyRegion;
+  auto it = image_id_to_region_.find(image_id);
+  return it == image_id_to_region_.end() ? kEmptyRegion : it->second;
 }
 
 void DiscardableImageMap::Reset() {
-  image_id_to_rect_.clear();
-  image_id_to_rect_.shrink_to_fit();
+  image_id_to_region_.clear();
+  image_id_to_region_.shrink_to_fit();
   images_rtree_.Reset();
 }
 

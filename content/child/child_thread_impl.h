@@ -49,14 +49,7 @@ class ScopedIPCSupport;
 }  // namespace mojo
 
 namespace content {
-class ChildResourceMessageFilter;
-class FileSystemDispatcher;
 class InProcessChildThreadParams;
-class NotificationDispatcher;
-class ServiceWorkerMessageFilter;
-class QuotaDispatcher;
-class QuotaMessageFilter;
-class ResourceDispatcher;
 class ThreadSafeSender;
 
 // The main thread of a child process derives from this class.
@@ -120,22 +113,6 @@ class CONTENT_EXPORT ChildThreadImpl
                          base::ThreadPriority priority);
 #endif
 
-  ResourceDispatcher* resource_dispatcher() const {
-    return resource_dispatcher_.get();
-  }
-
-  FileSystemDispatcher* file_system_dispatcher() const {
-    return file_system_dispatcher_.get();
-  }
-
-  QuotaDispatcher* quota_dispatcher() const {
-    return quota_dispatcher_.get();
-  }
-
-  NotificationDispatcher* notification_dispatcher() const {
-    return notification_dispatcher_.get();
-  }
-
   IPC::SyncMessageFilter* sync_message_filter() const {
     return sync_message_filter_.get();
   }
@@ -145,18 +122,6 @@ class CONTENT_EXPORT ChildThreadImpl
   // the main thread.
   ThreadSafeSender* thread_safe_sender() const {
     return thread_safe_sender_.get();
-  }
-
-  ServiceWorkerMessageFilter* service_worker_message_filter() const {
-    return service_worker_message_filter_.get();
-  }
-
-  QuotaMessageFilter* quota_message_filter() const {
-    return quota_message_filter_.get();
-  }
-
-  ChildResourceMessageFilter* child_resource_message_filter() const {
-    return resource_message_filter_.get();
   }
 
   base::MessageLoop* message_loop() const { return message_loop_; }
@@ -213,6 +178,9 @@ class CONTENT_EXPORT ChildThreadImpl
 
   void Init(const Options& options);
 
+  // Sets chrome_trace_event_agent_ if necessary.
+  void InitTracing();
+
   // We create the channel first without connecting it so we can add filters
   // prior to any messages being received, then connect it afterwards.
   void ConnectChannel(mojo::edk::IncomingBrokerClientInvitation* invitation);
@@ -254,26 +222,11 @@ class CONTENT_EXPORT ChildThreadImpl
   // ChildThreadImpl.
   ChildThreadMessageRouter router_;
 
-  // Handles resource loads for this process.
-  std::unique_ptr<ResourceDispatcher> resource_dispatcher_;
-
   // The OnChannelError() callback was invoked - the channel is dead, don't
   // attempt to communicate.
   bool on_channel_error_called_;
 
   base::MessageLoop* message_loop_;
-
-  std::unique_ptr<FileSystemDispatcher> file_system_dispatcher_;
-
-  std::unique_ptr<QuotaDispatcher> quota_dispatcher_;
-
-  scoped_refptr<ChildResourceMessageFilter> resource_message_filter_;
-
-  scoped_refptr<ServiceWorkerMessageFilter> service_worker_message_filter_;
-
-  scoped_refptr<QuotaMessageFilter> quota_message_filter_;
-
-  scoped_refptr<NotificationDispatcher> notification_dispatcher_;
 
   std::unique_ptr<base::PowerMonitor> power_monitor_;
 

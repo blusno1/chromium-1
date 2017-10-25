@@ -29,7 +29,7 @@
 
 #include "base/time/time.h"
 #include "platform/Histogram.h"
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
 #include "platform/loader/fetch/FetchContext.h"
@@ -55,9 +55,9 @@
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 
 using blink::WebURLRequest;
 
@@ -376,8 +376,10 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
       resource_request.GetRequestContext(), resource,
       FetchContext::ResourceResponseType::kFromMemoryCache);
 
-  if (resource->EncodedSize() > 0)
-    Context().DispatchDidReceiveData(identifier, 0, resource->EncodedSize());
+  if (resource->EncodedSize() > 0) {
+    Context().DispatchDidReceiveData(identifier, nullptr,
+                                     resource->EncodedSize());
+  }
 
   Context().DispatchDidFinishLoading(
       identifier, 0, 0, resource->GetResponse().DecodedBodyLength());
@@ -576,9 +578,8 @@ ResourceFetcher::PrepareRequestResult ResourceFetcher::PrepareRequest(
       resource_type, params.GetResourceRequest(), ResourcePriority::kNotVisible,
       params.Defer(), params.GetSpeculativePreloadType(),
       params.IsLinkPreload()));
-  if (resource_request.GetCachePolicy() ==
-      WebCachePolicy::kUseProtocolCachePolicy) {
-    resource_request.SetCachePolicy(Context().ResourceRequestCachePolicy(
+  if (resource_request.GetCacheMode() == mojom::FetchCacheMode::kDefault) {
+    resource_request.SetCacheMode(Context().ResourceRequestCachePolicy(
         resource_request, resource_type, params.Defer()));
   }
   if (resource_request.GetRequestContext() ==
@@ -668,7 +669,7 @@ Resource* ResourceFetcher::RequestResource(
 
   if (!params.IsSpeculativePreload()) {
     // Only log if it's not for speculative preload.
-    Context().RecordLoadingActivity(identifier, resource_request, resource_type,
+    Context().RecordLoadingActivity(resource_request, resource_type,
                                     params.Options().initiator_info.name);
   }
 
@@ -801,10 +802,10 @@ void ResourceFetcher::InitializeRevalidation(
   const AtomicString& e_tag =
       resource->GetResponse().HttpHeaderField(HTTPNames::ETag);
   if (!last_modified.IsEmpty() || !e_tag.IsEmpty()) {
-    DCHECK_NE(WebCachePolicy::kBypassingCache,
-              revalidating_request.GetCachePolicy());
-    if (revalidating_request.GetCachePolicy() ==
-        WebCachePolicy::kValidatingCacheData) {
+    DCHECK_NE(mojom::FetchCacheMode::kBypassCache,
+              revalidating_request.GetCacheMode());
+    if (revalidating_request.GetCacheMode() ==
+        mojom::FetchCacheMode::kValidateCache) {
       revalidating_request.SetHTTPHeaderField(HTTPNames::Cache_Control,
                                               "max-age=0");
     }
@@ -1065,8 +1066,8 @@ ResourceFetcher::DetermineRevalidationPolicyInternal(
   if (allow_stale_resources_)
     return kUse;
 
-  // WebCachePolicy::ReturnCacheDataElseLoad uses the cache no matter what.
-  if (request.GetCachePolicy() == WebCachePolicy::kReturnCacheDataElseLoad)
+  // FORCE_CACHE uses the cache no matter what.
+  if (request.GetCacheMode() == mojom::FetchCacheMode::kForceCache)
     return kUse;
 
   // Don't reuse resources with Cache-control: no-store.
@@ -1091,11 +1092,11 @@ ResourceFetcher::DetermineRevalidationPolicyInternal(
       return kUse;
   }
 
-  // WebCachePolicy::BypassingCache always reloads
-  if (request.GetCachePolicy() == WebCachePolicy::kBypassingCache) {
+  // RELOAD always reloads
+  if (request.GetCacheMode() == mojom::FetchCacheMode::kBypassCache) {
     RESOURCE_LOADING_DVLOG(1) << "ResourceFetcher::DetermineRevalidationPolicy "
                                  "reloading due to "
-                                 "WebCachePolicy::BypassingCache.";
+                                 "FetchCacheMode::kBypassCache";
     return kReload;
   }
 
@@ -1128,7 +1129,7 @@ ResourceFetcher::DetermineRevalidationPolicyInternal(
 
   // Check if the cache headers requires us to revalidate (cache expiration for
   // example).
-  if (request.GetCachePolicy() == WebCachePolicy::kValidatingCacheData ||
+  if (request.GetCacheMode() == mojom::FetchCacheMode::kValidateCache ||
       existing_resource.MustRevalidateDueToCacheHeaders() ||
       request.CacheControlContainsNoCache()) {
     // Revalidation is harmful for non-matched preloads because it may lead to
@@ -1416,7 +1417,7 @@ bool ResourceFetcher::StartLoad(Resource* resource) {
     // to prevent unintended state transitions.
     Resource::RevalidationStartForbiddenScope
         revalidation_start_forbidden_scope(resource);
-    ScriptForbiddenIfMainThreadScope script_forbidden_scope;
+    ScriptForbiddenScope script_forbidden_scope;
 
     if (!Context().ShouldLoadNewResource(resource->GetType()) &&
         IsMainThread()) {
@@ -1724,7 +1725,7 @@ void ResourceFetcher::StopFetchingIncludingKeepaliveLoaders() {
   StopFetchingInternal(StopFetchingTarget::kIncludingKeepaliveLoaders);
 }
 
-DEFINE_TRACE(ResourceFetcher) {
+void ResourceFetcher::Trace(blink::Visitor* visitor) {
   visitor->Trace(context_);
   visitor->Trace(scheduler_);
   visitor->Trace(archive_);

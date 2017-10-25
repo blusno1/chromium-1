@@ -32,7 +32,6 @@ import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrl
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.StateChangeReason;
@@ -97,8 +96,8 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         mRecyclerView.setBackgroundColor(backgroundColor);
 
         TouchEnabledDelegate touchEnabledDelegate = activity.getBottomSheet()::setTouchEnabled;
-        mContextMenuManager =
-                new ContextMenuManager(activity, navigationDelegate, touchEnabledDelegate);
+        mContextMenuManager = new ContextMenuManager(
+                navigationDelegate, touchEnabledDelegate, activity::closeContextMenu);
         activity.getWindowAndroid().addContextMenuCloseListener(mContextMenuManager);
         mSuggestionsUiDelegate.addDestructionObserver(() -> {
             activity.getWindowAndroid().removeContextMenuCloseListener(mContextMenuManager);
@@ -107,7 +106,7 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         UiConfig uiConfig = new UiConfig(mRecyclerView);
         mRecyclerView.init(uiConfig, mContextMenuManager);
 
-        OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfile(profile);
+        OfflinePageBridge offlinePageBridge = depsFactory.getOfflinePageBridge(profile);
 
         mSuggestionsCarousel =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_SUGGESTIONS_CAROUSEL)
@@ -326,8 +325,7 @@ public class SuggestionsBottomSheetContent implements BottomSheet.BottomSheetCon
         boolean showLogo = mSearchProviderHasLogo && mNewTabShown && mSheet.isSheetOpen()
                 && !mActivity.getTabModelSelector().isIncognitoSelected() && mIsAttachedToWindow
                 && !mSheet.isSmallScreen()
-                && mActivity.getTabModelSelector().getModel(false).getCount() > 0
-                && FeatureUtilities.isChromeHomeDoodleEnabled();
+                && mActivity.getTabModelSelector().getModel(false).getCount() > 0;
 
         if (!showLogo) {
             mLogoView.setVisibility(View.GONE);

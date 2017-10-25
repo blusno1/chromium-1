@@ -69,8 +69,8 @@ class MODULES_EXPORT IDBDatabase final
                              IDBDatabaseCallbacks*,
                              v8::Isolate*);
   ~IDBDatabase() override;
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   // Overwrites the database metadata, including object store and index
   // metadata. Used to pass metadata to the database when it is opened.
@@ -144,7 +144,8 @@ class MODULES_EXPORT IDBDatabase final
   }
   void RenameObjectStore(int64_t store_id, const String& new_name);
   void RevertObjectStoreCreation(int64_t object_store_id);
-  void RevertObjectStoreMetadata(RefPtr<IDBObjectStoreMetadata> old_metadata);
+  void RevertObjectStoreMetadata(
+      scoped_refptr<IDBObjectStoreMetadata> old_metadata);
 
   // Will return nullptr if this database is stopped.
   WebIDBDatabase* Backend() const { return backend_.get(); }

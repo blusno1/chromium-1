@@ -13,6 +13,8 @@ aggregate_vector_icons("omnibox_vector_icons") {
   icon_directory = "vector_icons"
 
   icons = [
+    "blank.1x.icon",
+    "blank.icon",
     "calculator.1x.icon",
     "calculator.icon",
     "extension_app.1x.icon",
@@ -134,8 +136,8 @@ static_library("browser") {
 
   public_deps = [
     "//components/history/core/browser",
-    "//components/metrics/proto",
     "//components/omnibox/common",
+    "//third_party/metrics_proto",
   ]
   deps = [
     ":in_memory_url_index_cache_proto",
@@ -230,11 +232,11 @@ static_library("test_support") {
     "//components/bookmarks/test",
     "//components/history/core/browser",
     "//components/history/core/test",
-    "//components/metrics/proto",
     "//components/search_engines",
     "//net",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/metrics_proto",
     "//ui/base",
   ]
 }

@@ -8,8 +8,6 @@
 #include <memory>
 #include "core/CoreExport.h"
 #include "platform/geometry/IntRect.h"
-#include "platform/geometry/IntSizeHash.h"
-#include "platform/geometry/LayoutSize.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/ImageOrientation.h"
@@ -53,7 +51,7 @@ class CORE_EXPORT ImageResourceContent final
   }
 
   // Creates ImageResourceContent from an already loaded image.
-  static ImageResourceContent* CreateLoaded(RefPtr<blink::Image>);
+  static ImageResourceContent* CreateLoaded(scoped_refptr<blink::Image>);
 
   static ImageResourceContent* Fetch(FetchParameters&, ResourceFetcher*);
 
@@ -61,22 +59,20 @@ class CORE_EXPORT ImageResourceContent final
   blink::Image* GetImage();
   bool HasImage() const { return image_.get(); }
 
-  static std::pair<blink::Image*, float> BrokenImage(
-      float
-          device_scale_factor);  // Returns an image and the image's resolution
-                                 // scale factor.
-
   bool UsesImageContainerSize() const;
   bool ImageHasRelativeSize() const;
   // The device pixel ratio we got from the server for this image, or 1.0.
   float DevicePixelRatioHeaderValue() const;
   bool HasDevicePixelRatioHeaderValue() const;
 
-  // This method takes a zoom multiplier that can be used to increase the
-  // natural size of the image by the zoom.
-  LayoutSize ImageSize(
-      RespectImageOrientationEnum should_respect_image_orientation,
-      float multiplier);
+  // Returns the intrinsic width and height of the image, or 0x0 if no image
+  // exists. If the image is a BitmapImage, then this corresponds to the
+  // physical pixel dimensions of the image. If the image is an SVGImage, this
+  // does not quite return the intrinsic width/height, but rather a concrete
+  // object size resolved using a default object size of 300x150.
+  // TODO(fs): Make SVGImages return proper intrinsic width/height.
+  IntSize IntrinsicSize(
+      RespectImageOrientationEnum should_respect_image_orientation);
 
   void UpdateImageAnimationPolicy();
 
@@ -87,7 +83,7 @@ class CORE_EXPORT ImageResourceContent final
     return size_available_ != Image::kSizeUnavailable;
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
   // Content status and deriving predicates.
   // https://docs.google.com/document/d/1O-fB83mrE0B_V8gzXNqHgmRLCvstTB4MMi3RnVLr8bE/edit#heading=h.6cyqmir0f30h
@@ -113,6 +109,9 @@ class CORE_EXPORT ImageResourceContent final
   bool IsAccessAllowed(SecurityOrigin*);
   const ResourceResponse& GetResponse() const;
   const ResourceError& GetResourceError() const;
+  // DEPRECATED: ImageResourceContents consumers shouldn't need to worry about
+  // whether the underlying Resource is being revalidated.
+  bool IsCacheValidator() const;
 
   // For FrameSerializer.
   bool HasCacheControlNoStoreHeader() const;
@@ -151,7 +150,7 @@ class CORE_EXPORT ImageResourceContent final
     // Only occurs when UpdateImage or ClearAndUpdateImage is specified.
     kShouldDecodeError,
   };
-  WARN_UNUSED_RESULT UpdateImageResult UpdateImage(RefPtr<SharedBuffer>,
+  WARN_UNUSED_RESULT UpdateImageResult UpdateImage(scoped_refptr<SharedBuffer>,
                                                    ResourceStatus,
                                                    UpdateImageOption,
                                                    bool all_data_received,
@@ -164,7 +163,7 @@ class CORE_EXPORT ImageResourceContent final
   void SetImageResourceInfo(ImageResourceInfo*);
 
   ResourcePriority PriorityFromObservers() const;
-  RefPtr<const SharedBuffer> ResourceBuffer() const;
+  scoped_refptr<const SharedBuffer> ResourceBuffer() const;
   bool ShouldUpdateImageImmediately() const;
   bool HasObservers() const {
     return !observers_.IsEmpty() || !finished_observers_.IsEmpty();
@@ -174,7 +173,7 @@ class CORE_EXPORT ImageResourceContent final
   }
 
  private:
-  explicit ImageResourceContent(RefPtr<blink::Image> = nullptr);
+  explicit ImageResourceContent(scoped_refptr<blink::Image> = nullptr);
 
   // ImageObserver
   void DecodedSizeChangedTo(const blink::Image*, size_t new_size) override;
@@ -183,7 +182,7 @@ class CORE_EXPORT ImageResourceContent final
   void ChangedInRect(const blink::Image*, const IntRect&) override;
   void AsyncLoadCompleted(const blink::Image*) override;
 
-  RefPtr<Image> CreateImage(bool is_multipart);
+  scoped_refptr<Image> CreateImage(bool is_multipart);
   void ClearImage();
 
   enum NotifyFinishOption { kShouldNotifyFinish, kDoNotNotifyFinish };
@@ -212,7 +211,7 @@ class CORE_EXPORT ImageResourceContent final
 
   Member<ImageResourceInfo> info_;
 
-  RefPtr<blink::Image> image_;
+  scoped_refptr<blink::Image> image_;
 
   HashCountedSet<ImageResourceObserver*> observers_;
   HashCountedSet<ImageResourceObserver*> finished_observers_;

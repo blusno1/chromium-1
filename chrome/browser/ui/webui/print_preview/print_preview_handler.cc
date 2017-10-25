@@ -58,9 +58,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/printing/common/print_messages.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -419,10 +419,6 @@ void PrintPreviewHandler::RegisterMessages() {
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getPrinterCapabilities",
-      base::Bind(&PrintPreviewHandler::HandleGetPrinterCapabilities,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "getExtensionOrPrivetPrinterCapabilities",
       base::Bind(&PrintPreviewHandler::HandleGetPrinterCapabilities,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
@@ -1087,7 +1083,7 @@ void PrintPreviewHandler::SendPrinterSetup(
   auto caps = base::MakeUnique<base::DictionaryValue>();
   if (destination_info &&
       destination_info->Remove(printing::kSettingCapabilities, &caps_value) &&
-      caps_value->IsType(base::Value::Type::DICTIONARY)) {
+      caps_value->is_dict()) {
     caps = base::DictionaryValue::From(std::move(caps_value));
   } else {
     LOG(WARNING) << "Printer setup failed";
@@ -1239,12 +1235,6 @@ void PrintPreviewHandler::OnPrintRequestCancelled() {
   HandleCancelPendingPrintRequest(nullptr);
 }
 
-#if BUILDFLAG(ENABLE_BASIC_PRINT_DIALOG)
-void PrintPreviewHandler::ShowSystemDialog() {
-  HandleShowSystemDialog(NULL);
-}
-#endif
-
 void PrintPreviewHandler::ClearInitiatorDetails() {
   WebContents* initiator = GetInitiator();
   if (!initiator)
@@ -1350,10 +1340,9 @@ void PrintPreviewHandler::OnGotExtensionPrinterInfo(
 }
 
 void PrintPreviewHandler::OnPrintResult(const std::string& callback_id,
-                                        bool success,
                                         const base::Value& error) {
-  if (success) {
-    ResolveJavascriptCallback(base::Value(callback_id), base::Value());
+  if (error.is_none()) {
+    ResolveJavascriptCallback(base::Value(callback_id), error);
     return;
   }
   RejectJavascriptCallback(base::Value(callback_id), error);

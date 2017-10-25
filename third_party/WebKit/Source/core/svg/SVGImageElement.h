@@ -42,7 +42,7 @@ class CORE_EXPORT SVGImageElement final
 
  public:
   DECLARE_NODE_FACTORY(SVGImageElement);
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   bool CurrentFrameHasSingleSecurityOrigin() const;
 
@@ -64,8 +64,6 @@ class CORE_EXPORT SVGImageElement final
   ImageResourceContent* CachedImage() const {
     return GetImageLoader().GetContent();
   }
-
-  Image::ImageDecodingMode GetDecodingMode() const { return decoding_mode_; }
 
  private:
   explicit SVGImageElement(Document&);
@@ -102,7 +100,6 @@ class CORE_EXPORT SVGImageElement final
   Member<SVGAnimatedPreserveAspectRatio> preserve_aspect_ratio_;
 
   Member<SVGImageLoader> image_loader_;
-  Image::ImageDecodingMode decoding_mode_;
 };
 
 }  // namespace blink

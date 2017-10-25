@@ -199,8 +199,16 @@ ChromePasswordManagerClient::~ChromePasswordManagerClient() {}
 bool ChromePasswordManagerClient::IsPasswordManagementEnabledForCurrentPage()
     const {
   DCHECK(web_contents());
-  content::NavigationEntry* entry =
-      web_contents()->GetController().GetLastCommittedEntry();
+  content::NavigationEntry* entry = nullptr;
+  switch (password_manager_.entry_to_check()) {
+    case password_manager::PasswordManager::NavigationEntryToCheck::
+        LAST_COMMITTED:
+      entry = web_contents()->GetController().GetLastCommittedEntry();
+      break;
+    case password_manager::PasswordManager::NavigationEntryToCheck::VISIBLE:
+      entry = web_contents()->GetController().GetVisibleEntry();
+      break;
+  }
   bool is_enabled = false;
   if (!entry) {
     // TODO(gcasto): Determine if fix for crbug.com/388246 is relevant here.
@@ -480,7 +488,7 @@ void ChromePasswordManagerClient::LogPasswordReuseDetectedEvent() {
 #endif
 
 ukm::UkmRecorder* ChromePasswordManagerClient::GetUkmRecorder() {
-  return g_browser_process->ukm_recorder();
+  return ukm::UkmRecorder::Get();
 }
 
 ukm::SourceId ChromePasswordManagerClient::GetUkmSourceId() {

@@ -53,7 +53,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   QuicPacketCreator(QuicConnectionId connection_id,
                     QuicFramer* framer,
-                    QuicBufferAllocator* buffer_allocator,
                     DelegateInterface* delegate);
 
   ~QuicPacketCreator();
@@ -113,14 +112,12 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // QuicStreamFrame to the returned SerializedPacket.  Sets
   // |num_bytes_consumed| to the number of bytes consumed to create the
   // QuicStreamFrame.
-  void CreateAndSerializeStreamFrame(
-      QuicStreamId id,
-      const QuicIOVector& iov,
-      QuicStreamOffset iov_offset,
-      QuicStreamOffset stream_offset,
-      bool fin,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> listener,
-      size_t* num_bytes_consumed);
+  void CreateAndSerializeStreamFrame(QuicStreamId id,
+                                     const QuicIOVector& iov,
+                                     QuicStreamOffset iov_offset,
+                                     QuicStreamOffset stream_offset,
+                                     bool fin,
+                                     size_t* num_bytes_consumed);
 
   // Returns true if there are frames pending to be serialized.
   bool HasPendingFrames() const;
@@ -153,12 +150,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   // Identical to AddSavedFrame, but allows the frame to be padded.
   bool AddPaddedSavedFrame(const QuicFrame& frame);
-
-  // Adds |listener| to the next serialized packet and notifies the listener
-  // with |length| as the number of acked bytes.
-  void AddAckListener(
-      QuicReferenceCountedPointer<QuicAckListenerInterface> listener,
-      QuicPacketLength length);
 
   // Creates a version negotiation packet which supports |supported_versions|.
   std::unique_ptr<QuicEncryptedPacket> SerializeVersionNegotiationPacket(
@@ -265,8 +256,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   DelegateInterface* delegate_;
   DebugDelegate* debug_delegate_;
   QuicFramer* framer_;
-
-  QuicBufferAllocator* const buffer_allocator_;
 
   // Controls whether version should be included while serializing the packet.
   bool send_version_in_packet_;

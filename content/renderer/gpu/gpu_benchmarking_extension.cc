@@ -29,10 +29,10 @@
 #include "content/common/input/synthetic_smooth_drag_gesture_params.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/common/input/synthetic_tap_gesture_params.h"
-#include "content/public/child/v8_value_converter.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/chrome_object_extensions_utils.h"
 #include "content/public/renderer/render_thread.h"
+#include "content/public/renderer/v8_value_converter.h"
 #include "content/renderer/gpu/actions_parser.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/render_thread_impl.h"
@@ -67,7 +67,7 @@
 #if defined(OS_WIN) && !defined(NDEBUG)
 #include <XpsObjectModel.h>
 #include <objbase.h>
-#include "base/win/scoped_comptr.h"
+#include <wrl/client.h>
 #endif
 
 using blink::WebCanvas;
@@ -357,8 +357,8 @@ bool BeginSmoothScroll(v8::Isolate* isolate,
     blink::WebMouseEvent mouseMove(
         blink::WebInputEvent::kMouseMove, blink::WebInputEvent::kNoModifiers,
         ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
-    mouseMove.SetPositionInWidget((contentRect.x + contentRect.width / 2),
-                                  (contentRect.y + contentRect.height / 2));
+    mouseMove.SetPositionInWidget((contentRect.x + contentRect.width / 2.0),
+                                  (contentRect.y + contentRect.height / 2.0));
     context.web_view()->HandleInputEvent(
         blink::WebCoalescedInputEvent(mouseMove));
     context.web_view()->SetCursorVisibilityState(true);
@@ -513,7 +513,7 @@ static sk_sp<SkDocument> MakeXPSDocument(SkWStream* s) {
                        COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
   // In non-sandboxed mode, we will need to create and hold on to the
   // factory before entering the sandbox.
-  base::win::ScopedComPtr<IXpsOMObjectFactory> factory;
+  Microsoft::WRL::ComPtr<IXpsOMObjectFactory> factory;
   HRESULT hr = ::CoCreateInstance(CLSID_XpsOMObjectFactory, nullptr,
                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
   if (FAILED(hr) || !factory) {

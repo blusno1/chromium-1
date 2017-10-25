@@ -57,13 +57,13 @@ class MODULES_EXPORT ServiceWorker final
                              std::unique_ptr<WebServiceWorker::Handle>);
 
   ~ServiceWorker() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   // Eager finalization needed to promptly release owned WebServiceWorker.
   EAGERLY_FINALIZE();
 
   void postMessage(ScriptState*,
-                   RefPtr<SerializedScriptValue> message,
+                   scoped_refptr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
   static bool CanTransferArrayBuffersAndImageBitmaps() { return false; }

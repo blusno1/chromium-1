@@ -36,9 +36,9 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "components/sync/base/sync_prefs.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -116,7 +116,7 @@ OneClickSigninSyncStarter::OneClickSigninSyncStarter(
   BrowserList::AddObserver(this);
   Initialize(profile, browser);
 
-  DCHECK(!refresh_token.empty() || signin::IsAccountConsistencyDiceEnabled());
+  DCHECK(!refresh_token.empty() || signin::IsDiceMigrationEnabled());
   SigninManagerFactory::GetForProfile(profile_)->StartSignInWithRefreshToken(
       refresh_token, gaia_id, email, password,
       base::Bind(&OneClickSigninSyncStarter::ConfirmSignin,
@@ -144,7 +144,7 @@ OneClickSigninSyncStarter::OneClickSigninSyncStarter(
           GURL() /* current_url */,
           GURL() /* continue_url */,
           callback) {
-  DCHECK(signin::IsAccountConsistencyDiceEnabled());
+  DCHECK(signin::IsDiceMigrationEnabled());
 }
 
 void OneClickSigninSyncStarter::OnBrowserRemoved(Browser* browser) {
@@ -201,7 +201,7 @@ void OneClickSigninSyncStarter::ConfirmSignin(ProfileMode profile_mode,
       policy::UserPolicySigninService* policy_service =
           policy::UserPolicySigninServiceFactory::GetForProfile(profile_);
       if (oauth_token.empty()) {
-        DCHECK(signin::IsAccountConsistencyDiceEnabled());
+        DCHECK(signin::IsDiceMigrationEnabled());
         policy_service->RegisterForPolicyWithAccountId(
             signin->GetUsernameForAuthInProgress(),
             signin->GetAccountIdForAuthInProgress(),

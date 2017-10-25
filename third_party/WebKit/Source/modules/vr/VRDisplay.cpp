@@ -72,7 +72,7 @@ class VRDisplayFrameRequestCallback
     vr_display_->OnMagicWindowVSync(monotonic_time);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(vr_display_);
 
     FrameRequestCallbackCollection::FrameCallback::Trace(visitor);
@@ -685,7 +685,7 @@ void VRDisplay::submitFrame() {
   }
 
   TRACE_EVENT_BEGIN0("gpu", "VRDisplay::GetStaticBitmapImage");
-  RefPtr<Image> image_ref = rendering_context_->GetStaticBitmapImage();
+  scoped_refptr<Image> image_ref = rendering_context_->GetStaticBitmapImage();
   TRACE_EVENT_END0("gpu", "VRDisplay::GetStaticBitmapImage");
 
   // Hardware-accelerated rendering should always be texture backed,
@@ -842,7 +842,7 @@ void VRDisplay::OnActivate(device::mojom::blink::VRDisplayEventReason reason,
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator;
   if (reason == device::mojom::blink::VRDisplayEventReason::MOUNTED)
-    gesture_indicator = LocalFrame::CreateUserGesture(doc->GetFrame());
+    gesture_indicator = Frame::NotifyUserActivation(doc->GetFrame());
 
   navigator_vr_->DispatchVREvent(VRDisplayEvent::Create(
       EventTypeNames::vrdisplayactivate, true, false, this, reason));
@@ -857,10 +857,10 @@ void VRDisplay::OnDeactivate(
 
 void VRDisplay::ProcessScheduledWindowAnimations(double timestamp) {
   TRACE_EVENT1("gpu", "VRDisplay::window.rAF", "frame", vr_frame_id_);
-  auto doc = navigator_vr_->GetDocument();
+  auto* doc = navigator_vr_->GetDocument();
   if (!doc)
     return;
-  auto page = doc->GetPage();
+  auto* page = doc->GetPage();
   if (!page)
     return;
 
@@ -1029,7 +1029,7 @@ bool VRDisplay::FocusedOrPresenting() {
   return navigator_vr_->IsFocused() || is_presenting_;
 }
 
-DEFINE_TRACE(VRDisplay) {
+void VRDisplay::Trace(blink::Visitor* visitor) {
   visitor->Trace(navigator_vr_);
   visitor->Trace(capabilities_);
   visitor->Trace(stage_parameters_);
@@ -1043,7 +1043,7 @@ DEFINE_TRACE(VRDisplay) {
   ContextLifecycleObserver::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(VRDisplay) {
+void VRDisplay::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(scripted_animation_controller_);
   EventTargetWithInlineData::TraceWrappers(visitor);
 }

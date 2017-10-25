@@ -29,7 +29,7 @@ class DummyModulator : public Modulator {
  public:
   DummyModulator();
   virtual ~DummyModulator();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   ScriptModuleResolver* GetScriptModuleResolver() override;
   WebTaskRunner* TaskRunner() override;
@@ -52,6 +52,7 @@ class DummyModulator : public Modulator {
                           const KURL&,
                           const ReferrerScriptInfo&,
                           ScriptPromiseResolver*) override;
+  ModuleImportMeta HostGetImportMetaProperties(ScriptModule) const override;
   ScriptModule CompileModule(const String& script,
                              const String& url_str,
                              AccessControlStatus,

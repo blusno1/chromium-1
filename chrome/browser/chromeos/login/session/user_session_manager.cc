@@ -65,11 +65,11 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/tether/tether_service.h"
+#include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/sth_set_component_installer.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/google/google_brand_chromeos.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
-#include "chrome/browser/net/crl_set_fetcher.h"
 #include "chrome/browser/net/nss_context.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -666,6 +666,9 @@ void UserSessionManager::SetAppModeChromeClientOAuthInfo(
 
 void UserSessionManager::DoBrowserLaunch(Profile* profile,
                                          LoginDisplayHost* login_host) {
+  session_manager::SessionManager::Get()->SetSessionState(
+      session_manager::SessionState::LOGGED_IN_NOT_ACTIVE);
+
   ui_shown_time_ = base::Time::Now();
   DoBrowserLaunchInternal(profile, login_host, false /* locale_pref_checked */);
 }
@@ -1265,13 +1268,6 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
 
   profile->OnLogin();
 
-  // Skip LOGGED_IN_NOT_ACTIVE state for kiosk launching so that login dialog
-  // such as network config during launch is put on top of the login screen.
-  if (!user_manager->IsLoggedInAsKioskApp()) {
-    session_manager::SessionManager::Get()->SetSessionState(
-        session_manager::SessionState::LOGGED_IN_NOT_ACTIVE);
-  }
-
   // Send the notification before creating the browser so additional objects
   // that need the profile (e.g. the launcher) can be created first.
   content::NotificationService::current()->Notify(
@@ -1538,9 +1534,8 @@ void UserSessionManager::InitializeCRLSetFetcher(
     path = ProfileHelper::GetProfilePathByUserIdHash(username_hash);
     component_updater::ComponentUpdateService* cus =
         g_browser_process->component_updater();
-    CRLSetFetcher* crl_set = g_browser_process->crl_set_fetcher();
-    if (crl_set && cus)
-      crl_set->StartInitialLoad(cus, path);
+    if (cus)
+      component_updater::RegisterCRLSetComponent(cus, path);
   }
 }
 
@@ -1924,19 +1919,6 @@ void UserSessionManager::RunCallbackOnLocaleLoaded(
     InputEventsBlocker* /* input_events_blocker */,
     const locale_util::LanguageSwitchResult& /* result */) {
   callback.Run();
-}
-
-// static
-bool UserSessionManager::NeedRestartToApplyPerSessionFlagsForProfile(
-    const Profile* profile) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kLoginUser))
-    return false;
-
-  const base::CommandLine user_flags(
-      CreatePerSessionCommandLine(const_cast<Profile*>(profile)));
-  std::set<base::CommandLine::StringType> command_line_difference;
-  return NeedRestartToApplyPerSessionFlags(user_flags,
-                                           &command_line_difference);
 }
 
 void UserSessionManager::RemoveProfileForTesting(Profile* profile) {

@@ -37,7 +37,7 @@ class FirstLetterPseudoElement;
 // We cache offsets so that text transformations can be applied in such a way
 // that we can recover the original unaltered string from our corresponding DOM
 // node.
-class LayoutTextFragment final : public LayoutText {
+class CORE_EXPORT LayoutTextFragment final : public LayoutText {
  public:
   LayoutTextFragment(Node*, StringImpl*, int start_offset, int length);
   LayoutTextFragment(Node*, StringImpl*);
@@ -51,6 +51,13 @@ class LayoutTextFragment final : public LayoutText {
 
   bool IsTextFragment() const override { return true; }
 
+  bool ContainsCaretOffset(int) const override;
+  bool IsBeforeNonCollapsedCharacter(unsigned) const override;
+  bool IsAfterNonCollapsedCharacter(unsigned) const override;
+  int CaretMinOffset() const override;
+  int CaretMaxOffset() const override;
+  unsigned ResolvedTextLength() const override;
+
   unsigned Start() const { return start_; }
   unsigned FragmentLength() const { return fragment_length_; }
 
@@ -59,15 +66,17 @@ class LayoutTextFragment final : public LayoutText {
   void SetContentString(StringImpl*);
   StringImpl* ContentString() const { return content_string_.get(); }
   // The complete text is all of the text in the associated DOM text node.
-  RefPtr<StringImpl> CompleteText() const;
+  scoped_refptr<StringImpl> CompleteText() const;
   // The fragment text is the text which will be used by this
   // LayoutTextFragment. For things like first-letter this may differ from the
   // completeText as we maybe using only a portion of the text nodes content.
 
-  RefPtr<StringImpl> OriginalText() const override;
+  scoped_refptr<StringImpl> OriginalText() const override;
 
-  void SetText(RefPtr<StringImpl>, bool force = false) override;
-  void SetTextFragment(RefPtr<StringImpl>, unsigned start, unsigned length);
+  void SetText(scoped_refptr<StringImpl>, bool force = false) override;
+  void SetTextFragment(scoped_refptr<StringImpl>,
+                       unsigned start,
+                       unsigned length);
 
   void TransformText() override;
 
@@ -102,7 +111,7 @@ class LayoutTextFragment final : public LayoutText {
   unsigned start_;
   unsigned fragment_length_;
   bool is_remaining_text_layout_object_;
-  RefPtr<StringImpl> content_string_;
+  scoped_refptr<StringImpl> content_string_;
   // Reference back to FirstLetterPseudoElement; cleared by
   // FirstLetterPseudoElement::detachLayoutTree() if it goes away first.
   UntracedMember<FirstLetterPseudoElement> first_letter_pseudo_element_;

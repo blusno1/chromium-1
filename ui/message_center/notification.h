@@ -416,13 +416,17 @@ class MESSAGE_CENTER_EXPORT Notification {
     return optional_fields_;
   }
 
+  void set_delegate(scoped_refptr<NotificationDelegate> delegate) {
+    DCHECK(!delegate_);
+    delegate_ = delegate;
+  }
+
   // Set the priority to SYSTEM. The system priority user needs to call this
   // method explicitly, to avoid setting it accidentally.
   void SetSystemPriority();
 
   // Delegate actions.
   void Display() const { delegate()->Display(); }
-  bool HasClickedListener() const { return delegate()->HasClickedListener(); }
   void Click() const { delegate()->Click(); }
   void ButtonClick(int index) const { delegate()->ButtonClick(index); }
   void Close(bool by_user) const { delegate()->Close(by_user); }

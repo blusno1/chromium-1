@@ -20,7 +20,7 @@ class PaintLayerPainterTest : public PaintControllerPaintTest {
                                     bool expected_value) {
     // The optimization to skip painting for effectively-invisible content is
     // limited to SPv1.
-    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+    if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled())
       return;
 
     PaintLayer* target_layer =
@@ -30,8 +30,8 @@ class PaintLayerPainterTest : public PaintControllerPaintTest {
     bool invisible =
         PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info);
     EXPECT_EQ(expected_value, invisible)
-        << "Failed painted output visibility [spv2_enabled="
-        << RuntimeEnabledFeatures::SlimmingPaintV2Enabled()
+        << "Failed painted output visibility [spv175_enabled="
+        << RuntimeEnabledFeatures::SlimmingPaintV175Enabled()
         << ", expected=" << expected_value << ", actual=" << invisible << "].";
   }
 
@@ -77,16 +77,18 @@ TEST_P(PaintLayerPainterTest, CachedSubsequence) {
   auto& content2 = *GetLayoutObjectByElementId("content2");
   auto& filler2 = *GetLayoutObjectByElementId("filler2");
 
-  DisplayItemClient* background_display_item_client = nullptr;
-
+  const DisplayItemClient* background_display_item_client;
+  const DisplayItemClient* background_chunk_client;
   if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
       RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
     // With SPv1 and RLS, the document background uses the scrolling contents
     // layer as its DisplayItemClient.
     background_display_item_client =
         GetLayoutView().Layer()->GraphicsLayerBacking();
+    background_chunk_client = background_display_item_client;
   } else {
     background_display_item_client = &GetLayoutView();
+    background_chunk_client = GetLayoutView().Layer();
   }
 
   EXPECT_DISPLAY_LIST(
@@ -99,19 +101,18 @@ TEST_P(PaintLayerPainterTest, CachedSubsequence) {
       TestDisplayItem(content2, kBackgroundType),
       TestDisplayItem(filler2, kBackgroundType));
 
-  auto* root_layer = GetLayoutView().Layer();
   auto* container1_layer = ToLayoutBoxModelObject(container1).Layer();
   auto* filler1_layer = ToLayoutBoxModelObject(filler1).Layer();
   auto* container2_layer = ToLayoutBoxModelObject(container2).Layer();
   auto* filler2_layer = ToLayoutBoxModelObject(filler2).Layer();
 
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     // Check that new paint chunks were forced for |container1| and
     // |container2|.
-    Vector<PaintChunk> paint_chunks =
+    const auto& paint_chunks =
         RootPaintController().GetPaintArtifact().PaintChunks();
     EXPECT_EQ(5u, paint_chunks.size());
-    EXPECT_EQ(root_layer, &paint_chunks[0].id.client);
+    EXPECT_EQ(background_chunk_client, &paint_chunks[0].id.client);
     EXPECT_EQ(container1_layer, &paint_chunks[1].id.client);
     EXPECT_EQ(filler1_layer, &paint_chunks[2].id.client);
     EXPECT_EQ(container2_layer, &paint_chunks[3].id.client);
@@ -138,12 +139,12 @@ TEST_P(PaintLayerPainterTest, CachedSubsequence) {
       TestDisplayItem(content2, kBackgroundType),
       TestDisplayItem(filler2, kBackgroundType));
 
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     // We should still have the paint chunks forced by the cached subsequences.
     Vector<PaintChunk> paint_chunks =
         RootPaintController().GetPaintArtifact().PaintChunks();
     EXPECT_EQ(5u, paint_chunks.size());
-    EXPECT_EQ(root_layer, &paint_chunks[0].id.client);
+    EXPECT_EQ(background_chunk_client, &paint_chunks[0].id.client);
     EXPECT_EQ(container1_layer, &paint_chunks[1].id.client);
     EXPECT_EQ(filler1_layer, &paint_chunks[2].id.client);
     EXPECT_EQ(container2_layer, &paint_chunks[3].id.client);
@@ -380,7 +381,7 @@ TEST_P(PaintLayerPainterTest, PaintPhaseOutline) {
   EXPECT_FALSE(non_self_painting_layer.NeedsPaintPhaseDescendantOutlines());
   EXPECT_TRUE(DisplayItemListContains(
       RootPaintController().GetDisplayItemList(), self_painting_layer_object,
-      DisplayItem::PaintPhaseToDrawingType(kPaintPhaseSelfOutlineOnly)));
+      DisplayItem::PaintPhaseToDrawingType(PaintPhase::kSelfOutlineOnly)));
 
   // needsPaintPhaseDescendantOutlines should be set when any descendant on the
   // same layer has outline.
@@ -392,7 +393,7 @@ TEST_P(PaintLayerPainterTest, PaintPhaseOutline) {
   Paint();
   EXPECT_TRUE(DisplayItemListContains(
       RootPaintController().GetDisplayItemList(), outline_div,
-      DisplayItem::PaintPhaseToDrawingType(kPaintPhaseSelfOutlineOnly)));
+      DisplayItem::PaintPhaseToDrawingType(PaintPhase::kSelfOutlineOnly)));
 
   // needsPaintPhaseDescendantOutlines should be reset when no outline is
   // actually painted.
@@ -559,7 +560,7 @@ TEST_P(PaintLayerPainterTest, PaintPhaseBlockBackground) {
   ToHTMLElement(background_div.GetNode())
       ->setAttribute(HTMLNames::styleAttr, style_without_background);
   GetDocument().View()->UpdateAllLifecyclePhases();
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() ||
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled() ||
       !RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
     // In RootLayerScrolls+SPv1, the empty paint phase optimization doesn't
     // apply to the composited scrolling layer so we don't need this check.

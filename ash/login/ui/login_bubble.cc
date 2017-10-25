@@ -10,6 +10,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/styled_label.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -43,7 +44,7 @@ views::Label* CreateLabel(const base::string16& message, SkColor color) {
 
 class LoginErrorBubbleView : public LoginBaseBubbleView {
  public:
-  LoginErrorBubbleView(const base::string16& message, views::View* anchor_view)
+  LoginErrorBubbleView(views::StyledLabel* label, views::View* anchor_view)
       : LoginBaseBubbleView(anchor_view) {
     set_anchor_view_insets(gfx::Insets(kAnchorViewVerticalSpacingDp, 0));
 
@@ -57,8 +58,7 @@ class LoginErrorBubbleView : public LoginBaseBubbleView {
     alert_view->AddChildView(alert_icon);
     AddChildView(alert_view);
 
-    views::Label* label = CreateLabel(message, SK_ColorWHITE);
-    label->SetMultiLine(true);
+    label->set_auto_color_readability_enabled(false);
     AddChildView(label);
   }
 
@@ -97,6 +97,19 @@ class LoginUserMenuView : public LoginBaseBubbleView {
   DISALLOW_COPY_AND_ASSIGN(LoginUserMenuView);
 };
 
+class LoginTooltipView : public LoginBaseBubbleView {
+ public:
+  LoginTooltipView(const base::string16& message, views::View* anchor_view)
+      : LoginBaseBubbleView(anchor_view) {
+    views::Label* text = CreateLabel(message, SK_ColorWHITE);
+    text->SetMultiLine(true);
+    AddChildView(text);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(LoginTooltipView);
+};
+
 }  // namespace
 
 LoginBubble::LoginBubble() {
@@ -109,10 +122,10 @@ LoginBubble::~LoginBubble() {
     bubble_view_->GetWidget()->RemoveObserver(this);
 }
 
-void LoginBubble::ShowErrorBubble(const base::string16& message,
+void LoginBubble::ShowErrorBubble(views::StyledLabel* label,
                                   views::View* anchor_view) {
   DCHECK_EQ(bubble_view_, nullptr);
-  bubble_view_ = new LoginErrorBubbleView(message, anchor_view);
+  bubble_view_ = new LoginErrorBubbleView(label, anchor_view);
   Show();
 }
 
@@ -128,6 +141,15 @@ void LoginBubble::ShowUserMenu(const base::string16& message,
   Show();
 }
 
+void LoginBubble::ShowTooltip(const base::string16& message,
+                              views::View* anchor_view) {
+  if (bubble_view_)
+    Close();
+
+  bubble_view_ = new LoginTooltipView(message, anchor_view);
+  Show();
+}
+
 void LoginBubble::Close() {
   if (bubble_view_)
     bubble_view_->GetWidget()->Close();
@@ -138,13 +160,13 @@ bool LoginBubble::IsVisible() {
 }
 
 void LoginBubble::OnWidgetClosing(views::Widget* widget) {
+  bubble_opener_ = nullptr;
   widget->RemoveObserver(this);
   bubble_view_ = nullptr;
 }
 
 void LoginBubble::OnWidgetDestroying(views::Widget* widget) {
-  widget->RemoveObserver(this);
-  bubble_view_ = nullptr;
+  OnWidgetClosing(widget);
 }
 
 void LoginBubble::OnMouseEvent(ui::MouseEvent* event) {

@@ -82,7 +82,7 @@ class MODULES_EXPORT IDBTransaction final
       IDBOpenDBRequest*,
       const IDBDatabaseMetadata& old_metadata);
   ~IDBTransaction() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   static WebIDBTransactionMode StringToMode(const String&);
 
@@ -251,13 +251,13 @@ class MODULES_EXPORT IDBTransaction final
   // The metadata of object stores when they are opened by this transaction.
   //
   // Only valid for versionchange transactions.
-  HeapHashMap<Member<IDBObjectStore>, RefPtr<IDBObjectStoreMetadata>>
+  HeapHashMap<Member<IDBObjectStore>, scoped_refptr<IDBObjectStoreMetadata>>
       old_store_metadata_;
 
   // The metadata of deleted object stores without IDBObjectStore instances.
   //
   // Only valid for versionchange transactions.
-  Vector<RefPtr<IDBObjectStoreMetadata>> deleted_object_stores_;
+  Vector<scoped_refptr<IDBObjectStoreMetadata>> deleted_object_stores_;
 
   // Tracks the indexes deleted by this transaction.
   //

@@ -49,12 +49,12 @@ class V8CustomXPathNSResolver final : public XPathNSResolver {
 
   AtomicString lookupNamespaceURI(const String& prefix) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   V8CustomXPathNSResolver(ScriptState*, v8::Local<v8::Object> resolver);
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   v8::Local<v8::Object> resolver_;  // Handle to resolver object.
 };
 

@@ -360,7 +360,7 @@ void BlinkGCPluginConsumer::CheckLeftMostDerived(RecordInfo* info) {
   CXXRecordDecl* left_most = GetLeftMostBase(info->record());
   if (!left_most)
     return;
-  if (!Config::IsGCBase(left_most->getName()))
+  if (!Config::IsGCBase(left_most->getName()) || Config::IsGCMixinBase(left_most->getName()))
     reporter_.ClassMustLeftMostlyDeriveGC(info);
 }
 
@@ -590,7 +590,6 @@ void BlinkGCPluginConsumer::DumpClass(RecordInfo* info) {
                        (static_cast<RawPtr*>(Parent())->HasReferenceType() ?
                         "reference" : "raw") :
                    Parent()->IsRefPtr() ? "ref" :
-                   Parent()->IsOwnPtr() ? "own" :
                    Parent()->IsUniquePtr() ? "unique" :
                    (Parent()->IsMember() || Parent()->IsWeakMember()) ? "mem" :
                    "val");

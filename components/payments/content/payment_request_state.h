@@ -38,7 +38,6 @@ class PaymentInstrument;
 // what the merchant has specified, as input into the "is ready to pay"
 // computation.
 class PaymentRequestState : public PaymentResponseHelper::Delegate,
-                            public autofill::AddressNormalizer::Delegate,
                             public PaymentRequestSpec::Observer {
  public:
   // Any class call add itself as Observer via AddObserver() and receive
@@ -89,11 +88,6 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
   // PaymentResponseHelper::Delegate
   void OnPaymentResponseReady(
       mojom::PaymentResponsePtr payment_response) override;
-
-  // autofill::AddressNormalizer::Delegate
-  void OnAddressNormalized(
-      const autofill::AutofillProfile& normalized_profile) override;
-  void OnCouldNotNormalize(const autofill::AutofillProfile& profile) override;
 
   // PaymentRequestSpec::Observer
   void OnStartUpdating(PaymentRequestSpec::UpdateReason reason) override {}
@@ -182,7 +176,7 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
 
   bool is_ready_to_pay() { return is_ready_to_pay_; }
 
-  // Checks whehter getting all available instruments is finished.
+  // Checks whether getting all available instruments is finished.
   bool is_get_all_instruments_finished() {
     return get_all_instruments_finished_;
   }
@@ -248,6 +242,9 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
   // specified supported payment methods and call the |callback| to return the
   // result.
   void CheckCanMakePayment(CanMakePaymentCallback callback);
+
+  void OnAddressNormalized(bool success,
+                           const autofill::AutofillProfile& normalized_profile);
 
   bool is_ready_to_pay_;
 

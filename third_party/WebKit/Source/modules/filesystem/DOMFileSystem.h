@@ -38,7 +38,6 @@
 #include "modules/filesystem/DOMFileSystemBase.h"
 #include "modules/filesystem/EntriesCallback.h"
 #include "platform/bindings/ActiveScriptWrappable.h"
-#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebTraceLocation.h"
@@ -52,7 +51,6 @@ class FileWriterCallback;
 
 class MODULES_EXPORT DOMFileSystem final
     : public DOMFileSystemBase,
-      public ScriptWrappable,
       public ActiveScriptWrappable<DOMFileSystem>,
       public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
@@ -90,7 +88,7 @@ class MODULES_EXPORT DOMFileSystem final
   static void ScheduleCallback(ExecutionContext* execution_context,
                                WTF::Closure task);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   DOMFileSystem(ExecutionContext*,

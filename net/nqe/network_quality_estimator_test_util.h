@@ -48,7 +48,6 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
       const std::map<std::string, std::string>& variation_params,
       bool allow_local_host_requests_for_tests,
       bool allow_smaller_responses_for_tests,
-      bool add_default_platform_observations,
       std::unique_ptr<BoundTestNetLog> net_log);
 
   TestNetworkQualityEstimator(
@@ -56,7 +55,6 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
       const std::map<std::string, std::string>& variation_params,
       bool allow_local_host_requests_for_tests,
       bool allow_smaller_responses_for_tests,
-      bool add_default_platform_observations,
       bool suppress_notifications_for_testing,
       std::unique_ptr<BoundTestNetLog> net_log);
 
@@ -228,7 +226,7 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
 
   using NetworkQualityEstimator::SetTickClockForTesting;
   using NetworkQualityEstimator::OnConnectionTypeChanged;
-  using NetworkQualityEstimator::OnUpdatedRTTAvailable;
+  using NetworkQualityEstimator::OnUpdatedTransportRTTAvailable;
 
  private:
   class LocalHttpTestServer : public EmbeddedTestServer {

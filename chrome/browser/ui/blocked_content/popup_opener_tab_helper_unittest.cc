@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/blocked_content/popup_opener_tab_helper.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -21,6 +22,9 @@
 #include "chrome/browser/ui/blocked_content/popup_tracker.h"
 #include "chrome/browser/ui/blocked_content/tab_under_navigation_throttle.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "chrome/test/base/testing_browser_process.h"
+#include "components/rappor/public/rappor_parameters.h"
+#include "components/rappor/test_rappor_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_utils.h"
@@ -34,7 +38,9 @@
 class InfoBarAndroid;
 
 constexpr char kTabUnderVisibleTime[] = "Tab.TabUnder.VisibleTime";
+constexpr char kTabUnderVisibleTimeBefore[] = "Tab.TabUnder.VisibleTimeBefore";
 constexpr char kPopupToTabUnder[] = "Tab.TabUnder.PopupToTabUnderTime";
+constexpr char kTabUnderAction[] = "Tab.TabUnderAction";
 
 class PopupOpenerTabHelperTest : public ChromeRenderViewHostTestHarness {
  public:
@@ -121,6 +127,9 @@ TEST_F(PopupOpenerTabHelperTest, LogVisibleTime) {
 TEST_F(PopupOpenerTabHelperTest, SimpleTabUnder_LogsMetrics) {
   NavigateAndCommitWithoutGesture(GURL("https://first.test/"));
 
+  // Spend 1s on the page before doing anything.
+  raw_clock()->Advance(base::TimeDelta::FromSeconds(1));
+
   // Popup and then navigate 50ms after.
   SimulatePopup();
   raw_clock()->Advance(base::TimeDelta::FromMilliseconds(50));
@@ -132,6 +141,7 @@ TEST_F(PopupOpenerTabHelperTest, SimpleTabUnder_LogsMetrics) {
   raw_clock()->Advance(base::TimeDelta::FromMilliseconds(100));
   DeleteContents();
 
+  histogram_tester()->ExpectUniqueSample(kTabUnderVisibleTimeBefore, 1050, 1);
   histogram_tester()->ExpectUniqueSample(kTabUnderVisibleTime, 100, 1);
   histogram_tester()->ExpectUniqueSample(kPopupToTabUnder, 50, 1);
 }
@@ -493,8 +503,6 @@ TEST_F(BlockTabUnderTest, MultipleRedirectAttempts_AreBlocked) {
 
 TEST_F(BlockTabUnderTest,
        MultipleRedirectAttempts_AreBlockedAndLogsActionMetrics) {
-  const char kTabUnderAction[] = "Tab.TabUnderAction";
-
   EXPECT_TRUE(NavigateAndCommitWithoutGesture(GURL("https://first.test/")));
   histogram_tester()->ExpectUniqueSample(
       kTabUnderAction,
@@ -516,4 +524,46 @@ TEST_F(BlockTabUnderTest,
       kTabUnderAction,
       static_cast<int>(TabUnderNavigationThrottle::Action::kDidTabUnder), 3);
   histogram_tester()->ExpectTotalCount(kTabUnderAction, 10);
+}
+
+// kDidTabUnder is not reported multiple times for redirects.
+TEST_F(BlockTabUnderTest, DisableFeature_LogsDidTabUnder) {
+  DisableFeature();
+  EXPECT_TRUE(NavigateAndCommitWithoutGesture(GURL("https://first.test/")));
+  SimulatePopup();
+
+  const GURL a_url("https://a.com/");
+  const GURL b_url("https://b.com/");
+  std::unique_ptr<content::NavigationSimulator> simulator =
+      content::NavigationSimulator::CreateRendererInitiated(a_url, main_rfh());
+  simulator->SetHasUserGesture(false);
+  simulator->Redirect(b_url);
+  simulator->Redirect(a_url);
+  simulator->Commit();
+  histogram_tester()->ExpectBucketCount(
+      kTabUnderAction,
+      static_cast<int>(TabUnderNavigationThrottle::Action::kStarted), 2);
+  histogram_tester()->ExpectBucketCount(
+      kTabUnderAction,
+      static_cast<int>(TabUnderNavigationThrottle::Action::kDidTabUnder), 1);
+  histogram_tester()->ExpectTotalCount(kTabUnderAction, 3);
+}
+
+TEST_F(BlockTabUnderTest, LogsRappor) {
+  rappor::TestRapporServiceImpl test_rappor_service;
+  TestingBrowserProcess::GetGlobal()->SetRapporServiceImpl(
+      &test_rappor_service);
+
+  const GURL first_url("https://first.test/");
+  EXPECT_TRUE(NavigateAndCommitWithoutGesture(first_url));
+  SimulatePopup();
+  const GURL blocked_url("https://example.test/");
+  EXPECT_FALSE(NavigateAndCommitWithoutGesture(blocked_url));
+
+  std::string sample;
+  rappor::RapporType type;
+  EXPECT_TRUE(test_rappor_service.GetRecordedSampleForMetric(
+      "Tab.TabUnder.Opener", &sample, &type));
+  EXPECT_EQ(first_url.host(), sample);
+  EXPECT_EQ(rappor::UMA_RAPPOR_TYPE, type);
 }

@@ -61,11 +61,11 @@ const int kCommitErrorThreshold = 8;
 // Limits on the cache size and number of areas in memory, over which the areas
 // are purged.
 #if defined(OS_ANDROID)
-const unsigned kMaxStorageAreaCount = 10;
-const size_t kMaxCacheSize = 2 * 1024 * 1024;
+const unsigned kMaxLocalStorageAreaCount = 10;
+const size_t kMaxLocalStorageCacheSize = 2 * 1024 * 1024;
 #else
-const unsigned kMaxStorageAreaCount = 50;
-const size_t kMaxCacheSize = 20 * 1024 * 1024;
+const unsigned kMaxLocalStorageAreaCount = 50;
+const size_t kMaxLocalStorageCacheSize = 20 * 1024 * 1024;
 #endif
 
 static const uint8_t kUTF16Format = 0;
@@ -498,9 +498,9 @@ void LocalStorageContextMojo::PurgeUnusedWrappersIfNeeded() {
 
   CachePurgeReason purge_reason = CachePurgeReason::NotNeeded;
 
-  if (total_cache_size > kMaxCacheSize)
+  if (total_cache_size > kMaxLocalStorageCacheSize)
     purge_reason = CachePurgeReason::SizeLimitExceeded;
-  else if (level_db_wrappers_.size() > kMaxStorageAreaCount)
+  else if (level_db_wrappers_.size() > kMaxLocalStorageAreaCount)
     purge_reason = CachePurgeReason::AreaCountLimitExceeded;
   else if (is_low_end_device_)
     purge_reason = CachePurgeReason::InactiveOnLowEndDevice;
@@ -903,7 +903,7 @@ void LocalStorageContextMojo::OnGotMetaData(
     LocalStorageUsageInfo info;
     info.origin = GURL(leveldb::Uint8VectorToStdString(row->key).substr(
         arraysize(kMetaPrefix)));
-    origins.insert(url::Origin(info.origin));
+    origins.insert(url::Origin::Create(info.origin));
     if (!info.origin.is_valid()) {
       // TODO(mek): Deal with database corruption.
       continue;
@@ -941,7 +941,7 @@ void LocalStorageContextMojo::OnGotStorageUsageForDeletePhysicalOrigin(
     const url::Origin& origin,
     std::vector<LocalStorageUsageInfo> usage) {
   for (const auto& info : usage) {
-    url::Origin origin_candidate(info.origin);
+    url::Origin origin_candidate = url::Origin::Create(info.origin);
     if (!origin_candidate.IsSameOriginWith(origin) &&
         origin_candidate.IsSamePhysicalOriginWith(origin))
       DeleteStorage(origin_candidate);
@@ -958,7 +958,7 @@ void LocalStorageContextMojo::OnGotStorageUsageForShutdown(
     if (!special_storage_policy_->IsStorageSessionOnly(info.origin))
       continue;
 
-    AddDeleteOriginOperations(&operations, url::Origin(info.origin));
+    AddDeleteOriginOperations(&operations, url::Origin::Create(info.origin));
   }
 
   if (!operations.empty()) {

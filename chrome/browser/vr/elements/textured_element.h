@@ -30,16 +30,17 @@ class TexturedElement : public UiElement {
               const gfx::Transform& model_view_proj_matrix) const final;
 
   static void SetInitializedForTesting();
+  static void SetRerenderIfNotDirtyForTesting();
 
  protected:
-  void UpdateTexture();
-
   virtual UiTexture* GetTexture() const = 0;
   virtual void UpdateElementSize();
 
-  void PrepareToDraw() final;
+  bool PrepareToDraw() final;
 
  private:
+  bool UpdateTexture();
+
   void Flush(SkSurface* surface);
   void OnSetMode() override;
 

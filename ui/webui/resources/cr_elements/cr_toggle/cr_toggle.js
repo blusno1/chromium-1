@@ -19,6 +19,7 @@ Polymer({
       value: false,
       reflectToAttribute: true,
       observer: 'checkedChanged_',
+      notify: true,
     },
 
     disabled: {
@@ -166,7 +167,9 @@ Polymer({
    * @return {boolean}
    */
   shouldIgnoreHostTap: function(e) {
-    return e.detail.sourceEvent.timeStamp == this.lastPointerUpTime_;
+    let timeStamp =
+        e.detail.sourceEvent ? e.detail.sourceEvent.timeStamp : e.timeStamp;
+    return timeStamp == this.lastPointerUpTime_;
   },
 
   /**
@@ -189,8 +192,10 @@ Polymer({
    * @private
    */
   onKeyPress_: function(e) {
-    if (e.code == 'Space' || e.code == 'Enter')
+    if (e.code == 'Space' || e.code == 'Enter') {
+      e.preventDefault();
       this.toggleState_(true);
+    }
   },
 
   // customize the element's ripple

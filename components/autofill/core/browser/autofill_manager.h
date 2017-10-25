@@ -76,7 +76,8 @@ extern const int kCreditCardSigninPromoImpressionLimit;
 // forms. One per frame; owned by the AutofillDriver.
 class AutofillManager : public AutofillHandler,
                         public AutofillDownloadManager::Observer,
-                        public payments::PaymentsClientDelegate,
+                        public payments::PaymentsClientUnmaskDelegate,
+                        public payments::PaymentsClientSaveDelegate,
                         public payments::FullCardRequest::ResultDelegate,
                         public payments::FullCardRequest::UIDelegate {
  public:
@@ -269,7 +270,7 @@ class AutofillManager : public AutofillHandler,
     return form_interactions_ukm_logger_.get();
   }
 
-  // payments::PaymentsClientDelegate:
+  // payments::PaymentsClientSaveDelegate:
   // Exposed for testing.
   void OnDidUploadCard(AutofillClient::PaymentsRpcResult result,
                        const std::string& server_id) override;
@@ -295,10 +296,10 @@ class AutofillManager : public AutofillHandler,
       std::string response,
       const std::vector<std::string>& form_signatures) override;
 
-  // payments::PaymentsClientDelegate:
-  IdentityProvider* GetIdentityProvider() override;
+  // payments::PaymentsClientUnmaskDelegate:
   void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
                        const std::string& real_pan) override;
+  // payments::PaymentsClientSaveDelegate:
   void OnDidGetUploadDetails(
       AutofillClient::PaymentsRpcResult result,
       const base::string16& context_token,
@@ -586,6 +587,10 @@ class AutofillManager : public AutofillHandler,
   // |found_cvc_value_in_non_cvc_field_| is |true| if a field that is not
   // determined to be a CVC field via heuristics has a valid CVC |value|.
   bool found_cvc_value_in_non_cvc_field_;
+
+  // Ablation experiment turns off autofill, but logging still has to be kept
+  // for metrics analysis.
+  bool enable_ablation_logging_;
 
   GURL pending_upload_request_url_;
 

@@ -27,19 +27,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
-#include "content/child/blob_storage/webblobregistry_impl.h"
-#include "content/child/child_url_loader_factory_getter_impl.h"
-#include "content/child/file_info_util.h"
-#include "content/child/fileapi/webfilesystem_impl.h"
-#include "content/child/indexed_db/webidbfactory_impl.h"
-#include "content/child/loader/cors_url_loader_factory.h"
-#include "content/child/quota_dispatcher.h"
-#include "content/child/quota_message_filter.h"
-#include "content/child/storage_util.h"
+#include "content/child/child_process.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/child/web_database_observer_impl.h"
-#include "content/child/web_url_loader_impl.h"
-#include "content/child/webfileutilities_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/common/render_process_messages.h"
@@ -50,14 +39,23 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/media_stream_utils.h"
 #include "content/public/renderer/render_frame.h"
+#include "content/renderer/blob_storage/webblobregistry_impl.h"
 #include "content/renderer/cache_storage/webserviceworkercachestorage_impl.h"
 #include "content/renderer/device_sensors/device_motion_event_pump.h"
 #include "content/renderer/device_sensors/device_orientation_event_pump.h"
 #include "content/renderer/dom_storage/local_storage_cached_areas.h"
 #include "content/renderer/dom_storage/local_storage_namespace.h"
 #include "content/renderer/dom_storage/webstoragenamespace_impl.h"
+#include "content/renderer/file_info_util.h"
+#include "content/renderer/fileapi/webfilesystem_impl.h"
 #include "content/renderer/gamepad_shared_memory_reader.h"
 #include "content/renderer/image_capture/image_capture_frame_grabber.h"
+#include "content/renderer/indexed_db/webidbfactory_impl.h"
+#include "content/renderer/loader/child_url_loader_factory_getter_impl.h"
+#include "content/renderer/loader/cors_url_loader_factory.h"
+#include "content/renderer/loader/resource_dispatcher.h"
+#include "content/renderer/loader/web_data_consumer_handle_impl.h"
+#include "content/renderer/loader/web_url_loader_impl.h"
 #include "content/renderer/media/audio_decoder.h"
 #include "content/renderer/media/audio_device_factory.h"
 #include "content/renderer/media/renderer_webaudiodevice_impl.h"
@@ -67,12 +65,22 @@
 #include "content/renderer/media_capture_from_element/html_video_element_capturer_source.h"
 #include "content/renderer/media_recorder/media_recorder_handler.h"
 #include "content/renderer/mojo/blink_interface_provider_impl.h"
+#include "content/renderer/notifications/notification_dispatcher.h"
+#include "content/renderer/notifications/notification_manager.h"
+#include "content/renderer/push_messaging/push_provider.h"
+#include "content/renderer/quota_dispatcher.h"
+#include "content/renderer/quota_message_filter.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/renderer_clipboard_delegate.h"
+#include "content/renderer/storage_util.h"
+#include "content/renderer/web_database_observer_impl.h"
 #include "content/renderer/webclipboard_impl.h"
+#include "content/renderer/webfileutilities_impl.h"
 #include "content/renderer/webgraphicscontext3d_provider_impl.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
+#include "content/renderer/worker_thread_registry.h"
 #include "device/gamepad/public/cpp/gamepads.h"
+#include "device/sensors/public/cpp/motion_data.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
@@ -105,11 +113,13 @@
 #include "third_party/WebKit/public/platform/WebSocketHandshakeThrottle.h"
 #include "third_party/WebKit/public/platform/WebThread.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/WebKit/public/platform/WebURLLoaderFactory.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionListener.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationListener.h"
 #include "third_party/WebKit/public/platform/modules/webmidi/WebMIDIAccessor.h"
+#include "third_party/WebKit/public/platform/scheduler/child/webthread_base.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/sqlite/sqlite3.h"
@@ -259,6 +269,7 @@ class RendererBlinkPlatformImpl::SandboxSupport
 RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     blink::scheduler::RendererScheduler* renderer_scheduler)
     : BlinkPlatformImpl(renderer_scheduler->DefaultTaskRunner()),
+      compositor_thread_(nullptr),
       main_thread_(renderer_scheduler->CreateMainThread()),
       clipboard_delegate_(new RendererClipboardDelegate),
       clipboard_(new WebClipboardImpl(clipboard_delegate_.get())),
@@ -292,6 +303,8 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     web_idb_factory_.reset(new WebIDBFactoryImpl(
         sync_message_filter_,
         RenderThreadImpl::current()->GetIOTaskRunner().get()));
+    notification_dispatcher_ =
+        RenderThreadImpl::current()->notification_dispatcher();
   } else {
     service_manager::mojom::ConnectorRequest request;
     connector_ = service_manager::Connector::Create(&request);
@@ -327,24 +340,22 @@ void RendererBlinkPlatformImpl::Shutdown() {
 
 //------------------------------------------------------------------------------
 
-std::unique_ptr<blink::WebURLLoader> RendererBlinkPlatformImpl::CreateURLLoader(
-    const blink::WebURLRequest& request,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  ChildThreadImpl* child_thread = ChildThreadImpl::current();
+std::unique_ptr<blink::WebURLLoaderFactory>
+RendererBlinkPlatformImpl::CreateDefaultURLLoaderFactory() {
+  if (!RenderThreadImpl::current()) {
+    // RenderThreadImpl is null in some tests, the default factory impl
+    // takes care of that in the case.
+    return std::make_unique<WebURLLoaderFactoryImpl>(nullptr, nullptr);
+  }
+  return std::make_unique<WebURLLoaderFactoryImpl>(
+      RenderThreadImpl::current()->resource_dispatcher()->GetWeakPtr(),
+      CreateDefaultURLLoaderFactoryGetter());
+}
 
-  if (!url_loader_factory_getter_ && child_thread)
-    url_loader_factory_getter_ = CreateDefaultURLLoaderFactoryGetter();
-
-  mojom::URLLoaderFactory* factory =
-      url_loader_factory_getter_
-          ? url_loader_factory_getter_->GetFactoryForURL(request.Url())
-          : nullptr;
-
-  // There may be no child thread in RenderViewTests.  These tests can still use
-  // data URLs to bypass the ResourceDispatcher.
-  return base::MakeUnique<WebURLLoaderImpl>(
-      child_thread ? child_thread->resource_dispatcher() : nullptr,
-      std::move(task_runner), factory);
+std::unique_ptr<blink::WebDataConsumerHandle>
+RendererBlinkPlatformImpl::CreateDataConsumerHandle(
+    mojo::ScopedDataPipeConsumerHandle handle) {
+  return base::MakeUnique<WebDataConsumerHandleImpl>(std::move(handle));
 }
 
 scoped_refptr<ChildURLLoaderFactoryGetter>
@@ -358,8 +369,8 @@ RendererBlinkPlatformImpl::CreateDefaultURLLoaderFactoryGetter() {
 
 PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
 RendererBlinkPlatformImpl::CreateNetworkURLLoaderFactory() {
-  ChildThreadImpl* child_thread = ChildThreadImpl::current();
-  DCHECK(child_thread);
+  RenderThreadImpl* render_thread = RenderThreadImpl::current();
+  DCHECK(render_thread);
   PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory> url_loader_factory;
 
   if (base::FeatureList::IsEnabled(features::kNetworkService)) {
@@ -368,7 +379,7 @@ RendererBlinkPlatformImpl::CreateNetworkURLLoaderFactory() {
     url_loader_factory = std::move(factory_ptr);
   } else {
     mojom::URLLoaderFactoryAssociatedPtr factory_ptr;
-    child_thread->channel()->GetRemoteAssociatedInterface(&factory_ptr);
+    render_thread->channel()->GetRemoteAssociatedInterface(&factory_ptr);
     url_loader_factory = std::move(factory_ptr);
   }
 
@@ -384,6 +395,13 @@ RendererBlinkPlatformImpl::CreateNetworkURLLoaderFactory() {
     url_loader_factory = std::move(factory_ptr);
   }
   return url_loader_factory;
+}
+
+void RendererBlinkPlatformImpl::SetCompositorThread(
+    blink::scheduler::WebThreadBase* compositor_thread) {
+  compositor_thread_ = compositor_thread;
+  if (compositor_thread_)
+    WaitUntilWebThreadTLSUpdate(compositor_thread_);
 }
 
 blink::WebThread* RendererBlinkPlatformImpl::CurrentThread() {
@@ -517,6 +535,18 @@ void RendererBlinkPlatformImpl::SuddenTerminationChanged(bool enabled) {
   RenderThread* thread = RenderThread::Get();
   if (thread)  // NULL in unittests.
     thread->Send(new RenderProcessHostMsg_SuddenTerminationChanged(enabled));
+}
+
+void RendererBlinkPlatformImpl::AddRefProcess() {
+  ChildProcess::current()->AddRefProcess();
+}
+
+void RendererBlinkPlatformImpl::ReleaseRefProcess() {
+  ChildProcess::current()->ReleaseProcess();
+}
+
+blink::WebThread* RendererBlinkPlatformImpl::CompositorThread() const {
+  return compositor_thread_;
 }
 
 std::unique_ptr<WebStorageNamespace>
@@ -1209,9 +1239,11 @@ RendererBlinkPlatformImpl::CreatePlatformEventObserverFromType(
     case blink::kWebPlatformEventTypeDeviceMotion:
       return base::MakeUnique<DeviceMotionEventPump>(thread);
     case blink::kWebPlatformEventTypeDeviceOrientation:
-      return base::MakeUnique<DeviceOrientationEventPump>(thread);
+      return base::MakeUnique<DeviceOrientationEventPump>(thread,
+                                                          false /* absolute */);
     case blink::kWebPlatformEventTypeDeviceOrientationAbsolute:
-      return base::MakeUnique<DeviceOrientationAbsoluteEventPump>(thread);
+      return base::MakeUnique<DeviceOrientationEventPump>(thread,
+                                                          true /* absolute */);
     case blink::kWebPlatformEventTypeGamepad:
       return base::MakeUnique<GamepadSharedMemoryReader>(thread);
     default:
@@ -1325,6 +1357,12 @@ void RendererBlinkPlatformImpl::QueryStorageUsageAndQuota(
 
 //------------------------------------------------------------------------------
 
+blink::WebPushProvider* RendererBlinkPlatformImpl::PushProvider() {
+  return PushProvider::ThreadSpecificInstance(default_task_runner_);
+}
+
+//------------------------------------------------------------------------------
+
 std::unique_ptr<blink::WebTrialTokenValidator>
 RendererBlinkPlatformImpl::TrialTokenValidator() {
   return std::make_unique<WebTrialTokenValidatorImpl>(
@@ -1334,6 +1372,28 @@ RendererBlinkPlatformImpl::TrialTokenValidator() {
 std::unique_ptr<blink::TrialPolicy>
 RendererBlinkPlatformImpl::OriginTrialPolicy() {
   return std::make_unique<TrialPolicyImpl>();
+}
+
+//------------------------------------------------------------------------------
+
+blink::WebNotificationManager*
+RendererBlinkPlatformImpl::GetNotificationManager() {
+  if (!thread_safe_sender_.get() || !notification_dispatcher_.get())
+    return nullptr;
+
+  return NotificationManager::ThreadSpecificInstance(
+      thread_safe_sender_.get(),
+      notification_dispatcher_.get());
+}
+
+//------------------------------------------------------------------------------
+
+void RendererBlinkPlatformImpl::DidStartWorkerThread() {
+  WorkerThreadRegistry::Instance()->DidStartCurrentWorkerThread();
+}
+
+void RendererBlinkPlatformImpl::WillStopWorkerThread() {
+  WorkerThreadRegistry::Instance()->WillStopCurrentWorkerThread();
 }
 
 void RendererBlinkPlatformImpl::WorkerContextCreated(

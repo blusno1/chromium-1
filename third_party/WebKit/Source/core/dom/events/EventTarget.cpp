@@ -151,11 +151,12 @@ EventTargetData::EventTargetData() {}
 
 EventTargetData::~EventTargetData() {}
 
-DEFINE_TRACE(EventTargetData) {
+void EventTargetData::Trace(blink::Visitor* visitor) {
   visitor->Trace(event_listener_map);
 }
 
-DEFINE_TRACE_WRAPPERS(EventTargetData) {
+void EventTargetData::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(event_listener_map);
 }
 

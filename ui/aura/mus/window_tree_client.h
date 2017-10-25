@@ -487,6 +487,7 @@ class AURA_EXPORT WindowTreeClient
   void WmDeactivateWindow(Id window_id) override;
   void WmStackAbove(uint32_t change_id, Id above_id, Id below_id) override;
   void WmStackAtTop(uint32_t change_id, uint32_t window_id) override;
+  void WmPerformWmAction(Id window_id, const std::string& action) override;
   void OnAccelerator(uint32_t ack_id,
                      uint32_t accelerator_id,
                      std::unique_ptr<ui::Event> event) override;
@@ -522,7 +523,8 @@ class AURA_EXPORT WindowTreeClient
   void SetDisplayConfiguration(
       const std::vector<display::Display>& displays,
       std::vector<ui::mojom::WmViewportMetricsPtr> viewport_metrics,
-      int64_t primary_display_id) override;
+      int64_t primary_display_id,
+      const std::vector<display::Display>& mirrors) override;
   void AddDisplayReusingWindowTreeHost(
       WindowTreeHostMus* window_tree_host,
       const display::Display& display,
@@ -547,6 +549,8 @@ class AURA_EXPORT WindowTreeClient
   void OnWindowTreeHostStackAbove(WindowTreeHostMus* window_tree_host,
                                   Window* window) override;
   void OnWindowTreeHostStackAtTop(WindowTreeHostMus* window_tree_host) override;
+  void OnWindowTreeHostPerformWmAction(WindowTreeHostMus* window_tree_host,
+                                       const std::string& action) override;
   void OnWindowTreeHostPerformWindowMove(
       WindowTreeHostMus* window_tree_host,
       ui::mojom::MoveLoopSource mus_source,

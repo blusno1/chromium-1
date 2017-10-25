@@ -18,6 +18,9 @@ void SimpleDataProducer::SaveStreamData(QuicStreamId id,
                                         size_t iov_offset,
                                         QuicStreamOffset offset,
                                         QuicByteCount data_length) {
+  if (data_length == 0) {
+    return;
+  }
   if (!QuicContainsKey(send_buffer_map_, id)) {
     send_buffer_map_[id].reset(new QuicStreamSendBuffer(&allocator_));
   }
@@ -29,6 +32,20 @@ bool SimpleDataProducer::WriteStreamData(QuicStreamId id,
                                          QuicByteCount data_length,
                                          QuicDataWriter* writer) {
   return send_buffer_map_[id]->WriteStreamData(offset, data_length, writer);
+}
+
+void SimpleDataProducer::OnStreamFrameAcked(
+    const QuicStreamFrame& frame,
+    QuicTime::Delta /*ack_delay_time*/) {
+  OnStreamFrameDiscarded(frame);
+}
+
+void SimpleDataProducer::OnStreamFrameDiscarded(const QuicStreamFrame& frame) {
+  if (!QuicContainsKey(send_buffer_map_, frame.stream_id)) {
+    return;
+  }
+  send_buffer_map_[frame.stream_id]->RemoveStreamFrame(frame.offset,
+                                                       frame.data_length);
 }
 
 }  // namespace test

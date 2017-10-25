@@ -50,7 +50,7 @@ class WaitableEvent;
 
 class ScriptProcessorHandler final : public AudioHandler {
  public:
-  static RefPtr<ScriptProcessorHandler> Create(
+  static scoped_refptr<ScriptProcessorHandler> Create(
       AudioNode&,
       float sample_rate,
       size_t buffer_size,
@@ -99,7 +99,7 @@ class ScriptProcessorHandler final : public AudioHandler {
   unsigned number_of_input_channels_;
   unsigned number_of_output_channels_;
 
-  RefPtr<AudioBus> internal_input_bus_;
+  scoped_refptr<AudioBus> internal_input_bus_;
   // Synchronize process() with fireProcessEvent().
   mutable Mutex process_event_lock_;
 
@@ -141,7 +141,7 @@ class ScriptProcessorNode final
   // ScriptWrappable
   bool HasPendingActivity() const final;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { AudioNode::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) { AudioNode::Trace(visitor); }
 
  private:
   ScriptProcessorNode(BaseAudioContext&,

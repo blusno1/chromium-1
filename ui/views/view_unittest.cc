@@ -4495,7 +4495,6 @@ class PaintLayerView : public View {
  public:
   PaintLayerView() = default;
 
-  // View::
   void PaintChildren(const PaintInfo& info) override {
     last_paint_info_ = base::MakeUnique<PaintInfo>(info);
     View::PaintChildren(info);
@@ -4980,7 +4979,7 @@ class ViewObserverTest : public ViewTest, public ViewObserver {
   }
 
   std::unique_ptr<View> NewView() {
-    auto view = base::MakeUnique<View>();
+    auto view = std::make_unique<View>();
     view->AddObserver(this);
     return view;
   }

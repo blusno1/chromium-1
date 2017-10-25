@@ -14,9 +14,9 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 class PrefService;
 
@@ -55,6 +55,10 @@ extern const base::Feature kUIExperimentSwapTitleAndUrl;
 extern const base::Feature kUIExperimentVerticalLayout;
 extern const base::Feature kUIExperimentVerticalMargin;
 extern const base::Feature kSpeculativeServiceWorkerStartOnQueryInput;
+
+#if defined(OS_IOS)
+extern const base::Feature kZeroSuggestProviderIOS;
+#endif
 }
 
 // The set of parameters customizing the HUP scoring.
@@ -190,11 +194,6 @@ class OmniboxFieldTrial {
   // ---------------------------------------------------------
   // For the ZeroSuggestProvider field trial.
 
-  // Returns whether the user is in any field trial where the
-  // ZeroSuggestProvider should be used to get suggestions when the
-  // user clicks on the omnibox but has not typed anything yet.
-  static bool InZeroSuggestFieldTrial();
-
   // Returns whether the user is in a ZeroSuggest field trial, which shows
   // most visited URLs. This is true for both "MostVisited" and
   // "MostVisitedWithoutSERP" trials.
@@ -215,6 +214,9 @@ class OmniboxFieldTrial {
   // Returns the server-side experiment ID to use for contextual suggestions.
   // Returns -1 if there is no associated experiment ID.
   static int GetZeroSuggestRedirectToChromeExperimentId();
+
+  // Returns the server address associated with the current field trial.
+  static std::string GetZeroSuggestRedirectToChromeServerAddress();
 
   // ---------------------------------------------------------
   // For the ShortcutsScoringMaxRelevance experiment that's part of the
@@ -457,7 +459,6 @@ class OmniboxFieldTrial {
   static const char kHQPTypedValueRule[];
   static const char kHQPAllowMatchInTLDRule[];
   static const char kHQPAllowMatchInSchemeRule[];
-  static const char kZeroSuggestRule[];
   static const char kZeroSuggestVariantRule[];
   static const char kDisableResultsCachingRule[];
   static const char kMeasureSuggestPollingDelayFromLastKeystrokeRule[];
@@ -505,6 +506,7 @@ class OmniboxFieldTrial {
 
   // Parameter names used by Zero Suggest Redirect to Chrome.
   static const char kZeroSuggestRedirectToChromeExperimentIdParam[];
+  static const char kZeroSuggestRedirectToChromeServerAddressParam[];
 
   // The amount of time to wait before sending a new suggest request after the
   // previous one unless overridden by a field trial parameter.

@@ -994,7 +994,7 @@ void BaseAudioContext::StartRendering() {
   }
 }
 
-DEFINE_TRACE(BaseAudioContext) {
+void BaseAudioContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(destination_node_);
   visitor->Trace(listener_);
   visitor->Trace(active_source_nodes_);
@@ -1011,7 +1011,8 @@ DEFINE_TRACE(BaseAudioContext) {
   SuspendableObject::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(BaseAudioContext) {
+void BaseAudioContext::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   EventTargetWithInlineData::TraceWrappers(visitor);
 
   // Inform V8's GC that we have references to these objects so they
@@ -1040,8 +1041,14 @@ void BaseAudioContext::SetWorkletMessagingProxy(
   DCHECK(!worklet_messaging_proxy_);
   worklet_messaging_proxy_ = proxy;
   has_worklet_messaging_proxy_ = true;
-  // TODO(hongchan): If the context was already running, stop the destination
-  // and restart the context with the worklet thread.
+
+  // If the context is running or suspended, restart the destination to switch
+  // the render thread with the worklet thread. Note that restarting can happen
+  // right after the context construction.
+  // TODO(hongchan): consider removing redundant restart.
+  if (ContextState() != kClosed) {
+    destination()->GetAudioDestinationHandler().RestartDestination();
+  }
 }
 
 AudioWorkletMessagingProxy* BaseAudioContext::WorkletMessagingProxy() {

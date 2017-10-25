@@ -11,6 +11,10 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget_observer.h"
 
+namespace views {
+class StyledLabel;
+}
+
 namespace ash {
 
 // A wrapper for the bubble view in the login screen.
@@ -24,7 +28,7 @@ class ASH_EXPORT LoginBubble : public views::WidgetObserver,
 
   // Shows an error bubble for authentication failure.
   // |anchor_view| is the anchor for placing the bubble view.
-  void ShowErrorBubble(const base::string16& message, views::View* anchor_view);
+  void ShowErrorBubble(views::StyledLabel* label, views::View* anchor_view);
 
   // Shows a user menu bubble.
   // |anchor_view| is the anchor for placing the bubble view.
@@ -36,6 +40,9 @@ class ASH_EXPORT LoginBubble : public views::WidgetObserver,
                     views::View* anchor_view,
                     views::View* bubble_opener,
                     bool show_remove_user);
+
+  // Shows a tooltip.
+  void ShowTooltip(const base::string16& message, views::View* anchor_view);
 
   // Close the bubble.
   void Close();

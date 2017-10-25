@@ -21,11 +21,29 @@
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/wtf/WTF.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/service_manager/public/interfaces/interface_provider.mojom-blink.h"
+#include "third_party/WebKit/public/platform/dedicated_worker_factory.mojom-blink.h"
 
 namespace blink {
+namespace {
+
+service_manager::mojom::blink::InterfaceProviderPtrInfo
+ConnectToWorkerInterfaceProvider(Document* document,
+                                 scoped_refptr<SecurityOrigin> script_origin) {
+  mojom::blink::DedicatedWorkerFactoryPtr worker_factory;
+  document->GetInterfaceProvider()->GetInterface(&worker_factory);
+  service_manager::mojom::blink::InterfaceProviderPtrInfo
+      interface_provider_ptr;
+  worker_factory->CreateDedicatedWorker(
+      script_origin, mojo::MakeRequest(&interface_provider_ptr));
+  return interface_provider_ptr;
+}
+
+}  // namespace
 
 struct DedicatedWorkerMessagingProxy::QueuedTask {
-  RefPtr<SerializedScriptValue> message;
+  scoped_refptr<SerializedScriptValue> message;
   Vector<MessagePortChannel> channels;
 };
 
@@ -59,18 +77,16 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
   ContentSecurityPolicy* csp = document->GetContentSecurityPolicy();
   DCHECK(csp);
 
-  WorkerThreadStartMode start_mode =
-      GetWorkerInspectorProxy()->WorkerStartMode(document);
-  std::unique_ptr<WorkerSettings> worker_settings =
-      WTF::WrapUnique(new WorkerSettings(document->GetSettings()));
-
   auto global_scope_creation_params =
-      WTF::MakeUnique<GlobalScopeCreationParams>(
-          script_url, user_agent, source_code, nullptr, start_mode,
-          csp->Headers().get(), referrer_policy, starter_origin,
-          ReleaseWorkerClients(), document->AddressSpace(),
+      std::make_unique<GlobalScopeCreationParams>(
+          script_url, user_agent, source_code, nullptr, csp->Headers().get(),
+          referrer_policy, starter_origin, ReleaseWorkerClients(),
+          document->AddressSpace(),
           OriginTrialContext::GetTokens(document).get(),
-          std::move(worker_settings), kV8CacheOptionsDefault);
+          std::make_unique<WorkerSettings>(document->GetSettings()),
+          kV8CacheOptionsDefault,
+          ConnectToWorkerInterfaceProvider(document,
+                                           SecurityOrigin::Create(script_url)));
 
   InitializeWorkerThread(std::move(global_scope_creation_params),
                          CreateBackingThreadStartupData(ToIsolate(document)),
@@ -78,7 +94,7 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
 }
 
 void DedicatedWorkerMessagingProxy::PostMessageToWorkerGlobalScope(
-    RefPtr<SerializedScriptValue> message,
+    scoped_refptr<SerializedScriptValue> message,
     Vector<MessagePortChannel> channels) {
   DCHECK(IsParentContextThread());
   if (AskedToTerminate())
@@ -121,7 +137,7 @@ bool DedicatedWorkerMessagingProxy::HasPendingActivity() const {
 }
 
 void DedicatedWorkerMessagingProxy::PostMessageToWorkerObject(
-    RefPtr<SerializedScriptValue> message,
+    scoped_refptr<SerializedScriptValue> message,
     Vector<MessagePortChannel> channels) {
   DCHECK(IsParentContextThread());
   if (!worker_object_ || AskedToTerminate())
@@ -163,7 +179,7 @@ void DedicatedWorkerMessagingProxy::DispatchErrorEvent(
                      exception_id, CrossThreadUnretained(GetWorkerThread())));
 }
 
-DEFINE_TRACE(DedicatedWorkerMessagingProxy) {
+void DedicatedWorkerMessagingProxy::Trace(blink::Visitor* visitor) {
   visitor->Trace(worker_object_);
   ThreadedMessagingProxyBase::Trace(visitor);
 }

@@ -44,6 +44,7 @@ extern "C" {
 
 #if defined(OS_ANDROID)
 #include <android/native_window_jni.h>
+#include "base/android/build_info.h"
 #endif
 
 #if !defined(EGL_FIXED_SIZE_ANGLE)
@@ -80,6 +81,9 @@ extern "C" {
 #define EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE 0x320A
 #define EGL_PLATFORM_ANGLE_DEVICE_TYPE_WARP_ANGLE 0x320B
 #define EGL_PLATFORM_ANGLE_DEVICE_TYPE_REFERENCE_ANGLE 0x320C
+
+// Hidden enum for the NULL D3D device type.
+#define EGL_PLATFORM_ANGLE_DEVICE_TYPE_NULL_ANGLE 0x6AC0
 #endif /* EGL_ANGLE_platform_angle_d3d */
 
 #ifndef EGL_ANGLE_platform_angle_opengl
@@ -147,6 +151,7 @@ bool g_use_direct_composition = false;
 bool g_egl_robust_resource_init_supported = false;
 bool g_egl_display_texture_share_group_supported = false;
 bool g_egl_create_context_client_arrays_supported = false;
+bool g_egl_android_native_fence_sync_supported = false;
 
 const char kSwapEventTraceCategories[] = "gpu";
 
@@ -204,15 +209,21 @@ class EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
 
 EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
                                    EGLenum platform_type,
-                                   bool warpDevice) {
+                                   bool warpDevice,
+                                   bool nullDevice) {
   std::vector<EGLint> display_attribs;
 
   display_attribs.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
   display_attribs.push_back(platform_type);
 
   if (warpDevice) {
+    DCHECK(!nullDevice);
     display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE);
     display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_WARP_ANGLE);
+  } else if (nullDevice) {
+    DCHECK(!warpDevice);
+    display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE);
+    display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_NULL_ANGLE);
   }
 
 #if defined(USE_X11)
@@ -241,20 +252,29 @@ EGLDisplay GetDisplayFromType(DisplayType display_type,
     case SWIFT_SHADER:
       return eglGetDisplay(native_display);
     case ANGLE_D3D9:
-      return GetPlatformANGLEDisplay(native_display,
-                                     EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE, false);
+      return GetPlatformANGLEDisplay(
+          native_display, EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE, false, false);
     case ANGLE_D3D11:
       return GetPlatformANGLEDisplay(
-          native_display, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, false);
+          native_display, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, false, false);
+    case ANGLE_D3D11_NULL:
+      return GetPlatformANGLEDisplay(
+          native_display, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, false, true);
     case ANGLE_OPENGL:
       return GetPlatformANGLEDisplay(
-          native_display, EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE, false);
+          native_display, EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE, false, false);
+    case ANGLE_OPENGL_NULL:
+      return GetPlatformANGLEDisplay(
+          native_display, EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE, false, true);
     case ANGLE_OPENGLES:
       return GetPlatformANGLEDisplay(
-          native_display, EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE, false);
+          native_display, EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE, false, false);
+    case ANGLE_OPENGLES_NULL:
+      return GetPlatformANGLEDisplay(
+          native_display, EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE, false, true);
     case ANGLE_NULL:
-      return GetPlatformANGLEDisplay(native_display,
-                                     EGL_PLATFORM_ANGLE_TYPE_NULL_ANGLE, false);
+      return GetPlatformANGLEDisplay(
+          native_display, EGL_PLATFORM_ANGLE_TYPE_NULL_ANGLE, false, false);
     default:
       NOTREACHED();
       return EGL_NO_DISPLAY;
@@ -484,9 +504,10 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
     } else {
       if (requested_renderer == kANGLEImplementationD3D11Name) {
         init_displays->push_back(ANGLE_D3D11);
-      }
-      if (requested_renderer == kANGLEImplementationD3D9Name) {
+      } else if (requested_renderer == kANGLEImplementationD3D9Name) {
         init_displays->push_back(ANGLE_D3D9);
+      } else if (requested_renderer == kANGLEImplementationD3D11NULLName) {
+        init_displays->push_back(ANGLE_D3D11_NULL);
       }
     }
   }
@@ -498,9 +519,12 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
     } else {
       if (requested_renderer == kANGLEImplementationOpenGLName) {
         init_displays->push_back(ANGLE_OPENGL);
-      }
-      if (requested_renderer == kANGLEImplementationOpenGLESName) {
+      } else if (requested_renderer == kANGLEImplementationOpenGLESName) {
         init_displays->push_back(ANGLE_OPENGLES);
+      } else if (requested_renderer == kANGLEImplementationOpenGLNULLName) {
+        init_displays->push_back(ANGLE_OPENGL_NULL);
+      } else if (requested_renderer == kANGLEImplementationOpenGLESNULLName) {
+        init_displays->push_back(ANGLE_OPENGLES_NULL);
       }
     }
   }
@@ -616,6 +640,22 @@ bool GLSurfaceEGL::InitializeOneOff(EGLNativeDisplayType native_display) {
   }
 #endif
 
+  // The native fence sync extension is a bit complicated. It's reported as
+  // present for ChromeOS, but Android currently doesn't report this extension
+  // even when it's present, and older devices may export a useless wrapper
+  // function. See crbug.com/775707 for details. In short, if the symbol is
+  // present and we're on Android N or newer, assume that it's usable even if
+  // the extension wasn't reported.
+  g_egl_android_native_fence_sync_supported =
+      g_driver_egl.ext.b_EGL_ANDROID_native_fence_sync;
+#if defined(OS_ANDROID)
+  if (base::android::BuildInfo::GetInstance()->sdk_int() >=
+          base::android::SDK_VERSION_NOUGAT &&
+      g_driver_egl.fn.eglDupNativeFenceFDANDROIDFn) {
+    g_egl_android_native_fence_sync_supported = true;
+  }
+#endif
+
   initialized_ = true;
   return true;
 }
@@ -712,6 +752,10 @@ bool GLSurfaceEGL::IsDisplayTextureShareGroupSupported() {
 
 bool GLSurfaceEGL::IsCreateContextClientArraysSupported() {
   return g_egl_create_context_client_arrays_supported;
+}
+
+bool GLSurfaceEGL::IsAndroidNativeFenceSyncSupported() {
+  return g_egl_android_native_fence_sync_supported;
 }
 
 GLSurfaceEGL::~GLSurfaceEGL() {}
@@ -910,7 +954,7 @@ bool NativeViewGLSurfaceEGL::Initialize(GLSurfaceFormat format) {
 
   if (!vsync_provider_external_ && EGLSyncControlVSyncProvider::IsSupported()) {
     vsync_provider_internal_ =
-        base::MakeUnique<EGLSyncControlVSyncProvider>(surface_);
+        std::make_unique<EGLSyncControlVSyncProvider>(surface_);
   }
 
   // If frame timestamps are supported, set the proper attribute to enable the

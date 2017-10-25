@@ -25,9 +25,7 @@ class AudioWorkletProcessorDefinition;
 //
 // This is constructed and destroyed on a worker thread, and all methods also
 // must be called on the worker thread.
-class MODULES_EXPORT AudioWorkletProcessor
-    : public GarbageCollectedFinalized<AudioWorkletProcessor>,
-      public ScriptWrappable {
+class MODULES_EXPORT AudioWorkletProcessor : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -48,8 +46,8 @@ class MODULES_EXPORT AudioWorkletProcessor
 
   const String& Name() const { return name_; }
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   AudioWorkletProcessor(AudioWorkletGlobalScope*, const String& name);

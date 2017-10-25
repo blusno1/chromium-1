@@ -171,8 +171,9 @@ int PrintContext::PageNumberForElement(Element* element,
     return -1;
 
   FloatSize scaled_page_size = page_size_in_pixels;
-  scaled_page_size.Scale(frame->View()->ContentsSize().Width() /
-                         page_rect.Width());
+  scaled_page_size.Scale(
+      frame->View()->LayoutViewportScrollableArea()->ContentsSize().Width() /
+      page_rect.Width());
   print_context->ComputePageRectsWithPageSize(scaled_page_size);
 
   int top = box->PixelSnappedOffsetTop(box->OffsetParent());
@@ -242,7 +243,7 @@ String PrintContext::PageProperty(LocalFrame* frame,
   // want to collect @page rules and figure out what declarations apply on a
   // given page (that may or may not exist).
   print_context->BeginPrintMode(800, 1000);
-  RefPtr<ComputedStyle> style = document->StyleForPage(page_number);
+  scoped_refptr<ComputedStyle> style = document->StyleForPage(page_number);
 
   // Implement formatters for properties we care about.
   if (!strcmp(property_name, "margin-left")) {
@@ -296,8 +297,9 @@ int PrintContext::NumberOfPages(LocalFrame* frame,
   print_context->BeginPrintMode(page_rect.Width(), page_rect.Height());
   // Account for shrink-to-fit.
   FloatSize scaled_page_size = page_size_in_pixels;
-  scaled_page_size.Scale(frame->View()->ContentsSize().Width() /
-                         page_rect.Width());
+  scaled_page_size.Scale(
+      frame->View()->LayoutViewportScrollableArea()->ContentsSize().Width() /
+      page_rect.Width());
   print_context->ComputePageRectsWithPageSize(scaled_page_size);
   return print_context->PageCount();
 }
@@ -307,7 +309,7 @@ bool PrintContext::IsFrameValid() const {
          !frame_->GetDocument()->GetLayoutViewItem().IsNull();
 }
 
-DEFINE_TRACE(PrintContext) {
+void PrintContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(linked_destinations_);
 }

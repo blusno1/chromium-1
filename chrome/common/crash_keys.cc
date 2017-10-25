@@ -170,6 +170,7 @@ size_t RegisterChromeCrashKeys() {
     {"channel_error_bt", kMediumSize},
     {"remove_route_bt", kMediumSize},
     {"rwhvm_window", kMediumSize},
+    {"text-input-context-client", kMediumSize},
 // media/:
 #endif
     {kBug464926CrashKey, kSmallSize},
@@ -219,6 +220,10 @@ size_t RegisterChromeCrashKeys() {
     // Temporary for https://crbug.com/752914.
     {"blink_scheduler_task_function_name", kMediumSize},
     {"blink_scheduler_task_file_name", kMediumSize},
+
+    // Accessibility keys. Temporary for http://crbug.com/765490.
+    {"ax_tree_error", kSmallSize},
+    {"ax_tree_update", kMediumSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

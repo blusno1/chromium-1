@@ -35,7 +35,6 @@
 
 namespace blink {
 
-class CSSFontFace;
 class FontDescription;
 class SimpleFontData;
 
@@ -51,10 +50,8 @@ class CORE_EXPORT CSSFontFaceSource
   virtual bool IsLoaded() const { return true; }
   virtual bool IsValid() const { return true; }
 
-  void SetFontFace(CSSFontFace* face) { face_ = face; }
-
-  RefPtr<SimpleFontData> GetFontData(const FontDescription&,
-                                     const FontSelectionCapabilities&);
+  scoped_refptr<SimpleFontData> GetFontData(const FontDescription&,
+                                            const FontSelectionCapabilities&);
 
   virtual bool IsLocalFontAvailable(const FontDescription&) { return false; }
   virtual void BeginLoadIfNeeded() {}
@@ -64,20 +61,21 @@ class CORE_EXPORT CSSFontFaceSource
   // For UMA reporting
   virtual bool HadBlankText() { return false; }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor* visitor) {}
 
  protected:
-  CSSFontFaceSource();
-  virtual RefPtr<SimpleFontData> CreateFontData(
+  CSSFontFaceSource() = default;
+  virtual scoped_refptr<SimpleFontData> CreateFontData(
       const FontDescription&,
       const FontSelectionCapabilities&) = 0;
+  void PruneTable();
 
+ private:
   using FontDataTable = HashMap<FontCacheKey,
-                                RefPtr<SimpleFontData>,
+                                scoped_refptr<SimpleFontData>,
                                 FontCacheKeyHash,
                                 FontCacheKeyTraits>;
 
-  Member<CSSFontFace> face_;  // Our owning font face.
   FontDataTable font_data_table_;
 };
 

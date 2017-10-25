@@ -55,16 +55,18 @@
 
 namespace content {
 
-typedef std::vector<RenderFrameDevToolsAgentHost*> Instances;
+typedef std::vector<RenderFrameDevToolsAgentHost*> RenderFrameDevToolsArray;
 
 namespace {
-base::LazyInstance<Instances>::Leaky g_instances = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<RenderFrameDevToolsArray>::Leaky g_agent_host_instances =
+    LAZY_INSTANCE_INITIALIZER;
 
 RenderFrameDevToolsAgentHost* FindAgentHost(FrameTreeNode* frame_tree_node) {
-  if (g_instances == NULL)
+  if (g_agent_host_instances == NULL)
     return NULL;
-  for (Instances::iterator it = g_instances.Get().begin();
-       it != g_instances.Get().end(); ++it) {
+  for (RenderFrameDevToolsArray::iterator it =
+           g_agent_host_instances.Get().begin();
+       it != g_agent_host_instances.Get().end(); ++it) {
     if ((*it)->frame_tree_node() == frame_tree_node)
       return *it;
   }
@@ -85,8 +87,6 @@ FrameTreeNode* GetFrameTreeNodeAncestor(FrameTreeNode* frame_tree_node) {
   DCHECK(frame_tree_node);
   return frame_tree_node;
 }
-
-const char* kPageNavigateCommand = "Page.navigate";
 
 }  // namespace
 
@@ -151,8 +151,8 @@ RenderFrameDevToolsAgentHost::FrameHostHolder::~FrameHostHolder() {
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::Attach(
     DevToolsSession* session) {
-  host_->Send(new DevToolsAgentMsg_Attach(
-      host_->GetRoutingID(), agent_->GetId(), session->session_id()));
+  host_->Send(new DevToolsAgentMsg_Attach(host_->GetRoutingID(),
+                                          session->session_id()));
   agent_->GrantPolicy(host_);
   InitInfo(session->session_id());
 }
@@ -187,8 +187,8 @@ void RenderFrameDevToolsAgentHost::FrameHostHolder::ReattachWithCookie(
     DevToolsSession* session,
     std::string cookie) {
   InitInfo(session->session_id()).chunk_processor->set_state_cookie(cookie);
-  host_->Send(new DevToolsAgentMsg_Reattach(
-      host_->GetRoutingID(), agent_->GetId(), session->session_id(), cookie));
+  host_->Send(new DevToolsAgentMsg_Reattach(host_->GetRoutingID(),
+                                            session->session_id(), cookie));
   agent_->GrantPolicy(host_);
 }
 
@@ -405,27 +405,26 @@ bool RenderFrameDevToolsAgentHost::IsNetworkHandlerEnabled(
 void RenderFrameDevToolsAgentHost::AppendDevToolsHeaders(
     FrameTreeNode* frame_tree_node,
     net::HttpRequestHeaders* headers) {
-  static const char kDevToolsEmulateNetworkConditionsClientId[] =
-      "X-DevTools-Emulate-Network-Conditions-Client-Id";
-
   frame_tree_node = GetFrameTreeNodeAncestor(frame_tree_node);
   RenderFrameDevToolsAgentHost* agent_host = FindAgentHost(frame_tree_node);
   if (!agent_host)
     return;
-  std::string ua_override;
-  bool enabled = false;
+  for (auto* network : protocol::NetworkHandler::ForAgentHost(agent_host))
+    network->AppendDevToolsHeaders(headers);
+}
+
+// static
+bool RenderFrameDevToolsAgentHost::ShouldBypassServiceWorker(
+    FrameTreeNode* frame_tree_node) {
+  frame_tree_node = GetFrameTreeNodeAncestor(frame_tree_node);
+  RenderFrameDevToolsAgentHost* agent_host = FindAgentHost(frame_tree_node);
+  if (!agent_host)
+    return false;
   for (auto* network : protocol::NetworkHandler::ForAgentHost(agent_host)) {
-    enabled = enabled || network->enabled();
-    ua_override = network->UserAgentOverride();
-    if (!ua_override.empty())
-      break;
+    if (network->ShouldBypassServiceWorker())
+      return true;
   }
-  if (!enabled)
-    return;
-  headers->SetHeader(kDevToolsEmulateNetworkConditionsClientId,
-                     agent_host->GetId());
-  if (!ua_override.empty())
-    headers->SetHeader(net::HttpRequestHeaders::kUserAgent, ua_override);
+  return false;
 }
 
 // static
@@ -461,7 +460,7 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
     current_frame_crashed_ = true;
   }
 
-  g_instances.Get().push_back(this);
+  g_agent_host_instances.Get().push_back(this);
   AddRef();  // Balanced in RenderFrameHostDestroyed.
 
   NotifyCreated();
@@ -549,8 +548,8 @@ void RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session) {
 
   if (IsBrowserSideNavigationEnabled()) {
     if (frame_host_) {
-      frame_host_->Send(new DevToolsAgentMsg_Attach(
-          frame_host_->GetRoutingID(), GetId(), session->session_id()));
+      frame_host_->Send(new DevToolsAgentMsg_Attach(frame_host_->GetRoutingID(),
+                                                    session->session_id()));
     }
   } else {
     if (current_)
@@ -591,7 +590,7 @@ bool RenderFrameDevToolsAgentHost::DispatchProtocolMessage(
   }
 
   if (IsBrowserSideNavigationEnabled()) {
-    if (!navigation_handles_.empty() || method == kPageNavigateCommand) {
+    if (!navigation_handles_.empty()) {
       suspended_messages_by_session_id_[session_id].push_back(
           {call_id, method, message});
       return true;
@@ -646,11 +645,11 @@ void RenderFrameDevToolsAgentHost::OnClientsDetached() {
 }
 
 RenderFrameDevToolsAgentHost::~RenderFrameDevToolsAgentHost() {
-  Instances::iterator it = std::find(g_instances.Get().begin(),
-                                     g_instances.Get().end(),
-                                     this);
-  if (it != g_instances.Get().end())
-    g_instances.Get().erase(it);
+  RenderFrameDevToolsArray::iterator it =
+      std::find(g_agent_host_instances.Get().begin(),
+                g_agent_host_instances.Get().end(), this);
+  if (it != g_agent_host_instances.Get().end())
+    g_agent_host_instances.Get().erase(it);
 }
 
 void RenderFrameDevToolsAgentHost::ReadyToCommitNavigation(
@@ -757,9 +756,9 @@ void RenderFrameDevToolsAgentHost::MaybeReattachToRenderFrame() {
   if (!frame_host_)
     return;
   for (DevToolsSession* session : sessions()) {
-    frame_host_->Send(new DevToolsAgentMsg_Reattach(
-        frame_host_->GetRoutingID(), GetId(), session->session_id(),
-        session->state_cookie()));
+    frame_host_->Send(new DevToolsAgentMsg_Reattach(frame_host_->GetRoutingID(),
+                                                    session->session_id(),
+                                                    session->state_cookie()));
     for (const auto& pair : session->waiting_messages()) {
       int call_id = pair.first;
       const DevToolsSession::Message& message = pair.second;
@@ -786,7 +785,7 @@ void RenderFrameDevToolsAgentHost::RevokePolicy(RenderFrameHostImpl* host) {
 
   bool process_has_agents = false;
   RenderProcessHost* process_host = host->GetProcess();
-  for (RenderFrameDevToolsAgentHost* agent : g_instances.Get()) {
+  for (RenderFrameDevToolsAgentHost* agent : g_agent_host_instances.Get()) {
     if (!agent->IsAttached())
       continue;
     if (IsBrowserSideNavigationEnabled()) {

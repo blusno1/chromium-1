@@ -72,6 +72,8 @@ SourceFrame.UISourceCodeFrame = class extends SourceFrame.SourceFrame {
     this.textEditor.addEventListener(
         SourceFrame.SourcesTextEditor.Events.EditorFocused,
         () => UI.context.setFlavor(SourceFrame.UISourceCodeFrame, this));
+    Common.settings.moduleSetting('persistenceNetworkOverridesEnabled')
+        .addChangeListener(this._onNetworkPersistenceChanged, this);
 
     this._updateStyle();
     this._updateDiffUISourceCode();
@@ -133,6 +135,7 @@ SourceFrame.UISourceCodeFrame = class extends SourceFrame.SourceFrame {
     super.wasShown();
     // We need CodeMirrorTextEditor to be initialized prior to this call as it calls |cursorPositionToCoordinates| internally. @see crbug.com/506566
     setImmediate(this._updateBucketDecorations.bind(this));
+    this.setEditable(this._canEditSource());
   }
 
   /**
@@ -154,7 +157,18 @@ SourceFrame.UISourceCodeFrame = class extends SourceFrame.SourceFrame {
       return true;
     if (this._uiSourceCode.project().isServiceProject())
       return false;
+    var networkPersistenceProject = Persistence.networkPersistenceManager.activeProject();
+    if (this._uiSourceCode.project().type() === Workspace.projectTypes.Network && networkPersistenceProject) {
+      var projectDomain = Persistence.networkPersistenceManager.domainForProject(networkPersistenceProject);
+      var urlDomainPath = this._uiSourceCode.url().replace(/^https?:\/\//, '');
+      if (projectDomain && urlDomainPath.startsWith(projectDomain + '/'))
+        return true;
+    }
     return this._uiSourceCode.contentType() !== Common.resourceTypes.Document;
+  }
+
+  _onNetworkPersistenceChanged() {
+    this.setEditable(this._canEditSource());
   }
 
   commitEditing() {
@@ -340,6 +354,8 @@ SourceFrame.UISourceCodeFrame = class extends SourceFrame.SourceFrame {
     this.textEditor.dispose();
     Common.moduleSetting('textEditorAutocompletion').removeChangeListener(this._updateAutocomplete, this);
     this.detach();
+    Common.settings.moduleSetting('persistenceNetworkOverridesEnabled')
+        .removeChangeListener(this._onNetworkPersistenceChanged, this);
   }
 
   /**

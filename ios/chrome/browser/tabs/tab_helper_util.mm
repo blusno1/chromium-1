@@ -12,7 +12,6 @@
 #include "components/history/core/browser/top_sites.h"
 #import "components/history/ios/browser/web_state_top_sites_observer.h"
 #include "components/keyed_service/core/service_access_type.h"
-#import "components/signin/ios/browser/account_consistency_service.h"
 #import "ios/chrome/browser/autofill/autofill_tab_helper.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_tab_helper.h"
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
@@ -28,7 +27,6 @@
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/reading_list_web_state_observer.h"
 #import "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
-#import "ios/chrome/browser/signin/account_consistency_service_factory.h"
 #import "ios/chrome/browser/ssl/captive_portal_detector_tab_helper.h"
 #import "ios/chrome/browser/ssl/ios_security_state_tab_helper.h"
 #import "ios/chrome/browser/store_kit/store_kit_tab_helper.h"
@@ -38,6 +36,7 @@
 #import "ios/chrome/browser/tabs/tab_private.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/web/blocked_popup_tab_helper.h"
+#import "ios/chrome/browser/web/load_timing_tab_helper.h"
 #import "ios/chrome/browser/web/network_activity_indicator_tab_helper.h"
 #import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 #import "ios/chrome/browser/web/repost_form_tab_helper.h"
@@ -70,16 +69,12 @@ void AttachTabHelpers(web::WebState* web_state) {
   PagePlaceholderTabHelper::CreateForWebState(web_state, tab);
   CaptivePortalDetectorTabHelper::CreateForWebState(web_state);
   HistoryTabHelper::CreateForWebState(web_state);
+  LoadTimingTabHelper::CreateForWebState(web_state);
 
   ReadingListModel* model =
       ReadingListModelFactory::GetForBrowserState(browser_state);
   ReadingListWebStateObserver::FromWebState(web_state, model);
 
-  if (AccountConsistencyService* account_consistency_service =
-          ios::AccountConsistencyServiceFactory::GetForBrowserState(
-              browser_state)) {
-    account_consistency_service->SetWebStateHandler(web_state, tab);
-  }
   ChromeIOSTranslateClient::CreateForWebState(web_state);
 
   ios::ChromeBrowserState* original_browser_state =

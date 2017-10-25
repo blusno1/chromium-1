@@ -488,6 +488,28 @@ interface FileReader : EventTarget
     setter onloadend
     setter onloadstart
     setter onprogress
+interface FontFace
+    attribute @@toStringTag
+    getter display
+    getter family
+    getter featureSettings
+    getter loaded
+    getter status
+    getter stretch
+    getter style
+    getter unicodeRange
+    getter variant
+    getter weight
+    method constructor
+    method load
+    setter display
+    setter family
+    setter featureSettings
+    setter stretch
+    setter style
+    setter unicodeRange
+    setter variant
+    setter weight
 interface ForeignFetchEvent : ExtendableEvent
     attribute @@toStringTag
     getter origin
@@ -789,7 +811,6 @@ interface Notification : EventTarget
     getter data
     getter dir
     getter icon
-    getter image
     getter lang
     getter onclick
     getter onclose
@@ -1053,6 +1074,7 @@ interface Request
     getter credentials
     getter headers
     getter integrity
+    getter keepalive
     getter method
     getter mode
     getter redirect

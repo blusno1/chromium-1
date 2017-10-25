@@ -83,12 +83,24 @@ void UiElement::OnScrollUpdate(std::unique_ptr<blink::WebGestureEvent> gesture,
 void UiElement::OnScrollEnd(std::unique_ptr<blink::WebGestureEvent> gesture,
                             const gfx::PointF& position) {}
 
-void UiElement::PrepareToDraw() {}
+bool UiElement::PrepareToDraw() {
+  return false;
+}
 
-void UiElement::OnBeginFrame(const base::TimeTicks& time,
+bool UiElement::DoBeginFrame(const base::TimeTicks& time,
                              const gfx::Vector3dF& look_at) {
+  // TODO(mthiesse): This is overly cautious. We may have animations but not
+  // trigger any updates, so we should refine this logic and have
+  // AnimationPlayer::Tick return a boolean.
+  bool updated = animation_player_.animations().size() > 0;
   animation_player_.Tick(time);
   last_frame_time_ = time;
+  return OnBeginFrame(time, look_at) || updated;
+}
+
+bool UiElement::OnBeginFrame(const base::TimeTicks& time,
+                             const gfx::Vector3dF& look_at) {
+  return false;
 }
 
 bool UiElement::IsHitTestable() const {
@@ -205,6 +217,10 @@ const gfx::Transform& UiElement::world_space_transform() const {
   return world_space_transform_;
 }
 
+bool UiElement::IsWorldPositioned() const {
+  return true;
+}
+
 void UiElement::OnSetMode() {}
 void UiElement::OnUpdatedWorldSpaceTransform() {}
 
@@ -233,9 +249,13 @@ void UiElement::AddBinding(std::unique_ptr<BindingBase> binding) {
   bindings_.push_back(std::move(binding));
 }
 
-void UiElement::UpdateBindings() {
-  for (auto& binding : bindings_)
-    binding->Update();
+bool UiElement::UpdateBindings() {
+  bool updated = false;
+  for (auto& binding : bindings_) {
+    if (binding->Update())
+      updated = true;
+  }
+  return updated;
 }
 
 gfx::Point3F UiElement::GetCenter() const {
@@ -278,10 +298,10 @@ bool UiElement::GetRayDistance(const gfx::Point3F& ray_origin,
                              distance);
 }
 
-void UiElement::NotifyClientFloatAnimated(float opacity,
+void UiElement::NotifyClientFloatAnimated(float value,
                                           int target_property_id,
                                           cc::Animation* animation) {
-  opacity_ = base::ClampToRange(opacity, 0.0f, 1.0f);
+  opacity_ = base::ClampToRange(value, 0.0f, 1.0f);
 }
 
 void UiElement::NotifyClientTransformOperationsAnimated(
@@ -307,6 +327,10 @@ void UiElement::SetTransitionedProperties(
     const std::set<TargetProperty>& properties) {
   std::set<int> converted_properties(properties.begin(), properties.end());
   animation_player_.SetTransitionedProperties(converted_properties);
+}
+
+void UiElement::SetTransitionDuration(base::TimeDelta delta) {
+  animation_player_.SetTransitionDuration(delta);
 }
 
 void UiElement::AddAnimation(std::unique_ptr<cc::Animation> animation) {

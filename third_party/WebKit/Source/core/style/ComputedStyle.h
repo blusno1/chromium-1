@@ -91,7 +91,7 @@ class TransformationMatrix;
 
 class ContentData;
 
-typedef Vector<RefPtr<ComputedStyle>, 4> PseudoStyleCache;
+typedef Vector<scoped_refptr<ComputedStyle>, 4> PseudoStyleCache;
 
 // ComputedStyle stores the computed value [1] for every CSS property on an
 // element and provides the interface between the style engine and the rest of
@@ -105,7 +105,7 @@ typedef Vector<RefPtr<ComputedStyle>, 4> PseudoStyleCache;
 // In addition to storing the computed value of every CSS property,
 // ComputedStyle also contains various internal style information. Examples
 // include cached_pseudo_styles_ (for storing pseudo element styles), unique_
-// (for style caching) and has_simple_underline_ (cached indicator flag of
+// (for style sharing) and has_simple_underline_ (cached indicator flag of
 // text-decoration). These are stored on ComputedStyle for two reasons:
 //
 //  1) They share the same lifetime as ComputedStyle, so it is convenient to
@@ -194,16 +194,16 @@ class ComputedStyle : public ComputedStyleBase,
   ALWAYS_INLINE ComputedStyle();
   ALWAYS_INLINE ComputedStyle(const ComputedStyle&);
 
-  static RefPtr<ComputedStyle> CreateInitialStyle();
+  static scoped_refptr<ComputedStyle> CreateInitialStyle();
   // TODO(shend): Remove this. Initial style should not be mutable.
   CORE_EXPORT static ComputedStyle& MutableInitialStyle();
 
  public:
-  CORE_EXPORT static RefPtr<ComputedStyle> Create();
-  static RefPtr<ComputedStyle> CreateAnonymousStyleWithDisplay(
+  CORE_EXPORT static scoped_refptr<ComputedStyle> Create();
+  static scoped_refptr<ComputedStyle> CreateAnonymousStyleWithDisplay(
       const ComputedStyle& parent_style,
       EDisplay);
-  CORE_EXPORT static RefPtr<ComputedStyle> Clone(const ComputedStyle&);
+  CORE_EXPORT static scoped_refptr<ComputedStyle> Clone(const ComputedStyle&);
   static const ComputedStyle& InitialStyle() { return MutableInitialStyle(); }
   static void InvalidateInitialStyle();
 
@@ -249,7 +249,7 @@ class ComputedStyle : public ComputedStyleBase,
   void SetStyleType(PseudoId style_type) { SetStyleTypeInternal(style_type); }
 
   ComputedStyle* GetCachedPseudoStyle(PseudoId) const;
-  ComputedStyle* AddCachedPseudoStyle(RefPtr<ComputedStyle>);
+  ComputedStyle* AddCachedPseudoStyle(scoped_refptr<ComputedStyle>);
   void RemoveCachedPseudoStyle(PseudoId);
 
   const PseudoStyleCache* CachedPseudoStyles() const {
@@ -1012,7 +1012,7 @@ class ComputedStyle : public ComputedStyleBase,
   void SetCy(const Length& cy) { AccessSVGStyle().SetCy(cy); }
 
   // d
-  void SetD(RefPtr<StylePath> d) { AccessSVGStyle().SetD(std::move(d)); }
+  void SetD(scoped_refptr<StylePath> d) { AccessSVGStyle().SetD(std::move(d)); }
 
   // x
   void SetX(const Length& x) { AccessSVGStyle().SetX(x); }
@@ -1066,7 +1066,7 @@ class ComputedStyle : public ComputedStyleBase,
 
   // stroke-dasharray
   SVGDashArray* StrokeDashArray() const { return SvgStyle().StrokeDashArray(); }
-  void SetStrokeDashArray(RefPtr<SVGDashArray> array) {
+  void SetStrokeDashArray(scoped_refptr<SVGDashArray> array) {
     AccessSVGStyle().SetStrokeDashArray(std::move(array));
   }
 
@@ -1138,17 +1138,17 @@ class ComputedStyle : public ComputedStyleBase,
   StyleNonInheritedVariables* NonInheritedVariables() const;
 
   void SetUnresolvedInheritedVariable(const AtomicString&,
-                                      RefPtr<CSSVariableData>);
+                                      scoped_refptr<CSSVariableData>);
   void SetUnresolvedNonInheritedVariable(const AtomicString&,
-                                         RefPtr<CSSVariableData>);
+                                         scoped_refptr<CSSVariableData>);
 
   void SetResolvedUnregisteredVariable(const AtomicString&,
-                                       RefPtr<CSSVariableData>);
+                                       scoped_refptr<CSSVariableData>);
   void SetResolvedInheritedVariable(const AtomicString&,
-                                    RefPtr<CSSVariableData>,
+                                    scoped_refptr<CSSVariableData>,
                                     const CSSValue*);
   void SetResolvedNonInheritedVariable(const AtomicString&,
-                                       RefPtr<CSSVariableData>,
+                                       scoped_refptr<CSSVariableData>,
                                        const CSSValue*);
 
   void RemoveVariable(const AtomicString&, bool is_inherited_property);
@@ -2259,14 +2259,13 @@ class ComputedStyle : public ComputedStyleBase,
   // Color utility functions.
   // TODO(sashab): Rename this to just getColor(), and add a comment explaining
   // how it works.
-  CORE_EXPORT Color VisitedDependentColor(int color_property) const;
+  CORE_EXPORT Color VisitedDependentColor(CSSPropertyID color_property) const;
 
   // -webkit-appearance utility functions.
   bool HasAppearance() const { return Appearance() != kNoControlPart; }
 
   // Other utility functions.
   bool IsStyleAvailable() const;
-  bool IsSharable() const;
 
   bool RequireTransformOrigin(ApplyTransformOrigin apply_origin,
                               ApplyMotionPath) const;
@@ -2487,7 +2486,8 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   StyleColor DecorationColorIncludingFallback(bool visited_link) const;
-  Color ColorIncludingFallback(int color_property, bool visited_link) const;
+  Color ColorIncludingFallback(CSSPropertyID color_property,
+                               bool visited_link) const;
 
   Color StopColor() const { return SvgStyle().StopColor(); }
   Color FloodColor() const { return SvgStyle().FloodColor(); }
@@ -2612,14 +2612,6 @@ inline bool ComputedStyle::SetEffectiveZoom(float f) {
   if (EffectiveZoom() == clamped_effective_zoom)
     return false;
   SetEffectiveZoomInternal(clamped_effective_zoom);
-  return true;
-}
-
-inline bool ComputedStyle::IsSharable() const {
-  if (Unique())
-    return false;
-  if (HasUniquePseudoStyle())
-    return false;
   return true;
 }
 

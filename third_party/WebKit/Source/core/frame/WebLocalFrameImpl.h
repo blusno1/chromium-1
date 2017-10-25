@@ -252,7 +252,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   void SendPings(const WebURL& destination_url) override;
   bool DispatchBeforeUnloadEvent(bool) override;
   WebURLRequest RequestFromHistoryItem(const WebHistoryItem&,
-                                       WebCachePolicy) const override;
+                                       mojom::FetchCacheMode) const override;
   WebURLRequest RequestForReload(WebFrameLoadType,
                                  const WebURL&) const override;
   void Load(const WebURLRequest&,
@@ -428,16 +428,14 @@ class CORE_EXPORT WebLocalFrameImpl final
   void SetContextMenuNode(Node* node) { context_menu_node_ = node; }
   void ClearContextMenuNode() { context_menu_node_.Clear(); }
 
-  std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const WebURLRequest&,
-      SingleThreadTaskRunnerRefPtr) override;
+  std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() override;
 
   WebFrameWidgetBase* LocalRootFrameWidget();
 
   // Sets the local core frame and registers destruction observers.
   void SetCoreFrame(LocalFrame*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   WebLocalFrameImpl(WebTreeScopeType,

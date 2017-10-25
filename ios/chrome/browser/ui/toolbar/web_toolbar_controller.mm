@@ -42,7 +42,8 @@
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#include "ios/chrome/browser/ui/commands/start_voice_search_command.h"
+#import "ios/chrome/browser/ui/commands/external_search_commands.h"
+#import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/image_util.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_controller.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_controller_impl.h"
@@ -485,7 +486,7 @@ using ios::material::TimingFunction;
   SetA11yLabelAndUiAutomationName(_omniBox, IDS_ACCNAME_LOCATION, @"Address");
 
   // Resize the container to match the available area.
-  [self.view addSubview:_webToolbar];
+  [self.contentView addSubview:_webToolbar];
   [_webToolbar setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
                                    UIViewAutoresizingFlexibleTopMargin];
   [_webToolbar setFrame:[self specificControlsArea]];
@@ -1270,6 +1271,10 @@ using ios::material::TimingFunction;
   [self.dispatcher showQRScanner];
 }
 
+- (void)keyboardAccessoryExternalSearchTouchUp {
+  [self.dispatcher launchExternalSearch];
+}
+
 - (void)keyPressed:(NSString*)title {
   NSString* text = [self updateTextForDotCom:title];
   [_omniBox insertTextWhileEditing:text];
@@ -1443,7 +1448,7 @@ using ios::material::TimingFunction;
     // to avoid interfering with the omnibox animation.
     [_webToolbar setAutoresizesSubviews:NO];
     CGRect expandedFrame =
-        RectShiftedDownAndResizedForStatusBar(self.view.bounds);
+        RectShiftedDownAndResizedForStatusBar(self.contentView.bounds);
     [_webToolbar
         setFrame:growOmnibox ? expandedFrame : [self specificControlsArea]];
     [_webToolbar setAutoresizesSubviews:YES];

@@ -21,8 +21,7 @@ class IDBObserverInit;
 class IDBTransaction;
 class V8IDBObserverCallback;
 
-class MODULES_EXPORT IDBObserver final : public GarbageCollected<IDBObserver>,
-                                         public ScriptWrappable {
+class MODULES_EXPORT IDBObserver final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -37,8 +36,8 @@ class MODULES_EXPORT IDBObserver final : public GarbageCollected<IDBObserver>,
                ExceptionState&);
   void unobserve(IDBDatabase*, ExceptionState&);
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   explicit IDBObserver(V8IDBObserverCallback*);

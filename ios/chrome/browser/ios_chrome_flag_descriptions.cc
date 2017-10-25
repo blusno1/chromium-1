@@ -29,6 +29,12 @@ const char kContextualSearch[] = "Contextual Search";
 const char kContextualSearchDescription[] =
     "Whether or not Contextual Search is enabled.";
 
+const char kDragAndDropName[] = "Drag and Drop";
+const char kDragAndDropDescription[] = "Enable support for drag and drop.";
+
+const char kExternalSearchName[] = "External Search";
+const char kExternalSearchDescription[] = "Enable support for External Search.";
+
 const char kInProductHelpDemoModeName[] = "In-Product Help Demo Mode";
 const char kInProductHelpDemoModeDescription[] =
     "When enabled, in-product help promotions occur exactly once per cold "
@@ -39,12 +45,6 @@ const char kInProductHelpDemoModeDescription[] =
 const char kMarkHttpAsName[] = "Mark non-secure origins as non-secure";
 const char kMarkHttpAsDescription[] = "Change the UI treatment for HTTP pages";
 const char kMarkHttpAsDangerous[] = "Always mark HTTP as actively dangerous";
-const char kMarkHttpAsNonSecureAfterEditing[] =
-    "Warn on HTTP after editing forms";
-const char kMarkHttpAsNonSecureWhileIncognito[] =
-    "Warn on HTTP while in Incognito mode";
-const char kMarkHttpAsNonSecureWhileIncognitoOrEditing[] =
-    "Warn on HTTP while in Incognito mode or after editing forms";
 
 const char kMailtoPromptForUserChoiceName[] =
     "Mailto Handler Prompt for User Choice";
@@ -99,8 +99,5 @@ const char kWebPaymentsNativeAppsDescription[] =
     "Request.";
 
 // Please insert your name/description above in alphabetical order.
-
-const char kDragAndDropName[] = "Drag and Drop";
-const char kDragAndDropDescription[] = "Enable support for drag and drop.";
 
 }  // namespace flag_descriptions

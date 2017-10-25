@@ -40,6 +40,7 @@ class TestThreadableLoader : public ThreadableLoader {
   }
 
   void Cancel() override { is_cancelled_ = true; }
+  void Detach() override { NOTREACHED(); }
 
   bool IsStarted() const { return is_started_; }
   bool IsCancelled() const { return is_cancelled_; }
@@ -66,6 +67,7 @@ class SyncLoadingTestThreadableLoader : public ThreadableLoader {
   }
 
   void Cancel() override { is_cancelled_ = true; }
+  void Detach() override { NOTREACHED(); }
 
   bool IsStarted() const { return is_started_; }
   bool IsCancelled() const { return is_cancelled_; }
@@ -97,6 +99,7 @@ class SyncErrorTestThreadableLoader : public ThreadableLoader {
   }
 
   void Cancel() override { is_cancelled_ = true; }
+  void Detach() override { NOTREACHED(); }
 
   bool IsStarted() const { return is_started_; }
   bool IsCancelled() const { return is_cancelled_; }
@@ -135,7 +138,7 @@ class BlobBytesConsumerTest : public ::testing::Test {
 };
 
 TEST_F(BlobBytesConsumerTest, TwoPhaseRead) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -168,7 +171,7 @@ TEST_F(BlobBytesConsumerTest, TwoPhaseRead) {
 }
 
 TEST_F(BlobBytesConsumerTest, FailLoading) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -191,7 +194,7 @@ TEST_F(BlobBytesConsumerTest, FailLoading) {
 }
 
 TEST_F(BlobBytesConsumerTest, FailLoadingAfterResponseReceived) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -220,7 +223,7 @@ TEST_F(BlobBytesConsumerTest, FailLoadingAfterResponseReceived) {
 }
 
 TEST_F(BlobBytesConsumerTest, FailAccessControlCheck) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -243,7 +246,7 @@ TEST_F(BlobBytesConsumerTest, FailAccessControlCheck) {
 }
 
 TEST_F(BlobBytesConsumerTest, CancelBeforeStarting) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -265,7 +268,7 @@ TEST_F(BlobBytesConsumerTest, CancelBeforeStarting) {
 }
 
 TEST_F(BlobBytesConsumerTest, CancelAfterStarting) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -288,7 +291,7 @@ TEST_F(BlobBytesConsumerTest, CancelAfterStarting) {
 }
 
 TEST_F(BlobBytesConsumerTest, ReadLastChunkBeforeDidFinishLoadingArrives) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -331,7 +334,7 @@ TEST_F(BlobBytesConsumerTest, ReadLastChunkBeforeDidFinishLoadingArrives) {
 }
 
 TEST_F(BlobBytesConsumerTest, ReadLastChunkAfterDidFinishLoadingArrives) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -373,7 +376,7 @@ TEST_F(BlobBytesConsumerTest, ReadLastChunkAfterDidFinishLoadingArrives) {
 }
 
 TEST_F(BlobBytesConsumerTest, DrainAsBlobDataHandle) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -382,7 +385,7 @@ TEST_F(BlobBytesConsumerTest, DrainAsBlobDataHandle) {
   EXPECT_EQ(PublicState::kReadableOrWaiting, consumer->GetPublicState());
   EXPECT_FALSE(loader->IsStarted());
 
-  RefPtr<BlobDataHandle> result = consumer->DrainAsBlobDataHandle(
+  scoped_refptr<BlobDataHandle> result = consumer->DrainAsBlobDataHandle(
       BytesConsumer::BlobSizePolicy::kDisallowBlobWithInvalidSize);
   ASSERT_TRUE(result);
   EXPECT_FALSE(consumer->DrainAsBlobDataHandle(
@@ -393,7 +396,7 @@ TEST_F(BlobBytesConsumerTest, DrainAsBlobDataHandle) {
 }
 
 TEST_F(BlobBytesConsumerTest, DrainAsBlobDataHandle_2) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), -1);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -402,7 +405,7 @@ TEST_F(BlobBytesConsumerTest, DrainAsBlobDataHandle_2) {
   EXPECT_EQ(PublicState::kReadableOrWaiting, consumer->GetPublicState());
   EXPECT_FALSE(loader->IsStarted());
 
-  RefPtr<BlobDataHandle> result = consumer->DrainAsBlobDataHandle(
+  scoped_refptr<BlobDataHandle> result = consumer->DrainAsBlobDataHandle(
       BytesConsumer::BlobSizePolicy::kAllowBlobWithInvalidSize);
   ASSERT_TRUE(result);
   EXPECT_FALSE(consumer->DrainAsBlobDataHandle(
@@ -413,7 +416,7 @@ TEST_F(BlobBytesConsumerTest, DrainAsBlobDataHandle_2) {
 }
 
 TEST_F(BlobBytesConsumerTest, DrainAsBlobDataHandle_3) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), -1);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -429,7 +432,7 @@ TEST_F(BlobBytesConsumerTest, DrainAsBlobDataHandle_3) {
 }
 
 TEST_F(BlobBytesConsumerTest, DrainAsFormData) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   TestThreadableLoader* loader = new TestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -438,7 +441,7 @@ TEST_F(BlobBytesConsumerTest, DrainAsFormData) {
   EXPECT_EQ(PublicState::kReadableOrWaiting, consumer->GetPublicState());
   EXPECT_FALSE(loader->IsStarted());
 
-  RefPtr<EncodedFormData> result = consumer->DrainAsFormData();
+  scoped_refptr<EncodedFormData> result = consumer->DrainAsFormData();
   ASSERT_TRUE(result);
   ASSERT_EQ(1u, result->Elements().size());
   ASSERT_EQ(FormDataElement::kEncodedBlob, result->Elements()[0].type_);
@@ -451,7 +454,7 @@ TEST_F(BlobBytesConsumerTest, DrainAsFormData) {
 
 TEST_F(BlobBytesConsumerTest, LoaderShouldBeCancelled) {
   {
-    RefPtr<BlobDataHandle> blob_data_handle =
+    scoped_refptr<BlobDataHandle> blob_data_handle =
         BlobDataHandle::Create(BlobData::Create(), 12345);
     TestThreadableLoader* loader = new TestThreadableLoader();
     BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -467,7 +470,7 @@ TEST_F(BlobBytesConsumerTest, LoaderShouldBeCancelled) {
 }
 
 TEST_F(BlobBytesConsumerTest, SyncErrorDispatch) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   SyncErrorTestThreadableLoader* loader = new SyncErrorTestThreadableLoader();
   BlobBytesConsumer* consumer = BlobBytesConsumer::CreateForTesting(
@@ -486,7 +489,7 @@ TEST_F(BlobBytesConsumerTest, SyncErrorDispatch) {
 }
 
 TEST_F(BlobBytesConsumerTest, SyncLoading) {
-  RefPtr<BlobDataHandle> blob_data_handle =
+  scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create(BlobData::Create(), 12345);
   SyncLoadingTestThreadableLoader* loader =
       new SyncLoadingTestThreadableLoader();

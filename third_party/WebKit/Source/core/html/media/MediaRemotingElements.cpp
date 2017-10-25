@@ -28,7 +28,7 @@ class MediaRemotingExitButtonElement::MouseEventsListener final
     return this == &other;
   }
 
-  void Trace(blink::Visitor* visitor) {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(element_);
     EventListener::Trace(visitor);
   }
@@ -75,7 +75,7 @@ HTMLVideoElement& MediaRemotingExitButtonElement::GetVideoElement() const {
   return interstitial_->GetVideoElement();
 }
 
-DEFINE_TRACE(MediaRemotingExitButtonElement) {
+void MediaRemotingExitButtonElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(interstitial_);
   visitor->Trace(listener_);
   HTMLDivElement::Trace(visitor);

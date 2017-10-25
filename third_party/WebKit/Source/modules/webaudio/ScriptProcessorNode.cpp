@@ -70,7 +70,7 @@ ScriptProcessorHandler::ScriptProcessorHandler(
   Initialize();
 }
 
-RefPtr<ScriptProcessorHandler> ScriptProcessorHandler::Create(
+scoped_refptr<ScriptProcessorHandler> ScriptProcessorHandler::Create(
     AudioNode& node,
     float sample_rate,
     size_t buffer_size,
@@ -99,12 +99,12 @@ void ScriptProcessorHandler::Initialize() {
         number_of_input_channels_
             ? AudioBuffer::Create(number_of_input_channels_, BufferSize(),
                                   sample_rate)
-            : 0;
+            : nullptr;
     AudioBuffer* output_buffer =
         number_of_output_channels_
             ? AudioBuffer::Create(number_of_output_channels_, BufferSize(),
                                   sample_rate)
-            : 0;
+            : nullptr;
 
     input_buffers_.push_back(input_buffer);
     output_buffers_.push_back(output_buffer);
@@ -219,7 +219,7 @@ void ScriptProcessorHandler::Process(size_t frames_to_process) {
             ->PostTask(
                 BLINK_FROM_HERE,
                 CrossThreadBind(&ScriptProcessorHandler::FireProcessEvent,
-                                WrapRefPtr(this), double_buffer_index_));
+                                WrapRefCounted(this), double_buffer_index_));
       } else {
         // If this node is in the offline audio context, use the
         // waitable event to synchronize to the offline rendering thread.
@@ -232,7 +232,7 @@ void ScriptProcessorHandler::Process(size_t frames_to_process) {
                 BLINK_FROM_HERE,
                 CrossThreadBind(&ScriptProcessorHandler::
                                     FireProcessEventForOfflineAudioContext,
-                                WrapRefPtr(this), double_buffer_index_,
+                                WrapRefCounted(this), double_buffer_index_,
                                 CrossThreadUnretained(waitable_event.get())));
 
         // Okay to block the offline audio rendering thread since it is

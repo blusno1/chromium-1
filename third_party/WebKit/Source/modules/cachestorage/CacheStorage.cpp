@@ -15,7 +15,7 @@
 #include "modules/fetch/Request.h"
 #include "modules/fetch/Response.h"
 #include "platform/bindings/ScriptState.h"
-#include "platform/http_names.h"
+#include "platform/network/http_names.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheError.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
@@ -359,8 +359,9 @@ void CacheStorage::Dispose() {
   web_cache_storage_.reset();
 }
 
-DEFINE_TRACE(CacheStorage) {
+void CacheStorage::Trace(blink::Visitor* visitor) {
   visitor->Trace(scoped_fetcher_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

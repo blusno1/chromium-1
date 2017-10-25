@@ -9,7 +9,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
 #include "platform/PlatformExport.h"
 #include "platform/WebTaskRunner.h"
@@ -20,7 +20,8 @@ class TaskQueue;
 
 class PLATFORM_EXPORT WebTaskRunnerImpl : public WebTaskRunner {
  public:
-  static RefPtr<WebTaskRunnerImpl> Create(scoped_refptr<TaskQueue> task_queue);
+  static scoped_refptr<WebTaskRunnerImpl> Create(
+      scoped_refptr<TaskQueue> task_queue);
 
   // WebTaskRunner implementation:
   bool RunsTasksInCurrentSequence() override;

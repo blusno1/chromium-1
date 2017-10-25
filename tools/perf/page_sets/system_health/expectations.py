@@ -9,17 +9,14 @@ class SystemHealthDesktopCommonExpectations(expectations.StoryExpectations):
     self.DisableStory('browse:news:hackernews',
                       [expectations.ALL_WIN, expectations.ALL_MAC],
                       'crbug.com/676336')
-    self.DisableStory('browse:search:google',
-                      [expectations.ALL_WIN],
-                      'win:crbug.com/673775, mac:crbug.com/756027')
+    self.DisableStory('browse:search:google', [expectations.ALL_WIN],
+                      'crbug.com/673775')
     self.DisableStory('play:media:google_play_music', [expectations.ALL],
                       'crbug.com/649392')
     self.DisableStory('play:media:soundcloud', [expectations.ALL_WIN],
                       'crbug.com/649392')
     self.DisableStory('play:media:pandora', [expectations.ALL],
                       'crbug.com/64939')
-    self.DisableStory('browse:media:tumblr',
-                      [expectations.MAC_10_11], 'crbug.com/760966')
     self.DisableStory('browse:media:tumblr',
                       [expectations.ALL_WIN], 'crbug.com/773393')
     self.DisableStory('browse:news:cnn',
@@ -45,8 +42,6 @@ class SystemHealthDesktopMemoryExpectations(expectations.StoryExpectations):
                       'crbug.com/649392')
     self.DisableStory('play:media:pandora', [expectations.ALL],
                       'crbug.com/64939')
-    self.DisableStory('browse:media:tumblr',
-                      [expectations.MAC_10_11], 'crbug.com/760966')
     self.DisableStory('browse:news:cnn',
                       [expectations.ALL_MAC], 'crbug.com/728576')
     self.DisableStory('browse:social:twitter_infinite_scroll',
@@ -57,6 +52,10 @@ class SystemHealthDesktopMemoryExpectations(expectations.StoryExpectations):
                       [expectations.ALL], 'crbug.com/769809')
     self.DisableStory('browse:tools:maps', [expectations.ALL_MAC],
                       'crbug.com/773084')
+    self.DisableStory('load:news:wikipedia',
+                      [expectations.ALL_WIN], 'crbug.com/777931')
+    self.DisableStory('load_accessibility:media:wikipedia',
+                      [expectations.ALL_WIN], 'crbug.com/777931')
 
 
 class SystemHealthMobileCommonExpectations(expectations.StoryExpectations):
@@ -69,10 +68,16 @@ class SystemHealthMobileCommonExpectations(expectations.StoryExpectations):
                       'crbug.com/657433')
     self.DisableStory('browse:news:toi', [expectations.ALL_ANDROID],
                       'crbug.com/728081')
+    self.DisableStory('browse:shopping:lazada', [expectations.ANDROID_NEXUS5],
+                      'crbug.com/778108')
+    self.DisableStory('load:tools:weather', [expectations.ANDROID_NEXUS5],
+                      'crbug.com/778108')
     self.DisableStory(
         'load:tools:drive',
         [expectations.ANDROID_NEXUS5X, expectations.ANDROID_WEBVIEW],
         'crbug.com/738854')
+    self.DisableStory('load:news:irctc', [expectations.ANDROID_SVELTE],
+                      'crbug.com/778115')
     # TODO(rnephew): This disabling should move to CanRunOnBrowser.
     self.DisableStory('browse:chrome:omnibox',
                       [expectations.ANDROID_WEBVIEW],
@@ -103,6 +108,8 @@ class SystemHealthMobileMemoryExpectations(expectations.StoryExpectations):
         'load:tools:drive',
         [expectations.ANDROID_NEXUS5X, expectations.ANDROID_WEBVIEW],
         'crbug.com/738854')
+    self.DisableStory('long_running:tools:gmail-background',
+                      [expectations.ANDROID_SVELTE], 'crbug.com/777355')
     # TODO(rnephew): This disabling should move to CanRunOnBrowser.
     self.DisableStory('browse:chrome:omnibox',
                       [expectations.ANDROID_WEBVIEW],

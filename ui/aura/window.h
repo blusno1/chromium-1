@@ -167,6 +167,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   gfx::Rect GetBoundsInScreen() const;
 
   void SetTransform(const gfx::Transform& transform);
+  const gfx::Transform& transform() const { return layer()->transform(); }
 
   // Assigns a LayoutManager to size and place child windows.
   // The Window takes ownership of the LayoutManager.
@@ -226,6 +227,9 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // Converts |point| from |source|'s coordinates to |target|'s. If |source| is
   // NULL, the function returns without modifying |point|. |target| cannot be
   // NULL.
+  static void ConvertPointToTarget(const Window* source,
+                                   const Window* target,
+                                   gfx::PointF* point);
   static void ConvertPointToTarget(const Window* source,
                                    const Window* target,
                                    gfx::Point* point);

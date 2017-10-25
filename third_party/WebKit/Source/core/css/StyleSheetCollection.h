@@ -67,8 +67,8 @@ class CORE_EXPORT StyleSheetCollection
   void AppendSheetForList(StyleSheet*);
   void MarkSheetListDirty() { sheet_list_dirty_ = true; }
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   void Dispose();
 

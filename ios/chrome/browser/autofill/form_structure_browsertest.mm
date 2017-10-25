@@ -10,6 +10,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/task_scheduler.h"
+#import "base/test/ios/wait_util.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/data_driven_test.h"
 #import "components/autofill/ios/browser/autofill_agent.h"
@@ -39,12 +41,31 @@ const base::FilePath& GetTestDataDir() {
   return dir;
 }
 
+base::FilePath GetIOSOutputDirectory(
+    const base::FilePath::StringType& test_name) {
+  base::FilePath dir;
+  CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &dir));
+
+  dir = dir.AppendASCII("components")
+            .AppendASCII("test")
+            .AppendASCII("data")
+            .AppendASCII("autofill")
+            .AppendASCII("heuristics")
+            .AppendASCII("output");
+
+  return dir;
+}
+
 const std::vector<base::FilePath> GetTestFiles() {
   base::FilePath dir;
   CHECK(PathService::Get(base::DIR_SOURCE_ROOT, &dir));
-  dir = dir.AppendASCII("ios/chrome/test/data/autofill")
-            .Append(kTestName)
+  dir = dir.AppendASCII("components")
+            .AppendASCII("test")
+            .AppendASCII("data")
+            .AppendASCII("autofill")
+            .AppendASCII("heuristics")
             .AppendASCII("input");
+
   base::FileEnumerator input_files(dir, false, base::FileEnumerator::FILES);
   std::vector<base::FilePath> files;
   for (base::FilePath input_file = input_files.Next(); !input_file.empty();
@@ -113,12 +134,18 @@ void FormStructureBrowserTest::SetUp() {
 void FormStructureBrowserTest::TearDown() {
   [autofillController_ detachFromWebState];
 
+  // TODO(crbug.com/776330): remove this manual sync.
+  // This is a workaround to manually sync the tasks posted by
+  // |CRWCertVerificationController verifyTrust:completionHandler:|.
+  // |WaitForBackgroundTasks| currently fails to wait for completion of them.
+  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(0.1));
   ChromeWebTest::TearDown();
 }
 
 void FormStructureBrowserTest::GenerateResults(const std::string& input,
                                                std::string* output) {
   LoadHtml(input);
+  base::TaskScheduler::GetInstance()->FlushForTesting();
   AutofillManager* autofill_manager =
       AutofillDriverIOS::FromWebState(web_state())->autofill_manager();
   ASSERT_NE(nullptr, autofill_manager);
@@ -143,10 +170,8 @@ std::string FormStructureBrowserTest::FormStructuresToString(
   return forms_string;
 }
 
-// Disabled because the tests don't pass yet: http://crbug.com/427614
-// Disabled because the tests crash flakily: http://crbug.com/464383
-TEST_P(FormStructureBrowserTest, DISABLED_DataDrivenHeuristics) {
-  RunOneDataDrivenTest(GetParam(), GetOutputDirectory(kTestName));
+TEST_P(FormStructureBrowserTest, DataDrivenHeuristics) {
+  RunOneDataDrivenTest(GetParam(), GetIOSOutputDirectory(kTestName));
 }
 
 INSTANTIATE_TEST_CASE_P(AllForms,

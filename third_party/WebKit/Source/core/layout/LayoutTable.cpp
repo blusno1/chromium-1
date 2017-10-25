@@ -131,7 +131,7 @@ static inline void ResetSectionPointerIfNotBefore(LayoutTableSection*& ptr,
   while (o && o != ptr)
     o = o->PreviousSibling();
   if (!o)
-    ptr = 0;
+    ptr = nullptr;
 }
 
 static inline bool NeedsTableSection(LayoutObject* object) {
@@ -224,7 +224,7 @@ void LayoutTable::AddChild(LayoutObject* child, LayoutObject* before_child) {
 
   if (before_child && !before_child->IsTableSection() &&
       NeedsTableSection(before_child))
-    before_child = 0;
+    before_child = nullptr;
 
   LayoutTableSection* section =
       LayoutTableSection::CreateAnonymousWithParent(this);
@@ -547,7 +547,7 @@ void LayoutTable::SimplifiedNormalFlowLayout() {
   // FIXME: We should walk through the items in the tree in tree order to do the
   // layout here instead of walking through individual parts of the tree.
   // crbug.com/442737
-  for (auto& caption : captions_)
+  for (auto*& caption : captions_)
     caption->LayoutIfNeeded();
 
   for (LayoutTableSection* section = TopSection(); section;
@@ -1282,7 +1282,7 @@ LayoutTableSection* LayoutTable::SectionAbove(
   RecalcSectionsIfNeeded();
 
   if (section == head_)
-    return 0;
+    return nullptr;
 
   LayoutObject* prev_section =
       section == foot_ ? LastChild() : section->PreviousSibling();
@@ -1541,7 +1541,7 @@ bool LayoutTable::NodeAtPoint(HitTestResult& result,
 
 LayoutTable* LayoutTable::CreateAnonymousWithParent(
     const LayoutObject* parent) {
-  RefPtr<ComputedStyle> new_style =
+  scoped_refptr<ComputedStyle> new_style =
       ComputedStyle::CreateAnonymousStyleWithDisplay(
           parent->StyleRef(),
           parent->IsLayoutInline() ? EDisplay::kInlineTable : EDisplay::kTable);

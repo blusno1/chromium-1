@@ -24,15 +24,16 @@ namespace internal {
 class IdleRequestCallbackWrapper
     : public RefCounted<IdleRequestCallbackWrapper> {
  public:
-  static RefPtr<IdleRequestCallbackWrapper> Create(
+  static scoped_refptr<IdleRequestCallbackWrapper> Create(
       ScriptedIdleTaskController::CallbackId id,
       ScriptedIdleTaskController* controller) {
     return WTF::AdoptRef(new IdleRequestCallbackWrapper(id, controller));
   }
   virtual ~IdleRequestCallbackWrapper() {}
 
-  static void IdleTaskFired(RefPtr<IdleRequestCallbackWrapper> callback_wrapper,
-                            double deadline_seconds) {
+  static void IdleTaskFired(
+      scoped_refptr<IdleRequestCallbackWrapper> callback_wrapper,
+      double deadline_seconds) {
     // TODO(rmcilroy): Implement clamping of deadline in some form.
     if (ScriptedIdleTaskController* controller =
             callback_wrapper->Controller()) {
@@ -53,7 +54,7 @@ class IdleRequestCallbackWrapper
   }
 
   static void TimeoutFired(
-      RefPtr<IdleRequestCallbackWrapper> callback_wrapper) {
+      scoped_refptr<IdleRequestCallbackWrapper> callback_wrapper) {
     if (ScriptedIdleTaskController* controller =
             callback_wrapper->Controller()) {
       controller->CallbackFired(callback_wrapper->Id(),
@@ -83,12 +84,13 @@ ScriptedIdleTaskController::V8IdleTask::V8IdleTask(
     V8IdleRequestCallback* callback)
     : callback_(callback) {}
 
-DEFINE_TRACE(ScriptedIdleTaskController::V8IdleTask) {
+void ScriptedIdleTaskController::V8IdleTask::Trace(blink::Visitor* visitor) {
   visitor->Trace(callback_);
   ScriptedIdleTaskController::IdleTask::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ScriptedIdleTaskController::V8IdleTask) {
+void ScriptedIdleTaskController::V8IdleTask::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(callback_);
   ScriptedIdleTaskController::IdleTask::TraceWrappers(visitor);
 }
@@ -108,12 +110,13 @@ ScriptedIdleTaskController::ScriptedIdleTaskController(
 
 ScriptedIdleTaskController::~ScriptedIdleTaskController() {}
 
-DEFINE_TRACE(ScriptedIdleTaskController) {
+void ScriptedIdleTaskController::Trace(blink::Visitor* visitor) {
   visitor->Trace(idle_tasks_);
   SuspendableObject::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ScriptedIdleTaskController) {
+void ScriptedIdleTaskController::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   for (const auto& idle_task : idle_tasks_.Values()) {
     visitor->TraceWrappers(idle_task);
   }
@@ -142,7 +145,7 @@ ScriptedIdleTaskController::RegisterCallback(
   probe::AsyncTaskScheduled(GetExecutionContext(), "requestIdleCallback",
                             idle_task);
 
-  RefPtr<internal::IdleRequestCallbackWrapper> callback_wrapper =
+  scoped_refptr<internal::IdleRequestCallbackWrapper> callback_wrapper =
       internal::IdleRequestCallbackWrapper::Create(id, this);
   ScheduleCallback(std::move(callback_wrapper), timeout_millis);
   TRACE_EVENT_INSTANT1("devtools.timeline", "RequestIdleCallback",
@@ -153,7 +156,7 @@ ScriptedIdleTaskController::RegisterCallback(
 }
 
 void ScriptedIdleTaskController::ScheduleCallback(
-    RefPtr<internal::IdleRequestCallbackWrapper> callback_wrapper,
+    scoped_refptr<internal::IdleRequestCallbackWrapper> callback_wrapper,
     long long timeout_millis) {
   scheduler_->PostIdleTask(
       BLINK_FROM_HERE,
@@ -258,7 +261,7 @@ void ScriptedIdleTaskController::Resume() {
 
   // Repost idle tasks for any remaining callbacks.
   for (auto& idle_task : idle_tasks_) {
-    RefPtr<internal::IdleRequestCallbackWrapper> callback_wrapper =
+    scoped_refptr<internal::IdleRequestCallbackWrapper> callback_wrapper =
         internal::IdleRequestCallbackWrapper::Create(idle_task.key, this);
     scheduler_->PostIdleTask(
         BLINK_FROM_HERE,

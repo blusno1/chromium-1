@@ -51,7 +51,6 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "components/metrics/proto/ukm/entry.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
@@ -114,9 +113,15 @@ class TestPaymentsClient : public payments::PaymentsClient {
  public:
   TestPaymentsClient(net::URLRequestContextGetter* context_getter,
                      PrefService* pref_service,
-                     payments::PaymentsClientDelegate* delegate)
-      : PaymentsClient(context_getter, pref_service, delegate),
-        delegate_(delegate) {}
+                     IdentityProvider* identity_provider,
+                     payments::PaymentsClientUnmaskDelegate* unmask_delegate,
+                     payments::PaymentsClientSaveDelegate* save_delegate)
+      : PaymentsClient(context_getter,
+                       pref_service,
+                       identity_provider,
+                       unmask_delegate,
+                       save_delegate),
+        save_delegate_(save_delegate) {}
 
   ~TestPaymentsClient() override {}
 
@@ -124,7 +129,7 @@ class TestPaymentsClient : public payments::PaymentsClient {
                         const std::vector<const char*>& active_experiments,
                         const std::string& app_locale) override {
     active_experiments_ = active_experiments;
-    delegate_->OnDidGetUploadDetails(
+    save_delegate_->OnDidGetUploadDetails(
         app_locale == "en-US" ? AutofillClient::SUCCESS
                               : AutofillClient::PERMANENT_FAILURE,
         ASCIIToUTF16("this is a context token"),
@@ -134,14 +139,14 @@ class TestPaymentsClient : public payments::PaymentsClient {
   void UploadCard(const payments::PaymentsClient::UploadRequestDetails&
                       request_details) override {
     active_experiments_ = request_details.active_experiments;
-    delegate_->OnDidUploadCard(AutofillClient::SUCCESS, server_id_);
+    save_delegate_->OnDidUploadCard(AutofillClient::SUCCESS, server_id_);
   }
 
   std::string server_id_;
   std::vector<const char*> active_experiments_;
 
  private:
-  payments::PaymentsClientDelegate* const delegate_;
+  payments::PaymentsClientSaveDelegate* const save_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPaymentsClient);
 };
@@ -173,7 +178,7 @@ class TestPersonalDataManager : public PersonalDataManager {
       if (!profile->guid().compare(guid))
         return profile;
     }
-    return NULL;
+    return nullptr;
   }
 
   CreditCard* GetCreditCardWithGUID(const char* guid) {
@@ -181,7 +186,7 @@ class TestPersonalDataManager : public PersonalDataManager {
       if (!card->guid().compare(guid))
         return card;
     }
-    return NULL;
+    return nullptr;
   }
 
   void AddProfile(const AutofillProfile& profile) override {
@@ -573,7 +578,11 @@ class TestAutofillManager : public AutofillManager {
         personal_data_(personal_data),
         context_getter_(driver->GetURLRequestContext()),
         test_payments_client_(
-            new TestPaymentsClient(context_getter_, client->GetPrefs(), this)),
+            new TestPaymentsClient(context_getter_,
+                                   client->GetPrefs(),
+                                   client->GetIdentityProvider(),
+                                   this,
+                                   this)),
         autofill_enabled_(true),
         credit_card_enabled_(true),
         credit_card_upload_enabled_(false),
@@ -720,7 +729,8 @@ class TestAutofillManager : public AutofillManager {
 
   void ResetPaymentsClientForCardUpload(const char* server_id) {
     TestPaymentsClient* payments_client =
-        new TestPaymentsClient(context_getter_, client()->GetPrefs(), this);
+        new TestPaymentsClient(context_getter_, client()->GetPrefs(),
+                               client()->GetIdentityProvider(), this, this);
     payments_client->server_id_ = server_id;
     set_payments_client(payments_client);
   }
@@ -903,8 +913,8 @@ class AutofillManagerTest : public testing::Test {
 
     // Remove the AutofillWebDataService so TestPersonalDataManager does not
     // need to care about removing self as an observer in destruction.
-    personal_data_.set_database(scoped_refptr<AutofillWebDataService>(NULL));
-    personal_data_.SetPrefService(NULL);
+    personal_data_.set_database(scoped_refptr<AutofillWebDataService>(nullptr));
+    personal_data_.SetPrefService(nullptr);
     personal_data_.ClearCreditCards();
 
     request_context_ = nullptr;
@@ -1113,6 +1123,11 @@ class AutofillManagerTest : public testing::Test {
   void EnableAutofillUpstreamUseAutofillProfileComparator() {
     scoped_feature_list_.InitAndEnableFeature(
         kAutofillUpstreamUseAutofillProfileComparator);
+  }
+
+  void DisableCreditCardAutofill() {
+    scoped_feature_list_.InitAndEnableFeature(
+        kAutofillCreditCardAblationExperiment);
   }
 
   void ExpectUniqueFillableFormParsedUkm() {
@@ -2100,6 +2115,62 @@ TEST_F(AutofillManagerTest, GetAddressAndCreditCardSuggestionsNonHttps) {
   personal_data_.ClearCreditCards();
   GetAutofillSuggestions(form, field);
   external_delegate_->CheckNoSuggestions(kDefaultPageID);
+}
+
+TEST_F(AutofillManagerTest,
+       ShouldShowAddressSuggestionsIfCreditCardAutofillDisabled) {
+  DisableCreditCardAutofill();
+
+  // Set up our form data.
+  FormData form;
+  test::CreateTestAddressFormData(&form);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field = form.fields[0];
+  GetAutofillSuggestions(form, field);
+
+  // Check that address suggestions will still be available.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID, Suggestion("Charles", "123 Apple St.", "", 1),
+      Suggestion("Elvis", "3734 Elvis Presley Blvd.", "", 2));
+}
+
+TEST_F(AutofillManagerTest,
+       ShouldNotShowCreditCardsSuggestionsIfCreditCardAutofillDisabled) {
+  DisableCreditCardAutofill();
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field = form.fields[0];
+  GetAutofillSuggestions(form, field);
+
+  // Check that credit card suggestions will not be available.
+  external_delegate_->CheckNoSuggestions(kDefaultPageID);
+}
+
+TEST_F(AutofillManagerTest,
+       ShouldLogFormSubmitEventIfCreditCardAutofillDisabled) {
+  DisableCreditCardAutofill();
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field = form.fields[0];
+  GetAutofillSuggestions(form, field);
+
+  base::HistogramTester histogram_tester;
+  FormSubmitted(form);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      AutofillMetrics::FORM_EVENT_SUGGESTION_SHOWN_SUBMITTED_ONCE, 1);
 }
 
 // Test that we return autocomplete-like suggestions when trying to autofill
@@ -3260,7 +3331,7 @@ TEST_F(AutofillManagerTest, FillPhoneNumber) {
   // We should be able to fill prefix and suffix fields for US numbers.
   AutofillProfile* work_profile = autofill_manager_->GetProfileWithGUID(
       "00000000-0000-0000-0000-000000000002");
-  ASSERT_TRUE(work_profile != NULL);
+  ASSERT_TRUE(work_profile != nullptr);
   work_profile->SetRawInfo(PHONE_HOME_WHOLE_NUMBER,
                            ASCIIToUTF16("16505554567"));
 
@@ -3452,7 +3523,7 @@ TEST_F(AutofillManagerTest, FormWillSubmitDoesNotSaveData) {
 TEST_F(AutofillManagerTest, FormSubmittedAutocompleteEnabled) {
   TestAutofillClient client;
   autofill_manager_.reset(
-      new TestAutofillManager(autofill_driver_.get(), &client, NULL));
+      new TestAutofillManager(autofill_driver_.get(), &client, nullptr));
   autofill_manager_->set_autofill_enabled(false);
 
   // Set up our form data.
@@ -3469,7 +3540,7 @@ TEST_F(AutofillManagerTest, FormSubmittedAutocompleteEnabled) {
 TEST_F(AutofillManagerTest, AutocompleteSuggestions_SomeWhenAutofillDisabled) {
   TestAutofillClient client;
   autofill_manager_.reset(
-      new TestAutofillManager(autofill_driver_.get(), &client, NULL));
+      new TestAutofillManager(autofill_driver_.get(), &client, nullptr));
   autofill_manager_->set_autofill_enabled(false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
@@ -3493,7 +3564,7 @@ TEST_F(AutofillManagerTest,
        AutocompleteSuggestions_AutofillDisabledAndFieldShouldNotAutocomplete) {
   TestAutofillClient client;
   autofill_manager_.reset(
-      new TestAutofillManager(autofill_driver_.get(), &client, NULL));
+      new TestAutofillManager(autofill_driver_.get(), &client, nullptr));
   autofill_manager_->set_autofill_enabled(false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
@@ -3565,7 +3636,7 @@ TEST_F(AutofillManagerTest,
        AutocompleteSuggestions_CreditCardNameFieldShouldAutocomplete) {
   TestAutofillClient client;
   autofill_manager_.reset(
-      new TestAutofillManager(autofill_driver_.get(), &client, NULL));
+      new TestAutofillManager(autofill_driver_.get(), &client, nullptr));
   autofill_manager_->set_autofill_enabled(false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
@@ -3591,7 +3662,7 @@ TEST_F(AutofillManagerTest,
        AutocompleteSuggestions_CreditCardNumberShouldNotAutocomplete) {
   TestAutofillClient client;
   autofill_manager_.reset(
-      new TestAutofillManager(autofill_driver_.get(), &client, NULL));
+      new TestAutofillManager(autofill_driver_.get(), &client, nullptr));
   autofill_manager_->set_autofill_enabled(false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
@@ -3637,7 +3708,7 @@ TEST_F(
 TEST_F(AutofillManagerTest, AutocompleteOffRespectedForAutocomplete) {
   TestAutofillClient client;
   autofill_manager_.reset(
-      new TestAutofillManager(autofill_driver_.get(), &client, NULL));
+      new TestAutofillManager(autofill_driver_.get(), &client, nullptr));
   autofill_manager_->set_autofill_enabled(false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 

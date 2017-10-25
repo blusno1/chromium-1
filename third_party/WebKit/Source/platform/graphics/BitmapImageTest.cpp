@@ -62,16 +62,19 @@ class BitmapImageTest : public ::testing::Test {
       last_decoded_size_ = new_size;
     }
     bool ShouldPauseAnimation(const Image*) override { return false; }
-    void AnimationAdvanced(const Image*) override {}
+    void AnimationAdvanced(const Image*) override {
+      animation_advanced_ = true;
+    }
     void AsyncLoadCompleted(const Image*) override { NOTREACHED(); }
 
     virtual void ChangedInRect(const Image*, const IntRect&) {}
 
     size_t last_decoded_size_;
     int last_decoded_size_changed_delta_;
+    bool animation_advanced_ = false;
   };
 
-  static RefPtr<SharedBuffer> ReadFile(const char* file_name) {
+  static scoped_refptr<SharedBuffer> ReadFile(const char* file_name) {
     String file_path = testing::BlinkRootDir();
     file_path.append(file_name);
     return testing::ReadFromFile(file_path);
@@ -91,7 +94,7 @@ class BitmapImageTest : public ::testing::Test {
   void SetFirstFrameNotComplete() { image_->frames_[0].is_complete_ = false; }
 
   void LoadImage(const char* file_name, bool load_all_frames = true) {
-    RefPtr<SharedBuffer> image_data = ReadFile(file_name);
+    scoped_refptr<SharedBuffer> image_data = ReadFile(file_name);
     ASSERT_TRUE(image_data.get());
 
     image_->SetData(image_data, true);
@@ -119,13 +122,13 @@ class BitmapImageTest : public ::testing::Test {
     return size;
   }
 
-  void AdvanceAnimation() { image_->AdvanceAnimation(0); }
+  void AdvanceAnimation() { image_->AdvanceAnimation(nullptr); }
 
   int RepetitionCount() { return image_->RepetitionCount(); }
 
   int AnimationFinished() { return image_->animation_finished_; }
 
-  RefPtr<Image> ImageForDefaultFrame() {
+  scoped_refptr<Image> ImageForDefaultFrame() {
     return image_->ImageForDefaultFrame();
   }
 
@@ -133,7 +136,7 @@ class BitmapImageTest : public ::testing::Test {
     return image_observer_->last_decoded_size_changed_delta_;
   }
 
-  RefPtr<SharedBuffer> Data() { return image_->Data(); }
+  scoped_refptr<SharedBuffer> Data() { return image_->Data(); }
 
  protected:
   void SetUp() override {
@@ -142,7 +145,7 @@ class BitmapImageTest : public ::testing::Test {
   }
 
   Persistent<FakeImageObserver> image_observer_;
-  RefPtr<BitmapImage> image_;
+  scoped_refptr<BitmapImage> image_;
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
       platform_;
 };
@@ -181,11 +184,11 @@ TEST_F(BitmapImageTest, animationRepetitions) {
 }
 
 TEST_F(BitmapImageTest, isAllDataReceived) {
-  RefPtr<SharedBuffer> image_data =
+  scoped_refptr<SharedBuffer> image_data =
       ReadFile("/LayoutTests/images/resources/green.jpg");
   ASSERT_TRUE(image_data.get());
 
-  RefPtr<BitmapImage> image = BitmapImage::Create();
+  scoped_refptr<BitmapImage> image = BitmapImage::Create();
   EXPECT_FALSE(image->IsAllDataReceived());
 
   image->SetData(image_data, false);
@@ -262,12 +265,12 @@ TEST_F(BitmapImageTest, recachingFrameAfterDataChanged) {
 }
 
 TEST_F(BitmapImageTest, ConstantImageIdForPartiallyLoadedImages) {
-  RefPtr<SharedBuffer> image_data =
+  scoped_refptr<SharedBuffer> image_data =
       ReadFile("/LayoutTests/images/resources/green.jpg");
   ASSERT_TRUE(image_data.get());
 
   // Create a new buffer to partially supply the data.
-  RefPtr<SharedBuffer> partial_buffer = SharedBuffer::Create();
+  scoped_refptr<SharedBuffer> partial_buffer = SharedBuffer::Create();
   partial_buffer->Append(image_data->Data(), image_data->size() - 4);
 
   // First partial load. Repeated calls for a PaintImage should have the same
@@ -467,7 +470,7 @@ TEST_F(BitmapImageTestWithMockDecoder, DontAdvanceToIncompleteFrame) {
   // still won't advance it.
   image_->SetData(SharedBuffer::Create("data", sizeof("data")), true);
 
-  RefPtr<scheduler::FakeWebTaskRunner> task_runner =
+  scoped_refptr<scheduler::FakeWebTaskRunner> task_runner =
       WTF::AdoptRef(new scheduler::FakeWebTaskRunner);
   image_->SetTaskRunnerForTesting(task_runner);
   task_runner->SetTime(10);
@@ -490,7 +493,7 @@ TEST_F(BitmapImageTestWithMockDecoder, DontAdvanceToIncompleteFrame) {
 }
 
 TEST_F(BitmapImageTestWithMockDecoder, FrameSkipTracking) {
-  RuntimeEnabledFeatures::SetCompositorImageAnimationsEnabled(false);
+  ScopedCompositorImageAnimationsForTest compositor_image_animations(false);
 
   repetition_count_ = kAnimationLoopOnce;
   frame_count_ = 7u;
@@ -502,13 +505,14 @@ TEST_F(BitmapImageTestWithMockDecoder, FrameSkipTracking) {
   // received.
   image_->SetData(SharedBuffer::Create("data", sizeof("data")), false);
 
-  RefPtr<scheduler::FakeWebTaskRunner> task_runner =
+  scoped_refptr<scheduler::FakeWebTaskRunner> task_runner =
       WTF::AdoptRef(new scheduler::FakeWebTaskRunner);
   image_->SetTaskRunnerForTesting(task_runner);
   task_runner->SetTime(10);
 
   // Start the animation at 10s. This should schedule a timer for the next frame
   // after 10 seconds.
+  EXPECT_FALSE(image_observer_->animation_advanced_);
   StartAnimation();
   EXPECT_EQ(image_->PaintImageForCurrentFrame().frame_index(), 0u);
 
@@ -517,42 +521,51 @@ TEST_F(BitmapImageTestWithMockDecoder, FrameSkipTracking) {
 
   // Advance the time to 15s. The frame is still at 0u because the posted task
   // should run at 20s.
+  image_observer_->animation_advanced_ = false;
   task_runner->AdvanceTimeAndRun(5);
   EXPECT_EQ(image_->PaintImageForCurrentFrame().frame_index(), 0u);
+  EXPECT_FALSE(image_observer_->animation_advanced_);
 
   // Advance the time to 20s. The task runs and advances the animation forward
   // to 1u.
   task_runner->AdvanceTimeAndRun(5);
-  EXPECT_EQ(image_->PaintImageForCurrentFrame().frame_index(), 1u);
-  EXPECT_EQ(image_->last_num_frames_skipped_for_testing().value(), 0u);
+  EXPECT_TRUE(image_observer_->animation_advanced_);
 
-  // Set now_ to 41 seconds. Since the animation started at 10s, and each frame
-  // has a duration of 10s, we should see the fourth frame at 41 seconds.
+  // If we were to paint now, we should use the second frame.
+  EXPECT_EQ(image_->PaintImageForCurrentFrame().frame_index(), 1u);
+
+  // Now assume painting the next frame was delayed to 41 seconds. We should
+  // first draw with the |current_frame_index_| and then call StartAnimation to
+  // advance the frame.
+  // Since the animation started at 10s, and each frame has a duration of 10s,
+  // we should see the fourth frame at 41 seconds.
   now_ = 41;
   task_runner->SetTime(41);
   StartAnimation();
+
+  // Since we just skipped frames while advancing this animation, we should see
+  // a notification to dirty immediately.
+  image_observer_->animation_advanced_ = false;
+  task_runner->AdvanceTimeAndRun(0);
+  EXPECT_TRUE(image_observer_->animation_advanced_);
+
+  // On the next draw, we should see the fourth frame.
   EXPECT_EQ(image_->PaintImageForCurrentFrame().frame_index(), 3u);
   EXPECT_EQ(image_->last_num_frames_skipped_for_testing().value(), 1u);
 
-  // We should have scheduled a task to move to the fifth frame in
-  // StartAnimation above, at 50s.
-  // Advance by 5s, not time for the next frame yet.
-  task_runner->AdvanceTimeAndRun(5);
-  EXPECT_EQ(image_->PaintImageForCurrentFrame().frame_index(), 3u);
-
-  // Advance to the fifth frame.
-  task_runner->SetTime(50);
-  task_runner->AdvanceTimeAndRun(0);
-  EXPECT_EQ(image_->PaintImageForCurrentFrame().frame_index(), 4u);
-
-  // At 70s, we would want to display the last frame and would skip 1 frame.
-  // But because its incomplete, we advanced to the sixth frame and did not need
-  // to skip anything.
+  // At 70s, we would want to display the last frame and would skip 2 frames.
+  // But because its incomplete, we advanced to the sixth frame and only skipped
+  // 1 frame.
   now_ = 71;
   task_runner->SetTime(71);
   StartAnimation();
   EXPECT_EQ(image_->PaintImageForCurrentFrame().frame_index(), 5u);
-  EXPECT_EQ(image_->last_num_frames_skipped_for_testing().value(), 0u);
+  EXPECT_EQ(image_->last_num_frames_skipped_for_testing().value(), 1u);
+
+  // We should still see a notification to move to the sixth frame.
+  image_observer_->animation_advanced_ = false;
+  task_runner->AdvanceTimeAndRun(0);
+  EXPECT_TRUE(image_observer_->animation_advanced_);
 
   // Run any pending tasks and try to animate again. Can't advance the animation
   // because the last frame is not complete.
@@ -565,12 +578,20 @@ TEST_F(BitmapImageTestWithMockDecoder, FrameSkipTracking) {
   // But no frame skipped because we just advanced to the last frame.
   last_frame_complete_ = true;
   image_->SetData(SharedBuffer::Create("data", sizeof("data")), true);
+
   StartAnimation();
   EXPECT_EQ(image_->PaintImageForCurrentFrame().frame_index(), 6u);
   EXPECT_EQ(image_->last_num_frames_skipped_for_testing().value(), 0u);
+
+  // Finishing the animation always notifies observers async.
+  image_observer_->animation_advanced_ = false;
+  task_runner->AdvanceTimeAndRun(0);
+  EXPECT_TRUE(image_observer_->animation_advanced_);
 }
 
 TEST_F(BitmapImageTestWithMockDecoder, ResetAnimation) {
+  ScopedCompositorImageAnimationsForTest compositor_image_animations(false);
+
   repetition_count_ = kAnimationLoopInfinite;
   frame_count_ = 4u;
   last_frame_complete_ = true;
@@ -584,6 +605,8 @@ TEST_F(BitmapImageTestWithMockDecoder, ResetAnimation) {
 }
 
 TEST_F(BitmapImageTestWithMockDecoder, PaintImageForStaticBitmapImage) {
+  ScopedCompositorImageAnimationsForTest compositor_image_animations(false);
+
   repetition_count_ = kAnimationLoopInfinite;
   frame_count_ = 5;
   last_frame_complete_ = true;

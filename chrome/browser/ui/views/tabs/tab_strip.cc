@@ -279,8 +279,8 @@ void TabStrip::RemoveTabDelegate::AnimationCanceled(
 ///////////////////////////////////////////////////////////////////////////////
 // TabStrip, public:
 
-TabStrip::TabStrip(TabStripController* controller)
-    : controller_(controller),
+TabStrip::TabStrip(std::unique_ptr<TabStripController> controller)
+    : controller_(std::move(controller)),
       new_tab_button_(NULL),
       current_inactive_width_(Tab::GetStandardSize().width()),
       current_active_width_(Tab::GetStandardSize().width()),
@@ -640,11 +640,11 @@ void TabStrip::SetSelection(const ui::ListSelectionModel& old_selection,
 void TabStrip::TabTitleChangedNotLoading(int model_index) {
   Tab* tab = tab_at(model_index);
   if (tab->data().pinned && !tab->IsActive())
-    tab->SetTabNeedsAttention(true);
+    tab->TabTitleChangedNotLoading();
 }
 
-void TabStrip::SetTabNeedsAttention(int model_index) {
-  tab_at(model_index)->SetTabNeedsAttention(true);
+void TabStrip::SetTabNeedsAttention(int model_index, bool attention) {
+  tab_at(model_index)->SetTabNeedsAttention(attention);
 }
 
 int TabStrip::GetModelIndexOfTab(const Tab* tab) const {
@@ -881,7 +881,7 @@ void TabStrip::MaybeStartDrag(
   DCHECK(base::ContainsValue(tabs, tab));
   ui::ListSelectionModel selection_model;
   if (!original_selection.IsSelected(model_index))
-    selection_model.Copy(original_selection);
+    selection_model = original_selection;
   // Delete the existing DragController before creating a new one. We do this as
   // creating the DragController remembers the WebContents delegates and we need
   // to make sure the existing DragController isn't still a delegate.
@@ -906,9 +906,9 @@ void TabStrip::MaybeStartDrag(
   }
 
   drag_controller_.reset(new TabDragController);
-  drag_controller_->Init(
-      this, tab, tabs, gfx::Point(x, y), event.x(), selection_model,
-      move_behavior, EventSourceFromEvent(event));
+  drag_controller_->Init(this, tab, tabs, gfx::Point(x, y), event.x(),
+                         std::move(selection_model), move_behavior,
+                         EventSourceFromEvent(event));
 }
 
 void TabStrip::ContinueDrag(views::View* view, const ui::LocatedEvent& event) {

@@ -1017,7 +1017,7 @@ void LayoutBlock::RemovePositionedObjects(
     }
   }
 
-  for (auto object : dead_objects) {
+  for (auto* object : dead_objects) {
     DCHECK_EQ(g_positioned_container_map->at(object), this);
     positioned_descendants->erase(object);
     g_positioned_container_map->erase(object);
@@ -1456,7 +1456,7 @@ void LayoutBlock::ComputeBlockPreferredLogicalWidths(
       child->SetPreferredLogicalWidthsDirty();
     }
 
-    RefPtr<ComputedStyle> child_style = child->MutableStyle();
+    scoped_refptr<ComputedStyle> child_style = child->MutableStyle();
     if (child->IsFloating() ||
         (child->IsBox() && ToLayoutBox(child)->AvoidsFloats())) {
       LayoutUnit float_total_width = float_left_width + float_right_width;
@@ -1975,7 +1975,7 @@ LayoutBlock* LayoutBlock::CreateAnonymousWithParentAndDisplay(
     new_display = EDisplay::kBlock;
   }
 
-  RefPtr<ComputedStyle> new_style =
+  scoped_refptr<ComputedStyle> new_style =
       ComputedStyle::CreateAnonymousStyleWithDisplay(parent->StyleRef(),
                                                      new_display);
   parent->UpdateAnonymousChildStyle(*new_box, *new_style);

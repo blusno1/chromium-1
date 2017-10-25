@@ -17,9 +17,9 @@
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/paint/PaintLayer.h"
-#include "platform/PluginScriptForbiddenScope.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/plugins/PluginScriptForbiddenScope.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/WebLayer.h"
 
@@ -44,7 +44,7 @@ RemoteFrame::~RemoteFrame() {
   DCHECK(!view_);
 }
 
-DEFINE_TRACE(RemoteFrame) {
+void RemoteFrame::Trace(blink::Visitor* visitor) {
   visitor->Trace(view_);
   visitor->Trace(security_context_);
   Frame::Trace(visitor);

@@ -68,8 +68,8 @@ class CORE_EXPORT ScriptRunner final
 
   static void MovePendingScript(Document&, Document&, ScriptLoader*);
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   class Task;
@@ -105,7 +105,7 @@ class CORE_EXPORT ScriptRunner final
   HeapDeque<TraceWrapperMember<ScriptLoader>> async_scripts_to_execute_soon_;
   HeapDeque<TraceWrapperMember<ScriptLoader>> in_order_scripts_to_execute_soon_;
 
-  RefPtr<WebTaskRunner> task_runner_;
+  scoped_refptr<WebTaskRunner> task_runner_;
 
   int number_of_in_order_scripts_with_pending_notification_;
 

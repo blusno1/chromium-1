@@ -32,7 +32,7 @@ CSSMediaRule::CSSMediaRule(StyleRuleMedia* media_rule, CSSStyleSheet* parent)
 
 CSSMediaRule::~CSSMediaRule() {}
 
-RefPtr<MediaQuerySet> CSSMediaRule::MediaQueries() const {
+scoped_refptr<MediaQuerySet> CSSMediaRule::MediaQueries() const {
   return ToStyleRuleMedia(group_rule_.Get())->MediaQueries();
 }
 
@@ -70,7 +70,7 @@ void CSSMediaRule::Reattach(StyleRuleBase* rule) {
     media_cssom_wrapper_->Reattach(MediaQueries());
 }
 
-DEFINE_TRACE(CSSMediaRule) {
+void CSSMediaRule::Trace(blink::Visitor* visitor) {
   visitor->Trace(media_cssom_wrapper_);
   CSSConditionRule::Trace(visitor);
 }

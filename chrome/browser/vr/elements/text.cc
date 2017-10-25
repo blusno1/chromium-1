@@ -17,14 +17,28 @@ namespace vr {
 
 class TextTexture : public UiTexture {
  public:
-  TextTexture(const base::string16& text, float font_height, float text_width)
-      : text_(text), font_height_(font_height), text_width_(text_width) {}
+  TextTexture(float font_height, float text_width)
+      : font_height_(font_height), text_width_(text_width) {}
   ~TextTexture() override {}
+
+  void SetText(const base::string16& text) {
+    if (text_ == text)
+      return;
+    text_ = text;
+    set_dirty();
+  }
 
   void SetColor(SkColor color) {
     if (color_ == color)
       return;
     color_ = color;
+    set_dirty();
+  }
+
+  void SetAlignment(TextAlignment alignment) {
+    if (alignment_ == alignment)
+      return;
+    alignment_ = alignment;
     set_dirty();
   }
 
@@ -42,6 +56,7 @@ class TextTexture : public UiTexture {
   // These widths are in meters.
   float font_height_;
   float text_width_;
+  TextAlignment alignment_ = kTextAlignmentCenter;
 
   SkColor color_ = SK_ColorBLACK;
 
@@ -50,20 +65,26 @@ class TextTexture : public UiTexture {
 
 Text::Text(int maximum_width_pixels,
            float font_height_meters,
-           float text_width_meters,
-           const base::string16& text)
+           float text_width_meters)
     : TexturedElement(maximum_width_pixels),
-      texture_(base::MakeUnique<TextTexture>(text,
-                                             font_height_meters,
+      texture_(base::MakeUnique<TextTexture>(font_height_meters,
                                              text_width_meters)) {}
 Text::~Text() {}
 
-UiTexture* Text::GetTexture() const {
-  return texture_.get();
+void Text::SetText(const base::string16& text) {
+  texture_->SetText(text);
 }
 
 void Text::SetColor(SkColor color) {
   texture_->SetColor(color);
+}
+
+void Text::SetTextAlignment(UiTexture::TextAlignment alignment) {
+  texture_->SetAlignment(alignment);
+}
+
+UiTexture* Text::GetTexture() const {
+  return texture_.get();
 }
 
 void TextTexture::Draw(SkCanvas* sk_canvas, const gfx::Size& texture_size) {
@@ -80,8 +101,8 @@ void TextTexture::Draw(SkCanvas* sk_canvas, const gfx::Size& texture_size) {
   std::vector<std::unique_ptr<gfx::RenderText>> lines =
       // TODO(vollick): if this subsumes all text, then we should probably move
       // this function into this class.
-      PrepareDrawStringRect(text_, fonts, color_, &text_bounds,
-                            kTextAlignmentCenter, kWrappingBehaviorWrap);
+      PrepareDrawStringRect(text_, fonts, color_, &text_bounds, alignment_,
+                            kWrappingBehaviorWrap);
   // Draw the text.
   for (auto& render_text : lines)
     render_text->Draw(canvas);

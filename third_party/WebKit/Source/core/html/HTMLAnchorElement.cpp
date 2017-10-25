@@ -50,8 +50,8 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tag_name,
                                      Document& document)
     : HTMLElement(tag_name, document),
       link_relations_(0),
-      cached_visited_link_hash_(0),
-      was_focused_by_mouse_(false) {}
+      was_focused_by_mouse_(false),
+      cached_visited_link_hash_(0) {}
 
 HTMLAnchorElement* HTMLAnchorElement::Create(Document& document) {
   return new HTMLAnchorElement(aTag, document);
@@ -225,7 +225,7 @@ void HTMLAnchorElement::ParseAttribute(
 
 void HTMLAnchorElement::AccessKeyAction(bool send_mouse_events) {
   DispatchSimulatedClick(
-      0, send_mouse_events ? kSendMouseUpDownEvents : kSendNoEvents);
+      nullptr, send_mouse_events ? kSendMouseUpDownEvents : kSendNoEvents);
 }
 
 bool HTMLAnchorElement::IsURLAttribute(const Attribute& attribute) const {

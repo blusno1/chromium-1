@@ -62,9 +62,8 @@ int GetSimilarLanguageGroupCode(const std::string& language) {
 // TODO(toyoshim): Remove these static tables and caller functions to
 // translate/common, and implement them as std::set<>.
 const char* kWellKnownCodesOnWrongConfiguration[] = {
-    "es", "pt", "ja", "ru", "de", "zh-CN", "zh-TW", "ar",
-    "id", "fr", "it", "th", "hi", "ms",    "vi",    "fa",
-    "ro", "da", "el", "nl", "hu", "tr",    "sv",    "pl"};
+  "es", "pt", "ja", "ru", "de", "zh-CN", "zh-TW", "ar", "id", "fr", "it", "th"
+};
 
 // Applies a series of language code modification in proper order.
 void ApplyLanguageCodeCorrection(std::string* code) {
@@ -195,7 +194,7 @@ std::string DetermineTextLanguage(const base::string16& text,
                              static_cast<int>(100 * lang_id_result.proportion));
   }
 
-  if (is_cld_reliable != NULL) {
+  if (is_cld_reliable != nullptr) {
     *is_cld_reliable = prediction_reliable;
   }
 
@@ -281,9 +280,9 @@ std::string DeterminePageLanguage(const std::string& code,
       contents, &is_cld_reliable, modified_code, modified_html_lang);
   translate::ReportLanguageDetectionTime(begin_time, base::TimeTicks::Now());
 
-  if (cld_language_p != NULL)
+  if (cld_language_p != nullptr)
     *cld_language_p = cld_language;
-  if (is_cld_reliable_p != NULL)
+  if (is_cld_reliable_p != nullptr)
     *is_cld_reliable_p = is_cld_reliable;
   translate::ToTranslateLanguageSynonym(&cld_language);
 

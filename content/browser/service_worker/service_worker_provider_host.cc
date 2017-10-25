@@ -13,7 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "content/browser/bad_message.h"
-#include "content/browser/service_worker/browser_side_controller_service_worker.h"
+#include "content/browser/interface_provider_filtering.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_request_handler.h"
@@ -39,6 +39,7 @@
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "net/base/url_util.h"
 #include "storage/browser/blob/blob_storage_context.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
@@ -96,6 +97,19 @@ class ServiceWorkerURLTrackingRequestHandler
     provider_host_->SetDocumentUrl(stripped_url);
     provider_host_->SetTopmostFrameUrl(request->site_for_cookies());
     return nullptr;
+  }
+
+  void MaybeCreateLoader(const ResourceRequest& resource_request,
+                         ResourceContext*,
+                         LoaderCallback callback) override {
+    // |provider_host_| may have been deleted when the request is resumed.
+    if (!provider_host_)
+      return;
+    const GURL stripped_url = net::SimplifyUrlForRequest(resource_request.url);
+    provider_host_->SetDocumentUrl(stripped_url);
+    provider_host_->SetTopmostFrameUrl(resource_request.site_for_cookies);
+    // Fall back to network.
+    std::move(callback).Run(StartLoaderCallback());
   }
 
  private:
@@ -333,14 +347,9 @@ void ServiceWorkerProviderHost::SetControllerVersionAttribute(
   scoped_refptr<ServiceWorkerVersion> previous_version = controller_;
   controller_ = version;
 
-  // This will drop the message pipes to the client pages as well.
-  controller_service_worker_.reset();
-
-  if (version) {
+  if (version)
     version->AddControllee(this);
-    controller_service_worker_ =
-        base::MakeUnique<BrowserSideControllerServiceWorker>(version);
-  }
+
   if (previous_version.get())
     previous_version->RemoveControllee(this);
 
@@ -489,12 +498,12 @@ ServiceWorkerProviderHost::CreateRequestHandler(
   return std::unique_ptr<ServiceWorkerRequestHandler>();
 }
 
-ServiceWorkerObjectInfo
+blink::mojom::ServiceWorkerObjectInfo
 ServiceWorkerProviderHost::GetOrCreateServiceWorkerHandle(
     ServiceWorkerVersion* version) {
   DCHECK(dispatcher_host_);
   if (!context_ || !version)
-    return ServiceWorkerObjectInfo();
+    return blink::mojom::ServiceWorkerObjectInfo();
   ServiceWorkerHandle* handle = dispatcher_host_->FindServiceWorkerHandle(
       provider_id(), version->version_id());
   if (handle) {
@@ -726,8 +735,9 @@ ServiceWorkerProviderHost::CompleteStartWorkerPreparation(
   binding_.set_connection_error_handler(
       base::BindOnce(&RemoveProviderHost, context_, process_id, provider_id()));
 
-  interface_provider_binding_.Bind(
-      mojo::MakeRequest(&provider_info->interface_provider));
+  interface_provider_binding_.Bind(FilterRendererExposedInterfaces(
+      mojom::kNavigation_ServiceWorkerSpec, process_id,
+      mojo::MakeRequest(&provider_info->interface_provider)));
 
   // Set the document URL to the script url in order to allow
   // register/unregister/getRegistration on ServiceWorkerGlobalScope.
@@ -910,7 +920,7 @@ void ServiceWorkerProviderHost::SendSetControllerServiceWorker(
       }
     }
   }
-  container_->SetController(GetOrCreateServiceWorkerHandle(version),
+  container_->SetController(GetOrCreateServiceWorkerHandle(version).Clone(),
                             used_features, notify_controllerchange);
 }
 
@@ -918,19 +928,9 @@ void ServiceWorkerProviderHost::Register(
     const GURL& script_url,
     blink::mojom::ServiceWorkerRegistrationOptionsPtr options,
     RegisterCallback callback) {
-  if (!dispatcher_host_ || !IsContextAlive()) {
-    std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kAbort,
-                            std::string(kServiceWorkerRegisterErrorPrefix) +
-                                std::string(kShutdownErrorMessage),
-                            nullptr, base::nullopt);
-    return;
-  }
-  // TODO(falken): This check can be removed once crbug.com/439697 is fixed.
-  if (document_url().is_empty()) {
-    std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kSecurity,
-                            std::string(kServiceWorkerRegisterErrorPrefix) +
-                                std::string(kNoDocumentURLErrorMessage),
-                            nullptr, base::nullopt);
+  if (!CanServeContainerHostMethods(&callback, options->scope,
+                                    kServiceWorkerRegisterErrorPrefix, nullptr,
+                                    base::nullopt)) {
     return;
   }
 
@@ -941,17 +941,6 @@ void ServiceWorkerProviderHost::Register(
     // the callback is not run. Just run it with nonsense arguments.
     std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kUnknown,
                             std::string(), nullptr, base::nullopt);
-    return;
-  }
-
-  if (!GetContentClient()->browser()->AllowServiceWorker(
-          options->scope, topmost_frame_url(),
-          dispatcher_host_->resource_context(),
-          base::Bind(&GetWebContents, render_process_id_, frame_id()))) {
-    std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kDisabled,
-                            std::string(kServiceWorkerRegisterErrorPrefix) +
-                                std::string(kUserDeniedPermissionMessage),
-                            nullptr, base::nullopt);
     return;
   }
 
@@ -1012,21 +1001,9 @@ void ServiceWorkerProviderHost::RegistrationComplete(
 void ServiceWorkerProviderHost::GetRegistration(
     const GURL& client_url,
     GetRegistrationCallback callback) {
-  if (!dispatcher_host_ || !IsContextAlive()) {
-    std::move(callback).Run(
-        blink::mojom::ServiceWorkerErrorType::kAbort,
-        std::string(kServiceWorkerGetRegistrationErrorPrefix) +
-            std::string(kShutdownErrorMessage),
-        nullptr, base::nullopt);
-    return;
-  }
-  // TODO(falken): This check can be removed once crbug.com/439697 is fixed.
-  if (document_url().is_empty()) {
-    std::move(callback).Run(
-        blink::mojom::ServiceWorkerErrorType::kSecurity,
-        std::string(kServiceWorkerGetRegistrationErrorPrefix) +
-            std::string(kNoDocumentURLErrorMessage),
-        nullptr, base::nullopt);
+  if (!CanServeContainerHostMethods(&callback, document_url(),
+                                    kServiceWorkerGetRegistrationErrorPrefix,
+                                    nullptr, base::nullopt)) {
     return;
   }
 
@@ -1037,18 +1014,6 @@ void ServiceWorkerProviderHost::GetRegistration(
     // the callback is not run. Just run it with nonsense arguments.
     std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kUnknown,
                             std::string(), nullptr, base::nullopt);
-    return;
-  }
-
-  if (!GetContentClient()->browser()->AllowServiceWorker(
-          document_url(), topmost_frame_url(),
-          dispatcher_host_->resource_context(),
-          base::Bind(&GetWebContents, render_process_id_, frame_id()))) {
-    std::move(callback).Run(
-        blink::mojom::ServiceWorkerErrorType::kDisabled,
-        std::string(kServiceWorkerGetRegistrationErrorPrefix) +
-            std::string(kUserDeniedPermissionMessage),
-        nullptr, base::nullopt);
     return;
   }
 
@@ -1064,21 +1029,9 @@ void ServiceWorkerProviderHost::GetRegistration(
 
 void ServiceWorkerProviderHost::GetRegistrations(
     GetRegistrationsCallback callback) {
-  if (!dispatcher_host_ || !IsContextAlive()) {
-    std::move(callback).Run(
-        blink::mojom::ServiceWorkerErrorType::kAbort,
-        std::string(kServiceWorkerGetRegistrationsErrorPrefix) +
-            std::string(kShutdownErrorMessage),
-        base::nullopt, base::nullopt);
-    return;
-  }
-  // TODO(falken): This check can be removed once crbug.com/439697 is fixed.
-  if (document_url().is_empty()) {
-    std::move(callback).Run(
-        blink::mojom::ServiceWorkerErrorType::kSecurity,
-        std::string(kServiceWorkerGetRegistrationsErrorPrefix) +
-            std::string(kNoDocumentURLErrorMessage),
-        base::nullopt, base::nullopt);
+  if (!CanServeContainerHostMethods(&callback, document_url(),
+                                    kServiceWorkerGetRegistrationsErrorPrefix,
+                                    base::nullopt, base::nullopt)) {
     return;
   }
 
@@ -1089,18 +1042,6 @@ void ServiceWorkerProviderHost::GetRegistrations(
     // the callback is not run. Just run it with nonsense arguments.
     std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kUnknown,
                             std::string(), base::nullopt, base::nullopt);
-    return;
-  }
-
-  if (!GetContentClient()->browser()->AllowServiceWorker(
-          document_url(), topmost_frame_url(),
-          dispatcher_host_->resource_context(),
-          base::Bind(&GetWebContents, render_process_id_, frame_id()))) {
-    std::move(callback).Run(
-        blink::mojom::ServiceWorkerErrorType::kDisabled,
-        std::string(kServiceWorkerGetRegistrationsErrorPrefix) +
-            std::string(kUserDeniedPermissionMessage),
-        base::nullopt, base::nullopt);
     return;
   }
 
@@ -1232,15 +1173,15 @@ void ServiceWorkerProviderHost::GetRegistrationForReady(
 void ServiceWorkerProviderHost::GetControllerServiceWorker(
     mojom::ControllerServiceWorkerRequest controller_request) {
   // TODO(kinuko): Log the reasons we drop the request.
-  if (!dispatcher_host_ || !IsContextAlive() || !controller_service_worker_)
+  if (!dispatcher_host_ || !IsContextAlive() || !controller_)
     return;
 
-  // TODO(kinuko): Call version_->StartWorker() here and pass the
-  // controller_request to the ServiceWorker.
-  // (Note that this could get called multiple times before the service
-  // worker is started)
+  // TODO(kinuko): Call version_->StartWorker() here if the service
+  // is stopped. Currently it should be starting or running at this point.
   DCHECK(ServiceWorkerUtils::IsServicificationEnabled());
-  controller_service_worker_->AddBinding(std::move(controller_request));
+  DCHECK(controller_->running_status() == EmbeddedWorkerStatus::STARTING ||
+         controller_->running_status() == EmbeddedWorkerStatus::RUNNING);
+  controller_->controller()->Clone(std::move(controller_request));
 }
 
 bool ServiceWorkerProviderHost::IsValidRegisterMessage(
@@ -1328,6 +1269,43 @@ void ServiceWorkerProviderHost::GetInterface(
       base::BindOnce(
           &GetInterfaceImpl, interface_name, std::move(interface_pipe),
           running_hosted_version_->script_origin(), render_process_id_));
+}
+
+template <typename CallbackType, typename... Args>
+bool ServiceWorkerProviderHost::CanServeContainerHostMethods(
+    CallbackType* callback,
+    const GURL& scope,
+    const char* error_prefix,
+    Args... args) {
+  if (!dispatcher_host_ || !IsContextAlive()) {
+    std::move(*callback).Run(
+        blink::mojom::ServiceWorkerErrorType::kAbort,
+        std::string(error_prefix) + std::string(kShutdownErrorMessage),
+        args...);
+    return false;
+  }
+
+  // TODO(falken): This check can be removed once crbug.com/439697 is fixed.
+  // (Also see crbug.com/776408)
+  if (document_url().is_empty()) {
+    std::move(*callback).Run(
+        blink::mojom::ServiceWorkerErrorType::kSecurity,
+        std::string(error_prefix) + std::string(kNoDocumentURLErrorMessage),
+        args...);
+    return false;
+  }
+
+  if (!GetContentClient()->browser()->AllowServiceWorker(
+          scope, topmost_frame_url(), dispatcher_host_->resource_context(),
+          base::Bind(&GetWebContents, render_process_id_, frame_id()))) {
+    std::move(*callback).Run(
+        blink::mojom::ServiceWorkerErrorType::kDisabled,
+        std::string(error_prefix) + std::string(kUserDeniedPermissionMessage),
+        args...);
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace content

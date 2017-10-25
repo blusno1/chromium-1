@@ -48,18 +48,16 @@ class DOMStringList;
 class IDBAny;
 class ExceptionState;
 
-class MODULES_EXPORT IDBObjectStore final
-    : public GarbageCollectedFinalized<IDBObjectStore>,
-      public ScriptWrappable {
+class MODULES_EXPORT IDBObjectStore final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static IDBObjectStore* Create(RefPtr<IDBObjectStoreMetadata> metadata,
+  static IDBObjectStore* Create(scoped_refptr<IDBObjectStoreMetadata> metadata,
                                 IDBTransaction* transaction) {
     return new IDBObjectStore(std::move(metadata), transaction);
   }
   ~IDBObjectStore() {}
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   const IDBObjectStoreMetadata& Metadata() const { return *metadata_; }
   const IDBKeyPath& IdbKeyPath() const { return Metadata().key_path; }
@@ -172,7 +170,7 @@ class MODULES_EXPORT IDBObjectStore final
   // IDBIndex metadata for indexes that were deleted in this transaction.
   //
   // Used when a versionchange transaction is aborted.
-  void RevertMetadata(RefPtr<IDBObjectStoreMetadata> previous_metadata);
+  void RevertMetadata(scoped_refptr<IDBObjectStoreMetadata> previous_metadata);
   // This relies on the changes made by RevertMetadata().
   void RevertDeletedIndexMetadata(IDBIndex& deleted_index);
 
@@ -187,7 +185,7 @@ class MODULES_EXPORT IDBObjectStore final
  private:
   using IDBIndexMap = HeapHashMap<String, Member<IDBIndex>>;
 
-  IDBObjectStore(RefPtr<IDBObjectStoreMetadata>, IDBTransaction*);
+  IDBObjectStore(scoped_refptr<IDBObjectStoreMetadata>, IDBTransaction*);
 
   IDBIndex* createIndex(ScriptState*,
                         const String& name,
@@ -205,7 +203,7 @@ class MODULES_EXPORT IDBObjectStore final
 
   // The IDBObjectStoreMetadata is shared with the object store map in the
   // database's metadata.
-  RefPtr<IDBObjectStoreMetadata> metadata_;
+  scoped_refptr<IDBObjectStoreMetadata> metadata_;
   Member<IDBTransaction> transaction_;
   bool deleted_ = false;
 

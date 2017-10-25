@@ -85,7 +85,6 @@ class PLATFORM_EXPORT TaskQueueImpl {
 
   class PLATFORM_EXPORT Task : public TaskQueue::Task {
    public:
-    Task();
     Task(TaskQueue::PostedTask task,
          base::TimeTicks desired_run_time,
          EnqueueOrder sequence_number);
@@ -158,7 +157,7 @@ class PLATFORM_EXPORT TaskQueueImpl {
   void InsertFence(TaskQueue::InsertFencePosition position);
   void InsertFenceAt(base::TimeTicks time);
   void RemoveFence();
-  bool HasFence() const;
+  bool HasActiveFence();
   bool BlockedByFence() const;
   // Implementation of TaskQueue::SetObserver.
   void SetOnNextWakeUpChangedCallback(OnNextWakeUpChangedCallback callback);

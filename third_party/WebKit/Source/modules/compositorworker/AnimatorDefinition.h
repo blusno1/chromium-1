@@ -26,8 +26,8 @@ class MODULES_EXPORT AnimatorDefinition final
                      v8::Local<v8::Function> constructor,
                      v8::Local<v8::Function> animate);
   ~AnimatorDefinition();
-  DEFINE_INLINE_TRACE() {}
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor* visitor) {}
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
   v8::Local<v8::Function> ConstructorLocal(v8::Isolate*);
   v8::Local<v8::Function> AnimateLocal(v8::Isolate*);

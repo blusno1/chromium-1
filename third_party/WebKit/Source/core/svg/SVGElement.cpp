@@ -336,8 +336,7 @@ static FloatRect ComputeTransformReferenceBox(const SVGElement& element) {
   }
   if (style.TransformBox() == ETransformBox::kFillBox)
     return layout_object.ObjectBoundingBox();
-  DCHECK(style.TransformBox() == ETransformBox::kBorderBox ||
-         style.TransformBox() == ETransformBox::kViewBox);
+  DCHECK_EQ(style.TransformBox(), ETransformBox::kViewBox);
   SVGLengthContext length_context(&element);
   FloatSize viewport_size;
   length_context.DetermineViewport(viewport_size);
@@ -690,7 +689,7 @@ const HeapHashSet<WeakMember<SVGElement>>& SVGElement::InstancesForElement()
 SVGElement* SVGElement::CorrespondingElement() const {
   DCHECK(!HasSVGRareData() || !SvgRareData()->CorrespondingElement() ||
          ContainingShadowRoot());
-  return HasSVGRareData() ? SvgRareData()->CorrespondingElement() : 0;
+  return HasSVGRareData() ? SvgRareData()->CorrespondingElement() : nullptr;
 }
 
 SVGUseElement* SVGElement::CorrespondingUseElement() const {
@@ -1068,7 +1067,7 @@ void SVGElement::SynchronizeAnimatedSVGAttribute(
   }
 }
 
-RefPtr<ComputedStyle> SVGElement::CustomStyleForLayoutObject() {
+scoped_refptr<ComputedStyle> SVGElement::CustomStyleForLayoutObject() {
   if (!CorrespondingElement())
     return GetDocument().EnsureStyleResolver().StyleForElement(this);
 
@@ -1146,7 +1145,7 @@ void SVGElement::InvalidateInstances() {
 
   // Mark all use elements referencing 'element' for rebuilding
   for (SVGElement* instance : set) {
-    instance->SetCorrespondingElement(0);
+    instance->SetCorrespondingElement(nullptr);
 
     if (SVGUseElement* element = instance->CorrespondingUseElement()) {
       if (element->isConnected())
@@ -1350,7 +1349,7 @@ void SVGElement::RemoveAllOutgoingReferences() {
   outgoing_references.clear();
 }
 
-DEFINE_TRACE(SVGElement) {
+void SVGElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(elements_with_relative_lengths_);
   visitor->Trace(attribute_to_property_map_);
   visitor->Trace(svg_rare_data_);

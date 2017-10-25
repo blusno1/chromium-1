@@ -110,7 +110,7 @@ AtomicString FontCache::GetFamilyNameForCharacter(
     bcp47_locales[locale_count++] = kAndroidColorEmojiLocale;
   SECURITY_DCHECK(locale_count <= kMaxLocales);
   sk_sp<SkTypeface> typeface(fm->matchFamilyStyleCharacter(
-      0, SkFontStyle(), bcp47_locales, locale_count, c));
+      nullptr, SkFontStyle(), bcp47_locales, locale_count, c));
   if (!typeface)
     return g_empty_atom;
 
@@ -122,7 +122,7 @@ AtomicString FontCache::GetFamilyNameForCharacter(
 
 void FontCache::PlatformInit() {}
 
-RefPtr<SimpleFontData> FontCache::FallbackOnStandardFontStyle(
+scoped_refptr<SimpleFontData> FontCache::FallbackOnStandardFontStyle(
     const FontDescription& font_description,
     UChar32 character) {
   FontDescription substitute_description(font_description);
@@ -147,7 +147,7 @@ RefPtr<SimpleFontData> FontCache::FallbackOnStandardFontStyle(
   return nullptr;
 }
 
-RefPtr<SimpleFontData> FontCache::GetLastResortFallbackFont(
+scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
     const FontDescription& description,
     ShouldRetain should_retain) {
   const FontFaceCreationParams fallback_creation_params(

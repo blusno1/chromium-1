@@ -100,7 +100,7 @@ void CSSImageValue::RestoreCachedResourceIfNeeded(
     return;
 
   resource->EmulateLoadStartedForInspector(
-      document.Fetcher(), KURL(kParsedURLString, absolute_url_),
+      document.Fetcher(), KURL(absolute_url_),
       initiator_name_.IsEmpty() ? FetchInitiatorTypeNames::css
                                 : initiator_name_);
 }
@@ -129,7 +129,7 @@ bool CSSImageValue::KnownToBeOpaque(const Document& document,
                        : false;
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSImageValue) {
+void CSSImageValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(cached_image_);
   CSSValue::TraceAfterDispatch(visitor);
 }

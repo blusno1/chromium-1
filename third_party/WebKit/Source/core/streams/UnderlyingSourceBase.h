@@ -21,15 +21,14 @@ namespace blink {
 class ReadableStreamController;
 
 class CORE_EXPORT UnderlyingSourceBase
-    : public GarbageCollectedFinalized<UnderlyingSourceBase>,
-      public ScriptWrappable,
+    : public ScriptWrappable,
       public ActiveScriptWrappable<UnderlyingSourceBase>,
       public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(UnderlyingSourceBase);
 
  public:
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
   virtual ~UnderlyingSourceBase() {}
 
   ScriptPromise startWrapper(ScriptState*, ScriptValue stream);

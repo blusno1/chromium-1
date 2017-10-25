@@ -95,7 +95,7 @@ class CORE_EXPORT InspectorPageAgent final
   static bool CachedResourceContent(Resource*,
                                     String* result,
                                     bool* base64_encoded);
-  static bool SharedBufferContent(RefPtr<const SharedBuffer>,
+  static bool SharedBufferContent(scoped_refptr<const SharedBuffer>,
                                   const String& mime_type,
                                   const String& text_encoding_name,
                                   String* result,
@@ -120,10 +120,6 @@ class CORE_EXPORT InspectorPageAgent final
   protocol::Response setAutoAttachToCreatedPages(bool) override;
   protocol::Response reload(Maybe<bool> bypass_cache,
                             Maybe<String> script_to_evaluate_on_load) override;
-  protocol::Response navigate(const String& url,
-                              Maybe<String> referrer,
-                              Maybe<String> transitionType,
-                              String* frame_id) override;
   protocol::Response stopLoading() override;
   protocol::Response setAdBlockingEnabled(bool) override;
   protocol::Response getResourceTree(
@@ -186,7 +182,7 @@ class CORE_EXPORT InspectorPageAgent final
   void Restore() override;
   bool ScreencastEnabled();
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   InspectorPageAgent(InspectedFrames*,

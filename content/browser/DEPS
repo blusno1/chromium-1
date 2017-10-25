@@ -37,7 +37,6 @@ include_rules = [
   "+ui/aura_extra",
   "+components/vector_icons",
   "+ui/webui",
-  "+storage/public/interfaces",
 
   # In general, //content shouldn't depend on //device.
   # This is the an exception.
@@ -82,11 +81,14 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebMouseWheelEvent.h",
   "+third_party/WebKit/public/platform/WebPageVisibilityState.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
+  "+third_party/WebKit/public/platform/WebRemoteFrameProperties.h",
+  "+third_party/WebKit/public/platform/WebRemoteScrollProperties.h",
   "+third_party/WebKit/public/platform/WebScreenInfo.h",
   "+third_party/WebKit/public/platform/WebSecurityStyle.h",
   "+third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h",
   "+third_party/WebKit/public/platform/WebTouchEvent.h",
   "+third_party/WebKit/public/platform/WebTextInputType.h",
+  "+third_party/WebKit/public/platform/dedicated_worker_factory.mojom.h",
   "+third_party/WebKit/public/platform/input_host.mojom.h",
   "+third_party/WebKit/public/platform/input_messages.mojom.h",
   "+third_party/WebKit/public/platform/mac/WebScrollbarTheme.h",
@@ -118,6 +120,7 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseError.h",
   "+third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h",
   "+third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h",
+  "+third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h",
   "+third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h",
   "+third_party/WebKit/public/platform/modules/serviceworker/service_worker_state.mojom.h",
   "+third_party/WebKit/public/platform/modules/serviceworker/service_worker_stream_handle.mojom.h",

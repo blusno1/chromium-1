@@ -14,7 +14,6 @@
 #include "platform/animation/CompositorAnimationDelegate.h"
 #include "platform/animation/CompositorAnimationPlayer.h"
 #include "platform/animation/CompositorAnimationPlayerClient.h"
-#include "platform/bindings/ScriptWrappable.h"
 
 namespace blink {
 
@@ -30,7 +29,6 @@ namespace blink {
 //
 // Spec: https://wicg.github.io/animation-worklet/#worklet-animation-desc
 class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
-                                        public ScriptWrappable,
                                         public CompositorAnimationPlayerClient,
                                         public CompositorAnimationDelegate {
   DEFINE_WRAPPERTYPEINFO();
@@ -40,11 +38,11 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
   static WorkletAnimation* Create(
       String animator_name,
       const HeapVector<Member<KeyframeEffectReadOnly>>&,
-      HeapVector<DocumentTimelineOrScrollTimeline>&,
-      RefPtr<SerializedScriptValue>,
+      DocumentTimelineOrScrollTimeline,
+      scoped_refptr<SerializedScriptValue>,
       ExceptionState&);
 
-  virtual ~WorkletAnimation() {}
+  ~WorkletAnimation() override {}
 
   String playState();
   void play();
@@ -67,20 +65,18 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
 
   const String& Name() { return animator_name_; }
 
-  const HeapVector<DocumentTimelineOrScrollTimeline>& Timelines() {
-    return timelines_;
-  }
+  const DocumentTimelineOrScrollTimeline& Timeline() { return timeline_; }
 
-  const RefPtr<SerializedScriptValue> Options() { return options_; }
+  const scoped_refptr<SerializedScriptValue> Options() { return options_; }
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   WorkletAnimation(const String& animator_name,
                    Document&,
                    const HeapVector<Member<KeyframeEffectReadOnly>>&,
-                   HeapVector<DocumentTimelineOrScrollTimeline>&,
-                   RefPtr<SerializedScriptValue>);
+                   DocumentTimelineOrScrollTimeline,
+                   scoped_refptr<SerializedScriptValue>);
 
   const String animator_name_;
   Animation::AnimationPlayState play_state_;
@@ -88,8 +84,8 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
   Member<Document> document_;
 
   HeapVector<Member<KeyframeEffectReadOnly>> effects_;
-  HeapVector<DocumentTimelineOrScrollTimeline> timelines_;
-  RefPtr<SerializedScriptValue> options_;
+  DocumentTimelineOrScrollTimeline timeline_;
+  scoped_refptr<SerializedScriptValue> options_;
 
   std::unique_ptr<CompositorAnimationPlayer> compositor_player_;
 };

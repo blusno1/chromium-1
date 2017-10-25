@@ -41,6 +41,7 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
     this._messageByExceptionId = new Map();
     this._warnings = 0;
     this._errors = 0;
+    this._pageLoadSequenceNumber = 0;
 
     SDK.targetManager.observeTargets(this);
   }
@@ -169,6 +170,7 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
     if (msg.source === ConsoleModel.ConsoleMessage.MessageSource.Worker && SDK.targetManager.targetById(msg.workerId))
       return;
 
+    msg._pageLoadSequenceNumber = this._pageLoadSequenceNumber;
     if (msg.source === ConsoleModel.ConsoleMessage.MessageSource.ConsoleAPI &&
         msg.type === ConsoleModel.ConsoleMessage.MessageType.Clear)
       this._clearIfNecessary();
@@ -275,6 +277,7 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
   _clearIfNecessary() {
     if (!Common.moduleSetting('preserveConsoleLog').get())
       this._clear();
+    ++this._pageLoadSequenceNumber;
   }
 
   /**
@@ -553,6 +556,24 @@ ConsoleModel.ConsoleMessage = class {
   }
 
   /**
+   * @return {boolean}
+   */
+  isGroupable() {
+    return (
+        this.source !== ConsoleModel.ConsoleMessage.MessageSource.ConsoleAPI &&
+        this.type !== ConsoleModel.ConsoleMessage.MessageType.Command &&
+        this.type !== ConsoleModel.ConsoleMessage.MessageType.Result &&
+        this.type !== ConsoleModel.ConsoleMessage.MessageType.System);
+  }
+
+  /**
+   * @return {string}
+   */
+  groupCategoryKey() {
+    return [this.source, this.level, this.type, this._pageLoadSequenceNumber].join(':');
+  }
+
+  /**
    * @param {?ConsoleModel.ConsoleMessage} msg
    * @return {boolean}
    */
@@ -652,7 +673,8 @@ ConsoleModel.ConsoleMessage.MessageType = {
   Result: 'result',
   Profile: 'profile',
   ProfileEnd: 'profileEnd',
-  Command: 'command'
+  Command: 'command',
+  System: 'system'
 };
 
 /**

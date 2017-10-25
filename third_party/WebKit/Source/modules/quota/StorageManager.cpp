@@ -52,7 +52,7 @@ class EstimateCallbacks final : public StorageQuotaCallbacks {
     resolver_->Reject(DOMException::Create(static_cast<ExceptionCode>(error)));
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(resolver_);
     StorageQuotaCallbacks::Trace(visitor);
   }
@@ -142,8 +142,6 @@ ScriptPromise StorageManager::estimate(ScriptState* script_state) {
       new EstimateCallbacks(resolver));
   return promise;
 }
-
-DEFINE_TRACE(StorageManager) {}
 
 PermissionService* StorageManager::GetPermissionService(
     ExecutionContext* execution_context) {

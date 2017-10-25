@@ -61,7 +61,7 @@ class VoidCallback;
 class ErrorCallbackBase : public GarbageCollectedFinalized<ErrorCallbackBase> {
  public:
   virtual ~ErrorCallbackBase() {}
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
   virtual void Invoke(FileError::ErrorCode) = 0;
 };
 
@@ -102,8 +102,8 @@ class FileSystemCallbacksBase : public AsyncFileSystemCallbacks {
 class ScriptErrorCallback final : public ErrorCallbackBase {
  public:
   static ScriptErrorCallback* Wrap(ErrorCallback*);
-  virtual ~ScriptErrorCallback() {}
-  DECLARE_VIRTUAL_TRACE();
+  ~ScriptErrorCallback() override {}
+  void Trace(blink::Visitor*) override;
 
   void Invoke(FileError::ErrorCode) override;
 
@@ -234,8 +234,8 @@ class SnapshotFileCallback final : public FileSystemCallbacksBase {
                                                           BlobCallback*,
                                                           ErrorCallbackBase*,
                                                           ExecutionContext*);
-  virtual void DidCreateSnapshotFile(const FileMetadata&,
-                                     RefPtr<BlobDataHandle> snapshot);
+  void DidCreateSnapshotFile(const FileMetadata&,
+                             scoped_refptr<BlobDataHandle> snapshot) override;
 
  private:
   SnapshotFileCallback(DOMFileSystemBase*,

@@ -25,8 +25,8 @@ class CORE_EXPORT CustomElementReactionStack final
  public:
   CustomElementReactionStack();
 
-  DECLARE_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   void Push();
   void PopInvokingReactions();

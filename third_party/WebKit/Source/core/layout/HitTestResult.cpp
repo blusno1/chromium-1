@@ -146,7 +146,7 @@ void HitTestResult::PopulateFromCachedResult(const HitTestResult& other) {
                                 : nullptr;
 }
 
-DEFINE_TRACE(HitTestResult) {
+void HitTestResult::Trace(blink::Visitor* visitor) {
   visitor->Trace(inner_node_);
   visitor->Trace(inner_possibly_pseudo_node_);
   visitor->Trace(inner_url_element_);
@@ -168,7 +168,7 @@ PositionWithAffinity HitTestResult::GetPosition() const {
 }
 
 LayoutObject* HitTestResult::GetLayoutObject() const {
-  return inner_node_ ? inner_node_->GetLayoutObject() : 0;
+  return inner_node_ ? inner_node_->GetLayoutObject() : nullptr;
 }
 
 void HitTestResult::SetToShadowHostIfInRestrictedShadowRoot() {

@@ -14,7 +14,7 @@ class RemoteFrameClientImpl final : public RemoteFrameClient {
  public:
   static RemoteFrameClientImpl* Create(WebRemoteFrameImpl*);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   // FrameClient overrides:
   bool InShadowTree() const override;
@@ -34,7 +34,7 @@ class RemoteFrameClientImpl final : public RemoteFrameClient {
   void Reload(FrameLoadType, ClientRedirectPolicy) override;
   unsigned BackForwardLength() override;
   void ForwardPostMessage(MessageEvent*,
-                          RefPtr<SecurityOrigin> target,
+                          scoped_refptr<SecurityOrigin> target,
                           LocalFrame* source) const override;
   void FrameRectsChanged(const IntRect& frame_rect) override;
   void UpdateRemoteViewportIntersection(const IntRect&) override;

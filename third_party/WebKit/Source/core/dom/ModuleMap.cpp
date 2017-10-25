@@ -23,8 +23,8 @@ class ModuleMap::Entry final : public GarbageCollectedFinalized<Entry>,
   static Entry* Create(ModuleMap* map) { return new Entry(map); }
   ~Entry() override {}
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   // Notify fetched |m_moduleScript| to the client asynchronously.
   void AddClient(SingleModuleClient*);
@@ -53,13 +53,14 @@ ModuleMap::Entry::Entry(ModuleMap* map) : map_(map) {
   DCHECK(map_);
 }
 
-DEFINE_TRACE(ModuleMap::Entry) {
+void ModuleMap::Entry::Trace(blink::Visitor* visitor) {
   visitor->Trace(module_script_);
   visitor->Trace(map_);
   visitor->Trace(clients_);
 }
 
-DEFINE_TRACE_WRAPPERS(ModuleMap::Entry) {
+void ModuleMap::Entry::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(module_script_);
 }
 
@@ -102,12 +103,12 @@ ModuleMap::ModuleMap(Modulator* modulator) : modulator_(modulator) {
   DCHECK(modulator);
 }
 
-DEFINE_TRACE(ModuleMap) {
+void ModuleMap::Trace(blink::Visitor* visitor) {
   visitor->Trace(map_);
   visitor->Trace(modulator_);
 }
 
-DEFINE_TRACE_WRAPPERS(ModuleMap) {
+void ModuleMap::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   for (const auto& it : map_)
     visitor->TraceWrappers(it.value);
 }

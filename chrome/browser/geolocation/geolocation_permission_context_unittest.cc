@@ -77,7 +77,9 @@ class TestSearchEngineDelegate
  public:
   base::string16 GetDSEName() override { return base::string16(); }
 
-  url::Origin GetDSEOrigin() override { return url::Origin(GURL(kDSETestUrl)); }
+  url::Origin GetDSEOrigin() override {
+    return url::Origin::Create(GURL(kDSETestUrl));
+  }
 
   void SetDSEChangedCallback(const base::Closure& callback) override {}
 
@@ -438,7 +440,7 @@ TEST_F(GeolocationPermissionContextTests, GeolocationEnabledDisabled) {
   EXPECT_TRUE(HasActivePrompt());
   histograms.ExpectTotalCount("Permissions.Action.Geolocation", 0);
 
-  Reload();
+  content::NavigationSimulator::Reload(web_contents());
   histograms.ExpectUniqueSample("Permissions.Action.Geolocation",
                                 static_cast<int>(PermissionAction::IGNORED), 1);
   MockLocationSettings::SetLocationStatus(false /* android */,

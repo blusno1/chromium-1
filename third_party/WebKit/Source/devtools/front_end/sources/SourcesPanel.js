@@ -390,7 +390,7 @@ Sources.SourcesPanel = class extends UI.Panel {
       for (var i = 0; i < objects.length; ++i) {
         var navigatorView = /** @type {!Sources.NavigatorView} */ (objects[i]);
         var viewId = extensions[i].descriptor()['viewId'];
-        if (navigatorView.accept(uiSourceCode)) {
+        if (navigatorView.acceptProject(uiSourceCode.project())) {
           navigatorView.revealUISourceCode(uiSourceCode, true);
           if (skipReveal)
             this._navigatorTabbedLocation.tabbedPane().selectTab(viewId);
@@ -407,8 +407,7 @@ Sources.SourcesPanel = class extends UI.Panel {
   _populateNavigatorMenu(contextMenu) {
     var groupByFolderSetting = Common.moduleSetting('navigatorGroupByFolder');
     contextMenu.appendItemsAtLocation('navigatorMenu');
-    contextMenu.appendSeparator();
-    contextMenu.appendCheckboxItem(
+    contextMenu.viewSection().appendCheckboxItem(
         Common.UIString('Group by folder'), () => groupByFolderSetting.set(!groupByFolderSetting.get()),
         groupByFolderSetting.get());
   }
@@ -770,8 +769,6 @@ Sources.SourcesPanel = class extends UI.Panel {
    * @param {!Workspace.UISourceCode} uiSourceCode
    */
   _appendUISourceCodeMappingItems(contextMenu, uiSourceCode) {
-    Sources.NavigatorView.appendAddFolderItem(contextMenu);
-
     if (Runtime.experiments.isEnabled('persistence2'))
       return;
     if (uiSourceCode.project().type() === Workspace.projectTypes.FileSystem) {
@@ -815,15 +812,10 @@ Sources.SourcesPanel = class extends UI.Panel {
     var uiSourceCode = /** @type {!Workspace.UISourceCode} */ (target);
     if (!uiSourceCode.project().isServiceProject() &&
         !event.target.isSelfOrDescendant(this._navigatorTabbedLocation.widget().element)) {
-      contextMenu.appendItem(
+      contextMenu.revealSection().appendItem(
           Common.UIString('Reveal in navigator'), this._handleContextMenuReveal.bind(this, uiSourceCode));
-      contextMenu.appendSeparator();
     }
     this._appendUISourceCodeMappingItems(contextMenu, uiSourceCode);
-    if (!uiSourceCode.project().canSetFileContent()) {
-      contextMenu.appendItem(
-          Common.UIString('Local modifications\u2026'), this._showLocalHistory.bind(this, uiSourceCode));
-    }
   }
 
   /**
@@ -894,7 +886,7 @@ Sources.SourcesPanel = class extends UI.Panel {
     if (!uiSourceCode)
       return;
     var openText = Common.UIString('Open in Sources panel');
-    contextMenu.appendItem(openText, this.showUILocation.bind(this, uiSourceCode.uiLocation(0, 0)));
+    contextMenu.revealSection().appendItem(openText, this.showUILocation.bind(this, uiSourceCode.uiLocation(0, 0)));
   }
 
   /**

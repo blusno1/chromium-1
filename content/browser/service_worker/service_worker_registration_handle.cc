@@ -27,9 +27,14 @@ const char kNoDocumentURLErrorMessage[] =
 const char kShutdownErrorMessage[] = "The Service Worker system has shutdown.";
 const char kUserDeniedPermissionMessage[] =
     "The user denied permission to use Service Worker.";
+const char kEnableNavigationPreloadErrorPrefix[] =
+    "Failed to enable or disable navigation preload: ";
 const char kInvalidStateErrorMessage[] = "The object is in an invalid state.";
 const char kBadMessageImproperOrigins[] =
     "Origins are not matching, or some cannot access service worker.";
+const char kNoActiveWorkerErrorMessage[] =
+    "The registration does not have an active worker.";
+const char kDatabaseErrorMessage[] = "Failed to access storage.";
 
 WebContents* GetWebContents(int render_process_id, int render_frame_id) {
   RenderFrameHost* rfh =
@@ -76,6 +81,8 @@ ServiceWorkerRegistrationHandle::CreateObjectInfo() {
       registration_->pattern());
   info->registration_id = registration_->id();
   bindings_.AddBinding(this, mojo::MakeRequest(&info->host_ptr_info));
+  if (!remote_registration_)
+    info->request = mojo::MakeRequest(&remote_registration_);
   return info;
 }
 
@@ -108,35 +115,8 @@ void ServiceWorkerRegistrationHandle::OnUpdateFound(
 }
 
 void ServiceWorkerRegistrationHandle::Update(UpdateCallback callback) {
-  if (!provider_host_ || !context_) {
-    std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kAbort,
-                            std::string(kServiceWorkerUpdateErrorPrefix) +
-                                std::string(kShutdownErrorMessage));
-    return;
-  }
-  // TODO(falken): This check can be removed once crbug.com/439697 is fixed.
-  if (provider_host_->document_url().is_empty()) {
-    std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kSecurity,
-                            std::string(kServiceWorkerUpdateErrorPrefix) +
-                                std::string(kNoDocumentURLErrorMessage));
-    return;
-  }
-
-  std::vector<GURL> urls = {provider_host_->document_url(),
-                            registration_->pattern()};
-  if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(urls)) {
-    bindings_.ReportBadMessage(kBadMessageImproperOrigins);
-    return;
-  }
-
-  if (!GetContentClient()->browser()->AllowServiceWorker(
-          registration_->pattern(), provider_host_->topmost_frame_url(),
-          dispatcher_host_->resource_context(),
-          base::Bind(&GetWebContents, provider_host_->process_id(),
-                     provider_host_->frame_id()))) {
-    std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kDisabled,
-                            std::string(kServiceWorkerUpdateErrorPrefix) +
-                                std::string(kUserDeniedPermissionMessage));
+  if (!CanServeRegistrationObjectHostMethods(&callback,
+                                             kServiceWorkerUpdateErrorPrefix)) {
     return;
   }
 
@@ -156,19 +136,46 @@ void ServiceWorkerRegistrationHandle::Update(UpdateCallback callback) {
           base::BindOnce(&ServiceWorkerRegistrationHandle::UpdateComplete,
                          weak_ptr_factory_.GetWeakPtr(), std::move(callback))));
 }
+void ServiceWorkerRegistrationHandle::Unregister(UnregisterCallback callback) {
+  if (!CanServeRegistrationObjectHostMethods(
+          &callback, kServiceWorkerUnregisterErrorPrefix)) {
+    return;
+  }
+
+  context_->UnregisterServiceWorker(
+      registration_->pattern(),
+      base::AdaptCallbackForRepeating(base::BindOnce(
+          &ServiceWorkerRegistrationHandle::UnregistrationComplete,
+          weak_ptr_factory_.GetWeakPtr(), std::move(callback))));
+}
+
+void ServiceWorkerRegistrationHandle::EnableNavigationPreload(
+    bool enable,
+    EnableNavigationPreloadCallback callback) {
+  if (!CanServeRegistrationObjectHostMethods(
+          &callback, kEnableNavigationPreloadErrorPrefix)) {
+    return;
+  }
+
+  if (!registration_->active_version()) {
+    std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kState,
+                            std::string(kEnableNavigationPreloadErrorPrefix) +
+                                std::string(kNoActiveWorkerErrorMessage));
+    return;
+  }
+
+  context_->storage()->UpdateNavigationPreloadEnabled(
+      registration_->id(), registration_->pattern().GetOrigin(), enable,
+      base::AdaptCallbackForRepeating(base::BindOnce(
+          &ServiceWorkerRegistrationHandle::DidUpdateNavigationPreloadEnabled,
+          weak_ptr_factory_.GetWeakPtr(), enable, std::move(callback))));
+}
 
 void ServiceWorkerRegistrationHandle::UpdateComplete(
     UpdateCallback callback,
     ServiceWorkerStatusCode status,
     const std::string& status_message,
     int64_t registration_id) {
-  if (!provider_host_ || !context_) {
-    std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kAbort,
-                            std::string(kServiceWorkerUpdateErrorPrefix) +
-                                std::string(kShutdownErrorMessage));
-    return;
-  }
-
   if (status != SERVICE_WORKER_OK) {
     std::string error_message;
     blink::mojom::ServiceWorkerErrorType error_type;
@@ -179,6 +186,40 @@ void ServiceWorkerRegistrationHandle::UpdateComplete(
     return;
   }
 
+  std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kNone,
+                          base::nullopt);
+}
+
+void ServiceWorkerRegistrationHandle::UnregistrationComplete(
+    UnregisterCallback callback,
+    ServiceWorkerStatusCode status) {
+  if (status != SERVICE_WORKER_OK) {
+    std::string error_message;
+    blink::mojom::ServiceWorkerErrorType error_type;
+    GetServiceWorkerErrorTypeForRegistration(status, std::string(), &error_type,
+                                             &error_message);
+    std::move(callback).Run(
+        error_type, kServiceWorkerUnregisterErrorPrefix + error_message);
+    return;
+  }
+
+  std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kNone,
+                          base::nullopt);
+}
+
+void ServiceWorkerRegistrationHandle::DidUpdateNavigationPreloadEnabled(
+    bool enable,
+    EnableNavigationPreloadCallback callback,
+    ServiceWorkerStatusCode status) {
+  if (status != SERVICE_WORKER_OK) {
+    std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kUnknown,
+                            std::string(kEnableNavigationPreloadErrorPrefix) +
+                                std::string(kDatabaseErrorMessage));
+    return;
+  }
+
+  if (registration_)
+    registration_->EnableNavigationPreload(enable);
   std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kNone,
                           base::nullopt);
 }
@@ -203,6 +244,50 @@ void ServiceWorkerRegistrationHandle::OnConnectionError() {
     return;
   // Will destroy |this|.
   dispatcher_host_->UnregisterServiceWorkerRegistrationHandle(handle_id_);
+}
+
+template <typename CallbackType, typename... Args>
+bool ServiceWorkerRegistrationHandle::CanServeRegistrationObjectHostMethods(
+    CallbackType* callback,
+    const char* error_prefix,
+    Args... args) {
+  if (!provider_host_ || !context_) {
+    std::move(*callback).Run(
+        blink::mojom::ServiceWorkerErrorType::kAbort,
+        std::string(error_prefix) + std::string(kShutdownErrorMessage),
+        args...);
+    return false;
+  }
+
+  // TODO(falken): This check can be removed once crbug.com/439697 is fixed.
+  // (Also see crbug.com/776408)
+  if (provider_host_->document_url().is_empty()) {
+    std::move(*callback).Run(
+        blink::mojom::ServiceWorkerErrorType::kSecurity,
+        std::string(error_prefix) + std::string(kNoDocumentURLErrorMessage),
+        args...);
+    return false;
+  }
+
+  std::vector<GURL> urls = {provider_host_->document_url(),
+                            registration_->pattern()};
+  if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(urls)) {
+    bindings_.ReportBadMessage(kBadMessageImproperOrigins);
+    return false;
+  }
+
+  if (!GetContentClient()->browser()->AllowServiceWorker(
+          registration_->pattern(), provider_host_->topmost_frame_url(),
+          dispatcher_host_->resource_context(),
+          base::Bind(&GetWebContents, provider_host_->process_id(),
+                     provider_host_->frame_id()))) {
+    std::move(*callback).Run(
+        blink::mojom::ServiceWorkerErrorType::kDisabled,
+        std::string(error_prefix) + std::string(kUserDeniedPermissionMessage));
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace content

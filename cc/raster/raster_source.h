@@ -101,8 +101,6 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   // Valid rectangle in which everything is recorded and can be rastered from.
   virtual gfx::Rect RecordedViewport() const;
 
-  gfx::Rect GetRectForImage(PaintImage::Id image_id) const;
-
   // Tracing functionality.
   virtual void DidBeginTracing();
   virtual void AsValueInto(base::trace_event::TracedValue* array) const;
@@ -114,6 +112,9 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   }
 
   SkColor background_color() const { return background_color_; }
+
+  base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
+  TakeDecodingModeMap();
 
  protected:
   // RecordingSource is the only class that can create a raster source.

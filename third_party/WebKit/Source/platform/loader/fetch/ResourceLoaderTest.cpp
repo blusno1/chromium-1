@@ -20,10 +20,9 @@ class ResourceLoaderTest : public ::testing::Test {
 
  public:
   ResourceLoaderTest()
-      : foo_url_(kParsedURLString, "https://foo.test"),
-        bar_url_(kParsedURLString, "https://bar.test") {};
+      : foo_url_("https://foo.test"), bar_url_("https://bar.test"){};
 
-  void SetUp() {
+  void SetUp() override {
     context_ =
         MockFetchContext::Create(MockFetchContext::kShouldLoadNewResource);
   }

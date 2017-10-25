@@ -1457,16 +1457,19 @@ TEST(HttpCache, RangeGET_ParallelValidationNoMatch) {
   // Allow all requests to move from the Create queue to the active entry.
   base::RunLoop().RunUntilIdle();
 
-  // The first entry should have been doomed. Since the 1st transaction has not
-  // started writing to the cache, MockDiskEntry::CouldBeSparse() returns false
-  // leading to restarting the dooming the entry and restarting the second
-  // transaction.
+  // First entry created is doomed due to 2nd transaction's validation leading
+  // to restarting of the queued transactions.
   EXPECT_TRUE(cache.IsWriterPresent(kRangeGET_TransactionOK.url));
-  EXPECT_EQ(0, cache.GetCountDoneHeadersQueue(kRangeGET_TransactionOK.url));
 
+  // TODO(shivanisha): The restarted transactions race for creating the entry
+  // and thus instead of all 4 succeeding, 2 of them succeed. This is very
+  // implementation specific and happens because the queued transactions get
+  // restarted synchronously and get to the queue of creating the entry before
+  // the transaction that is restarting them. Fix the test to make it less
+  // vulnerable to any scheduling changes in the code.
   EXPECT_EQ(5, cache.network_layer()->transaction_count());
   EXPECT_EQ(0, cache.disk_cache()->open_count());
-  EXPECT_EQ(5, cache.disk_cache()->create_count());
+  EXPECT_EQ(3, cache.disk_cache()->create_count());
 
   for (auto& context : context_list) {
     EXPECT_EQ(LOAD_STATE_IDLE, context->trans->GetLoadState());
@@ -1482,7 +1485,7 @@ TEST(HttpCache, RangeGET_ParallelValidationNoMatch) {
 
   EXPECT_EQ(5, cache.network_layer()->transaction_count());
   EXPECT_EQ(0, cache.disk_cache()->open_count());
-  EXPECT_EQ(5, cache.disk_cache()->create_count());
+  EXPECT_EQ(3, cache.disk_cache()->create_count());
 }
 
 // Tests that if a transaction is dooming the entry and the entry was doomed by
@@ -1802,6 +1805,8 @@ TEST(HttpCache, RangeGET_ParallelValidationCacheLockTimeout) {
     EXPECT_EQ(LOAD_STATE_READING_RESPONSE, c->trans->GetLoadState());
   }
 
+  // Cache lock timeout will lead to dooming the entry since the transaction may
+  // have already written the headers.
   cache.SimulateCacheLockTimeoutAfterHeaders();
 
   // 2nd transaction requests ranges 30-39.
@@ -1820,7 +1825,6 @@ TEST(HttpCache, RangeGET_ParallelValidationCacheLockTimeout) {
     EXPECT_EQ(LOAD_STATE_IDLE, c->trans->GetLoadState());
   }
 
-  EXPECT_TRUE(cache.IsWriterPresent(kRangeGET_TransactionOK.url));
   EXPECT_EQ(0, cache.GetCountDoneHeadersQueue(kRangeGET_TransactionOK.url));
 
   EXPECT_EQ(3, cache.network_layer()->transaction_count());
@@ -7212,12 +7216,8 @@ TEST(HttpCache, SetTruncatedFlag) {
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(c->callback.have_result());
 
-  MockHttpCache::SetTestMode(TEST_MODE_SYNC_ALL);
-
   // Destroy the transaction.
   c->trans.reset();
-  MockHttpCache::SetTestMode(0);
-
 
   // Make sure that we don't invoke the callback. We may have an issue if the
   // UrlRequestJob is killed directly (without cancelling the UrlRequest) so we
@@ -7225,7 +7225,7 @@ TEST(HttpCache, SetTruncatedFlag) {
   // notification from the transaction destructor (see http://crbug.com/31723).
   EXPECT_FALSE(c->callback.have_result());
 
-  // Verify that the entry is marked as incomplete.
+  base::RunLoop().RunUntilIdle();
   VerifyTruncatedFlag(&cache, kSimpleGET_Transaction.url, true, 0);
 }
 
@@ -7279,7 +7279,9 @@ TEST(HttpCache, DontSetTruncatedFlagForGarbledResponseCode) {
   EXPECT_FALSE(c->callback.have_result());
 
   // Verify that the entry is deleted as well, since the response status is
-  // garbled.
+  // garbled. Note that the entry will be deleted after the pending Read is
+  // complete.
+  base::RunLoop().RunUntilIdle();
   disk_cache::Entry* entry;
   ASSERT_FALSE(cache.OpenBackendEntry(kSimpleGET_Transaction.url, &entry));
 }
@@ -7619,7 +7621,7 @@ TEST(HttpCache, GET_IncompleteResourceWithAuth) {
   c.reset();  // The destructor could delete the entry.
   EXPECT_EQ(2, cache.network_layer()->transaction_count());
 
-  // Verify that the entry was not deleted.
+  // Verify that the entry was deleted.
   disk_cache::Entry* entry;
   ASSERT_TRUE(cache.OpenBackendEntry(kRangeGET_TransactionOK.url, &entry));
   entry->Close();

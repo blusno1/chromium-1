@@ -172,7 +172,7 @@ std::unique_ptr<base::DictionaryValue> ComponentLoader::ParseManifest(
   JSONStringValueDeserializer deserializer(manifest_contents);
   std::unique_ptr<base::Value> manifest = deserializer.Deserialize(NULL, NULL);
 
-  if (!manifest.get() || !manifest->IsType(base::Value::Type::DICTIONARY)) {
+  if (!manifest.get() || !manifest->is_dict()) {
     LOG(ERROR) << "Failed to parse extension manifest.";
     return std::unique_ptr<base::DictionaryValue>();
   }
@@ -326,8 +326,10 @@ void ComponentLoader::AddGalleryExtension() {
 void ComponentLoader::AddZipArchiverExtension() {
 #if defined(OS_CHROMEOS)
   base::FilePath resources_path;
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kEnableZipArchiverOnFileManager) &&
+  if ((base::CommandLine::ForCurrentProcess()->HasSwitch(
+           chromeos::switches::kEnableZipArchiverPacker) ||
+       base::CommandLine::ForCurrentProcess()->HasSwitch(
+           chromeos::switches::kEnableZipArchiverUnpacker)) &&
       PathService::Get(chrome::DIR_RESOURCES, &resources_path)) {
     AddWithNameAndDescriptionFromDir(
         resources_path.Append(extension_misc::kZipArchiverExtensionPath),

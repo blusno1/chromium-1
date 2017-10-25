@@ -55,7 +55,7 @@ class LayerTreeHostContextTest : public LayerTreeTest {
  public:
   LayerTreeHostContextTest()
       : LayerTreeTest(),
-        context3d_(NULL),
+        context3d_(nullptr),
         times_to_fail_create_(0),
         times_to_lose_during_commit_(0),
         times_to_lose_during_draw_(0),
@@ -694,7 +694,7 @@ class LayerTreeHostContextTestLostContextAndEvictTextures
  public:
   LayerTreeHostContextTestLostContextAndEvictTextures()
       : LayerTreeHostContextTest(),
-        impl_host_(0),
+        impl_host_(nullptr),
         num_commits_(0),
         lost_context_(false) {}
 
@@ -826,9 +826,9 @@ class LayerTreeHostContextTestLayersNotified : public LayerTreeHostContextTest {
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
     LayerTreeHostContextTest::DidActivateTreeOnThread(host_impl);
 
-    FakePictureLayerImpl* root_picture = NULL;
-    FakePictureLayerImpl* child_picture = NULL;
-    FakePictureLayerImpl* grandchild_picture = NULL;
+    FakePictureLayerImpl* root_picture = nullptr;
+    FakePictureLayerImpl* child_picture = nullptr;
+    FakePictureLayerImpl* grandchild_picture = nullptr;
 
     root_picture = static_cast<FakePictureLayerImpl*>(
         host_impl->active_tree()->root_layer_for_testing());
@@ -880,7 +880,8 @@ class LayerTreeHostContextTestDontUseLostResources
     context_should_support_io_surface_ = true;
 
     child_context_provider_ = TestContextProvider::Create();
-    CHECK(child_context_provider_->BindToCurrentThread());
+    auto result = child_context_provider_->BindToCurrentThread();
+    CHECK_EQ(result, gpu::ContextResult::kSuccess);
     shared_bitmap_manager_.reset(new TestSharedBitmapManager);
     child_resource_provider_ =
         FakeResourceProvider::CreateLayerTreeResourceProvider(
@@ -911,7 +912,8 @@ class LayerTreeHostContextTestDontUseLostResources
     layer->SetIsDrawable(true);
     root->AddChild(layer);
 
-    scoped_refptr<TextureLayer> texture = TextureLayer::CreateForMailbox(NULL);
+    scoped_refptr<TextureLayer> texture =
+        TextureLayer::CreateForMailbox(nullptr);
     texture->SetBounds(gfx::Size(10, 10));
     texture->SetIsDrawable(true);
     texture->SetTextureMailbox(
@@ -995,8 +997,8 @@ class LayerTreeHostContextTestDontUseLostResources
       // On the third commit we're recovering from context loss. Hardware
       // video frames should not be reused by the VideoFrameProvider, but
       // software frames can be.
-      hw_frame_provider_.set_frame(NULL);
-      scaled_hw_frame_provider_.set_frame(NULL);
+      hw_frame_provider_.set_frame(nullptr);
+      scaled_hw_frame_provider_.set_frame(nullptr);
     }
   }
 

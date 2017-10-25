@@ -97,8 +97,7 @@ class WebRemotePlaybackClient;
 class WebRTCPeerConnectionHandler;
 class WebServiceWorkerProvider;
 class WebSpellCheckPanelHostClient;
-class WebTaskRunner;
-class WebURLLoader;
+struct WebRemoteScrollProperties;
 
 class CORE_EXPORT LocalFrameClient : public FrameClient {
  public:
@@ -354,14 +353,19 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual TextCheckerClient& GetTextCheckerClient() const = 0;
 
-  virtual std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequest&,
-                                                        WebTaskRunner*) = 0;
+  virtual std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() = 0;
 
   virtual void AnnotatedRegionsChanged() = 0;
 
   virtual void DidBlockFramebust(const KURL&) {}
 
-  virtual String GetDevToolsFrameToken() = 0;
+  virtual String GetInstrumentationToken() = 0;
+
+  // Called when the corresponding frame should be scrolled in a remote parent
+  // frame.
+  virtual void ScrollRectToVisibleInParentFrame(
+      const WebRect&,
+      const WebRemoteScrollProperties&) {}
 };
 
 }  // namespace blink

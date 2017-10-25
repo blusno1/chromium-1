@@ -34,33 +34,28 @@ void ThreadedWorkletMessagingProxy::Initialize() {
   worklet_object_proxy_ = CreateObjectProxy(this, GetParentFrameTaskRunners());
 
   Document* document = ToDocument(GetExecutionContext());
-  SecurityOrigin* starter_origin = document->GetSecurityOrigin();
-  KURL script_url = document->Url();
-
   ContentSecurityPolicy* csp = document->GetContentSecurityPolicy();
   DCHECK(csp);
 
-  WorkerThreadStartMode start_mode =
-      GetWorkerInspectorProxy()->WorkerStartMode(document);
-  std::unique_ptr<WorkerSettings> worker_settings =
-      WTF::WrapUnique(new WorkerSettings(document->GetSettings()));
-
-  // TODO(ikilpatrick): Decide on sensible a value for referrerPolicy.
+  // TODO(nhiroki): Inherit a referrer policy from owner's document.
+  // (https://crbug.com/773921)
   auto global_scope_creation_params =
-      WTF::MakeUnique<GlobalScopeCreationParams>(
-          script_url, document->UserAgent(), String(), nullptr, start_mode,
-          csp->Headers().get(), /* referrerPolicy */ String(), starter_origin,
+      std::make_unique<GlobalScopeCreationParams>(
+          document->Url(), document->UserAgent(), String() /* source_code */,
+          nullptr /* cached_meta_data */, csp->Headers().get(),
+          String() /* referrer_policy */, document->GetSecurityOrigin(),
           ReleaseWorkerClients(), document->AddressSpace(),
           OriginTrialContext::GetTokens(document).get(),
-          std::move(worker_settings), kV8CacheOptionsDefault);
+          std::make_unique<WorkerSettings>(document->GetSettings()),
+          kV8CacheOptionsDefault);
 
   // Worklets share the pre-initialized backing thread so that we don't have to
   // specify the backing thread startup data.
   InitializeWorkerThread(std::move(global_scope_creation_params), WTF::nullopt,
-                         script_url);
+                         document->Url());
 }
 
-DEFINE_TRACE(ThreadedWorkletMessagingProxy) {
+void ThreadedWorkletMessagingProxy::Trace(blink::Visitor* visitor) {
   ThreadedMessagingProxyBase::Trace(visitor);
 }
 
@@ -68,7 +63,7 @@ void ThreadedWorkletMessagingProxy::FetchAndInvokeScript(
     const KURL& module_url_record,
     WorkletModuleResponsesMap* module_responses_map,
     WebURLRequest::FetchCredentialsMode credentials_mode,
-    RefPtr<WebTaskRunner> outside_settings_task_runner,
+    scoped_refptr<WebTaskRunner> outside_settings_task_runner,
     WorkletPendingTasks* pending_tasks) {
   DCHECK(IsMainThread());
   TaskRunnerHelper::Get(TaskType::kUnspecedLoading, GetWorkerThread())

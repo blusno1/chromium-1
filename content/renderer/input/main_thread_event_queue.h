@@ -10,9 +10,9 @@
 #include "base/single_thread_task_runner.h"
 #include "cc/input/touch_action.h"
 #include "content/common/content_export.h"
-#include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/input_event_dispatch_type.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/input_event_ack_state.h"
 #include "content/renderer/input/main_thread_event_queue_task_list.h"
 #include "content/renderer/input/scoped_web_input_event_with_latency_info.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -116,7 +116,6 @@ class CONTENT_EXPORT MainThreadEventQueue
                              const ui::LatencyInfo& latency,
                              InputEventDispatchType original_dispatch_type);
 
-  bool IsRafAlignedInputDisabled() const;
   bool IsRafAlignedEvent(
       const std::unique_ptr<MainThreadEventQueueTask>& item) const;
   void RafFallbackTimerFired();

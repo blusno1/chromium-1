@@ -15,7 +15,7 @@ namespace blink {
 
 GeoNotifier::GeoNotifier(Geolocation* geolocation,
                          V8PositionCallback* success_callback,
-                         PositionErrorCallback* error_callback,
+                         V8PositionErrorCallback* error_callback,
                          const PositionOptions& options)
     : geolocation_(geolocation),
       success_callback_(success_callback),
@@ -35,15 +35,16 @@ GeoNotifier::GeoNotifier(Geolocation* geolocation,
   timeout_histogram.Count(options_.timeout());
 }
 
-DEFINE_TRACE(GeoNotifier) {
+void GeoNotifier::Trace(blink::Visitor* visitor) {
   visitor->Trace(geolocation_);
   visitor->Trace(success_callback_);
   visitor->Trace(error_callback_);
   visitor->Trace(fatal_error_);
 }
 
-DEFINE_TRACE_WRAPPERS(GeoNotifier) {
+void GeoNotifier::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(success_callback_);
+  visitor->TraceWrappers(error_callback_);
 }
 
 void GeoNotifier::SetFatalError(PositionError* error) {
@@ -70,7 +71,7 @@ void GeoNotifier::RunSuccessCallback(Geoposition* position) {
 
 void GeoNotifier::RunErrorCallback(PositionError* error) {
   if (error_callback_)
-    error_callback_->handleEvent(error);
+    error_callback_->call(nullptr, error);
 }
 
 void GeoNotifier::StartTimer() {
@@ -102,7 +103,8 @@ void GeoNotifier::TimerFired(TimerBase*) {
   }
 
   if (error_callback_)
-    error_callback_->handleEvent(
+    error_callback_->call(
+        nullptr,
         PositionError::Create(PositionError::kTimeout, "Timeout expired"));
 
   DEFINE_STATIC_LOCAL(CustomCountHistogram, timeout_expired_histogram,

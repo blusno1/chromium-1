@@ -20,6 +20,9 @@ static_library("safe_browsing") {
     "chrome_cleaner/chrome_cleaner_fetcher_win.h",
     "chrome_cleaner/chrome_cleaner_navigation_util_win.cc",
     "chrome_cleaner/chrome_cleaner_navigation_util_win.h",
+    "chrome_cleaner/chrome_cleaner_reboot_dialog_controller_impl_win.cc",
+    "chrome_cleaner/chrome_cleaner_reboot_dialog_controller_impl_win.h",
+    "chrome_cleaner/chrome_cleaner_reboot_dialog_controller_win.h",
     "chrome_cleaner/chrome_cleaner_runner_win.cc",
     "chrome_cleaner/chrome_cleaner_runner_win.h",
     "chrome_cleaner/chrome_cleaner_state_change_observer_win.cc",
@@ -230,8 +233,6 @@ static_library("safe_browsing") {
         "signature_evaluator_mac.mm",
         "trigger_creator.cc",
         "trigger_creator.h",
-        "v4_test_utils.cc",
-        "v4_test_utils.h",
       ]
       deps += [
         "//components/content_settings/core/browser:browser",

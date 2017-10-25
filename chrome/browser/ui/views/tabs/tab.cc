@@ -512,9 +512,10 @@ bool Tab::IsActive() const {
 }
 
 void Tab::ActiveStateChanged() {
-  // The attention indicator is only shown for inactive tabs. When transitioning
-  // between active and inactive always reset the state to enforce that.
-  SetTabNeedsAttention(false);
+  // Cancel the pinned tab title change attention indicator when a tab becomes
+  // activated.
+  if (IsActive())
+    current_attention_types_ &= ~AttentionType::kPinnedTabTitleChange;
   OnButtonColorMaybeChanged();
   alert_indicator_button_->UpdateEnabledForMuteToggle();
   Layout();
@@ -531,10 +532,10 @@ bool Tab::IsSelected() const {
 void Tab::SetData(const TabRendererData& data) {
   DCHECK(GetWidget());
 
-  if (data_.Equals(data))
+  if (data_ == data)
     return;
 
-  TabRendererData old(data_);
+  TabRendererData old(std::move(data_));
   data_ = data;
   UpdateThrobber(old);
 
@@ -585,11 +586,16 @@ void Tab::StopPulse() {
   pulse_animation_.Stop();
 }
 
-void Tab::SetTabNeedsAttention(bool value) {
-  if (value == showing_attention_indicator_)
-    return;
+void Tab::TabTitleChangedNotLoading() {
+  current_attention_types_ |= AttentionType::kPinnedTabTitleChange;
+  SchedulePaint();
+}
 
-  showing_attention_indicator_ = value;
+void Tab::SetTabNeedsAttention(bool attention) {
+  if (attention)
+    current_attention_types_ |= AttentionType::kTabWantsAttentionStatus;
+  else
+    current_attention_types_ &= ~AttentionType::kTabWantsAttentionStatus;
   SchedulePaint();
 }
 
@@ -886,7 +892,7 @@ bool Tab::OnMousePressed(const ui::MouseEvent& event) {
   if (event.IsOnlyLeftMouseButton() ||
       (event.IsOnlyRightMouseButton() && event.flags() & ui::EF_FROM_TOUCH)) {
     ui::ListSelectionModel original_selection;
-    original_selection.Copy(controller_->GetSelectionModel());
+    original_selection = controller_->GetSelectionModel();
     // Changing the selection may cause our bounds to change. If that happens
     // the location of the event may no longer be valid. Create a copy of the
     // event in the parents coordinate, which won't change, and recreate an
@@ -1000,7 +1006,7 @@ void Tab::OnGestureEvent(ui::GestureEvent* event) {
       ui::GestureEvent event_in_parent(*event, static_cast<View*>(this),
                                        parent());
       ui::ListSelectionModel original_selection;
-      original_selection.Copy(controller_->GetSelectionModel());
+      original_selection = controller_->GetSelectionModel();
       tab_activated_with_last_tap_down_ = !IsActive();
       if (!IsSelected())
         controller_->SelectTab(this);
@@ -1055,9 +1061,9 @@ void Tab::DataChanged(const TabRendererData& old) {
     return;
 
   if (data().blocked)
-    StartPulse();
+    current_attention_types_ |= AttentionType::kBlockedWebContents;
   else
-    StopPulse();
+    current_attention_types_ &= ~AttentionType::kBlockedWebContents;
 }
 
 void Tab::PaintTab(gfx::Canvas* canvas, const gfx::Path& clip) {
@@ -1311,7 +1317,13 @@ void Tab::PaintIcon(gfx::Canvas* canvas) {
     }
   }
 
-  if (showing_attention_indicator_ && !should_display_crashed_favicon_) {
+  // Don't show the attention indicator for blocked WebContentses if the tab is
+  // active; it's distracting.
+  int actual_attention_types = current_attention_types_;
+  if (IsActive())
+    actual_attention_types &= ~AttentionType::kBlockedWebContents;
+
+  if (actual_attention_types != 0 && !should_display_crashed_favicon_) {
     PaintAttentionIndicatorAndIcon(canvas, bounds);
   } else if (!favicon_.isNull()) {
     canvas->DrawImageInt(favicon_, 0, 0, bounds.width(), bounds.height(),

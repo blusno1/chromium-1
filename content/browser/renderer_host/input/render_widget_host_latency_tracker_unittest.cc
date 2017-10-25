@@ -5,7 +5,6 @@
 #include "content/browser/renderer_host/input/render_widget_host_latency_tracker.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/test/histogram_tester.h"
-#include "components/metrics/proto/ukm/entry.pb.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/test_rappor_service.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -477,10 +476,6 @@ TEST_F(RenderWidgetHostLatencyTrackerTest, TestTouchToFirstScrollHistograms) {
     // UMA histograms.
     EXPECT_TRUE(HistogramSizeEq("Event.Latency.Browser.TouchUI", 1));
     EXPECT_TRUE(HistogramSizeEq("Event.Latency.Browser.TouchAcked", 1));
-    EXPECT_TRUE(
-        HistogramSizeEq("Event.Latency.TouchToFirstScrollUpdateSwapBegin", 1));
-    EXPECT_TRUE(
-        HistogramSizeEq("Event.Latency.TouchToScrollUpdateSwapBegin", 1));
     EXPECT_TRUE(HistogramSizeEq(
         "Event.Latency.ScrollBegin.Touch.TimeToScrollUpdateSwapBegin2", 1));
 
@@ -730,9 +725,6 @@ TEST_F(RenderWidgetHostLatencyTrackerTest,
   EXPECT_TRUE(HistogramSizeEq("Event.Latency.Browser.TouchUI", 1));
   EXPECT_TRUE(HistogramSizeEq("Event.Latency.Browser.WheelAcked", 1));
   EXPECT_TRUE(HistogramSizeEq("Event.Latency.Browser.TouchAcked", 1));
-  EXPECT_TRUE(
-      HistogramSizeEq("Event.Latency.TouchToFirstScrollUpdateSwapBegin", 1));
-  EXPECT_TRUE(HistogramSizeEq("Event.Latency.TouchToScrollUpdateSwapBegin", 1));
   EXPECT_TRUE(
       HistogramSizeEq("Event.Latency.ScrollUpdate.TouchToHandled_Main", 0));
   EXPECT_TRUE(

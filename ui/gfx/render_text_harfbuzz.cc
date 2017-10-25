@@ -37,6 +37,10 @@
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/utf16_indexing.h"
 
+#if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
+#endif
+
 #include <hb.h>
 
 namespace gfx {
@@ -464,6 +468,7 @@ class HarfBuzzLineBreaker {
       }
     }
     line->segments.push_back(segment);
+    line->size.set_width(line->size.width() + segment.width());
 
     SkPaint paint;
     paint.setTypeface(run.skia_face);
@@ -472,11 +477,10 @@ class HarfBuzzLineBreaker {
     SkPaint::FontMetrics metrics;
     paint.getFontMetrics(&metrics);
 
-    line->size.set_width(line->size.width() + segment.width());
-    // TODO(dschuyler): Account for stylized baselines in string sizing.
-    max_descent_ = std::max(max_descent_, metrics.fDescent);
-    // fAscent is always negative.
-    max_ascent_ = std::max(max_ascent_, -metrics.fAscent);
+    // max_descent_ is y-down, fDescent is y-down, baseline_offset is y-down
+    max_descent_ = std::max(max_descent_, metrics.fDescent+run.baseline_offset);
+    // max_ascent_ is y-up, fAscent is y-down, baseline_offset is y-down
+    max_ascent_ = std::max(max_ascent_, -(metrics.fAscent+run.baseline_offset));
 
     if (run.is_rtl) {
       rtl_segments_.push_back(
@@ -1384,7 +1388,7 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
   }
 
   if (!bidi_iterator.Open(text, GetTextDirection(text), behavior)) {
-    auto run = base::MakeUnique<internal::TextRunHarfBuzz>(
+    auto run = std::make_unique<internal::TextRunHarfBuzz>(
         font_list().GetPrimaryFont());
     run->range = Range(0, text.length());
     run_list_out->Add(std::move(run));
@@ -1405,7 +1409,7 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
   internal::StyleIterator style(empty_colors, baselines(), weights(), styles());
 
   for (size_t run_break = 0; run_break < text.length();) {
-    auto run = base::MakeUnique<internal::TextRunHarfBuzz>(
+    auto run = std::make_unique<internal::TextRunHarfBuzz>(
         font_list().GetPrimaryFont());
     run->range.set_start(run_break);
     run->italic = style.style(ITALIC);
@@ -1640,8 +1644,19 @@ bool RenderTextHarfBuzz::ShapeRunWithFont(const base::string16& text,
     DCHECK_LE(infos[i].codepoint, std::numeric_limits<uint16_t>::max());
     run->glyphs[i] = static_cast<uint16_t>(infos[i].codepoint);
     run->glyph_to_char[i] = infos[i].cluster;
+
+#if defined(OS_MACOSX)
+    // Mac 10.9 and 10.10 give a quirky offset for whitespace glyphs in RTL,
+    // which requires tests relying on the behavior of |glyph_width_for_test_|
+    // to also be given a zero x_offset, otherwise expectations get thrown off.
+    const bool force_zero_offset =
+        glyph_width_for_test_ > 0 && base::mac::IsAtMostOS10_10();
+#else
+    constexpr bool force_zero_offset = false;
+#endif
     const SkScalar x_offset =
-        HarfBuzzUnitsToSkiaScalar(hb_positions[i].x_offset);
+        force_zero_offset ? 0
+                          : HarfBuzzUnitsToSkiaScalar(hb_positions[i].x_offset);
     const SkScalar y_offset =
         HarfBuzzUnitsToSkiaScalar(hb_positions[i].y_offset);
     run->positions[i].set(run->width + x_offset, -y_offset);

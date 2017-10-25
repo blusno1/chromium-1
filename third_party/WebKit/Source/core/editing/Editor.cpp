@@ -339,13 +339,13 @@ bool Editor::CanCut() const {
 
 static HTMLImageElement* ImageElementFromImageDocument(Document* document) {
   if (!document)
-    return 0;
+    return nullptr;
   if (!document->IsImageDocument())
-    return 0;
+    return nullptr;
 
   HTMLElement* body = document->body();
   if (!body)
-    return 0;
+    return nullptr;
 
   return ToHTMLImageElementOrNull(body->firstChild());
 }
@@ -563,7 +563,7 @@ void Editor::WriteSelectionToPasteboard() {
                                              CanSmartCopyOrDelete());
 }
 
-static RefPtr<Image> ImageFromNode(const Node& node) {
+static scoped_refptr<Image> ImageFromNode(const Node& node) {
   DCHECK(!node.GetDocument().NeedsLayoutTreeUpdate());
   DocumentLifecycle::DisallowTransitionScope disallow_transition(
       node.GetDocument().Lifecycle());
@@ -598,7 +598,7 @@ static void WriteImageNodeToPasteboard(Pasteboard* pasteboard,
   DCHECK(pasteboard);
   DCHECK(node);
 
-  RefPtr<Image> image = ImageFromNode(*node);
+  scoped_refptr<Image> image = ImageFromNode(*node);
   if (!image.get())
     return;
 
@@ -1825,7 +1825,7 @@ void Editor::ReplaceSelection(const String& text) {
                            InputEvent::InputType::kInsertReplacementText);
 }
 
-DEFINE_TRACE(Editor) {
+void Editor::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(last_edit_command_);
   visitor->Trace(undo_stack_);

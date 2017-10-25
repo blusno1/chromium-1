@@ -38,7 +38,6 @@
 namespace blink {
 
 void CSSFontFace::AddSource(CSSFontFaceSource* source) {
-  source->SetFontFace(this);
   sources_.push_back(source);
 }
 
@@ -53,10 +52,10 @@ void CSSFontFace::DidBeginLoad() {
     SetLoadStatus(FontFace::kLoading);
 }
 
-void CSSFontFace::FontLoaded(RemoteFontFaceSource* source,
+bool CSSFontFace::FontLoaded(RemoteFontFaceSource* source,
                              LoadFinishReason reason) {
   if (!IsValid() || source != sources_.front())
-    return;
+    return false;
 
   if (LoadStatus() == FontFace::kLoading) {
     if (source->IsValid()) {
@@ -74,6 +73,7 @@ void CSSFontFace::FontLoaded(RemoteFontFaceSource* source,
 
   if (segmented_font_face_)
     segmented_font_face_->FontFaceInvalidated();
+  return true;
 }
 
 size_t CSSFontFace::ApproximateBlankCharacterCount() const {
@@ -83,21 +83,22 @@ size_t CSSFontFace::ApproximateBlankCharacterCount() const {
   return 0;
 }
 
-void CSSFontFace::DidBecomeVisibleFallback(RemoteFontFaceSource* source) {
+bool CSSFontFace::DidBecomeVisibleFallback(RemoteFontFaceSource* source) {
   if (!IsValid() || source != sources_.front())
-    return;
+    return false;
   if (segmented_font_face_)
     segmented_font_face_->FontFaceInvalidated();
+  return true;
 }
 
-RefPtr<SimpleFontData> CSSFontFace::GetFontData(
+scoped_refptr<SimpleFontData> CSSFontFace::GetFontData(
     const FontDescription& font_description) {
   if (!IsValid())
     return nullptr;
 
   while (!sources_.IsEmpty()) {
     Member<CSSFontFaceSource>& source = sources_.front();
-    if (RefPtr<SimpleFontData> result = source->GetFontData(
+    if (scoped_refptr<SimpleFontData> result = source->GetFontData(
             font_description,
             segmented_font_face_->GetFontSelectionCapabilities())) {
       if (LoadStatus() == FontFace::kUnloaded &&
@@ -192,7 +193,7 @@ void CSSFontFace::SetLoadStatus(FontFace::LoadStatusType new_status) {
     FontFaceSetDocument::From(*document)->BeginFontLoading(font_face_);
 }
 
-DEFINE_TRACE(CSSFontFace) {
+void CSSFontFace::Trace(blink::Visitor* visitor) {
   visitor->Trace(segmented_font_face_);
   visitor->Trace(sources_);
   visitor->Trace(font_face_);

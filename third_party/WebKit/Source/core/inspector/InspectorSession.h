@@ -50,9 +50,10 @@ class CORE_EXPORT InspectorSession
   void Dispose();
   void DidCommitLoadForLocalFrame(LocalFrame*);
   void DispatchProtocolMessage(const String& method, const String& message);
+  void DispatchProtocolMessage(const String& message);
   void flushProtocolNotifications() override;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   // protocol::FrontendChannel implementation.

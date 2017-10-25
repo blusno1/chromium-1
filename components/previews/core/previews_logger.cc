@@ -12,14 +12,50 @@ namespace previews {
 
 namespace {
 
+const char kPreviewDecisionMade[] = "Decision";
 const char kPreviewNavigationEventType[] = "Navigation";
-const size_t kMaximumMessageLogs = 10;
+const size_t kMaximumNavigationLogs = 10;
+const size_t kMaximumDecisionLogs = 25;
 
-std::string GetPreviewNavigationDescription(
-    const PreviewsLogger::PreviewNavigation& navigation) {
+std::string GetDescriptionForPreviewsNavigation(PreviewsType type,
+                                                bool opt_out) {
   return base::StringPrintf("%s preview navigation - user opt_out: %s",
-                            GetStringNameForType(navigation.type).c_str(),
-                            navigation.opt_out ? "True" : "False");
+                            GetStringNameForType(type).c_str(),
+                            opt_out ? "True" : "False");
+}
+
+std::string GetReasonDescription(PreviewsEligibilityReason reason) {
+  switch (reason) {
+    case PreviewsEligibilityReason::ALLOWED:
+      return "Allowed";
+    case PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE:
+      return "Blacklist failed to be created";
+    case PreviewsEligibilityReason::BLACKLIST_DATA_NOT_LOADED:
+      return "Blacklist not loaded from disk yet";
+    case PreviewsEligibilityReason::USER_RECENTLY_OPTED_OUT:
+      return "User recently opted out";
+    case PreviewsEligibilityReason::USER_BLACKLISTED:
+      return "All previews are blacklisted";
+    case PreviewsEligibilityReason::HOST_BLACKLISTED:
+      return "All previews on this host are blacklisted";
+    case PreviewsEligibilityReason::NETWORK_QUALITY_UNAVAILABLE:
+      return "Network quality unavailable";
+    case PreviewsEligibilityReason::NETWORK_NOT_SLOW:
+      return "Network not slow";
+    case PreviewsEligibilityReason::RELOAD_DISALLOWED:
+      return "Page reloads do not show previews for this preview type";
+    case PreviewsEligibilityReason::HOST_BLACKLISTED_BY_SERVER:
+      return "Host blacklisted by server rules";
+  }
+  NOTREACHED();
+  return "";
+}
+
+std::string GetDescriptionForPreviewsDecision(PreviewsEligibilityReason reason,
+                                              PreviewsType type) {
+  return base::StringPrintf("%s preview decision made - %s",
+                            GetStringNameForType(type).c_str(),
+                            GetReasonDescription(reason).c_str());
 }
 
 }  // namespace
@@ -46,8 +82,30 @@ PreviewsLogger::~PreviewsLogger() {}
 void PreviewsLogger::AddAndNotifyObserver(PreviewsLoggerObserver* observer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observer_list_.AddObserver(observer);
-  for (auto message : log_messages_) {
-    observer->OnNewMessageLogAdded(message);
+
+  // Merge navigation logs and decision logs in chronological order, and push
+  // them to |observer|.
+  auto navigation_ptr = navigations_logs_.begin();
+  auto decision_ptr = decisions_logs_.begin();
+  while (navigation_ptr != navigations_logs_.end() ||
+         decision_ptr != decisions_logs_.end()) {
+    if (navigation_ptr == navigations_logs_.end()) {
+      observer->OnNewMessageLogAdded(*decision_ptr);
+      ++decision_ptr;
+      continue;
+    }
+    if (decision_ptr == decisions_logs_.end()) {
+      observer->OnNewMessageLogAdded(*navigation_ptr);
+      ++navigation_ptr;
+      continue;
+    }
+    if (navigation_ptr->time < decision_ptr->time) {
+      observer->OnNewMessageLogAdded(*navigation_ptr);
+      ++navigation_ptr;
+    } else {
+      observer->OnNewMessageLogAdded(*decision_ptr);
+      ++decision_ptr;
+    }
   }
 }
 
@@ -56,35 +114,53 @@ void PreviewsLogger::RemoveObserver(PreviewsLoggerObserver* observer) {
   observer_list_.RemoveObserver(observer);
 }
 
-std::vector<PreviewsLogger::MessageLog> PreviewsLogger::log_messages() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return std::vector<MessageLog>(log_messages_.begin(), log_messages_.end());
-}
-
 void PreviewsLogger::LogMessage(const std::string& event_type,
                                 const std::string& event_description,
                                 const GURL& url,
                                 base::Time time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_GE(kMaximumMessageLogs, log_messages_.size());
-  MessageLog message(event_type, event_description, url, time);
-
   // Notify observers about the new MessageLog.
   for (auto& observer : observer_list_) {
-    observer.OnNewMessageLogAdded(message);
+    observer.OnNewMessageLogAdded(
+        MessageLog(event_type, event_description, url, time));
   }
-
-  if (log_messages_.size() >= kMaximumMessageLogs) {
-    log_messages_.pop_front();
-  }
-  log_messages_.push_back(message);
 }
 
-void PreviewsLogger::LogPreviewNavigation(const PreviewNavigation& navigation) {
+void PreviewsLogger::LogPreviewNavigation(const GURL& url,
+                                          PreviewsType type,
+                                          bool opt_out,
+                                          base::Time time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  LogMessage(kPreviewNavigationEventType,
-             GetPreviewNavigationDescription(navigation), navigation.url,
-             navigation.time);
+  DCHECK_GE(kMaximumNavigationLogs, navigations_logs_.size());
+
+  std::string description = GetDescriptionForPreviewsNavigation(type, opt_out);
+  LogMessage(kPreviewNavigationEventType, description, url, time);
+
+  // Pop out the oldest message when the list is full.
+  if (navigations_logs_.size() >= kMaximumNavigationLogs) {
+    navigations_logs_.pop_front();
+  }
+
+  navigations_logs_.emplace_back(kPreviewNavigationEventType, description, url,
+                                 time);
+}
+
+void PreviewsLogger::LogPreviewDecisionMade(PreviewsEligibilityReason reason,
+                                            const GURL& url,
+                                            base::Time time,
+                                            PreviewsType type) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_GE(kMaximumDecisionLogs, decisions_logs_.size());
+
+  std::string description = GetDescriptionForPreviewsDecision(reason, type);
+  LogMessage(kPreviewDecisionMade, description, url, time);
+
+  // Pop out the oldest message when the list is full.
+  if (decisions_logs_.size() >= kMaximumDecisionLogs) {
+    decisions_logs_.pop_front();
+  }
+
+  decisions_logs_.emplace_back(kPreviewDecisionMade, description, url, time);
 }
 
 }  // namespace previews

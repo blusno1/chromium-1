@@ -72,11 +72,7 @@ class LayoutScrollbarPart final : public LayoutBlock {
   LayoutObject* ScrollbarStyleSource() const;
 
   // Must call setStyleWithWritingModeOfParent() instead.
-  void SetStyle(RefPtr<ComputedStyle>) = delete;
-
-  // Expose for LayoutScrollbar and PaintInvalidationCapableScrollableArea for
-  // paint invalidation.
-  using LayoutObject::SetVisualRect;
+  void SetStyle(scoped_refptr<ComputedStyle>) = delete;
 
  protected:
   void StyleWillChange(StyleDifference,
@@ -104,6 +100,9 @@ class LayoutScrollbarPart final : public LayoutBlock {
 
   void ComputeScrollbarWidth();
   void ComputeScrollbarHeight();
+  int CalcScrollbarThicknessUsing(SizeType,
+                                  const Length&,
+                                  int containing_length);
 
   void SetNeedsPaintInvalidation();
 

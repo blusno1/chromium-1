@@ -78,8 +78,8 @@ class CORE_EXPORT EventTargetData final
   EventTargetData();
   ~EventTargetData();
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   EventListenerMap event_listener_map;
   std::unique_ptr<FiringEventIteratorVector> firing_event_iterators;
@@ -114,8 +114,7 @@ DEFINE_TRAIT_FOR_TRACE_WRAPPERS(EventTargetData);
 //   depending on the base class of your class.
 // - EventTargets do not support EAGERLY_FINALIZE. You need to use
 //   a pre-finalizer instead.
-class CORE_EXPORT EventTarget : public GarbageCollectedFinalized<EventTarget>,
-                                public ScriptWrappable {
+class CORE_EXPORT EventTarget : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -175,9 +174,6 @@ class CORE_EXPORT EventTarget : public GarbageCollectedFinalized<EventTarget>,
 
   static DispatchEventResult GetDispatchEventResult(const Event&);
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {}
-
   virtual bool KeepEventInNode(Event*) { return false; }
 
  protected:
@@ -227,12 +223,12 @@ class CORE_EXPORT EventTargetWithInlineData : public EventTarget {
  public:
   ~EventTargetWithInlineData() override {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(event_target_data_);
     EventTarget::Trace(visitor);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {
+  virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
     visitor->TraceWrappers(event_target_data_);
     EventTarget::TraceWrappers(visitor);
   }

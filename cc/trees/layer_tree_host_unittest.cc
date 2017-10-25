@@ -3988,11 +3988,11 @@ class LayerTreeHostTestImplLayersPushProperties
         break;
     }
 
-    PushPropertiesCountingLayerImpl* root_impl_ = NULL;
-    PushPropertiesCountingLayerImpl* child_impl_ = NULL;
-    PushPropertiesCountingLayerImpl* child2_impl_ = NULL;
-    PushPropertiesCountingLayerImpl* grandchild_impl_ = NULL;
-    PushPropertiesCountingLayerImpl* leaf_always_pushing_layer_impl_ = NULL;
+    PushPropertiesCountingLayerImpl* root_impl_ = nullptr;
+    PushPropertiesCountingLayerImpl* child_impl_ = nullptr;
+    PushPropertiesCountingLayerImpl* child2_impl_ = nullptr;
+    PushPropertiesCountingLayerImpl* grandchild_impl_ = nullptr;
+    PushPropertiesCountingLayerImpl* leaf_always_pushing_layer_impl_ = nullptr;
 
     // Pull the layers that we need from the tree assuming the same structure
     // as LayerTreeHostTestLayersPushProperties
@@ -5375,7 +5375,7 @@ class LayerTreeHostTestSwapPromiseDuringCommit : public LayerTreeHostTest {
 
     {
       std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
-          new SimpleSwapPromiseMonitor(layer_tree_host(), NULL,
+          new SimpleSwapPromiseMonitor(layer_tree_host(), nullptr,
                                        &set_needs_commit_count,
                                        &set_needs_redraw_count));
       layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
@@ -5398,7 +5398,7 @@ class LayerTreeHostTestSwapPromiseDuringCommit : public LayerTreeHostTest {
 
     {
       std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
-          new SimpleSwapPromiseMonitor(layer_tree_host(), NULL,
+          new SimpleSwapPromiseMonitor(layer_tree_host(), nullptr,
                                        &set_needs_commit_count,
                                        &set_needs_redraw_count));
       layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
@@ -5430,7 +5430,7 @@ class LayerTreeHostTestSimpleSwapPromiseMonitor : public LayerTreeHostTest {
 
     {
       std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
-          new SimpleSwapPromiseMonitor(layer_tree_host(), NULL,
+          new SimpleSwapPromiseMonitor(layer_tree_host(), nullptr,
                                        &set_needs_commit_count,
                                        &set_needs_redraw_count));
       layer_tree_host()->SetNeedsCommit();
@@ -5446,7 +5446,7 @@ class LayerTreeHostTestSimpleSwapPromiseMonitor : public LayerTreeHostTest {
 
     {
       std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
-          new SimpleSwapPromiseMonitor(layer_tree_host(), NULL,
+          new SimpleSwapPromiseMonitor(layer_tree_host(), nullptr,
                                        &set_needs_commit_count,
                                        &set_needs_redraw_count));
       layer_tree_host()->SetNeedsUpdateLayers();
@@ -5456,7 +5456,7 @@ class LayerTreeHostTestSimpleSwapPromiseMonitor : public LayerTreeHostTest {
 
     {
       std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
-          new SimpleSwapPromiseMonitor(layer_tree_host(), NULL,
+          new SimpleSwapPromiseMonitor(layer_tree_host(), nullptr,
                                        &set_needs_commit_count,
                                        &set_needs_redraw_count));
       layer_tree_host()->SetNeedsAnimate();
@@ -7615,7 +7615,6 @@ class GpuRasterizationSucceedsWithLargeImage : public LayerTreeHostTest {
 
     // Set to 0 to force at-raster GPU image decode.
     settings->decoded_image_working_set_budget_bytes = 0;
-    settings->decoded_image_cache_budget_bytes = 0;
   }
 
   void SetupTree() override {
@@ -8128,5 +8127,62 @@ class LayerTreeHostTestImageAnimation : public LayerTreeHostTest {
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestImageAnimation);
 
+class LayerTreeHostTestImageDecodingHints : public LayerTreeHostTest {
+ public:
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void SetupTree() override {
+    gfx::Size layer_size(100, 100);
+    content_layer_client_.set_bounds(layer_size);
+    content_layer_client_.set_fill_with_nonsolid_color(true);
+    PaintImage async_image =
+        PaintImageBuilder::WithCopy(
+            CreateDiscardablePaintImage(gfx::Size(10, 10)))
+            .set_id(1)
+            .set_decoding_mode(PaintImage::DecodingMode::kAsync)
+            .TakePaintImage();
+    PaintImage sync_image =
+        PaintImageBuilder::WithCopy(
+            CreateDiscardablePaintImage(gfx::Size(10, 10)))
+            .set_id(2)
+            .set_decoding_mode(PaintImage::DecodingMode::kSync)
+            .TakePaintImage();
+    PaintImage unspecified_image =
+        PaintImageBuilder::WithCopy(
+            CreateDiscardablePaintImage(gfx::Size(10, 10)))
+            .set_id(3)
+            .set_decoding_mode(PaintImage::DecodingMode::kUnspecified)
+            .TakePaintImage();
+    content_layer_client_.add_draw_image(async_image, gfx::Point(0, 0),
+                                         PaintFlags());
+    content_layer_client_.add_draw_image(sync_image, gfx::Point(1, 2),
+                                         PaintFlags());
+    content_layer_client_.add_draw_image(unspecified_image, gfx::Point(3, 4),
+                                         PaintFlags());
+
+    layer_tree_host()->SetRootLayer(
+        FakePictureLayer::Create(&content_layer_client_));
+    layer_tree_host()->root_layer()->SetBounds(layer_size);
+    LayerTreeTest::SetupTree();
+  }
+
+  void WillPrepareToDrawOnThread(LayerTreeHostImpl* host_impl) override {
+    auto& tracker = host_impl->tile_manager()->checker_image_tracker();
+    EXPECT_EQ(tracker.get_decoding_mode_hint_for_testing(1),
+              PaintImage::DecodingMode::kAsync);
+    EXPECT_EQ(tracker.get_decoding_mode_hint_for_testing(2),
+              PaintImage::DecodingMode::kSync);
+    EXPECT_EQ(tracker.get_decoding_mode_hint_for_testing(3),
+              PaintImage::DecodingMode::kUnspecified);
+    EndTest();
+  }
+
+  void AfterTest() override {}
+
+ private:
+  FakeContentLayerClient content_layer_client_;
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestImageDecodingHints);
 }  // namespace
 }  // namespace cc

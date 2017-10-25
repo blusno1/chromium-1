@@ -35,18 +35,18 @@ class StyleInvalidImage final : public StyleImage {
   bool UsesImageContainerSize() const override { return false; }
   void AddClient(ImageResourceObserver*) override {}
   void RemoveClient(ImageResourceObserver*) override {}
-  RefPtr<Image> GetImage(const ImageResourceObserver&,
-                         const Document&,
-                         const ComputedStyle&,
-                         const IntSize& container_size,
-                         const LayoutSize* logical_size) const override {
+  scoped_refptr<Image> GetImage(const ImageResourceObserver&,
+                                const Document&,
+                                const ComputedStyle&,
+                                const IntSize& container_size,
+                                const LayoutSize* logical_size) const override {
     return nullptr;
   }
   bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override {
     return false;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { StyleImage::Trace(visitor); }
+  virtual void Trace(blink::Visitor* visitor) { StyleImage::Trace(visitor); }
 
  private:
   explicit StyleInvalidImage(const String& url) : url_(url) {

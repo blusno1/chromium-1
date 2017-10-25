@@ -23,7 +23,6 @@
 #include "ios/chrome/browser/payments/ios_payment_instrument.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #include "ios/chrome/browser/payments/payment_request_util.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
@@ -88,11 +87,6 @@ using ::payment_request_util::GetShippingSectionTitle;
           ![self requestContactInfo]);
 }
 
-- (BOOL)canShip {
-  return !self.paymentRequest->shipping_options().empty() &&
-         self.paymentRequest->selected_shipping_profile() != nullptr;
-}
-
 - (BOOL)hasPaymentItems {
   return !self.paymentRequest
               ->GetDisplayItems(self.paymentRequest->selected_payment_method())
@@ -132,6 +126,8 @@ using ::payment_request_util::GetShippingSectionTitle;
 }
 
 - (PaymentsTextItem*)shippingSectionHeaderItem {
+  if (!self.paymentRequest->selected_shipping_profile())
+    return nil;
   PaymentsTextItem* item = [[PaymentsTextItem alloc] init];
   item.text = GetShippingSectionTitle(self.paymentRequest->shipping_type());
   return item;
@@ -153,19 +149,20 @@ using ::payment_request_util::GetShippingSectionTitle;
   if (self.paymentRequest->shipping_profiles().empty()) {
     item.text = base::SysUTF16ToNSString(
         GetAddShippingAddressButtonLabel(self.paymentRequest->shipping_type()));
-    // TODO(crbug.com/774499): change this to a '+';
-    item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
-    item.textColor = [[MDCPalette cr_bluePalette] tint500];
+    item.trailingImage = TintImage([UIImage imageNamed:@"ic_add"],
+                                   [[MDCPalette greyPalette] tint400]);
   } else {
     item.text = base::SysUTF16ToNSString(GetChooseShippingAddressButtonLabel(
         self.paymentRequest->shipping_type()));
     item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
-    item.textColor = [[MDCPalette cr_bluePalette] tint500];
   }
+  item.cellType = PaymentsTextCellTypeCallToAction;
   return item;
 }
 
 - (CollectionViewItem*)shippingOptionItem {
+  if (!self.paymentRequest->selected_shipping_profile())
+    return nullptr;
   const payments::PaymentShippingOption* option =
       self.paymentRequest->selected_shipping_option();
   if (option) {
@@ -179,11 +176,14 @@ using ::payment_request_util::GetShippingSectionTitle;
     return item;
   }
 
+  if (self.paymentRequest->shipping_options().empty())
+    return nullptr;
+
   PaymentsTextItem* item = [[PaymentsTextItem alloc] init];
   item.text = base::SysUTF16ToNSString(
       GetChooseShippingOptionButtonLabel(self.paymentRequest->shipping_type()));
   item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
-  item.textColor = [[MDCPalette cr_bluePalette] tint500];
+  item.cellType = PaymentsTextCellTypeCallToAction;
   return item;
 }
 
@@ -226,19 +226,15 @@ using ::payment_request_util::GetShippingSectionTitle;
   }
 
   PaymentsTextItem* item = [[PaymentsTextItem alloc] init];
-  item.text =
-      l10n_util::GetNSString(IDS_PAYMENT_REQUEST_PAYMENT_METHOD_SECTION_NAME);
   if (self.paymentRequest->payment_methods().empty()) {
     item.text = l10n_util::GetNSString(IDS_ADD_PAYMENT_METHOD);
-    // TODO(crbug.com/774499): change this to a '+';
-    item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
-    item.textColor = [[MDCPalette cr_bluePalette] tint500];
+    item.trailingImage = TintImage([UIImage imageNamed:@"ic_add"],
+                                   [[MDCPalette greyPalette] tint400]);
   } else {
     item.text = l10n_util::GetNSString(IDS_CHOOSE_PAYMENT_METHOD);
-    item.text = @"Choose Payment Method";
     item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
-    item.textColor = [[MDCPalette cr_bluePalette] tint500];
   }
+  item.cellType = PaymentsTextCellTypeCallToAction;
   return item;
 }
 
@@ -246,7 +242,8 @@ using ::payment_request_util::GetShippingSectionTitle;
   if (!self.paymentRequest->selected_contact_profile())
     return nil;
   PaymentsTextItem* item = [[PaymentsTextItem alloc] init];
-  item.text = l10n_util::GetNSString(IDS_PAYMENTS_CONTACT_DETAILS_LABEL);
+  item.text =
+      l10n_util::GetNSString(IDS_PAYMENT_REQUEST_CONTACT_INFO_SECTION_NAME);
   return item;
 }
 
@@ -270,17 +267,15 @@ using ::payment_request_util::GetShippingSectionTitle;
   }
 
   PaymentsTextItem* item = [[PaymentsTextItem alloc] init];
-  item.text = l10n_util::GetNSString(IDS_PAYMENTS_CONTACT_DETAILS_LABEL);
   if (self.paymentRequest->contact_profiles().empty()) {
     item.text = l10n_util::GetNSString(IDS_PAYMENT_REQUEST_ADD_CONTACT_INFO);
-    // TODO(crbug.com/774499): change this to a '+';
-    item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
-    item.textColor = [[MDCPalette cr_bluePalette] tint500];
+    item.trailingImage = TintImage([UIImage imageNamed:@"ic_add"],
+                                   [[MDCPalette greyPalette] tint400]);
   } else {
     item.text = l10n_util::GetNSString(IDS_PAYMENT_REQUEST_CHOOSE_CONTACT_INFO);
     item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
-    item.textColor = [[MDCPalette cr_bluePalette] tint500];
   }
+  item.cellType = PaymentsTextCellTypeCallToAction;
   return item;
 }
 

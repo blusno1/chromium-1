@@ -40,13 +40,15 @@
 #include "core/layout/LayoutTextCombine.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/TextAutosizer.h"
+#include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/api/LineLayoutBox.h"
 #include "core/layout/line/AbstractInlineTextBox.h"
 #include "core/layout/line/EllipsisBox.h"
 #include "core/layout/line/GlyphOverflow.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
-#include "core/layout/ng/inline/ng_offset_mapping_result.h"
+#include "core/layout/ng/inline/ng_offset_mapping.h"
+#include "core/layout/ng/layout_ng_block_flow.h"
 #include "platform/fonts/CharacterRange.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/runtime_enabled_features.h"
@@ -152,7 +154,7 @@ static void MakeCapitalized(String* string, UChar previous) {
   *string = result.ToString();
 }
 
-LayoutText::LayoutText(Node* node, RefPtr<StringImpl> str)
+LayoutText::LayoutText(Node* node, scoped_refptr<StringImpl> str)
     : LayoutObject(node),
       has_tab_(false),
       lines_dirty_(false),
@@ -245,7 +247,7 @@ void LayoutText::RemoveAndDestroyTextBoxes() {
 
 void LayoutText::WillBeDestroyed() {
   if (SecureTextTimer* secure_text_timer =
-          g_secure_text_timers ? g_secure_text_timers->Take(this) : 0)
+          g_secure_text_timers ? g_secure_text_timers->Take(this) : nullptr)
     delete secure_text_timer;
 
   RemoveAndDestroyTextBoxes();
@@ -300,7 +302,7 @@ void LayoutText::DeleteTextBoxes() {
   }
 }
 
-RefPtr<StringImpl> LayoutText::OriginalText() const {
+scoped_refptr<StringImpl> LayoutText::OriginalText() const {
   Node* e = GetNode();
   return (e && e->IsTextNode()) ? ToText(e)->DataImpl() : nullptr;
 }
@@ -1105,7 +1107,7 @@ void LayoutText::ComputePreferredLogicalWidths(
   TextDirection text_direction = style_to_use.Direction();
   if ((Is8Bit() && text_direction == TextDirection::kLtr) ||
       IsOverride(style_to_use.GetUnicodeBidi())) {
-    run = 0;
+    run = nullptr;
   } else {
     TextRun text_run(GetText());
     BidiStatus status(text_direction, false);
@@ -1434,7 +1436,7 @@ void LayoutText::SetSelectionState(SelectionState state) {
     containing_block->SetSelectionState(state);
 }
 
-void LayoutText::SetTextWithOffset(RefPtr<StringImpl> text,
+void LayoutText::SetTextWithOffset(scoped_refptr<StringImpl> text,
                                    unsigned offset,
                                    unsigned len,
                                    bool force) {
@@ -1518,7 +1520,7 @@ void LayoutText::SetTextWithOffset(RefPtr<StringImpl> text,
 }
 
 void LayoutText::TransformText() {
-  if (RefPtr<StringImpl> text_to_transform = OriginalText())
+  if (scoped_refptr<StringImpl> text_to_transform = OriginalText())
     SetText(std::move(text_to_transform), true);
 }
 
@@ -1577,7 +1579,7 @@ void ApplyTextTransform(const ComputedStyle* style,
   }
 }
 
-void LayoutText::SetTextInternal(RefPtr<StringImpl> text) {
+void LayoutText::SetTextInternal(scoped_refptr<StringImpl> text) {
   DCHECK(text);
   text_ = String(std::move(text));
 
@@ -1611,7 +1613,7 @@ void LayoutText::SecureText(UChar mask) {
   int last_typed_character_offset_to_reveal = -1;
   UChar revealed_text;
   SecureTextTimer* secure_text_timer =
-      g_secure_text_timers ? g_secure_text_timers->at(this) : 0;
+      g_secure_text_timers ? g_secure_text_timers->at(this) : nullptr;
   if (secure_text_timer && secure_text_timer->IsActive()) {
     last_typed_character_offset_to_reveal =
         secure_text_timer->LastTypedCharacterOffset();
@@ -1629,7 +1631,7 @@ void LayoutText::SecureText(UChar mask) {
   }
 }
 
-void LayoutText::SetText(RefPtr<StringImpl> text, bool force) {
+void LayoutText::SetText(scoped_refptr<StringImpl> text, bool force) {
   DCHECK(text);
 
   if (!force && Equal(text_.Impl(), text.get()))
@@ -1852,6 +1854,12 @@ LayoutRect LayoutText::VisualOverflowRect() const {
 }
 
 LayoutRect LayoutText::LocalVisualRectIgnoringVisibility() const {
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    NGPhysicalOffsetRect visual_rect;
+    if (LayoutNGBlockFlow::LocalVisualRectFor(this, &visual_rect))
+      return visual_rect.ToLayoutRect();
+  }
+
   return UnionRect(VisualOverflowRect(), LocalSelectionRect());
 }
 
@@ -1909,21 +1917,22 @@ bool LayoutText::ShouldUseNGAlternatives() const {
          EnclosingNGBlockFlow();
 }
 
-const NGOffsetMappingResult& LayoutText::GetNGOffsetMapping() const {
+const NGOffsetMapping& LayoutText::GetNGOffsetMapping() const {
   DCHECK(EnclosingNGBlockFlow());
   return NGInlineNode(EnclosingNGBlockFlow()).ComputeOffsetMappingIfNeeded();
 }
 
 int LayoutText::CaretMinOffset() const {
   if (ShouldUseNGAlternatives()) {
-    // TODO(xiaochengh): Support ::first-letter.
+    // ::first-letter handling should be done by LayoutTextFragment override.
+    DCHECK(!IsTextFragment());
     if (!GetNode())
       return 0;
-    const unsigned candidate =
+    Optional<unsigned> candidate =
         GetNGOffsetMapping().StartOfNextNonCollapsedCharacter(*GetNode(), 0);
     // Align with the legacy behavior that 0 is returned if the entire node
     // contains only collapsed whitespaces.
-    return candidate == TextLength() ? 0 : candidate;
+    return candidate ? *candidate : 0;
   }
 
   InlineTextBox* box = FirstTextBox();
@@ -1937,15 +1946,16 @@ int LayoutText::CaretMinOffset() const {
 
 int LayoutText::CaretMaxOffset() const {
   if (ShouldUseNGAlternatives()) {
-    // TODO(xiaochengh): Support ::first-letter.
+    // ::first-letter handling should be done by LayoutTextFragment override.
+    DCHECK(!IsTextFragment());
     if (!GetNode())
       return TextLength();
-    const unsigned candidate =
+    Optional<unsigned> candidate =
         GetNGOffsetMapping().EndOfLastNonCollapsedCharacter(*GetNode(),
                                                             TextLength());
     // Align with the legacy behavior that |TextLength()| is returned if the
     // entire node contains only collapsed whitespaces.
-    return candidate == 0u ? TextLength() : candidate;
+    return candidate ? *candidate : TextLength();
   }
 
   InlineTextBox* box = LastTextBox();
@@ -1960,14 +1970,18 @@ int LayoutText::CaretMaxOffset() const {
 
 unsigned LayoutText::ResolvedTextLength() const {
   if (ShouldUseNGAlternatives()) {
-    // TODO(xiaochengh): Support ::first-letter.
+    // ::first-letter handling should be done by LayoutTextFragment override.
+    DCHECK(!IsTextFragment());
     if (!GetNode())
       return 0;
-    const NGOffsetMappingResult& mapping = GetNGOffsetMapping();
-    const unsigned start = mapping.GetTextContentOffset(*GetNode(), 0);
-    const unsigned end = mapping.GetTextContentOffset(*GetNode(), TextLength());
-    DCHECK_LE(start, end);
-    return end - start;
+    const NGOffsetMapping& mapping = GetNGOffsetMapping();
+    Optional<unsigned> start = mapping.GetTextContentOffset(*GetNode(), 0);
+    Optional<unsigned> end =
+        mapping.GetTextContentOffset(*GetNode(), TextLength());
+    DCHECK(start);
+    DCHECK(end);
+    DCHECK_LE(*start, *end);
+    return *end - *start;
   }
 
   int len = 0;
@@ -1980,6 +1994,138 @@ bool LayoutText::HasNonCollapsedText() const {
   if (ShouldUseNGAlternatives())
     return ResolvedTextLength();
   return FirstTextBox();
+}
+
+bool LayoutText::ContainsCaretOffset(int text_offset) const {
+  DCHECK_GE(text_offset, 0);
+  if (ShouldUseNGAlternatives()) {
+    // ::first-letter handling should be done by LayoutTextFragment override.
+    DCHECK(!IsTextFragment());
+    if (!GetNode())
+      return false;
+    const NGOffsetMapping& mapping = GetNGOffsetMapping();
+    if (mapping.IsBeforeNonCollapsedCharacter(*GetNode(), text_offset))
+      return true;
+    if (!mapping.IsAfterNonCollapsedCharacter(*GetNode(), text_offset))
+      return false;
+    return *mapping.GetCharacterBefore(*GetNode(), text_offset) !=
+           kNewlineCharacter;
+  }
+
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
+    if (text_offset < static_cast<int>(box->Start()) &&
+        !ContainsReversedText()) {
+      // The offset we're looking for is before this node
+      // this means the offset must be in content that is
+      // not laid out. Return false.
+      return false;
+    }
+    if (box->ContainsCaretOffset(text_offset))
+      return true;
+  }
+  return false;
+}
+
+// Returns true if |box| at |text_offset| can not continue on next line.
+static bool CanNotContinueOnNextLine(const LayoutText& text_layout_object,
+                                     InlineBox* box,
+                                     unsigned text_offset) {
+  InlineTextBox* const last_text_box = text_layout_object.LastTextBox();
+  if (box == last_text_box)
+    return true;
+  return LineLayoutAPIShim::LayoutObjectFrom(box->GetLineLayoutItem()) ==
+             text_layout_object &&
+         ToInlineTextBox(box)->Start() >= text_offset;
+}
+
+// The text continues on the next line only if the last text box is not on this
+// line and none of the boxes on this line have a larger start offset.
+static bool DoesContinueOnNextLine(const LayoutText& text_layout_object,
+                                   InlineBox* box,
+                                   unsigned text_offset) {
+  InlineTextBox* const last_text_box = text_layout_object.LastTextBox();
+  DCHECK_NE(box, last_text_box);
+  for (InlineBox* runner = box->NextLeafChild(); runner;
+       runner = runner->NextLeafChild()) {
+    if (CanNotContinueOnNextLine(text_layout_object, runner, text_offset))
+      return false;
+  }
+
+  for (InlineBox* runner = box->PrevLeafChild(); runner;
+       runner = runner->PrevLeafChild()) {
+    if (CanNotContinueOnNextLine(text_layout_object, runner, text_offset))
+      return false;
+  }
+
+  return true;
+}
+
+bool LayoutText::IsBeforeNonCollapsedCharacter(unsigned text_offset) const {
+  if (ShouldUseNGAlternatives()) {
+    // ::first-letter handling should be done by LayoutTextFragment override.
+    DCHECK(!IsTextFragment());
+    if (!GetNode())
+      return false;
+    return GetNGOffsetMapping().IsBeforeNonCollapsedCharacter(*GetNode(),
+                                                              text_offset);
+  }
+
+  InlineTextBox* const last_text_box = LastTextBox();
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
+    if (text_offset <= box->end()) {
+      if (text_offset >= box->Start())
+        return true;
+      continue;
+    }
+
+    if (box == last_text_box || text_offset != box->Start() + box->Len())
+      continue;
+
+    // Now that |text_offset == box->Start() + box->Len()|, check if this is the
+    // start offset of a whitespace collapsed due to line wrapping, e.g.
+    // <div style="width: 100px">foooooooooooooooo baaaaaaaaaaaaaaaaaaaar</div>
+    // The whitespace is collapsed away due to line wrapping, while the two
+    // positions next to it are still different caret positions. Hence, when the
+    // offset is at "...oo| baa...", we should return true.
+    if (DoesContinueOnNextLine(*this, box, text_offset))
+      return true;
+  }
+  return false;
+}
+
+bool LayoutText::IsAfterNonCollapsedCharacter(unsigned text_offset) const {
+  if (ShouldUseNGAlternatives()) {
+    // ::first-letter handling should be done by LayoutTextFragment override.
+    DCHECK(!IsTextFragment());
+    if (!GetNode())
+      return false;
+    return GetNGOffsetMapping().IsAfterNonCollapsedCharacter(*GetNode(),
+                                                             text_offset);
+  }
+
+  InlineTextBox* const last_text_box = LastTextBox();
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
+    if (text_offset == box->Start())
+      continue;
+    if (text_offset <= box->Start() + box->Len()) {
+      if (text_offset > box->Start())
+        return true;
+      continue;
+    }
+
+    if (box == last_text_box || text_offset != box->Start() + box->Len() + 1)
+      continue;
+
+    // Now that |text_offset == box->Start() + box->Len() + 1|, check if this is
+    // the end offset of a whitespace collapsed due to line wrapping, e.g.
+    // <div style="width: 100px">foooooooooooooooo baaaaaaaaaaaaaaaaaaaar</div>
+    // The whitespace is collapsed away due to line wrapping, while the two
+    // positions next to it are still different caret positions. Hence, when the
+    // offset is at "...oo |baa...", we should return true.
+    if (DoesContinueOnNextLine(*this, box, text_offset + 1))
+      return true;
+  }
+  return false;
 }
 
 void LayoutText::MomentarilyRevealLastTypedCharacter(
@@ -1995,7 +2141,7 @@ void LayoutText::MomentarilyRevealLastTypedCharacter(
   secure_text_timer->RestartWithNewText(last_typed_character_offset);
 }
 
-RefPtr<AbstractInlineTextBox> LayoutText::FirstAbstractInlineTextBox() {
+scoped_refptr<AbstractInlineTextBox> LayoutText::FirstAbstractInlineTextBox() {
   return AbstractInlineTextBox::GetOrCreate(LineLayoutText(this),
                                             first_text_box_);
 }

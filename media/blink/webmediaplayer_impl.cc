@@ -89,22 +89,7 @@ namespace media {
 
 namespace {
 
-// Limits the range of playback rate.
-//
-// TODO(kylep): Revisit these.
-//
-// Vista has substantially lower performance than XP or Windows7.  If you speed
-// up a video too much, it can't keep up, and rendering stops updating except on
-// the time bar. For really high speeds, audio becomes a bottleneck and we just
-// use up the data we have, which may not achieve the speed requested, but will
-// not crash the tab.
-//
-// A very slow speed, ie 0.00000001x, causes the machine to lock up. (It seems
-// like a busy loop). It gets unresponsive, although its not completely dead.
-//
-// Also our timers are not very accurate (especially for ogg), which becomes
-// evident at low speeds and on Vista. Since other speeds are risky and outside
-// the norms, we think 1/16x to 16x is a safe and useful range for now.
+// TODO(apacible): Remove when crbug/747082 is stable.
 const double kMinRate = 0.0625;
 const double kMaxRate = 16.0;
 
@@ -156,10 +141,17 @@ gfx::Size GetRotatedVideoSize(VideoRotation rotation, gfx::Size natural_size) {
   return natural_size;
 }
 
+void RecordEncryptedEvent(bool encrypted_event_fired) {
+  UMA_HISTOGRAM_BOOLEAN("Media.EME.EncryptedEvent", encrypted_event_fired);
+}
+
 // How much time must have elapsed since loading last progressed before we
 // assume that the decoder will have had time to complete preroll.
 constexpr base::TimeDelta kPrerollAttemptTimeout =
     base::TimeDelta::FromSeconds(3);
+
+// Maximum number, per-WMPI, of media logs of playback rate changes.
+constexpr int kMaxNumPlaybackRateLogs = 10;
 
 }  // namespace
 
@@ -206,6 +198,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       load_type_(kLoadTypeURL),
       opaque_(false),
       playback_rate_(0.0),
+      num_playback_rate_logs_(0),
       paused_(true),
       paused_when_hidden_(false),
       seeking_(false),
@@ -309,6 +302,9 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
 
   if (params->initial_cdm())
     SetCdm(params->initial_cdm());
+
+  // Report a false "EncrytpedEvent" here as a baseline.
+  RecordEncryptedEvent(false);
 
   // TODO(xhwang): When we use an external Renderer, many methods won't work,
   // e.g. GetCurrentFrameFromCompositor(). See http://crbug.com/434861
@@ -718,18 +714,19 @@ void WebMediaPlayerImpl::SetRate(double rate) {
   DVLOG(1) << __func__ << "(" << rate << ")";
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
-  // TODO(kylep): Remove when support for negatives is added. Also, modify the
-  // following checks so rewind uses reasonable values also.
+  if (rate != playback_rate_) {
+    LIMITED_MEDIA_LOG(INFO, media_log_.get(), num_playback_rate_logs_,
+                      kMaxNumPlaybackRateLogs)
+        << "Effective playback rate changed from " << playback_rate_ << " to "
+        << rate;
+  }
+
+  // TODO(apacible): Remove clamping when crbug/747082 is stable.
+  // Limit rates to reasonable values by clamping.
   if (rate < 0.0)
     return;
-
-  // Limit rates to reasonable values by clamping.
-  if (rate != 0.0) {
-    if (rate < kMinRate)
-      rate = kMinRate;
-    else if (rate > kMaxRate)
-      rate = kMaxRate;
-  }
+  if (rate != 0.0)
+    rate = std::min(std::max(rate, kMinRate), kMaxRate);
 
   playback_rate_ = rate;
   if (!paused_) {
@@ -1197,8 +1194,7 @@ void WebMediaPlayerImpl::OnEncryptedMediaInitData(
     const std::vector<uint8_t>& init_data) {
   DCHECK(init_data_type != EmeInitDataType::UNKNOWN);
 
-  // TODO(xhwang): Update this UMA name. https://crbug.com/589251
-  UMA_HISTOGRAM_COUNTS("Media.EME.NeedKey", 1);
+  RecordEncryptedEvent(true);
 
   // Recreate the watch time reporter if necessary.
   const bool was_encrypted = is_encrypted_;

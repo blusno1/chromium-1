@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_VR_UI_SCENE_MANAGER_H_
 #define CHROME_BROWSER_VR_UI_SCENE_MANAGER_H_
 
-#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/values.h"
 #include "chrome/browser/vr/browser_ui_interface.h"
@@ -62,6 +61,7 @@ struct UiInitialState;
 //       kUrlBar
 //         kLoadingIndicator
 //         kExitButton
+//         kUnderDevelopmentNotice
 //     kFullscreenToast
 //     kScreenDimmer
 //     k2dBrowsingViewportAwareRoot
@@ -80,6 +80,14 @@ struct UiInitialState;
 //       kSplashScreenTransientParent
 //         kSplashScreenText
 //           kSplashScreenBackground
+//       kWebVrTimeoutSpinner
+//         kWebVrTimeoutSpinnerBackground
+//       kWebVrTimeoutMessage
+//         kWebVrTimeoutMessageLayout
+//           kWebVrTimeoutMessageIcon
+//           kWebVrTimeoutMessageText
+//           kWebVrTimeoutMessageButton
+//             kWebVrTimeoutMessageButtonText
 //
 // TODO(vollick): The above hierarchy is complex, brittle, and would be easier
 // to manage if it were specified in a declarative format.
@@ -130,7 +138,7 @@ class UiSceneManager {
   void CreateWebVRExitWarning();
   void CreateSystemIndicators();
   void CreateContentQuad(ContentInputDelegate* delegate);
-  void CreateSplashScreen();
+  void CreateSplashScreen(Model* model);
   void CreateUnderDevelopmentNotice();
   void CreateBackground();
   void CreateViewportAwareRoot();
@@ -138,7 +146,8 @@ class UiSceneManager {
   void CreateWebVrUrlToast();
   void CreateCloseButton();
   void CreateExitPrompt();
-  void CreateToasts();
+  void CreateToasts(Model* model);
+  void CreateVoiceSearchButton();
 
   void ConfigureScene();
   void ConfigureExclusiveScreenToast();
@@ -150,6 +159,7 @@ class UiSceneManager {
   void OnExitPromptBackplaneClicked();
   void OnCloseButtonClicked();
   void OnUnsupportedMode(UiUnsupportedMode mode);
+  void OnVoiceSearchButtonClicked();
   ColorScheme::Mode mode() const;
 
   TransientElement* AddTransientParent(UiElementName name,
@@ -178,6 +188,7 @@ class UiSceneManager {
   Rect* ceiling_ = nullptr;
   Grid* floor_ = nullptr;
   UiElement* close_button_ = nullptr;
+  UiElement* voice_search_button_ = nullptr;
   UrlBar* url_bar_ = nullptr;
   TransientElement* webvr_url_toast_transient_parent_ = nullptr;
   WebVrUrlToast* webvr_url_toast_ = nullptr;
@@ -195,6 +206,7 @@ class UiSceneManager {
   bool prompting_to_exit_ = false;
   bool exiting_ = false;
   bool browsing_disabled_ = false;
+  bool configuring_scene_ = false;
 
   bool fullscreen_ = false;
   bool incognito_ = false;
@@ -203,6 +215,7 @@ class UiSceneManager {
   bool screen_capturing_ = false;
   bool location_access_ = false;
   bool bluetooth_connected_ = false;
+  bool recognizing_speech_ = false;
   UiUnsupportedMode exit_vr_prompt_reason_ = UiUnsupportedMode::kCount;
 
   std::vector<Rect*> background_panels_;

@@ -74,13 +74,13 @@ class XSSAuditorDelegate final {
 
  public:
   explicit XSSAuditorDelegate(Document*);
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void DidBlockScript(const XSSInfo&);
   void SetReportURL(const KURL& url) { report_url_ = url; }
 
  private:
-  RefPtr<EncodedFormData> GenerateViolationReport(const XSSInfo&);
+  scoped_refptr<EncodedFormData> GenerateViolationReport(const XSSInfo&);
 
   Member<Document> document_;
   bool did_send_notifications_;

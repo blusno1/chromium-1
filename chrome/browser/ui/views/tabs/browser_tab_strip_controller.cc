@@ -30,7 +30,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/feature_engagement/features.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
@@ -45,6 +44,7 @@
 #include "ipc/ipc_message.h"
 #include "net/base/filename_util.h"
 #include "third_party/WebKit/common/mime_util/mime_util.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -508,8 +508,9 @@ void BrowserTabStripController::TabBlockedStateChanged(WebContents* contents,
   SetTabDataAt(contents, model_index);
 }
 
-void BrowserTabStripController::TabNeedsAttentionAt(int index) {
-  tabstrip_->SetTabNeedsAttention(index);
+void BrowserTabStripController::SetTabNeedsAttentionAt(int index,
+                                                       bool attention) {
+  tabstrip_->SetTabNeedsAttention(index, attention);
 }
 
 void BrowserTabStripController::SetTabRendererDataFromModel(

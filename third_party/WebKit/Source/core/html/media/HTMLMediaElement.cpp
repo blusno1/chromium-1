@@ -162,6 +162,10 @@ enum class PlayPromiseRejectReason {
   kCount,
 };
 
+// Limits the range of media playback rate.
+const double kMinRate = 0.0625;
+const double kMaxRate = 16.0;
+
 void ReportContentTypeResultToUMA(String content_type,
                                   MIMETypeRegistry::SupportsType result) {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
@@ -393,7 +397,7 @@ MIMETypeRegistry::SupportsType HTMLMediaElement::GetSupportsType(
   return result;
 }
 
-URLRegistry* HTMLMediaElement::media_stream_registry_ = 0;
+URLRegistry* HTMLMediaElement::media_stream_registry_ = nullptr;
 
 void HTMLMediaElement::SetMediaStreamRegistry(URLRegistry* registry) {
   DCHECK(!media_stream_registry_);
@@ -1219,7 +1223,7 @@ void HTMLMediaElement::StartPlayerLoad() {
     if (!request_url.Pass().IsEmpty())
       request_url.SetPass(String());
 
-    KURL kurl(kParsedURLString, request_url);
+    KURL kurl(request_url);
     source = WebMediaPlayerSource(WebURL(kurl));
   }
 
@@ -2137,8 +2141,30 @@ double HTMLMediaElement::playbackRate() const {
   return playback_rate_;
 }
 
-void HTMLMediaElement::setPlaybackRate(double rate) {
+void HTMLMediaElement::setPlaybackRate(double rate,
+                                       ExceptionState& exception_state) {
   BLINK_MEDIA_LOG << "setPlaybackRate(" << (void*)this << ", " << rate << ")";
+
+  // TODO(apacible): While visible clamping is currently experimental, do NOT
+  // clamp the values of |playback_rate_| in |this|. Instead, clamp these
+  // values in WebMediaPlayerImpl until .
+  if (rate != 0.0 && (rate < kMinRate || rate > kMaxRate)) {
+    UseCounter::Count(GetDocument(),
+                      WebFeature::kHTMLMediaElementMediaPlaybackRateOutOfRange);
+
+    // Experimental: crbug/747082.
+    // When the proposed playbackRate is unsupported, throw a NotSupportedError
+    // DOMException and don't update the value.
+    if (RuntimeEnabledFeatures::PreloadDefaultIsMetadataEnabled()) {
+      exception_state.ThrowDOMException(
+          kNotSupportedError, "The provided playback rate (" +
+                                  String::Number(rate) + ") is not in the " +
+                                  "supported playback range.");
+
+      // Do not update |playback_rate_|.
+      return;
+    }
+  }
 
   if (playback_rate_ != rate) {
     playback_rate_ = rate;
@@ -2296,11 +2322,6 @@ Nullable<ExceptionCode> HTMLMediaElement::Play() {
       PlayInternal();
       return nullptr;
     }
-    String message = ExceptionMessages::FailedToExecute(
-        "play", "HTMLMediaElement",
-        "API can only be initiated by a user gesture.");
-    GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-        kJSMessageSource, kWarningMessageLevel, message));
     return exception_code;
   }
 
@@ -2893,7 +2914,7 @@ KURL HTMLMediaElement::SelectNextSourceChild(
 
   KURL media_url;
   Node* node;
-  HTMLSourceElement* source = 0;
+  HTMLSourceElement* source = nullptr;
   String type;
   bool looking_for_start_node = next_child_node_to_consider_;
   bool can_use_source_element = false;
@@ -3829,7 +3850,7 @@ bool HTMLMediaElement::IsInteractiveContent() const {
   return FastHasAttribute(controlsAttr);
 }
 
-DEFINE_TRACE(HTMLMediaElement) {
+void HTMLMediaElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(played_time_ranges_);
   visitor->Trace(async_event_queue_);
   visitor->Trace(error_);
@@ -3857,7 +3878,8 @@ DEFINE_TRACE(HTMLMediaElement) {
   SuspendableObject::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(HTMLMediaElement) {
+void HTMLMediaElement::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(video_tracks_);
   visitor->TraceWrappers(audio_tracks_);
   visitor->TraceWrappers(text_tracks_);
@@ -4084,11 +4106,11 @@ void HTMLMediaElement::AudioClientImpl::SetFormat(size_t number_of_channels,
     client_->SetFormat(number_of_channels, sample_rate);
 }
 
-DEFINE_TRACE(HTMLMediaElement::AudioClientImpl) {
+void HTMLMediaElement::AudioClientImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(client_);
 }
 
-DEFINE_TRACE(HTMLMediaElement::AudioSourceProviderImpl) {
+void HTMLMediaElement::AudioSourceProviderImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(client_);
 }
 

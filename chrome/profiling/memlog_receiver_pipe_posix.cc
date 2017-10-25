@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "chrome/profiling/memlog_receiver_pipe.h"
 #include "chrome/profiling/memlog_stream_receiver.h"
 #include "mojo/edk/embedder/platform_channel_utils_posix.h"
@@ -44,8 +45,17 @@ void MemlogReceiverPipe::OnFileCanReadWithoutBlocking(int fd) {
   ssize_t bytes_read = 0;
   do {
     base::circular_deque<mojo::edk::PlatformHandle> dummy_for_receive;
+
+#if defined(OS_MACOSX)
+    // macOS uses a pipe rather than a socket, so we cannot call
+    // PlatformChannelRecvmsg. See the creation in ProfilingProcessHost for more
+    // details.
+    bytes_read = HANDLE_EINTR(
+        read(handle_.get().handle, read_buffer_.get(), kReadBufferSize));
+#else
     bytes_read = mojo::edk::PlatformChannelRecvmsg(
         handle_.get(), read_buffer_.get(), kReadBufferSize, &dummy_for_receive);
+#endif
     if (bytes_read > 0) {
       receiver_task_runner_->PostTask(
           FROM_HERE,
@@ -57,20 +67,23 @@ void MemlogReceiverPipe::OnFileCanReadWithoutBlocking(int fd) {
       return;
     } else if (bytes_read == 0) {
       // Other end closed the pipe.
-      if (receiver_) {
-        // Temporary debugging for https://crbug.com/765836.
-        LOG(ERROR) << "Memlog debugging: 0 bytes read. Closing pipe";
-        controller_.StopWatchingFileDescriptor();
-        DCHECK(receiver_task_runner_);
-        receiver_task_runner_->PostTask(
-            FROM_HERE,
-            base::BindOnce(&MemlogStreamReceiver::OnStreamComplete, receiver_));
-      }
+
+      // Temporary debugging for https://crbug.com/765836.
+      LOG(ERROR) << "Memlog debugging: 0 bytes read. Closing pipe";
+      controller_.StopWatchingFileDescriptor();
+      DCHECK(receiver_task_runner_);
+      receiver_task_runner_->PostTask(
+          FROM_HERE,
+          base::BindOnce(&MemlogStreamReceiver::OnStreamComplete, receiver_));
       return;
     } else {
       if (errno != EAGAIN && errno != EWOULDBLOCK) {
         controller_.StopWatchingFileDescriptor();
         PLOG(ERROR) << "Problem reading socket.";
+        DCHECK(receiver_task_runner_);
+        receiver_task_runner_->PostTask(
+            FROM_HERE,
+            base::BindOnce(&MemlogStreamReceiver::OnStreamComplete, receiver_));
       }
     }
   } while (bytes_read > 0);

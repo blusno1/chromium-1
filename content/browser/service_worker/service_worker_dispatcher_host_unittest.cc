@@ -32,7 +32,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "content/test/test_content_browser_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
@@ -96,18 +95,6 @@ std::unique_ptr<ServiceWorkerNavigationHandleCore> CreateNavigationHandleCore(
   return navigation_handle_core;
 }
 
-class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
- public:
-  ServiceWorkerTestContentBrowserClient() {}
-  bool AllowServiceWorker(
-      const GURL& scope,
-      const GURL& first_party,
-      content::ResourceContext* context,
-      const base::Callback<WebContents*(void)>& wc_getter) override {
-    return false;
-  }
-};
-
 }  // namespace
 
 static const int kRenderFrameId = 1;
@@ -144,9 +131,11 @@ class FailToStartWorkerTestHelper : public EmbeddedWorkerTestHelper {
       const GURL& scope,
       const GURL& script_url,
       bool pause_after_download,
-      mojom::ServiceWorkerEventDispatcherRequest request,
+      mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ControllerServiceWorkerRequest controller_request,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
-      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info)
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
+      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
       override {
     mojom::EmbeddedWorkerInstanceHostAssociatedPtr instance_host_ptr;
     instance_host_ptr.Bind(std::move(instance_host));
@@ -242,22 +231,6 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
     context()->AddProviderHost(std::move(host));
   }
 
-  void SendUnregister(int64_t provider_id, int64_t registration_id) {
-    dispatcher_host_->OnMessageReceived(
-        ServiceWorkerHostMsg_UnregisterServiceWorker(-1, -1, provider_id,
-                                                     registration_id));
-    base::RunLoop().RunUntilIdle();
-  }
-
-  void Unregister(int64_t provider_id,
-                  int64_t registration_id,
-                  uint32_t expected_message) {
-    SendUnregister(provider_id, registration_id);
-    EXPECT_TRUE(dispatcher_host_->ipc_sink()->GetUniqueMessageMatching(
-        expected_message));
-    dispatcher_host_->ipc_sink()->ClearMessages();
-  }
-
   void DispatchExtendableMessageEvent(
       scoped_refptr<ServiceWorkerVersion> worker,
       const base::string16& message,
@@ -293,31 +266,6 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
   ServiceWorkerProviderHost* provider_host_;
   ServiceWorkerRemoteProviderEndpoint remote_endpoint_;
 };
-
-TEST_F(ServiceWorkerDispatcherHostTest,
-       Register_ContentSettingsDisallowsServiceWorker) {
-  ServiceWorkerTestContentBrowserClient test_browser_client;
-  ContentBrowserClient* old_browser_client =
-      SetBrowserClientForTesting(&test_browser_client);
-
-  const int64_t kProviderId = 99;  // Dummy value
-  ServiceWorkerRemoteProviderEndpoint remote_endpoint =
-      PrepareServiceWorkerProviderHost(kProviderId,
-                                       GURL("https://www.example.com/foo"));
-
-  // Add a registration into a live registration map so that Unregister() can
-  // find it.
-  const int64_t kRegistrationId = 999;  // Dummy value
-  scoped_refptr<ServiceWorkerRegistration> registration(
-      new ServiceWorkerRegistration(
-          blink::mojom::ServiceWorkerRegistrationOptions(
-              GURL("https://www.example.com/")),
-          kRegistrationId, context()->AsWeakPtr()));
-  Unregister(kProviderId, kRegistrationId,
-             ServiceWorkerMsg_ServiceWorkerUnregistrationError::ID);
-
-  SetBrowserClientForTesting(old_browser_client);
-}
 
 TEST_F(ServiceWorkerDispatcherHostTest, ProviderCreatedAndDestroyed) {
   // |kProviderId| must be -2 when PlzNavigate is enabled to match the
@@ -377,17 +325,13 @@ TEST_F(ServiceWorkerDispatcherHostTest, ProviderCreatedAndDestroyed) {
             base::Callback<WebContents*(void)>()));
   }
 
-  // Deletion of the dispatcher_host should cause provider hosts for
-  // that process to have a null dispatcher host.
+  // Deletion of the dispatcher_host should cause providers for that
+  // process to get deleted as well.
   dispatcher_host_->OnProviderCreated(std::move(host_info_3));
-  ServiceWorkerProviderHost* host =
-      context()->GetProviderHost(process_id, kProviderId);
-  EXPECT_TRUE(host->dispatcher_host());
+  EXPECT_TRUE(context()->GetProviderHost(process_id, kProviderId));
   EXPECT_TRUE(dispatcher_host_->HasOneRef());
   dispatcher_host_ = nullptr;
-  host = context()->GetProviderHost(process_id, kProviderId);
-  ASSERT_TRUE(host);
-  EXPECT_FALSE(host->dispatcher_host());
+  EXPECT_FALSE(context()->GetProviderHost(process_id, kProviderId));
 }
 
 TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
@@ -415,13 +359,8 @@ TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
   // Simulate the render process crashing.
   dispatcher_host_->OnFilterRemoved();
 
-  // The provider host still exists, since it will clean itself up when its Mojo
-  // connection to the renderer breaks. But it should no longer be using the
-  // dispatcher host.
-  ServiceWorkerProviderHost* host =
-      context()->GetProviderHost(process_id, provider_id);
-  ASSERT_TRUE(host);
-  EXPECT_FALSE(host->dispatcher_host());
+  // The dispatcher host should have removed the provider host.
+  EXPECT_FALSE(context()->GetProviderHost(process_id, provider_id));
 
   // The EmbeddedWorkerInstance should still think it is running, since it will
   // clean itself up when its Mojo connection to the renderer breaks.
@@ -435,8 +374,10 @@ TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
                                              helper_.get()));
   new_dispatcher_host->Init(context_wrapper());
 
-  // To show the new dispatcher can operate, simulate provider creation.
-  ServiceWorkerProviderHostInfo host_info(provider_id + 1, MSG_ROUTING_NONE,
+  // To show the new dispatcher can operate, simulate provider creation. Since
+  // the old dispatcher cleaned up the old provider host, the new one won't
+  // complain.
+  ServiceWorkerProviderHostInfo host_info(provider_id, MSG_ROUTING_NONE,
                                           SERVICE_WORKER_PROVIDER_FOR_WINDOW,
                                           true /* is_parent_frame_secure */);
   ServiceWorkerRemoteProviderEndpoint remote_endpoint;
@@ -492,8 +433,9 @@ TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent) {
   called = false;
   status = SERVICE_WORKER_ERROR_MAX_VALUE;
   DispatchExtendableMessageEvent(
-      version_, base::string16(), url::Origin(version_->scope().GetOrigin()),
-      ports, provider_host_, base::Bind(&SaveStatusCallback, &called, &status));
+      version_, base::string16(),
+      url::Origin::Create(version_->scope().GetOrigin()), ports, provider_host_,
+      base::Bind(&SaveStatusCallback, &called, &status));
   EXPECT_EQ(ref_count + 1, sender_worker_handle->ref_count());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
@@ -520,8 +462,9 @@ TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent_Fail) {
   bool called = false;
   ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_MAX_VALUE;
   DispatchExtendableMessageEvent(
-      version_, base::string16(), url::Origin(version_->scope().GetOrigin()),
-      ports, provider_host_, base::Bind(&SaveStatusCallback, &called, &status));
+      version_, base::string16(),
+      url::Origin::Create(version_->scope().GetOrigin()), ports, provider_host_,
+      base::Bind(&SaveStatusCallback, &called, &status));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
   EXPECT_EQ(SERVICE_WORKER_ERROR_START_WORKER_FAILED, status);

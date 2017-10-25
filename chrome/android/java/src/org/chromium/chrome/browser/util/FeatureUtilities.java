@@ -55,6 +55,7 @@ public class FeatureUtilities {
     private static Boolean sHasGoogleAccountAuthenticator;
     private static Boolean sHasRecognitionIntentHandler;
     private static Boolean sChromeHomeEnabled;
+    private static Boolean sChromeHomePendingState;
     private static String sChromeHomeSwipeLogicType;
 
     private static String sCachedHerbFlavor;
@@ -202,6 +203,21 @@ public class FeatureUtilities {
                 ChromeFeatureList.isEnabled(ChromeFeatureList.DONT_PREFETCH_LIBRARIES));
     }
 
+    public static void notifyChromeHomeStatusChanged(boolean isChromeHomeEnabled) {
+        nativeNotifyChromeHomeStatusChanged(isChromeHomeEnabled);
+    }
+
+    /**
+     * Finalize any static settings that will change when the browser restarts.
+     */
+    public static void finalizePendingFeatures() {
+        if (sChromeHomePendingState != null) {
+            sChromeHomeEnabled = sChromeHomePendingState;
+            sChromeHomePendingState = null;
+            notifyChromeHomeStatusChanged(sChromeHomeEnabled);
+        }
+    }
+
     /**
      * Caches which flavor of Herb the user prefers from native.
      */
@@ -269,6 +285,11 @@ public class FeatureUtilities {
             manager.clearChromeHomeUserPreference();
         }
 
+        if (manager.isChromeHomeUserPreferenceSet()) {
+            RecordHistogram.recordBooleanHistogram(
+                    "Android.ChromeHome.UserPreference.Enabled", manager.isChromeHomeUserEnabled());
+        }
+
         UmaSessionStats.registerSyntheticFieldTrial(SYNTHETIC_CHROME_HOME_EXPERIMENT_NAME,
                 isChromeHomeEnabled() ? ENABLED_EXPERIMENT_GROUP : DISABLED_EXPERIMENT_GROUP);
     }
@@ -280,7 +301,7 @@ public class FeatureUtilities {
      */
     public static void switchChromeHomeUserSetting(boolean enabled) {
         ChromePreferenceManager.getInstance().setChromeHomeUserEnabled(enabled);
-        sChromeHomeEnabled = enabled;
+        sChromeHomePendingState = enabled;
     }
 
     /**
@@ -300,8 +321,6 @@ public class FeatureUtilities {
                 if (ChromePreferenceManager.getInstance().isChromeHomeUserPreferenceSet()) {
                     isUserPreferenceSet = true;
                     sChromeHomeEnabled = prefManager.isChromeHomeUserEnabled();
-                    RecordHistogram.recordBooleanHistogram(
-                            "Android.ChromeHome.UserPreference.Enabled", sChromeHomeEnabled);
                 } else {
                     sChromeHomeEnabled = prefManager.isChromeHomeEnabled();
                 }
@@ -352,7 +371,7 @@ public class FeatureUtilities {
      * @return Whether the Chrome Home promo should be shown for cold-start.
      */
     public static boolean shouldShowChromeHomePromoForStartup() {
-        if (isChromeHomeEnabled()
+        if (DeviceFormFactor.isTablet() || isChromeHomeEnabled()
                 || !ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_PROMO)) {
             return false;
         }
@@ -363,14 +382,7 @@ public class FeatureUtilities {
         return !prefManager.isChromeHomeUserPreferenceSet();
     }
 
-    /**
-     * @return Whether or not showing the Doodle in the Chrome Home NTP is enabled.
-     */
-    public static boolean isChromeHomeDoodleEnabled() {
-        return isChromeHomeEnabled()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_DOODLE);
-    }
-
     private static native void nativeSetCustomTabVisible(boolean visible);
     private static native void nativeSetIsInMultiWindowMode(boolean isInMultiWindowMode);
+    private static native void nativeNotifyChromeHomeStatusChanged(boolean isChromeHomeEnabled);
 }

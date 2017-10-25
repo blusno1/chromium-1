@@ -46,6 +46,8 @@ class CC_PAINT_EXPORT PaintImage {
   // images, this would imply the first frame of the animation.
   static const size_t kDefaultFrameIndex;
 
+  static const Id kInvalidId;
+
   class CC_PAINT_EXPORT FrameKey {
    public:
     FrameKey(ContentId content_id, size_t frame_index, gfx::Rect subset_rect);
@@ -73,7 +75,24 @@ class CC_PAINT_EXPORT PaintImage {
 
   enum class AnimationType { ANIMATED, VIDEO, STATIC };
   enum class CompletionState { DONE, PARTIALLY_DONE };
-  enum class DecodingMode { kUnspecified, kSync, kAsync };
+  enum class DecodingMode {
+    // No preference has been specified. The compositor may choose to use sync
+    // or async decoding. See CheckerImageTracker for the default behaviour.
+    kUnspecified,
+
+    // It's preferred to display this image synchronously with the rest of the
+    // content updates, skipping any heuristics.
+    kSync,
+
+    // Async is preferred. The compositor may decode async if it meets the
+    // heuristics used to avoid flickering (for instance vetoing of multipart
+    // response, animated, partially loaded images) and would be performant. See
+    // CheckerImageTracker for all heuristics used.
+    kAsync
+  };
+
+  // Returns the more conservative mode out of the two given ones.
+  static DecodingMode GetConservative(DecodingMode one, DecodingMode two);
 
   static Id GetNextId();
   static ContentId GetNextContentId();
@@ -95,11 +114,6 @@ class CC_PAINT_EXPORT PaintImage {
   // GetSupportedDecodeSize(GetSupportedDecodeSize(size)) is guaranteed to be
   // GetSupportedDecodeSize(size).
   SkISize GetSupportedDecodeSize(const SkISize& requested_size) const;
-
-  // Returns SkImageInfo that should be used to decode this image to the given
-  // size and color type. The size must be supported.
-  SkImageInfo CreateDecodeImageInfo(const SkISize& size,
-                                    SkColorType color_type) const;
 
   // Decode the image into the given memory for the given SkImageInfo.
   // - Size in |info| must be supported.

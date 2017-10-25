@@ -2610,17 +2610,6 @@ void ProduceTextureDirectCHROMIUMImmediate(GLuint texture,
   }
 }
 
-void ConsumeTextureCHROMIUMImmediate(GLenum target, const GLbyte* mailbox) {
-  const uint32_t size =
-      gles2::cmds::ConsumeTextureCHROMIUMImmediate::ComputeSize();
-  gles2::cmds::ConsumeTextureCHROMIUMImmediate* c =
-      GetImmediateCmdSpaceTotalSize<
-          gles2::cmds::ConsumeTextureCHROMIUMImmediate>(size);
-  if (c) {
-    c->Init(target, mailbox);
-  }
-}
-
 void CreateAndConsumeTextureINTERNALImmediate(GLenum target,
                                               GLuint texture,
                                               const GLbyte* mailbox) {
@@ -3305,14 +3294,10 @@ void BeginRasterCHROMIUM(GLuint texture_id,
 
 void RasterCHROMIUM(uint32_t list_shm_id,
                     uint32_t list_shm_offset,
-                    GLint x,
-                    GLint y,
-                    GLint w,
-                    GLint h,
                     uint32_t data_size) {
   gles2::cmds::RasterCHROMIUM* c = GetCmdSpace<gles2::cmds::RasterCHROMIUM>();
   if (c) {
-    c->Init(list_shm_id, list_shm_offset, x, y, w, h, data_size);
+    c->Init(list_shm_id, list_shm_offset, data_size);
   }
 }
 

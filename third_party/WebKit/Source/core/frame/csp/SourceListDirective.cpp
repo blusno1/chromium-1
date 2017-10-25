@@ -239,7 +239,7 @@ bool SourceListDirective::ParseSource(
   const UChar* position = begin;
   const UChar* begin_host = begin;
   const UChar* begin_path = end;
-  const UChar* begin_port = 0;
+  const UChar* begin_port = nullptr;
 
   SkipWhile<UChar, IsNotColonOrSlash>(position, end);
 
@@ -830,7 +830,7 @@ HeapVector<Member<CSPSource>> SourceListDirective::GetIntersectCSPSources(
   return normalized;
 }
 
-DEFINE_TRACE(SourceListDirective) {
+void SourceListDirective::Trace(blink::Visitor* visitor) {
   visitor->Trace(policy_);
   visitor->Trace(list_);
   CSPDirective::Trace(visitor);

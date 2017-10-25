@@ -87,6 +87,12 @@ HTMLTableSectionElement* HTMLTableElement::tHead() const {
 
 void HTMLTableElement::setTHead(HTMLTableSectionElement* new_head,
                                 ExceptionState& exception_state) {
+  if (new_head && !new_head->HasTagName(theadTag)) {
+    exception_state.ThrowDOMException(kHierarchyRequestError,
+                                      "Not a thead element.");
+    return;
+  }
+
   deleteTHead();
   if (!new_head)
     return;
@@ -149,7 +155,7 @@ void HTMLTableElement::deleteTFoot() {
 HTMLTableSectionElement* HTMLTableElement::createTBody() {
   HTMLTableSectionElement* body =
       HTMLTableSectionElement::Create(tbodyTag, GetDocument());
-  Node* reference_element = LastBody() ? LastBody()->nextSibling() : 0;
+  Node* reference_element = LastBody() ? LastBody()->nextSibling() : nullptr;
 
   InsertBefore(body, reference_element);
   return body;
@@ -233,7 +239,7 @@ void HTMLTableElement::deleteRow(int index, ExceptionState& exception_state) {
     return;
   }
 
-  HTMLTableRowElement* row = 0;
+  HTMLTableRowElement* row = nullptr;
   int i = 0;
   if (index == -1) {
     row = HTMLTableRowsCollection::LastRow(*this);
@@ -614,7 +620,7 @@ const AtomicString& HTMLTableElement::Summary() const {
   return getAttribute(summaryAttr);
 }
 
-DEFINE_TRACE(HTMLTableElement) {
+void HTMLTableElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(shared_cell_style_);
   HTMLElement::Trace(visitor);
 }

@@ -38,15 +38,15 @@ class CORE_EXPORT CSSStyleImageValue : public CSSResourceValue,
     return true;
   }
   FloatSize ElementSize(const FloatSize& default_object_size) const final;
-  RefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
-                                        AccelerationHint,
-                                        SnapshotReason,
-                                        const FloatSize&) final {
+  scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
+                                               AccelerationHint,
+                                               SnapshotReason,
+                                               const FloatSize&) final {
     return GetImage();
   }
   bool IsAccelerated() const override;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(image_value_);
     CSSResourceValue::Trace(visitor);
   }
@@ -55,13 +55,13 @@ class CORE_EXPORT CSSStyleImageValue : public CSSResourceValue,
   CSSStyleImageValue(const CSSImageValue* image_value)
       : image_value_(image_value) {}
 
-  virtual LayoutSize ImageLayoutSize() const {
+  virtual IntSize ImageSize() const {
     DCHECK(!IsCachePending());
     ImageResourceContent* resource_content =
         image_value_->CachedImage()->CachedImage();
     return resource_content
-               ? resource_content->ImageSize(kDoNotRespectImageOrientation, 1)
-               : LayoutSize(0, 0);
+               ? resource_content->IntrinsicSize(kDoNotRespectImageOrientation)
+               : IntSize(0, 0);
   }
 
   virtual bool IsCachePending() const { return image_value_->IsCachePending(); }
@@ -75,7 +75,7 @@ class CORE_EXPORT CSSStyleImageValue : public CSSResourceValue,
   const CSSImageValue* CssImageValue() const { return image_value_.Get(); };
 
  private:
-  RefPtr<Image> GetImage() const;
+  scoped_refptr<Image> GetImage() const;
 
   Member<const CSSImageValue> image_value_;
 };

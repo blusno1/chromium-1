@@ -745,6 +745,11 @@ void AddChromeCleanupStrings(content::WebUIDataSource* html_source) {
           .spec();
   html_source->AddString("chromeCleanupLearnMoreUrl", cleanup_learn_more_url);
 
+  // TODO(crbug.com/776538): Localize these strings.
+  html_source->AddString("chromeCleanupPageTitle", "Clean up computer");
+  html_source->AddString("chromeCleanupPageTriggerDescription",
+                         "Find and remove harmful software");
+
   base::string16 powered_by_html =
       l10n_util::GetStringFUTF16(IDS_CHROME_CLEANUP_WEBUI_FOOTER_POWERED_BY,
                                  L"<span id='powered-by-logo'></span>");
@@ -932,6 +937,8 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
       {"networkConnectNotAllowed", IDS_SETTINGS_INTERNET_CONNECT_NOT_ALLOWED},
       {"networkIPAddress", IDS_SETTINGS_INTERNET_NETWORK_IP_ADDRESS},
       {"networkIPConfigAuto", IDS_SETTINGS_INTERNET_NETWORK_IP_CONFIG_AUTO},
+      {"networkNameserversLearnMore",
+       IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_LEARN_MORE},
       {"networkPrefer", IDS_SETTINGS_INTERNET_NETWORK_PREFER},
       {"networkPrimaryUserControlled",
        IDS_SETTINGS_INTERNET_NETWORK_PRIMARY_USER_CONTROLLED},
@@ -1005,6 +1012,8 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_INTERNET_NO_NETWORKS_MOBILE_DATA,
           base::ASCIIToUTF16(chrome::kInstantTetheringLearnMoreURL)));
+  html_source->AddString("networkGoogleNameserversLearnMoreUrl",
+                         chrome::kGoogleNameserversLearnMoreURL);
 }
 #endif
 
@@ -1612,6 +1621,7 @@ void AddSearchStrings(content::WebUIDataSource* html_source, Profile* profile) {
      IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_ENABLED},
     {"searchGoogleAssistantDisabled",
      IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_DISABLED},
+    {"assistantTurnOn", IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_TURN_ON},
 #endif
     {"searchOkGoogleSubtextAlwaysOn",
      IDS_SETTINGS_SEARCH_OK_GOOGLE_SUBTEXT_ALWAYS_ON},
@@ -1892,6 +1902,9 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"siteSettingsSourcePolicyBlock",
      IDS_PAGE_INFO_PERMISSION_BLOCKED_BY_POLICY},
     {"siteSettingsSourcePolicyAsk", IDS_PAGE_INFO_PERMISSION_ASK_BY_POLICY},
+    {"siteSettingsAdsBlockSingular",
+     IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_SINGULAR},
+    {"siteSettingsSourceAdsBlacklist", IDS_PAGE_INFO_PERMISSION_ADS_SUBTITLE},
     {"siteSettingsSourceDrmDisabled",
      IDS_SETTINGS_SITE_SETTINGS_SOURCE_DRM_DISABLED},
     {"siteSettingsSourceEmbargo",
@@ -1924,6 +1937,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_SITE_RESET_CONFIRMATION},
     {"siteSettingsSiteResetDialogTitle",
      IDS_SETTINGS_SITE_SETTINGS_SITE_RESET_DIALOG_TITLE},
+    {"loadingLocalDataList", IDS_SETTINGS_LOADING_LOCAL_DATA_LIST},
     {"thirdPartyCookie", IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE},
     {"thirdPartyCookieSublabel",
      IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE_SUBLABEL},

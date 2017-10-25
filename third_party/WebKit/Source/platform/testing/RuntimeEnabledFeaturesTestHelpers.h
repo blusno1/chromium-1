@@ -69,17 +69,9 @@ typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled>
     ScopedOverlayScrollbarsForTest;
 typedef ScopedRuntimeEnabledFeatureForTest<
-    RuntimeEnabledFeatures::SkipCompositingSmallScrollersEnabled,
-    RuntimeEnabledFeatures::SetSkipCompositingSmallScrollersEnabled>
-    ScopedSkipCompositingSmallScrollersForTest;
-typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::ExperimentalCanvasFeaturesEnabled,
     RuntimeEnabledFeatures::SetExperimentalCanvasFeaturesEnabled>
     ScopedExperimentalCanvasFeaturesForTest;
-typedef ScopedRuntimeEnabledFeatureForTest<
-    RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled,
-    RuntimeEnabledFeatures::SetColorCanvasExtensionsEnabled>
-    ScopedColorCanvasExtensionsForTest;
 typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::CSSVariables2Enabled,
     RuntimeEnabledFeatures::SetCSSVariables2Enabled>
@@ -216,6 +208,10 @@ typedef ScopedRuntimeEnabledFeatureForTest<
     RuntimeEnabledFeatures::SignatureBasedIntegrityEnabled,
     RuntimeEnabledFeatures::SetSignatureBasedIntegrityEnabled>
     ScopedSignatureBasedIntegrityForTest;
+typedef ScopedRuntimeEnabledFeatureForTest<
+    RuntimeEnabledFeatures::TimerThrottlingForHiddenFramesEnabled,
+    RuntimeEnabledFeatures::SetTimerThrottlingForHiddenFramesEnabled>
+    ScopedTimerThrottlingForHiddenFramesForTest;
 }  // namespace blink
 
 #endif  // RuntimeEnabledFeaturesTestHelpers_h

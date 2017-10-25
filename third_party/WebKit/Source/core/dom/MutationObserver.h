@@ -64,9 +64,8 @@ using MutationObserverVector = HeapVector<Member<MutationObserver>>;
 using MutationRecordVector = HeapVector<Member<MutationRecord>>;
 
 class CORE_EXPORT MutationObserver final
-    : public GarbageCollectedFinalized<MutationObserver>,
+    : public ScriptWrappable,
       public ActiveScriptWrappable<MutationObserver>,
-      public ScriptWrappable,
       public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MutationObserver);
@@ -94,8 +93,8 @@ class CORE_EXPORT MutationObserver final
     virtual ExecutionContext* GetExecutionContext() const = 0;
     virtual void Deliver(const MutationRecordVector& records,
                          MutationObserver&) = 0;
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
-    DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {}
+    virtual void Trace(blink::Visitor* visitor) {}
+    virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {}
   };
 
   class CORE_EXPORT V8DelegateImpl;
@@ -123,9 +122,9 @@ class CORE_EXPORT MutationObserver final
 
   // Eagerly finalized as destructor accesses heap object members.
   EAGERLY_FINALIZE();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   struct ObserverLessThan;

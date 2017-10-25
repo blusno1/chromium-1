@@ -20,6 +20,7 @@ class AudioWorkletProcessor;
 class AudioWorkletProcessorDefinition;
 class CrossThreadAudioWorkletProcessorInfo;
 class ExceptionState;
+struct GlobalScopeCreationParams;
 
 // This is constructed and destroyed on a worker thread, and all methods also
 // must be called on the worker thread.
@@ -28,12 +29,10 @@ class MODULES_EXPORT AudioWorkletGlobalScope final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static AudioWorkletGlobalScope* Create(const KURL&,
-                                         const String& user_agent,
-                                         RefPtr<SecurityOrigin>,
-                                         v8::Isolate*,
-                                         WorkerThread*,
-                                         WorkerClients*);
+  static AudioWorkletGlobalScope* Create(
+      std::unique_ptr<GlobalScopeCreationParams>,
+      v8::Isolate*,
+      WorkerThread*);
   ~AudioWorkletGlobalScope() override;
   bool IsAudioWorkletGlobalScope() const final { return true; }
   void registerProcessor(const String& name,
@@ -65,16 +64,13 @@ class MODULES_EXPORT AudioWorkletGlobalScope final
   double currentTime() const { return current_time_; }
   float sampleRate() const { return sample_rate_; }
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
-  AudioWorkletGlobalScope(const KURL&,
-                          const String& user_agent,
-                          RefPtr<SecurityOrigin>,
+  AudioWorkletGlobalScope(std::unique_ptr<GlobalScopeCreationParams>,
                           v8::Isolate*,
-                          WorkerThread*,
-                          WorkerClients*);
+                          WorkerThread*);
 
   typedef HeapHashMap<String,
                       TraceWrapperMember<AudioWorkletProcessorDefinition>>

@@ -143,6 +143,10 @@
       status: "experimental",
     },
     {
+      name: "CacheStyleSheetWithMediaQueries",
+      status: "experimental",
+    },
+    {
       name: "Canvas2dFixedRenderingMode",
       status: "test",
     },
@@ -154,10 +158,6 @@
       status: "experimental",
     },
     {
-      name: "ClientHints",
-      status: "stable",
-    },
-    {
       name: "ClientHintsPersistent",
       status: "experimental",
     },
@@ -167,9 +167,6 @@
     {
       name: "CoalescedEvents",
       status: "stable",
-    },
-    {
-      name: "ColorCanvasExtensions",
     },
     {
       name: "CompositedSelectionUpdate",
@@ -400,11 +397,15 @@
       name: "FeaturePolicyExperimentalFeatures",
     },
     {
-      name: "FeaturePolicyForEncryptedMedia",
-      status: "experimental"
+      name: "FeaturePolicyForPermissions",
+      status: "stable"
     },
     {
       name: "FetchRequestCache",
+      status: "experimental",
+    },
+    {
+      name: "FetchRequestKeepalive",
       status: "experimental",
     },
     {
@@ -457,9 +458,6 @@
       status: "stable",
     },
     {
-      name: "GetMatchedCSSRules",
-    },
-    {
       name: "HeapCompaction",
       status: "stable",
     },
@@ -488,6 +486,10 @@
       status: "test",
     },
     {
+      name: "IncrementalShadowDOM",
+      status: "test",
+    },
+    {
       name: "InertAttribute",
       status: "experimental",
     },
@@ -510,7 +512,7 @@
     },
     {
       name: "JSImageDecode",
-      status: "test",
+      status: "stable",
     },
     {
       name: "KeyboardLock",
@@ -586,6 +588,10 @@
       name: "MediaEngagementBypassAutoplayPolicies",
     },
     {
+      name: "MediaPlaybackRateOutOfRange",
+      status: "experimental",
+    },
+    {
       name: "MediaQueryShape",
       status: "experimental",
     },
@@ -633,6 +639,9 @@
     },
     {
       name: "ModuleScriptsDynamicImport",
+    },
+    {
+      name: "ModuleScriptsImportMetaUrl",
     },
     {
       name: "MojoBlobs",
@@ -937,19 +946,12 @@
       status: "experimental",
     },
     {
-      name: "SharedArrayBuffer",
-      status: "stable",
-    },
-    {
       name: "SharedWorker",
       status: "stable",
     },
     {
       name: "SignatureBasedIntegrity",
       status: "experimental",
-    },
-    {
-      name: "SkipCompositingSmallScrollers",
     },
     {
       name: "SlimmingPaintStrictCullRectClipping",
@@ -1039,6 +1041,9 @@
     {
       name: "UpdateHoverPostLayout",
       status: "stable",
+    },
+    {
+      name: "UserActivationV2",
     },
     {
       name: "V8ContextSnapshot",

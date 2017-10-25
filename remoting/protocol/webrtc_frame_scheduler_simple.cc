@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "remoting/base/constants.h"
 #include "remoting/protocol/frame_stats.h"
 #include "remoting/protocol/webrtc_dummy_video_encoder.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
@@ -18,7 +19,6 @@ namespace {
 // Number of samples used to estimate processing time for the next frame.
 const int kStatsWindow = 5;
 
-const int kTargetFrameRate = 30;
 constexpr base::TimeDelta kTargetFrameInterval =
     base::TimeDelta::FromMilliseconds(1000 / kTargetFrameRate);
 
@@ -59,6 +59,10 @@ constexpr base::TimeDelta kBandwidthAveragingInterval =
 // bandwidth exactly. Send bitrate is controlled more precisely by adjusting
 // time intervals between frames (i.e. FPS).
 const int kEncoderBitrateChangePercentage = 33;
+
+// Minimum interval between frames needed to keep the connection alive.
+constexpr base::TimeDelta kKeepAliveInterval =
+    base::TimeDelta::FromMilliseconds(200);
 
 int64_t GetRegionArea(const webrtc::DesktopRegion& region) {
   int64_t result = 0;
@@ -181,24 +185,35 @@ bool WebrtcFrameSchedulerSimple::OnFrameCaptured(
 
   base::TimeTicks now = base::TimeTicks::Now();
 
-  if ((!frame || frame->updated_region().is_empty())) {
-    // If we've failed to capture a frame or captured an empty frame we still
-    // need to encode and send the previous frame when top-off is active or a
-    // key-frame was requested. But it makes sense only when we have a frame to
-    // send, i.e. there is nothing to send if first capture request failed.
-    bool resend_last_frame =
-        captured_first_frame_ && (top_off_is_active_ || key_frame_request_);
-    if (!resend_last_frame) {
+  // Null |frame| indicates a capturer error.
+  if (!frame) {
+    frame_pending_ = false;
+    ScheduleNextFrame(now);
+    return false;
+  }
+
+  if (frame->updated_region().is_empty()) {
+    // If we've captured an empty frame we still need to encode and send the
+    // previous frame when top-off is active or a key-frame was requested. But
+    // it makes sense only when we have a frame to send, i.e. there is nothing
+    // to send if first capture request failed.
+    // Also send previous frame if there haven't been any frame updates for a
+    // while, to keep the video stream alive. Otherwise, the client will
+    // think the video stream is frozen and will attempt to recover it by
+    // requesting a key-frame every few seconds, wasting network resources.
+    bool send_frame =
+        top_off_is_active_ || key_frame_request_ ||
+        (now - latest_frame_encode_start_time_ > kKeepAliveInterval);
+    if (!send_frame) {
       frame_pending_ = false;
       ScheduleNextFrame(now);
       return false;
     }
   }
 
-  if (frame) {
-    captured_first_frame_ = true;
-    encoder_bitrate_.SetFrameSize(frame->size());
-  }
+  latest_frame_encode_start_time_ = now;
+
+  encoder_bitrate_.SetFrameSize(frame->size());
 
   params_out->bitrate_kbps = encoder_bitrate_.GetTargetBitrateKbps();
   params_out->duration = kTargetFrameInterval;
@@ -207,12 +222,9 @@ bool WebrtcFrameSchedulerSimple::OnFrameCaptured(
 
   params_out->vpx_min_quantizer = 10;
 
-  int64_t updated_area = 0;
-  if (frame) {
-    updated_area = params_out->key_frame
-                       ? frame->size().width() * frame->size().height()
-                       : GetRegionArea(frame->updated_region());
-  }
+  int64_t updated_area = params_out->key_frame
+                             ? frame->size().width() * frame->size().height()
+                             : GetRegionArea(frame->updated_region());
 
   // If bandwidth is being underutilized then libvpx is likely to choose the
   // minimum allowed quantizer value, which means that encoded frame size may

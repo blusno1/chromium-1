@@ -53,6 +53,7 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
@@ -65,9 +66,9 @@
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/content_restriction.h"
-#include "chrome/common/image_context_menu_renderer.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/url_constants.h"
@@ -78,9 +79,9 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/guest_view/browser/guest_view_base.h"
-#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/experiments.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
@@ -112,6 +113,7 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/associated_interface_provider.h"
 #include "content/public/common/menu_item.h"
 #include "content/public/common/url_utils.h"
 #include "extensions/features/features.h"
@@ -124,6 +126,7 @@
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 #include "third_party/WebKit/public/web/WebMediaPlayerAction.h"
 #include "third_party/WebKit/public/web/WebPluginAction.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -519,32 +522,6 @@ const extensions::Extension* GetBookmarkAppForURL(
 }
 
 }  // namespace
-
-// static
-gfx::Vector2d RenderViewContextMenu::GetOffset(
-    RenderFrameHost* render_frame_host) {
-  gfx::Vector2d offset;
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  // When --use-cross-process-frames-for-guests is enabled, the position is
-  // transformed in the browser process hittesting code.
-  WebContents* web_contents =
-      WebContents::FromRenderFrameHost(render_frame_host);
-  // TODO(ekaramad): For now, MimeHandlerView is based on BrowserPlugin even
-  // when guests use OOPIF. Remove the check below when MimeHandlerView is also
-  // based on OOPIF (https://crbug.com/642826).
-  if (!content::GuestMode::IsCrossProcessFrameGuest(web_contents)) {
-    WebContents* top_level_web_contents =
-        guest_view::GuestViewBase::GetTopLevelWebContents(web_contents);
-    if (web_contents && top_level_web_contents &&
-        web_contents != top_level_web_contents) {
-      gfx::Rect bounds = web_contents->GetContainerBounds();
-      gfx::Rect top_level_bounds = top_level_web_contents->GetContainerBounds();
-      offset = bounds.origin() - top_level_bounds.origin();
-    }
-  }
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-  return offset;
-}
 
 // static
 bool RenderViewContextMenu::IsDevToolsURL(const GURL& url) {
@@ -1527,17 +1504,23 @@ void RenderViewContextMenu::AppendProtocolHandlerSubMenu() {
 
 void RenderViewContextMenu::AppendPasswordItems() {
   bool add_separator = false;
-  if (password_manager::ForceSavingExperimentEnabled()) {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_FORCESAVEPASSWORD,
-                                    IDS_CONTENT_CONTEXT_FORCESAVEPASSWORD);
-    add_separator = true;
+
+  // Don't offer saving or generating passwords in incognito profiles.
+  if (!browser_context_->IsOffTheRecord()) {
+    if (password_manager::ForceSavingExperimentEnabled()) {
+      menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_FORCESAVEPASSWORD,
+                                      IDS_CONTENT_CONTEXT_FORCESAVEPASSWORD);
+      add_separator = true;
+    }
+    if (password_manager_util::ManualPasswordGenerationEnabled(
+            ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(
+                browser_context_))) {
+      menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_GENERATEPASSWORD,
+                                      IDS_CONTENT_CONTEXT_GENERATEPASSWORD);
+      add_separator = true;
+    }
   }
-  if (password_manager::ManualPasswordGenerationEnabled()) {
-    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_GENERATEPASSWORD,
-                                    IDS_CONTENT_CONTEXT_GENERATEPASSWORD);
-    add_separator = true;
-  }
-  if (password_manager::ShowAllSavedPasswordsContextMenuEnabled()) {
+  if (password_manager_util::ShowAllSavedPasswordsContextMenuEnabled()) {
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SHOWALLSAVEDPASSWORDS,
                                     IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK);
     add_separator = true;
@@ -1817,13 +1800,15 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW:
       OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
                               WindowOpenDisposition::NEW_WINDOW,
-                              ui::PAGE_TRANSITION_LINK, "", true);
+                              ui::PAGE_TRANSITION_LINK, "" /* extra_headers */,
+                              true /* started_from_context_menu */);
       break;
 
     case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
       OpenURLWithExtraHeaders(params_.link_url, GURL(),
                               WindowOpenDisposition::OFF_THE_RECORD,
-                              ui::PAGE_TRANSITION_LINK, "", true);
+                              ui::PAGE_TRANSITION_LINK, "" /* extra_headers */,
+                              true /* started_from_context_menu */);
       break;
 
     case IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP:
@@ -2020,13 +2005,14 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     case IDC_CONTENT_CONTEXT_GENERATEPASSWORD:
-      ChromePasswordManagerClient::FromWebContents(source_web_contents_)->
-          GeneratePassword();
+      password_manager_util::UserTriggeredManualGenerationFromContextMenu(
+          ChromePasswordManagerClient::FromWebContents(source_web_contents_));
       break;
 
     case IDC_CONTENT_CONTEXT_SHOWALLSAVEDPASSWORDS:
-      autofill::ChromeAutofillClient::FromWebContents(source_web_contents_)
-          ->ExecuteCommand(autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY);
+      password_manager_util::UserTriggeredShowAllSavedPasswordsFromContextMenu(
+          autofill::ChromeAutofillClient::FromWebContents(
+              source_web_contents_));
       break;
 
     case IDC_CONTENT_CONTENT_PICTUREINPICTURE:
@@ -2267,7 +2253,8 @@ bool RenderViewContextMenu::IsOpenLinkOTREnabled() const {
 void RenderViewContextMenu::ExecOpenLinkNewTab() {
   OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
                           WindowOpenDisposition::NEW_BACKGROUND_TAB,
-                          ui::PAGE_TRANSITION_LINK, "", true);
+                          ui::PAGE_TRANSITION_LINK, "" /* extra_headers */,
+                          true /* started_from_context_menu */);
 }
 
 void RenderViewContextMenu::ExecOpenBookmarkApp() {
@@ -2456,9 +2443,10 @@ void RenderViewContextMenu::ExecLoadOriginalImage() {
   RenderFrameHost* render_frame_host = GetRenderFrameHost();
   if (!render_frame_host)
     return;
-  chrome::mojom::ImageContextMenuRendererPtr renderer;
-  render_frame_host->GetRemoteInterfaces()->GetInterface(&renderer);
-  renderer->RequestReloadImageForContextNode();
+  chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame;
+  render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
+      &chrome_render_frame);
+  chrome_render_frame->RequestReloadImageForContextNode();
 }
 
 void RenderViewContextMenu::ExecPlayPause() {

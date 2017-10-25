@@ -86,7 +86,7 @@ class CORE_EXPORT InspectorDOMAgent final
                     InspectedFrames*,
                     v8_inspector::V8InspectorSession*);
   ~InspectorDOMAgent() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   void Restore() override;
 

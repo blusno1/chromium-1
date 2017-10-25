@@ -37,7 +37,7 @@ class CORE_EXPORT ScrollManager
 
  public:
   explicit ScrollManager(LocalFrame&);
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void Clear();
 
@@ -114,10 +114,11 @@ class CORE_EXPORT ScrollManager
 
   // scroller_size is set only when scrolling non root scroller.
   void ComputeScrollRelatedMetrics(
-      uint32_t* non_composited_main_thread_scrolling_reasons,
-      int* scroller_size,
-      bool* scroller_size_updated);
+      uint32_t* non_composited_main_thread_scrolling_reasons);
   void RecordScrollRelatedMetrics(const WebGestureDevice);
+
+  WebGestureEvent SynthesizeGestureScrollBegin(
+      const WebGestureEvent& update_event);
 
   // NOTE: If adding a new field to this class please ensure that it is
   // cleared in |ScrollManager::clear()|.

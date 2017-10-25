@@ -90,7 +90,7 @@ class CORE_EXPORT ListedElement : public GarbageCollectedMixin {
 
   typedef HeapVector<Member<ListedElement>> List;
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  protected:
   ListedElement();

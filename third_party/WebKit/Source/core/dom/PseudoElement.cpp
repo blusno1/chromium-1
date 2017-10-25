@@ -99,7 +99,7 @@ PseudoElement::PseudoElement(Element* parent, PseudoId pseudo_id)
   }
 }
 
-RefPtr<ComputedStyle> PseudoElement::CustomStyleForLayoutObject() {
+scoped_refptr<ComputedStyle> PseudoElement::CustomStyleForLayoutObject() {
   return ParentOrShadowHostElement()->PseudoStyle(
       PseudoStyleRequest(pseudo_id_));
 }
@@ -115,7 +115,7 @@ void PseudoElement::Dispose() {
   DetachLayoutTree();
   Element* parent = ParentOrShadowHostElement();
   GetDocument().AdoptIfNeeded(*this);
-  SetParentOrShadowHostNode(0);
+  SetParentOrShadowHostNode(nullptr);
   RemovedFrom(parent);
 }
 

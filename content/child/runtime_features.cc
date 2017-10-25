@@ -116,9 +116,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableWebAssemblyStreaming(
       base::FeatureList::IsEnabled(features::kWebAssemblyStreaming));
 
-  WebRuntimeFeatures::EnableSharedArrayBuffer(
-      base::FeatureList::IsEnabled(features::kSharedArrayBuffer));
-
   if (command_line.HasSwitch(switches::kDisableSharedWorkers))
     WebRuntimeFeatures::EnableSharedWorker(false);
 
@@ -230,6 +227,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       base::FeatureList::IsEnabled(features::kScrollAnchoring) ||
       enableExperimentalWebPlatformFeatures);
 
+  WebRuntimeFeatures::EnableUserActivationV2(
+      base::FeatureList::IsEnabled(features::kUserActivationV2));
+
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV175))
     WebRuntimeFeatures::EnableFeatureFromString("SlimmingPaintV175", true);
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV2))
@@ -285,6 +285,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnablePaymentRequest(
       base::FeatureList::IsEnabled(features::kWebPayments));
 
+  if (base::FeatureList::IsEnabled(features::kServiceWorkerPaymentApps))
+    WebRuntimeFeatures::EnablePaymentApp(true);
+
   WebRuntimeFeatures::EnableServiceWorkerScriptStreaming(
       base::FeatureList::IsEnabled(features::kServiceWorkerScriptStreaming));
 
@@ -308,9 +311,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
                                                 false);
   if (base::FeatureList::IsEnabled(features::kCompositorTouchAction))
     WebRuntimeFeatures::EnableCompositorTouchAction(true);
-
-  if (base::FeatureList::IsEnabled(features::kSkipCompositingSmallScrollers))
-    WebRuntimeFeatures::EnableSkipCompositingSmallScrollers(true);
 
   if (base::FeatureList::IsEnabled(features::kGenericSensor)) {
     WebRuntimeFeatures::EnableGenericSensor(true);
@@ -380,6 +380,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableModuleScriptsDynamicImport(
       base::FeatureList::IsEnabled(features::kModuleScriptsDynamicImport));
 
+  WebRuntimeFeatures::EnableModuleScriptsImportMetaUrl(
+      base::FeatureList::IsEnabled(features::kModuleScriptsImportMetaUrl));
+
   WebRuntimeFeatures::EnableOverflowIconsForMediaControls(
       base::FeatureList::IsEnabled(media::kOverflowIconsForMediaControls));
 
@@ -388,6 +391,13 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   WebRuntimeFeatures::EnableModernMediaControls(
       base::FeatureList::IsEnabled(media::kUseModernMediaControls));
+
+  WebRuntimeFeatures::EnableWorkStealingInScriptRunner(
+      base::FeatureList::IsEnabled(features::kWorkStealingInScriptRunner));
+
+  WebRuntimeFeatures::EnableFeatureFromString(
+      "FeaturePolicyForPermissions",
+      base::FeatureList::IsEnabled(features::kUseFeaturePolicyForPermissions));
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

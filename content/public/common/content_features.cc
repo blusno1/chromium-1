@@ -186,6 +186,10 @@ const base::Feature kModuleScripts{"ModuleScripts",
 const base::Feature kModuleScriptsDynamicImport{
     "ModuleScriptsDynamicImport", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// ES6 Modules import.meta.url.
+const base::Feature kModuleScriptsImportMetaUrl{
+    "ModuleScriptsImportMetaUrl", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Resource fetch optimizations for workers. See crbug.com/443374
 const base::Feature kOffMainThreadFetch{"OffMainThreadFetch",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
@@ -233,10 +237,6 @@ const base::Feature kPurgeAndSuspend {
 const base::Feature kRafAlignedMouseInputEvents{
     "RafAlignedMouseInput", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// RAF aligned touch input events support.
-const base::Feature kRafAlignedTouchInputEvents{
-    "RafAlignedTouchInput", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // If Pepper 3D Image Chromium is allowed, this feature controls whether it is
 // enabled.
 const base::Feature kPepper3DImageChromium {
@@ -276,11 +276,7 @@ const base::Feature kServiceWorkerPaymentApps{
 
 // Streaming installed scripts on starting service workers.
 const base::Feature kServiceWorkerScriptStreaming{
-    "ServiceWorkerScriptStreaming", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// http://tc39.github.io/ecmascript_sharedmem/shmem.html
-const base::Feature kSharedArrayBuffer{"SharedArrayBuffer",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
+    "ServiceWorkerScriptStreaming", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // An experiment to require process isolation for the sign-in origin,
 // https://accounts.google.com.  Launch bug: https://crbug.com/739418.
@@ -292,10 +288,6 @@ const base::Feature kSignInProcessIsolation{"sign-in-process-isolation",
 const base::Feature kSitePerProcess{"site-per-process",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// An experiment for skipping compositing small scrollers.
-const base::Feature kSkipCompositingSmallScrollers{
-    "SkipCompositingSmallScrollers", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Paint invalidation based on slimming paint. See https://goo.gl/eQczQW
 const base::Feature kSlimmingPaintInvalidation{
     "SlimmingPaintInvalidation", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -303,6 +295,12 @@ const base::Feature kSlimmingPaintInvalidation{
 // Throttle Blink timers in out-of-view cross origin frames.
 const base::Feature kTimerThrottlingForHiddenFrames{
     "TimerThrottlingForHiddenFrames", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// An experimental simple user-activation model where the user gesture state is
+// tracked through a frame-based state instead of the gesture tokens we use
+// today.
+const base::Feature kUserActivationV2{"UserActivationV2",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Groups all out-of-process iframes to a different process from the process of
 // the top document. This is a performance isolation mode.  Launch bug:
@@ -322,7 +320,7 @@ const base::Feature kTurnOff2DAndOpacityCompositorAnimations{
 // Use Feature Policy to gate the use of permission features like midi,
 // geolocation, camera, microphone, etc.
 const base::Feature kUseFeaturePolicyForPermissions{
-    "UseFeaturePolicyForPermissions", base::FEATURE_DISABLED_BY_DEFAULT};
+    "UseFeaturePolicyForPermissions", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use MojoAudioOutputIPC and RenderFrameAudioOutputStreamFactory rather than
 // AudioMessageFilter and AudioRendererHost.
@@ -420,6 +418,10 @@ const base::Feature kKeepAliveRendererForKeepaliveRequests{
 const base::Feature kWebVRExperimentalRendering{
     "WebVRExperimentalRendering", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enabled "work stealing" in the script runner.
+const base::Feature kWorkStealingInScriptRunner{
+    "WorkStealingInScriptRunner", base::FEATURE_DISABLED_BY_DEFAULT};
+
 #if defined(OS_ANDROID)
 // Autofill Accessibility in Android.
 // crbug.com/627860
@@ -439,18 +441,6 @@ const base::Feature kWebVrVsyncAlign{"WebVrVsyncAlign",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_WIN)
-// Emergency "off switch" for new Windows sandbox security mitigation,
-// sandbox::MITIGATION_EXTENSION_POINT_DISABLE.
-const base::Feature kWinSboxDisableExtensionPoints{
-    "WinSboxDisableExtensionPoint", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Emergency "off switch" for new Windows sandbox security mitigation,
-// sandbox::MITIGATION_FORCE_MS_SIGNED_BINS.
-const base::Feature kWinSboxForceMsSigned{"WinSboxForceMsSigned",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
-#endif  // defined(OS_WIN)
-
 #if defined(OS_MACOSX)
 // Enables caching of media devices for the purpose of enumerating them.
 const base::Feature kDeviceMonitorMac{"DeviceMonitorMac",
@@ -465,6 +455,10 @@ const base::Feature kMacV2Sandbox{"MacV2Sandbox",
 // Enables to use a snapshot file in creating V8 contexts.
 const base::Feature kV8ContextSnapshot{"V8ContextSnapshot",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables future V8 VM features
+const base::Feature kV8VmFuture{"V8VmFuture",
+                                base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsMojoBlobsEnabled() {
   return base::FeatureList::IsEnabled(features::kMojoBlobs) ||

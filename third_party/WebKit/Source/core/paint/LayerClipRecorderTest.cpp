@@ -5,12 +5,12 @@
 #include "core/paint/LayerClipRecorder.h"
 
 #include "core/layout/LayoutView.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintControllerPaintTest.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/compositing/PaintLayerCompositor.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -32,7 +32,7 @@ void DrawEmptyClip(GraphicsContext& context,
   ClipRect clip_rect(rect);
   LayerClipRecorder layer_clip_recorder(
       context, *layout_view.Compositor()->RootLayer(),
-      DisplayItem::kClipLayerForeground, clip_rect, 0, LayoutPoint(),
+      DisplayItem::kClipLayerForeground, clip_rect, nullptr, LayoutPoint(),
       PaintLayerFlags(),
       layout_view.Compositor()->RootLayer()->GetLayoutObject());
 }
@@ -45,13 +45,12 @@ void DrawRectInClip(GraphicsContext& context,
   ClipRect clip_rect((LayoutRect(rect)));
   LayerClipRecorder layer_clip_recorder(
       context, *layout_view.Compositor()->RootLayer(),
-      DisplayItem::kClipLayerForeground, clip_rect, 0, LayoutPoint(),
+      DisplayItem::kClipLayerForeground, clip_rect, nullptr, LayoutPoint(),
       PaintLayerFlags(),
       layout_view.Compositor()->RootLayer()->GetLayoutObject());
-  if (!LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-          context, layout_view, phase)) {
-    LayoutObjectDrawingRecorder drawing_recorder(context, layout_view, phase,
-                                                 bound);
+  if (!DrawingRecorder::UseCachedDrawingIfPossible(context, layout_view,
+                                                   phase)) {
+    DrawingRecorder recorder(context, layout_view, phase, bound);
     context.DrawRect(rect);
   }
 }
@@ -62,7 +61,7 @@ TEST_F(LayerClipRecorderTest, Single) {
   LayoutRect bound = GetLayoutView().ViewRect();
   EXPECT_EQ((size_t)0, RootPaintController().GetDisplayItemList().size());
 
-  DrawRectInClip(context, GetLayoutView(), kPaintPhaseForeground, bound);
+  DrawRectInClip(context, GetLayoutView(), PaintPhase::kForeground, bound);
   RootPaintController().CommitNewDisplayItems();
   EXPECT_EQ((size_t)3, RootPaintController().GetDisplayItemList().size());
   EXPECT_TRUE(DisplayItem::IsClipType(
@@ -78,7 +77,7 @@ TEST_F(LayerClipRecorderTest, Empty) {
   GraphicsContext context(RootPaintController());
   EXPECT_EQ((size_t)0, RootPaintController().GetDisplayItemList().size());
 
-  DrawEmptyClip(context, GetLayoutView(), kPaintPhaseForeground);
+  DrawEmptyClip(context, GetLayoutView(), PaintPhase::kForeground);
   RootPaintController().CommitNewDisplayItems();
   EXPECT_EQ((size_t)0, RootPaintController().GetDisplayItemList().size());
 }

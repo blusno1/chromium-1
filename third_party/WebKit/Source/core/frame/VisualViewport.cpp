@@ -74,7 +74,7 @@ VisualViewport::~VisualViewport() {
   SendUMAMetrics();
 }
 
-DEFINE_TRACE(VisualViewport) {
+void VisualViewport::Trace(blink::Visitor* visitor) {
   visitor->Trace(page_);
   ScrollableArea::Trace(visitor);
 }
@@ -238,8 +238,9 @@ double VisualViewport::VisibleWidthCSSPx() const {
 
   float zoom = MainFrame()->PageZoomFactor();
   float width_css_px = AdjustScrollForAbsoluteZoom(VisibleSize().Width(), zoom);
+  auto* scrollable_area = MainFrame()->View()->LayoutViewportScrollableArea();
   float scrollbar_thickness_css_px =
-      MainFrame()->View()->VerticalScrollbarWidth() / (zoom * scale_);
+      scrollable_area->VerticalScrollbarWidth() / (zoom * scale_);
   return width_css_px - scrollbar_thickness_css_px;
 }
 
@@ -250,8 +251,9 @@ double VisualViewport::VisibleHeightCSSPx() const {
   float zoom = MainFrame()->PageZoomFactor();
   float height_css_px =
       AdjustScrollForAbsoluteZoom(VisibleSize().Height(), zoom);
+  auto* scrollable_area = MainFrame()->View()->LayoutViewportScrollableArea();
   float scrollbar_thickness_css_px =
-      MainFrame()->View()->HorizontalScrollbarHeight() / (zoom * scale_);
+      scrollable_area->HorizontalScrollbarHeight() / (zoom * scale_);
   return height_css_px - scrollbar_thickness_css_px;
 }
 
@@ -288,11 +290,6 @@ bool VisualViewport::DidSetScaleOrLocation(float scale,
     // ScrollingCoordinator.
     if (ScrollingCoordinator* coordinator = GetPage().GetScrollingCoordinator())
       coordinator->ScrollableAreaScrollLayerDidChange(this);
-
-    if (!GetPage().GetSettings().GetInertVisualViewport()) {
-      if (Document* document = MainFrame()->GetDocument())
-        document->EnqueueScrollEventForNode(document);
-    }
 
     EnqueueScrollEvent();
 
@@ -670,7 +667,7 @@ IntRect VisualViewport::VisibleContentRect(
   return rect;
 }
 
-RefPtr<WebTaskRunner> VisualViewport::GetTimerTaskRunner() const {
+scoped_refptr<WebTaskRunner> VisualViewport::GetTimerTaskRunner() const {
   return TaskRunnerHelper::Get(TaskType::kUnspecedTimer, MainFrame());
 }
 
@@ -876,6 +873,10 @@ void VisualViewport::NotifyRootFrameViewport() const {
     return;
 
   root_frame_viewport->DidUpdateVisualViewport();
+}
+
+ScrollbarTheme& VisualViewport::GetPageScrollbarTheme() const {
+  return GetPage().GetScrollbarTheme();
 }
 
 String VisualViewport::DebugName(const GraphicsLayer* graphics_layer) const {

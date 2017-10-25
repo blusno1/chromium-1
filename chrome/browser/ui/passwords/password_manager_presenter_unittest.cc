@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -20,6 +21,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::ASCIIToUTF16;
+using testing::_;
 using testing::Eq;
 using testing::Property;
 
@@ -141,7 +143,7 @@ void PasswordManagerPresenterTest::SortAndCheckPositions(
       form->username_value = base::ASCIIToUTF16(entry.username);
       form->password_value = base::ASCIIToUTF16(entry.password);
       if (entry.federation != nullptr)
-        form->federation_origin = url::Origin(GURL(entry.federation));
+        form->federation_origin = url::Origin::Create(GURL(entry.federation));
     }
     if (entry.app_display_name)
       form->app_display_name = entry.app_display_name;
@@ -169,7 +171,7 @@ void PasswordManagerPresenterTest::SortAndCheckPositions(
         EXPECT_EQ(base::ASCIIToUTF16(entry.password),
                   list[entry.expected_position]->password_value);
         if (entry.federation != nullptr)
-          EXPECT_EQ(url::Origin(GURL(entry.federation)),
+          EXPECT_EQ(url::Origin::Create(GURL(entry.federation)),
                     list[entry.expected_position]->federation_origin);
       }
     }
@@ -345,5 +347,66 @@ TEST_F(PasswordManagerPresenterTest, Sorting_SpecialCharacters) {
   SortAndCheckPositions(test_cases, arraysize(test_cases),
                         PasswordEntryType::SAVED);
 }
+
+#if !defined(OS_ANDROID)  // Reauthentication is handled differently on Android.
+enum class ReauthResult { PASS, FAIL };
+bool FakeOsReauthCall(bool* reauth_called, ReauthResult result) {
+  *reauth_called = true;
+  return result == ReauthResult::PASS;
+}
+
+TEST_F(PasswordManagerPresenterTest, TestPassedReauthOnView) {
+  bool reauth_called = false;
+  GetUIController()->GetPasswordManagerPresenter()->SetOsReauthCallForTesting(
+      base::BindRepeating(&FakeOsReauthCall, &reauth_called,
+                          ReauthResult::PASS));
+
+  AddPasswordEntry(GURL("http://abc1.com"), "test@gmail.com", "test");
+  EXPECT_CALL(*GetUIController(), ShowPassword(0, base::ASCIIToUTF16("test")));
+  GetUIController()->GetPasswordManagerPresenter()->RequestShowPassword(0);
+  EXPECT_TRUE(reauth_called);
+}
+
+TEST_F(PasswordManagerPresenterTest, TestFailedReauthOnView) {
+  bool reauth_called = false;
+  GetUIController()->GetPasswordManagerPresenter()->SetOsReauthCallForTesting(
+      base::BindRepeating(&FakeOsReauthCall, &reauth_called,
+                          ReauthResult::FAIL));
+
+  AddPasswordEntry(GURL("http://abc1.com"), "test@gmail.com", "test");
+  EXPECT_CALL(*GetUIController(), ShowPassword(_, _)).Times(0);
+  GetUIController()->GetPasswordManagerPresenter()->RequestShowPassword(0);
+  EXPECT_TRUE(reauth_called);
+}
+
+TEST_F(PasswordManagerPresenterTest, TestPassedReauthOnGetAll) {
+  bool reauth_called = false;
+  GetUIController()->GetPasswordManagerPresenter()->SetOsReauthCallForTesting(
+      base::BindRepeating(&FakeOsReauthCall, &reauth_called,
+                          ReauthResult::PASS));
+
+  AddPasswordEntry(GURL("http://abc1.com"), "test@gmail.com", "test");
+  std::vector<std::unique_ptr<autofill::PasswordForm>> passwords =
+      GetUIController()->GetPasswordManagerPresenter()->GetAllPasswords();
+  EXPECT_TRUE(reauth_called);
+  EXPECT_EQ(1u, passwords.size());
+  EXPECT_EQ(base::ASCIIToUTF16("test@gmail.com"), passwords[0]->username_value);
+  EXPECT_EQ(base::ASCIIToUTF16("test"), passwords[0]->password_value);
+  EXPECT_EQ(GURL("http://abc1.com"), passwords[0]->origin);
+}
+
+TEST_F(PasswordManagerPresenterTest, TestFailedReauthOnGetAll) {
+  bool reauth_called = false;
+  GetUIController()->GetPasswordManagerPresenter()->SetOsReauthCallForTesting(
+      base::BindRepeating(&FakeOsReauthCall, &reauth_called,
+                          ReauthResult::FAIL));
+
+  AddPasswordEntry(GURL("http://abc1.com"), "test@gmail.com", "test");
+  EXPECT_THAT(
+      GetUIController()->GetPasswordManagerPresenter()->GetAllPasswords(),
+      testing::IsEmpty());
+  EXPECT_TRUE(reauth_called);
+}
+#endif  // !defined(OS_ANDROID)
 
 }  // namespace

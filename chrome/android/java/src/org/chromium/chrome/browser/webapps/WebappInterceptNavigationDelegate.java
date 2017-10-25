@@ -30,10 +30,8 @@ public class WebappInterceptNavigationDelegate extends InterceptNavigationDelega
             return true;
         }
 
-        if (UrlUtilities.isValidForIntentFallbackNavigation(navigationParams.url)
-                && !mActivity.scopePolicy().isUrlInScope(
-                           mActivity.mWebappInfo, navigationParams.url)
-                && mActivity.scopePolicy().openOffScopeNavsInCct()) {
+        if (shouldOpenInCustomTab(
+                    navigationParams, mActivity.getWebappInfo(), mActivity.scopePolicy())) {
             CustomTabsIntent.Builder intentBuilder = new CustomTabsIntent.Builder();
             intentBuilder.setShowTitle(true);
             if (mActivity.mWebappInfo.hasValidThemeColor()) {
@@ -49,5 +47,12 @@ public class WebappInterceptNavigationDelegate extends InterceptNavigationDelega
         }
 
         return false;
+    }
+
+    static boolean shouldOpenInCustomTab(
+            NavigationParams navigationParams, WebappInfo info, WebappScopePolicy scopePolicy) {
+        return UrlUtilities.isValidForIntentFallbackNavigation(navigationParams.url)
+                && !navigationParams.isPost && !scopePolicy.isUrlInScope(info, navigationParams.url)
+                && scopePolicy.openOffScopeNavsInCct();
     }
 }

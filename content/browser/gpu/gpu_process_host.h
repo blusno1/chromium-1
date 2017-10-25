@@ -32,6 +32,7 @@
 #include "ipc/message_filter.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/gpu/interfaces/gpu_main.mojom.h"
+#include "services/viz/privileged/interfaces/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/privileged/interfaces/gl/gpu_host.mojom.h"
 #include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
 #include "ui/gfx/geometry/size.h"
@@ -149,6 +150,12 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
                               int client_id,
                               const gpu::SyncToken& sync_token);
 
+  // Connects to FrameSinkManager running in the viz process. In this
+  // configuration the display compositor runs in the viz process and the
+  // browser must submit CompositorFrames over IPC.
+  void ConnectFrameSinkManager(viz::mojom::FrameSinkManagerRequest request,
+                               viz::mojom::FrameSinkManagerClientPtr client);
+
   void RequestGPUInfo(RequestGPUInfoCallback request_cb);
   void RequestHDRStatus(RequestHDRStatusCallback request_cb);
 
@@ -156,6 +163,12 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // Tells the GPU process that the given surface is being destroyed so that it
   // can stop using it.
   void SendDestroyingVideoSurface(int surface_id, const base::Closure& done_cb);
+
+  // Android-only notification when a context is initialized. Because the gpu
+  // process can be killed arbitrarily on this OS, the host needs to always
+  // restart it. This signal is used to differentiate a repeatedly failing gpu
+  // process from one that was functional but killed.
+  void DidSuccessfullyInitializeContext();
 #endif
 
   // What kind of GPU process, e.g. sandboxed or unsandboxed.

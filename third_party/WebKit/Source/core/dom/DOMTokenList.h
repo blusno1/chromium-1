@@ -38,8 +38,7 @@ namespace blink {
 class Element;
 class ExceptionState;
 
-class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
-                                 public ScriptWrappable {
+class CORE_EXPORT DOMTokenList : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
   WTF_MAKE_NONCOPYABLE(DOMTokenList);
 
@@ -48,7 +47,7 @@ class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
     return new DOMTokenList(element, attr);
   }
   virtual ~DOMTokenList() {}
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   unsigned length() const { return token_set_.size(); }
   const AtomicString item(unsigned index) const;

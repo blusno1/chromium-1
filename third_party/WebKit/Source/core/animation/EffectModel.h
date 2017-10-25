@@ -56,13 +56,13 @@ class CORE_EXPORT EffectModel : public GarbageCollectedFinalized<EffectModel> {
   virtual bool Sample(int iteration,
                       double fraction,
                       double iteration_duration,
-                      Vector<RefPtr<Interpolation>>&) const = 0;
+                      Vector<scoped_refptr<Interpolation>>&) const = 0;
 
   virtual bool Affects(const PropertyHandle&) const { return false; }
   virtual bool IsTransformRelatedEffect() const { return false; }
   virtual bool IsKeyframeEffectModel() const { return false; }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 };
 
 }  // namespace blink

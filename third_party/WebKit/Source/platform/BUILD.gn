@@ -27,11 +27,6 @@ make_names("font_family_names") {
   output_dir = blink_platform_output_dir
 }
 
-make_names("http_names") {
-  in_files = [ "network/http_names.json5" ]
-  output_dir = blink_platform_output_dir
-}
-
 action("runtime_enabled_features") {
   script = "../build/scripts/make_runtime_features.py"
 
@@ -159,9 +154,9 @@ group("make_platform_generated") {
     ":character_data",
     ":color_data",
     ":font_family_names",
-    ":http_names",
     ":instrumentation_probes",
     ":runtime_enabled_features",
+    "//third_party/WebKit/Source/platform/network:make_generated",
   ]
 }
 
@@ -307,16 +302,12 @@ jumbo_component("platform") {
     "PlatformChromeClient.h",
     "PlatformExport.h",
     "PlatformFrameView.h",
-    "PluginScriptForbiddenScope.cpp",
-    "PluginScriptForbiddenScope.h",
     "Prerender.cpp",
     "Prerender.h",
     "PrerenderClient.h",
     "ResolutionUnits.h",
     "ScopedOrientationChangeIndicator.cpp",
     "ScopedOrientationChangeIndicator.h",
-    "ScriptForbiddenScope.cpp",
-    "ScriptForbiddenScope.h",
     "SecureTextInput.cpp",
     "SecureTextInput.h",
     "SerializedResource.h",
@@ -489,6 +480,8 @@ jumbo_component("platform") {
     "bindings/RuntimeCallStats.cpp",
     "bindings/RuntimeCallStats.h",
     "bindings/ScopedPersistent.h",
+    "bindings/ScriptForbiddenScope.cpp",
+    "bindings/ScriptForbiddenScope.h",
     "bindings/ScriptPromiseProperties.h",
     "bindings/ScriptState.cpp",
     "bindings/ScriptState.h",
@@ -530,14 +523,6 @@ jumbo_component("platform") {
     "bindings/WrapperCreationSecurityCheck.h",
     "bindings/WrapperTypeInfo.cpp",
     "bindings/WrapperTypeInfo.h",
-    "blob/BlobBytesProvider.cpp",
-    "blob/BlobBytesProvider.h",
-    "blob/BlobData.cpp",
-    "blob/BlobData.h",
-    "blob/BlobRegistry.cpp",
-    "blob/BlobRegistry.h",
-    "blob/BlobURL.cpp",
-    "blob/BlobURL.h",
     "clipboard/ClipboardMimeTypes.cpp",
     "clipboard/ClipboardMimeTypes.h",
     "clipboard/ClipboardUtilities.cpp",
@@ -603,6 +588,7 @@ jumbo_component("platform") {
     "exported/WebMediaStreamTrack.cpp",
     "exported/WebMemoryCoordinator.cpp",
     "exported/WebMixedContent.cpp",
+    "exported/WebMockClipboard.cpp",
     "exported/WebNetworkStateNotifier.cpp",
     "exported/WebPasswordCredential.cpp",
     "exported/WebPrerender.cpp",
@@ -625,6 +611,7 @@ jumbo_component("platform") {
     "exported/WebRTCStatsRequest.cpp",
     "exported/WebRTCStatsResponse.cpp",
     "exported/WebRTCVoidRequest.cpp",
+    "exported/WebRemoteScrollProperties.cpp",
     "exported/WebRuntimeFeatures.cpp",
     "exported/WebScrollbarImpl.cpp",
     "exported/WebScrollbarImpl.h",
@@ -880,6 +867,7 @@ jumbo_component("platform") {
     "graphics/ColorSpaceProfileData.h",
     "graphics/CompositingReasons.cpp",
     "graphics/CompositingReasons.h",
+    "graphics/CompositorAnimatorsState.h",
     "graphics/CompositorElementId.cpp",
     "graphics/CompositorElementId.h",
     "graphics/CompositorFilterOperations.cpp",
@@ -980,6 +968,7 @@ jumbo_component("platform") {
     "graphics/RecordingImageBufferSurface.h",
     "graphics/ReplayingCanvas.cpp",
     "graphics/ReplayingCanvas.h",
+    "graphics/ScopedInterpolationQuality.h",
     "graphics/SkiaTextureHolder.cpp",
     "graphics/SkiaTextureHolder.h",
     "graphics/SquashingDisallowedReasons.cpp",
@@ -1180,14 +1169,14 @@ jumbo_component("platform") {
     "image-decoders/ImageFrame.h",
     "image-decoders/SegmentReader.cpp",
     "image-decoders/SegmentReader.h",
-    "image-decoders/SegmentStream.cpp",
-    "image-decoders/SegmentStream.h",
     "image-decoders/bmp/BMPImageDecoder.cpp",
     "image-decoders/bmp/BMPImageDecoder.h",
     "image-decoders/bmp/BMPImageReader.cpp",
     "image-decoders/bmp/BMPImageReader.h",
     "image-decoders/gif/GIFImageDecoder.cpp",
     "image-decoders/gif/GIFImageDecoder.h",
+    "image-decoders/gif/GIFImageReader.cpp",
+    "image-decoders/gif/GIFImageReader.h",
     "image-decoders/ico/ICOImageDecoder.cpp",
     "image-decoders/ico/ICOImageDecoder.h",
     "image-decoders/jpeg/JPEGImageDecoder.cpp",
@@ -1246,45 +1235,6 @@ jumbo_component("platform") {
     "mojo/CommonCustomTypesStructTraits.h",
     "mojo/FetchAPIRequestStructTraits.cpp",
     "mojo/MojoHelper.h",
-    "network/ContentSecurityPolicyParsers.cpp",
-    "network/ContentSecurityPolicyParsers.h",
-    "network/ContentSecurityPolicyResponseHeaders.cpp",
-    "network/ContentSecurityPolicyResponseHeaders.h",
-    "network/EncodedFormData.cpp",
-    "network/EncodedFormData.h",
-    "network/FormDataEncoder.cpp",
-    "network/FormDataEncoder.h",
-    "network/HTTPHeaderMap.cpp",
-    "network/HTTPHeaderMap.h",
-    "network/HTTPParsers.cpp",
-    "network/HTTPParsers.h",
-    "network/HeaderFieldTokenizer.cpp",
-    "network/HeaderFieldTokenizer.h",
-    "network/NetworkHints.cpp",
-    "network/NetworkHints.h",
-    "network/NetworkInstrumentation.cpp",
-    "network/NetworkInstrumentation.h",
-    "network/NetworkLog.h",
-    "network/NetworkStateNotifier.cpp",
-    "network/NetworkStateNotifier.h",
-    "network/NetworkUtils.cpp",
-    "network/NetworkUtils.h",
-    "network/ParsedContentDisposition.cpp",
-    "network/ParsedContentDisposition.h",
-    "network/ParsedContentHeaderFieldParameters.cpp",
-    "network/ParsedContentHeaderFieldParameters.h",
-    "network/ParsedContentType.cpp",
-    "network/ParsedContentType.h",
-    "network/WebSocketHandshakeRequest.cpp",
-    "network/WebSocketHandshakeRequest.h",
-    "network/WebSocketHandshakeResponse.cpp",
-    "network/WebSocketHandshakeResponse.h",
-    "network/mime/ContentType.cpp",
-    "network/mime/ContentType.h",
-    "network/mime/MIMETypeFromURL.cpp",
-    "network/mime/MIMETypeFromURL.h",
-    "network/mime/MIMETypeRegistry.cpp",
-    "network/mime/MIMETypeRegistry.h",
     "peerconnection/RTCAnswerOptionsPlatform.h",
     "peerconnection/RTCOfferOptionsPlatform.h",
     "peerconnection/RTCSessionDescriptionRequest.h",
@@ -1295,6 +1245,8 @@ jumbo_component("platform") {
     "plugins/PluginData.h",
     "plugins/PluginListBuilder.cpp",
     "plugins/PluginListBuilder.h",
+    "plugins/PluginScriptForbiddenScope.cpp",
+    "plugins/PluginScriptForbiddenScope.h",
     "probe/PlatformProbes.cpp",
     "probe/PlatformProbes.h",
     "probe/PlatformTraceEventsAgent.cpp",
@@ -1463,20 +1415,29 @@ jumbo_component("platform") {
   sources += get_target_outputs(":character_data") +
              get_target_outputs(":color_data") +
              get_target_outputs(":font_family_names") +
-             get_target_outputs(":http_names") +
              get_target_outputs(":instrumentation_probes") +
              get_target_outputs(":runtime_enabled_features")
 
-  if (is_win && is_component_build) {
-    # https://crbug.com/764823 - Mixing certain //url/ headers and
-    # using url::RawCanonOutputT<char> in one translation unit breaks
-    # the Windows component build. These files use RawCanonOutput.
+  if (is_win) {
     jumbo_excluded_sources = [
-      "LinkHash.cpp",
-      "weborigin/KURL.cpp",
-      "weborigin/OriginAccessEntry.cpp",
-      "weborigin/SecurityOrigin.cpp",
+      # https://crbug.com/775979 - Uses libjpeg_turbo which uses a
+      # "boolean" typedef which is different (int) from the Windows
+      # standard "boolean" typedef (unsigned char), resulting in
+      # compilation errors when both are joined in a translation unit.
+      "image-decoders/jpeg/JPEGImageDecoder.cpp",
     ]
+
+    if (is_component_build) {
+      # https://crbug.com/764823 - Mixing certain //url/ headers and
+      # using url::RawCanonOutputT<char> in one translation unit breaks
+      # the Windows component build. These files use RawCanonOutput.
+      jumbo_excluded_sources += [
+        "LinkHash.cpp",
+        "weborigin/KURL.cpp",
+        "weborigin/OriginAccessEntry.cpp",
+        "weborigin/SecurityOrigin.cpp",
+      ]
+    }
   }
   configs += [
     ":blink_platform_pch",
@@ -1503,10 +1464,10 @@ jumbo_component("platform") {
     "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
     "//services/service_manager/public/interfaces:interfaces_blink",
     "//skia",
-    "//storage/public/interfaces:interfaces_blink",
     "//third_party:jpeg",
     "//third_party/WebKit/Source/platform/wtf",
     "//third_party/WebKit/common:blink_common",
+    "//third_party/WebKit/common:mojo_platform_bindings_blink",
     "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/iccjpeg",
     "//third_party/libpng",
@@ -1523,12 +1484,13 @@ jumbo_component("platform") {
     "//mojo/public/cpp/bindings:wtf_support",
     "//services/service_manager/public/cpp",
     "//third_party:freetype_harfbuzz",
+    "//third_party/WebKit/Source/platform/blob",
     "//third_party/WebKit/Source/platform/heap",
     "//third_party/WebKit/Source/platform/instrumentation",
     "//third_party/WebKit/Source/platform/loader",
     "//third_party/WebKit/Source/platform/media",
+    "//third_party/WebKit/Source/platform/network",
     "//third_party/WebKit/Source/platform/scheduler",
-    "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/WebKit/public:offscreen_canvas_mojo_bindings_blink",
     "//third_party/ced",
     "//third_party/icu",
@@ -1656,7 +1618,6 @@ jumbo_static_library("test_support") {
 
   sources = [
     "graphics/gpu/DrawingBufferTestHelpers.h",
-    "network/mime/MockMimeRegistry.h",
     "scroll/ScrollbarTestSuite.h",
     "testing/CompositorTest.cpp",
     "testing/CompositorTest.h",
@@ -1727,6 +1688,7 @@ jumbo_static_library("test_support") {
     "//base/test:test_support",
     "//mojo/edk/system",
     "//third_party/WebKit/Source/platform/loader:test_support",
+    "//third_party/WebKit/Source/platform/network:test_support",
     "//third_party/WebKit/Source/platform/scheduler:test_support",
   ]
 
@@ -1775,8 +1737,6 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "animation/TimingFunctionTest.cpp",
     "audio/PushPullFIFOTest.cpp",
     "bindings/RuntimeCallStatsTest.cpp",
-    "blob/BlobBytesProviderTest.cpp",
-    "blob/BlobDataTest.cpp",
     "exported/FilePathConversionTest.cpp",
     "exported/WebCORSPreflightResultCacheTest.cpp",
     "exported/WebCORSTest.cpp",
@@ -1846,18 +1806,19 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "graphics/paint/DisplayItemClientTest.cpp",
     "graphics/paint/DisplayItemTest.cpp",
     "graphics/paint/DrawingDisplayItemTest.cpp",
+    "graphics/paint/DrawingRecorderTest.cpp",
     "graphics/paint/FloatClipRectTest.cpp",
     "graphics/paint/GeometryMapperTest.cpp",
     "graphics/paint/PaintChunkTest.cpp",
     "graphics/paint/PaintChunkerTest.cpp",
     "graphics/paint/PaintControllerTest.cpp",
+    "graphics/paint/PaintControllerTest.h",
     "graphics/paint/PaintPropertyNodeTest.cpp",
     "graphics/paint/PropertyTreeStateTest.cpp",
     "image-decoders/FastSharedBufferReaderTest.cpp",
     "image-decoders/ImageDecoderTest.cpp",
     "image-decoders/ImageDecoderTestHelpers.cpp",
     "image-decoders/ImageDecoderTestHelpers.h",
-    "image-decoders/SegmentStreamTest.cpp",
     "image-decoders/bmp/BMPImageDecoderTest.cpp",
     "image-decoders/gif/GIFImageDecoderTest.cpp",
     "image-decoders/ico/ICOImageDecoderTest.cpp",
@@ -1871,14 +1832,6 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "mojo/CommonCustomTypesStructTraitsTest.cpp",
     "mojo/GeometryStructTraitsTest.cpp",
     "mojo/KURLSecurityOriginTest.cpp",
-    "network/EncodedFormDataTest.cpp",
-    "network/HTTPParsersTest.cpp",
-    "network/NetworkStateNotifierTest.cpp",
-    "network/NetworkUtilsTest.cpp",
-    "network/ParsedContentDispositionTest.cpp",
-    "network/ParsedContentHeaderFieldParametersTest.cpp",
-    "network/ParsedContentTypeTest.cpp",
-    "network/mime/MIMETypeRegistryTest.cpp",
     "scroll/ScrollableAreaTest.cpp",
     "scroll/ScrollbarThemeOverlayTest.cpp",
     "testing/ArenaTestHelpers.h",
@@ -1954,8 +1907,10 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "//testing/gmock",
     "//testing/gtest",
     "//third_party:freetype_harfbuzz",
+    "//third_party/WebKit/Source/platform/blob:unit_tests",
     "//third_party/WebKit/Source/platform/instrumentation:unit_tests",
     "//third_party/WebKit/Source/platform/loader:unit_tests",
+    "//third_party/WebKit/Source/platform/network:unit_tests",
     "//third_party/WebKit/Source/platform/scheduler:unit_tests",
     "//third_party/WebKit/Source/platform/wtf",
     "//ui/gfx",

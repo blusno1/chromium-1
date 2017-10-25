@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/media/router/discovery/discovery_network_monitor.h"
 #include "chrome/browser/media/router/discovery/mdns/cast_media_sink_service_impl.h"
@@ -166,14 +167,7 @@ void CastMediaSinkService::ForceSinkDiscoveryCallback() {
                      cast_media_sink_service_impl_->AsWeakPtr()));
 }
 
-void CastMediaSinkService::SetDnsSdRegistryForTest(DnsSdRegistry* registry) {
-  DCHECK(!dns_sd_registry_);
-  dns_sd_registry_ = registry;
-  dns_sd_registry_->AddObserver(this);
-  dns_sd_registry_->RegisterDnsSdListener(kCastServiceType);
-}
-
-void CastMediaSinkService::ForceDiscovery() {
+void CastMediaSinkService::OnUserGesture() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (dns_sd_registry_)
     dns_sd_registry_->ForceDiscovery();
@@ -181,11 +175,19 @@ void CastMediaSinkService::ForceDiscovery() {
   if (!cast_media_sink_service_impl_)
     return;
 
-  DVLOG(2) << "ForceDiscovery on " << cast_sinks_.size() << " sinks";
+  DVLOG(2) << "OnUserGesture: open channel now for " << cast_sinks_.size()
+           << " devices discovered in latest round of mDNS";
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&CastMediaSinkServiceImpl::AttemptConnection,
                      cast_media_sink_service_impl_->AsWeakPtr(), cast_sinks_));
+}
+
+void CastMediaSinkService::SetDnsSdRegistryForTest(DnsSdRegistry* registry) {
+  DCHECK(!dns_sd_registry_);
+  dns_sd_registry_ = registry;
+  dns_sd_registry_->AddObserver(this);
+  dns_sd_registry_->RegisterDnsSdListener(kCastServiceType);
 }
 
 void CastMediaSinkService::OnDnsSdEvent(
@@ -207,14 +209,22 @@ void CastMediaSinkService::OnDnsSdEvent(
       continue;
     }
 
-    cast_sinks_.push_back(std::move(cast_sink));
+    cast_sinks_.push_back(cast_sink);
   }
 
-  task_runner_->PostTask(
+  // Add a random backoff between 0s to 5s before opening channels to prevent
+  // different browser instances connecting to the same receiver at the same
+  // time.
+  base::TimeDelta delay =
+      base::TimeDelta::FromMilliseconds(base::RandInt(0, 50) * 100);
+  DVLOG(2) << "Open channels in [" << delay.InSeconds() << "] seconds";
+
+  task_runner_->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&CastMediaSinkServiceImpl::OpenChannels,
                      cast_media_sink_service_impl_->AsWeakPtr(), cast_sinks_,
-                     CastMediaSinkServiceImpl::SinkSource::kMdns));
+                     CastMediaSinkServiceImpl::SinkSource::kMdns),
+      delay);
 }
 
 void CastMediaSinkService::OnDialSinkAdded(const MediaSinkInternal& sink) {

@@ -222,10 +222,11 @@ config("compiler") {
     # Linker warnings.
     if (fatal_linker_warnings && !(is_chromeos && current_cpu == "arm") &&
         !(is_android && use_order_profiling) && !is_mac && !is_ios &&
-        current_os != "aix") {
+        current_os != "aix" && !(is_linux && is_official_build)) {
       # TODO(jochen): Enable this on chromeos on arm. http://crbug.com/356580
       # TODO(lizeb,pasko): Fix link errors when linking with order_profiling=1
       # crbug.com/485542
+      # TODO(hans): Fix link warnings in official Linux builds crbug.com/774742
       ldflags += [ "-Wl,--fatal-warnings" ]
     }
   }
@@ -429,7 +430,7 @@ config("compiler") {
       "-Xclang",
       "-mllvm",
       "-Xclang",
-      "-instcombine-lower-dbg-declare=1",
+      "-instcombine-lower-dbg-declare=0",
     ]
   }
 
@@ -1170,11 +1171,9 @@ config("default_warnings") {
       cflags += [ "/wd4702" ]  # Unreachable code.
     }
 
-    # Building with Clang on Windows is a work in progress and very
-    # experimental. See crbug.com/82385.
     if (is_clang) {
       cflags += [
-        # TODO(hans): Make this list shorter eventually, http://crbug.com/504657
+        # TODO(hans): Enable these, http://crbug.com/504657
         "-Wno-unknown-pragmas",  # http://crbug.com/505314
         "-Wno-microsoft-cast",  # http://crbug.com/550065
       ]

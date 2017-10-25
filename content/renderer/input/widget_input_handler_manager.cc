@@ -132,7 +132,9 @@ void WidgetInputHandlerManager::AddInterface(
   }
 }
 
-void WidgetInputHandlerManager::WillShutdown() {}
+void WidgetInputHandlerManager::WillShutdown() {
+  input_handler_proxy_.reset();
+}
 
 void WidgetInputHandlerManager::TransferActiveWheelFlingAnimation(
     const blink::WebActiveWheelFlingParameters& params) {
@@ -244,6 +246,13 @@ void WidgetInputHandlerManager::DispatchEvent(
     std::unique_ptr<content::InputEvent> event,
     mojom::WidgetInputHandler::DispatchEventCallback callback) {
   if (!event || !event->web_event) {
+    // Call |callback| if it was available indicating this event wasn't
+    // handled.
+    if (callback) {
+      std::move(callback).Run(
+          InputEventAckSource::MAIN_THREAD, ui::LatencyInfo(),
+          INPUT_EVENT_ACK_STATE_NOT_CONSUMED, base::nullopt, base::nullopt);
+    }
     return;
   }
 
@@ -256,6 +265,15 @@ void WidgetInputHandlerManager::DispatchEvent(
   }
 
   if (compositor_task_runner_) {
+    // If the input_handler_proxy has disappeared ensure we just ack event.
+    if (!input_handler_proxy_) {
+      if (callback) {
+        std::move(callback).Run(
+            InputEventAckSource::MAIN_THREAD, ui::LatencyInfo(),
+            INPUT_EVENT_ACK_STATE_NOT_CONSUMED, base::nullopt, base::nullopt);
+      }
+      return;
+    }
     CHECK(!main_thread_task_runner_->BelongsToCurrentThread());
     input_handler_proxy_->HandleInputEventWithLatencyInfo(
         std::move(event->web_event), event->latency_info,
@@ -338,7 +356,6 @@ void WidgetInputHandlerManager::DidHandleInputEventAndOverscroll(
     InputEventDispatchType dispatch_type = callback.is_null()
                                                ? DISPATCH_TYPE_NON_BLOCKING
                                                : DISPATCH_TYPE_BLOCKING;
-
     HandledEventCallback handled_event =
         base::BindOnce(&WidgetInputHandlerManager::HandledInputEvent, this,
                        std::move(callback));
@@ -365,14 +382,24 @@ void WidgetInputHandlerManager::HandledInputEvent(
     base::Optional<cc::TouchAction> touch_action) {
   if (!callback)
     return;
-  if (compositor_task_runner_) {
+
+  // This method is called from either the main thread or the compositor thread.
+  bool is_compositor_thread = compositor_task_runner_ &&
+                              compositor_task_runner_->BelongsToCurrentThread();
+
+  // If there is a compositor task runner and the current thread isn't the
+  // compositor thread proxy it over to the compositor thread.
+  if (compositor_task_runner_ && !is_compositor_thread) {
     compositor_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(CallCallback, std::move(callback), ack_state,
                                   latency_info, std::move(overscroll_params),
                                   touch_action));
   } else {
+    // Otherwise call the callback immediately.
     std::move(callback).Run(
-        InputEventAckSource::COMPOSITOR_THREAD, latency_info, ack_state,
+        is_compositor_thread ? InputEventAckSource::COMPOSITOR_THREAD
+                             : InputEventAckSource::MAIN_THREAD,
+        latency_info, ack_state,
         overscroll_params
             ? base::Optional<ui::DidOverscrollParams>(*overscroll_params)
             : base::nullopt,
@@ -383,6 +410,8 @@ void WidgetInputHandlerManager::HandledInputEvent(
 void WidgetInputHandlerManager::ObserveGestureEventOnCompositorThread(
     const blink::WebGestureEvent& gesture_event,
     const cc::InputHandlerScrollResult& scroll_result) {
+  if (!input_handler_proxy_)
+    return;
   DCHECK(input_handler_proxy_->scroll_elasticity_controller());
   input_handler_proxy_->scroll_elasticity_controller()
       ->ObserveGestureEventAndResult(gesture_event, scroll_result);

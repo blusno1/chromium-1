@@ -50,7 +50,27 @@ FrameTree::FrameTree(Frame* this_frame)
 FrameTree::~FrameTree() {}
 
 const AtomicString& FrameTree::GetName() const {
+  // TODO(andypaicu): remove this once we have gathered the data
+  if (experimental_set_nulled_name_) {
+    const LocalFrame* frame =
+        this_frame_->IsLocalFrame()
+            ? ToLocalFrame(this_frame_)
+            : (Top().IsLocalFrame() ? ToLocalFrame(&Top()) : nullptr);
+    if (frame) {
+      UseCounter::Count(frame,
+                        WebFeature::kCrossOriginMainFrameNulledNameAccessed);
+      if (!name_.IsEmpty()) {
+        UseCounter::Count(
+            frame, WebFeature::kCrossOriginMainFrameNulledNonEmptyNameAccessed);
+      }
+    }
+  }
   return name_;
+}
+
+// TODO(andypaicu): remove this once we have gathered the data
+void FrameTree::ExperimentalSetNulledName() {
+  experimental_set_nulled_name_ = true;
 }
 
 void FrameTree::SetName(const AtomicString& name,
@@ -71,6 +91,8 @@ void FrameTree::SetName(const AtomicString& name,
     }
   }
 
+  // TODO(andypaicu): remove this once we have gathered the data
+  experimental_set_nulled_name_ = false;
   name_ = name;
 }
 
@@ -256,7 +278,7 @@ Frame* FrameTree::TraverseNext(const Frame* stay_within) const {
   return nullptr;
 }
 
-DEFINE_TRACE(FrameTree) {
+void FrameTree::Trace(blink::Visitor* visitor) {
   visitor->Trace(this_frame_);
 }
 

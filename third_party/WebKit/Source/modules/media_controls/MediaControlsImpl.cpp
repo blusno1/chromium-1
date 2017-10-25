@@ -56,9 +56,11 @@
 #include "modules/media_controls/MediaControlsRotateToFullscreenDelegate.h"
 #include "modules/media_controls/MediaControlsWindowEventListener.h"
 #include "modules/media_controls/MediaDownloadInProductHelpManager.h"
+#include "modules/media_controls/elements/MediaControlButtonPanelElement.h"
 #include "modules/media_controls/elements/MediaControlCastButtonElement.h"
 #include "modules/media_controls/elements/MediaControlCurrentTimeDisplayElement.h"
 #include "modules/media_controls/elements/MediaControlDownloadButtonElement.h"
+#include "modules/media_controls/elements/MediaControlElementsHelper.h"
 #include "modules/media_controls/elements/MediaControlFullscreenButtonElement.h"
 #include "modules/media_controls/elements/MediaControlMuteButtonElement.h"
 #include "modules/media_controls/elements/MediaControlOverflowMenuButtonElement.h"
@@ -216,7 +218,7 @@ class MediaControlsImpl::MediaControlsResizeObserverDelegate final
     controls_->NotifyElementSizeChanged(entries[0]->contentRect());
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(controls_);
     ResizeObserver::Delegate::Trace(visitor);
   }
@@ -262,7 +264,7 @@ class MediaControlsImpl::MediaElementMutationCallback
 
   void Disconnect() { observer_->disconnect(); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(controls_);
     visitor->Trace(observer_);
     MutationObserver::Delegate::Trace(visitor);
@@ -367,8 +369,7 @@ MediaControlsImpl* MediaControlsImpl::Create(HTMLMediaElement& media_element,
 // |    (-webkit-media-controls-overlay-enclosure)
 // | +-MediaControlOverlayPlayButtonElement
 // | |    (-webkit-media-controls-overlay-play-button)
-// | | {if mediaControlsOverlayPlayButtonEnabled or
-// | |  if ModernMediaControls is enabled}
+// | | {if mediaControlsOverlayPlayButtonEnabled}
 // | \-MediaControlCastButtonElement
 // |     (-internal-media-controls-overlay-cast-button)
 // \-MediaControlPanelEnclosureElement
@@ -377,14 +378,21 @@ MediaControlsImpl* MediaControlsImpl::Create(HTMLMediaElement& media_element,
 //     |    (-webkit-media-controls-panel)
 //     |  {if ModernMediaControlsEnabled, otherwise
 //     |   contents are directly attached to parent.
-//     +-HTMLDivElement
+//     +-MediaControlOverlayPlayButtonElement
+//     |  (-webkit-media-controls-overlay-play-button)
+//     |  {if ModernMediaControlsEnabled}
+//     +-MediaControlButtonPanelElement
 //     |  |  (-internal-media-controls-button-panel)
+//     |  |  <video> only, otherwise children are directly attached to parent
 //     |  +-MediaControlPlayButtonElement
 //     |  |   (-webkit-media-controls-play-button)
 //     |  +-MediaControlCurrentTimeDisplayElement
 //     |  |    (-webkit-media-controls-current-time-display)
 //     |  +-MediaControlRemainingTimeDisplayElement
 //     |  |    (-webkit-media-controls-time-remaining-display)
+//     |  +-HTMLDivElement
+//     |  |    (-internal-media-controls-button-spacer)
+//     |  |    {if ModernMediaControls is enabled and is video element}
 //     |  +-MediaControlMuteButtonElement
 //     |  |    (-webkit-media-controls-mute-button)
 //     |  +-MediaControlVolumeSliderElement
@@ -416,7 +424,9 @@ void MediaControlsImpl::InitializeControls() {
   if (RuntimeEnabledFeatures::MediaControlsOverlayPlayButtonEnabled() ||
       IsModern()) {
     overlay_play_button_ = new MediaControlOverlayPlayButtonElement(*this);
-    overlay_enclosure_->AppendChild(overlay_play_button_);
+
+    if (!IsModern())
+      overlay_enclosure_->AppendChild(overlay_play_button_);
   }
 
   overlay_cast_button_ = new MediaControlCastButtonElement(*this, true);
@@ -433,10 +443,10 @@ void MediaControlsImpl::InitializeControls() {
   // If using the modern media controls, the buttons should belong to a
   // seperate button panel. This is because they are displayed in two lines.
   Element* button_panel = panel_;
-  if (IsModern()) {
-    media_button_panel_ = HTMLDivElement::Create(GetDocument());
-    media_button_panel_->SetShadowPseudoId(
-        "-internal-media-controls-button-panel");
+  if (IsModern() && MediaElement().IsHTMLVideoElement()) {
+    panel_->AppendChild(overlay_play_button_);
+
+    media_button_panel_ = new MediaControlButtonPanelElement(*this);
     panel_->AppendChild(media_button_panel_);
     button_panel = media_button_panel_;
   }
@@ -450,6 +460,11 @@ void MediaControlsImpl::InitializeControls() {
 
   duration_display_ = new MediaControlRemainingTimeDisplayElement(*this);
   button_panel->AppendChild(duration_display_);
+
+  if (IsModern() && MediaElement().IsHTMLVideoElement()) {
+    MediaControlElementsHelper::CreateDiv(
+        "-internal-media-controls-button-spacer", button_panel);
+  }
 
   timeline_ = new MediaControlTimelineElement(*this);
   panel_->AppendChild(timeline_);
@@ -1286,8 +1301,9 @@ void MediaControlsImpl::ComputeWhichControlsFit() {
 
 void MediaControlsImpl::PositionPopupMenu(Element* popup_menu) {
   // The popup is positioned slightly on the inside of the bottom right corner.
-  static constexpr int kPopupMenuMarginPx = 0;
+  static constexpr int kPopupMenuMarginPx = 4;
   static const char kImportant[] = "important";
+  static const char kPx[] = "px";
 
   DCHECK(MediaElement().getBoundingClientRect());
   DCHECK(GetDocument().domWindow());
@@ -1295,17 +1311,19 @@ void MediaControlsImpl::PositionPopupMenu(Element* popup_menu) {
 
   DOMRect* bounding_client_rect = MediaElement().getBoundingClientRect();
   DOMVisualViewport* viewport = GetDocument().domWindow()->visualViewport();
-  ;
 
-  int bottom = viewport->height() - bounding_client_rect->y() -
-               bounding_client_rect->height() + kPopupMenuMarginPx;
-  int right = viewport->width() - bounding_client_rect->x() -
-              bounding_client_rect->width() + kPopupMenuMarginPx;
+  WTF::String bottom_str_value = WTF::String::Number(
+      viewport->height() - bounding_client_rect->bottom() + kPopupMenuMarginPx);
+  WTF::String right_str_value = WTF::String::Number(
+      viewport->width() - bounding_client_rect->right() + kPopupMenuMarginPx);
 
-  popup_menu->style()->setProperty("bottom", WTF::String::Number(bottom),
-                                   kImportant, ASSERT_NO_EXCEPTION);
-  popup_menu->style()->setProperty("right", WTF::String::Number(right),
-                                   kImportant, ASSERT_NO_EXCEPTION);
+  bottom_str_value.append(kPx);
+  right_str_value.append(kPx);
+
+  popup_menu->style()->setProperty("bottom", bottom_str_value, kImportant,
+                                   ASSERT_NO_EXCEPTION);
+  popup_menu->style()->setProperty("right", right_str_value, kImportant,
+                                   ASSERT_NO_EXCEPTION);
 }
 
 void MediaControlsImpl::Invalidate(Element* element) {
@@ -1386,7 +1404,7 @@ void MediaControlsImpl::MaybeRecordOverflowTimeToAction() {
       MediaControlOverflowMenuListElement::kTimeToAction);
 }
 
-DEFINE_TRACE(MediaControlsImpl) {
+void MediaControlsImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_mutation_callback_);
   visitor->Trace(resize_observer_);
   visitor->Trace(panel_);

@@ -148,7 +148,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
 
   // The transform, relative to the parent.
   void SetTransform(const gfx::Transform& transform);
-  gfx::Transform transform() const;
+  const gfx::Transform& transform() const { return cc_layer_->transform(); }
 
   gfx::PointF position() const { return cc_layer_->position(); }
 
@@ -276,7 +276,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // tree.
   static void ConvertPointToLayer(const Layer* source,
                                   const Layer* target,
-                                  gfx::Point* point);
+                                  gfx::PointF* point);
 
   // Converts a transform to be relative to the given |ancestor|. Returns
   // whether success (that is, whether the given ancestor was really an
@@ -412,6 +412,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   void didUpdateMainThreadScrollingReasons() override;
   void didChangeScrollbarsHidden(bool) override;
   void DidChangeLayerOpacity(float old_opacity, float new_opacity) override;
+  void DidChangeLayerTransform() override;
 
   // Triggers a call to SwitchToLayer.
   void SwitchCCLayerForTest();
@@ -456,8 +457,9 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // StackBelow().
   void StackRelativeTo(Layer* child, Layer* other, bool above);
 
-  bool ConvertPointForAncestor(const Layer* ancestor, gfx::Point* point) const;
-  bool ConvertPointFromAncestor(const Layer* ancestor, gfx::Point* point) const;
+  bool ConvertPointForAncestor(const Layer* ancestor, gfx::PointF* point) const;
+  bool ConvertPointFromAncestor(const Layer* ancestor,
+                                gfx::PointF* point) const;
 
   // Implementation of LayerAnimatorDelegate
   void SetBoundsFromAnimation(const gfx::Rect& bounds) override;

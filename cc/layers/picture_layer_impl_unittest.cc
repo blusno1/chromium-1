@@ -1540,7 +1540,6 @@ TEST_F(PictureLayerImplTest, DisallowTileDrawQuads) {
 TEST_F(PictureLayerImplTest, ResourcelessPartialRecording) {
   std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
 
-  gfx::Size tile_size(400, 400);
   gfx::Size layer_bounds(700, 650);
   gfx::Rect layer_rect(layer_bounds);
   SetInitialDeviceScaleFactor(2.f);
@@ -1817,7 +1816,6 @@ TEST_F(NoLowResPictureLayerImplTest, MarkRequiredOffscreenTiles) {
       viewport,
       pending_layer()->viewport_rect_for_tile_priority_in_content_space());
 
-  base::TimeTicks time_ticks;
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
   pending_layer()->UpdateTiles();
 
@@ -3275,6 +3273,34 @@ TEST_F(PictureLayerImplTest, Occlusion) {
   }
 }
 
+TEST_F(PictureLayerImplTest, OcclusionOnSolidColorPictureLayer) {
+  gfx::Size layer_bounds(1000, 1000);
+  gfx::Size viewport_size(1000, 1000);
+
+  LayerTestCommon::LayerImplTest impl;
+  host_impl()->SetViewportSize(viewport_size);
+
+  scoped_refptr<FakeRasterSource> pending_raster_source =
+      FakeRasterSource::CreateFilledSolidColor(layer_bounds);
+  SetupPendingTree(pending_raster_source);
+  host_impl()->pending_tree()->SetDeviceScaleFactor(2.f);
+  ActivateTree();
+
+  {
+    SCOPED_TRACE("Scaled occlusion");
+    gfx::Rect occluded(150, 0, 200, 1000);
+    impl.AppendQuadsWithOcclusion(active_layer(), occluded);
+
+    size_t partial_occluded_count = 0;
+    LayerTestCommon::VerifyQuadsAreOccluded(impl.quad_list(), occluded,
+                                            &partial_occluded_count);
+    // None of the quads shall be occluded and half of them are partially
+    // occluded.
+    EXPECT_EQ(16u, impl.quad_list().size());
+    EXPECT_EQ(8u, partial_occluded_count);
+  }
+}
+
 TEST_F(PictureLayerImplTest, RasterScaleChangeWithoutAnimation) {
   gfx::Size tile_size(host_impl()->settings().default_tile_size);
   SetupDefaultTrees(tile_size);
@@ -4550,7 +4576,6 @@ TEST_F(PictureLayerImplTest, DrawTransparentQuads) {
 TEST_F(PictureLayerImplTest, NonSolidToSolidNoTilings) {
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
 
-  gfx::Size tile_size(100, 100);
   gfx::Size layer_bounds(200, 200);
   gfx::Rect layer_rect(layer_bounds);
 

@@ -18,7 +18,6 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_database.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_result.h"
@@ -31,6 +30,7 @@
 #include "components/url_formatter/url_formatter.h"
 #include "net/base/escape.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_util.h"
 
@@ -125,20 +125,21 @@ void HistoryQuickProvider::DoAutocomplete() {
         // the URL-what-you-typed match are on the same host (i.e., aren't
         // from a longer internet hostname for which the omnibox input is
         // a prefix).
-        if (url_db->GetRowForURL(
-            autocomplete_input_.canonicalized_url(), NULL) != 0) {
+        if (url_db->GetRowForURL(autocomplete_input_.canonicalized_url(),
+                                 nullptr) != 0) {
           // We visited this URL before.
           will_have_url_what_you_typed_match_first = true;
           // HistoryURLProvider gives visited what-you-typed URLs a high score.
           url_what_you_typed_match_score =
               HistoryURLProvider::kScoreForBestInlineableResult;
-        } else if (url_db->IsTypedHost(host) &&
-             (!autocomplete_input_.parts().path.is_nonempty() ||
-              ((autocomplete_input_.parts().path.len == 1) &&
-               (autocomplete_input_.text()[
-                   autocomplete_input_.parts().path.begin] == '/'))) &&
-             !autocomplete_input_.parts().query.is_nonempty() &&
-             !autocomplete_input_.parts().ref.is_nonempty()) {
+        } else if (url_db->IsTypedHost(host, /*scheme=*/nullptr) &&
+                   (!autocomplete_input_.parts().path.is_nonempty() ||
+                    ((autocomplete_input_.parts().path.len == 1) &&
+                     (autocomplete_input_
+                          .text()[autocomplete_input_.parts().path.begin] ==
+                      '/'))) &&
+                   !autocomplete_input_.parts().query.is_nonempty() &&
+                   !autocomplete_input_.parts().ref.is_nonempty()) {
           // Not visited, but we've seen the host before.
           will_have_url_what_you_typed_match_first = true;
           if (net::registry_controlled_domains::HostHasRegistryControlledDomain(

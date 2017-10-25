@@ -12,6 +12,7 @@
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 
 #if INSIDE_BLINK
 #include <utility>
@@ -19,7 +20,7 @@
 #include "platform/weborigin/Referrer.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/text/StringHash.h"
-#include "storage/public/interfaces/blobs.mojom-blink.h"  // nogncheck
+#include "third_party/WebKit/common/blob/blob.mojom-blink.h"  // nogncheck
 #endif
 
 namespace blink {
@@ -78,8 +79,8 @@ class BLINK_PLATFORM_EXPORT WebServiceWorkerRequest {
   void SetIntegrity(const WebString&);
   const WebString& Integrity() const;
 
-  void SetCacheMode(WebURLRequest::FetchRequestCacheMode);
-  WebURLRequest::FetchRequestCacheMode CacheMode() const;
+  void SetCacheMode(mojom::FetchCacheMode);
+  mojom::FetchCacheMode CacheMode() const;
 
   void SetRedirectMode(WebURLRequest::FetchRedirectMode);
   WebURLRequest::FetchRedirectMode RedirectMode() const;
@@ -102,7 +103,7 @@ class BLINK_PLATFORM_EXPORT WebServiceWorkerRequest {
   const Referrer& GetReferrer() const;
   void SetBlob(const WebString& uuid,
                long long size,
-               storage::mojom::blink::BlobPtrInfo);
+               mojom::blink::BlobPtrInfo);
 #endif
 
  private:

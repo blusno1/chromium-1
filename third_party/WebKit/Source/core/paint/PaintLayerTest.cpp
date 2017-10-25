@@ -547,14 +547,16 @@ TEST_P(PaintLayerTest, PaintInvalidationOnNonCompositedScroll) {
   LayoutBox* scroller = ToLayoutBox(GetLayoutObjectByElementId("scroller"));
   LayoutObject* content_layer = GetLayoutObjectByElementId("content-layer");
   LayoutObject* content = GetLayoutObjectByElementId("content");
-  EXPECT_EQ(LayoutRect(0, 30, 50, 10), content_layer->VisualRect());
-  EXPECT_EQ(LayoutRect(0, 30, 50, 5), content->VisualRect());
+  EXPECT_EQ(LayoutRect(0, 30, 50, 10),
+            content_layer->FirstFragment().VisualRect());
+  EXPECT_EQ(LayoutRect(0, 30, 50, 5), content->FirstFragment().VisualRect());
 
   scroller->GetScrollableArea()->SetScrollOffset(ScrollOffset(0, 20),
                                                  kProgrammaticScroll);
   GetDocument().View()->UpdateAllLifecyclePhases();
-  EXPECT_EQ(LayoutRect(0, 10, 50, 10), content_layer->VisualRect());
-  EXPECT_EQ(LayoutRect(0, 10, 50, 5), content->VisualRect());
+  EXPECT_EQ(LayoutRect(0, 10, 50, 10),
+            content_layer->FirstFragment().VisualRect());
+  EXPECT_EQ(LayoutRect(0, 10, 50, 5), content->FirstFragment().VisualRect());
 }
 
 TEST_P(PaintLayerTest, PaintInvalidationOnCompositedScroll) {
@@ -574,14 +576,16 @@ TEST_P(PaintLayerTest, PaintInvalidationOnCompositedScroll) {
   LayoutBox* scroller = ToLayoutBox(GetLayoutObjectByElementId("scroller"));
   LayoutObject* content_layer = GetLayoutObjectByElementId("content-layer");
   LayoutObject* content = GetLayoutObjectByElementId("content");
-  EXPECT_EQ(LayoutRect(0, 30, 50, 10), content_layer->VisualRect());
-  EXPECT_EQ(LayoutRect(0, 30, 50, 5), content->VisualRect());
+  EXPECT_EQ(LayoutRect(0, 30, 50, 10),
+            content_layer->FirstFragment().VisualRect());
+  EXPECT_EQ(LayoutRect(0, 30, 50, 5), content->FirstFragment().VisualRect());
 
   scroller->GetScrollableArea()->SetScrollOffset(ScrollOffset(0, 20),
                                                  kProgrammaticScroll);
   GetDocument().View()->UpdateAllLifecyclePhases();
-  EXPECT_EQ(LayoutRect(0, 30, 50, 10), content_layer->VisualRect());
-  EXPECT_EQ(LayoutRect(0, 30, 50, 5), content->VisualRect());
+  EXPECT_EQ(LayoutRect(0, 30, 50, 10),
+            content_layer->FirstFragment().VisualRect());
+  EXPECT_EQ(LayoutRect(0, 30, 50, 5), content->FirstFragment().VisualRect());
 }
 
 TEST_P(PaintLayerTest, CompositingContainerStackedFloatUnderStackingInline) {
@@ -1054,7 +1058,7 @@ TEST_P(PaintLayerTest, PaintLayerTransformUpdatedOnStyleTransformAnimation) {
       ToLayoutBoxModelObject(target_object)->Layer();
   EXPECT_EQ(nullptr, target_paint_layer->Transform());
 
-  RefPtr<ComputedStyle> old_style =
+  scoped_refptr<ComputedStyle> old_style =
       ComputedStyle::Clone(target_object->StyleRef());
   ComputedStyle* new_style = target_object->MutableStyle();
   new_style->SetHasCurrentTransformAnimation(true);

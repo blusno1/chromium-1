@@ -7,6 +7,7 @@
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/vr/browser_ui_interface.h"
+#include "chrome/browser/vr/test/constants.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
 #include "chrome/browser/vr/ui_input_manager.h"
 #include "chrome/browser/vr/ui_renderer.h"
@@ -19,13 +20,6 @@
 #include "ui/gl/test/gl_test_helper.h"
 
 namespace vr {
-
-namespace {
-
-// Resolution of Pixel Phone for one eye.
-static const gfx::Size kPixelHalfScreen(960, 1080);
-
-}  // namespace
 
 UiPixelTest::UiPixelTest() : frame_buffer_size_(kPixelHalfScreen) {}
 
@@ -94,11 +88,11 @@ void UiPixelTest::DrawUi(const gfx::Vector3dF& laser_direction,
   render_info.right_eye_info.viewport = {0, 0, 0, 0};
 
   GestureList gesture_list;
-  ui_->scene()->OnBeginFrame(
+  EXPECT_TRUE(ui_->scene()->OnBeginFrame(
       base::TimeTicks(),
       gfx::Vector3dF(-render_info.head_pose.matrix().get(2, 0),
                      -render_info.head_pose.matrix().get(2, 1),
-                     -render_info.head_pose.matrix().get(2, 2)));
+                     -render_info.head_pose.matrix().get(2, 2))));
   ui_->input_manager()->HandleInput(
       gfx::Vector3dF(0.0f, 0.0f, -1.0f), controller_info.laser_origin,
       controller_info.touchpad_button_state, &gesture_list,

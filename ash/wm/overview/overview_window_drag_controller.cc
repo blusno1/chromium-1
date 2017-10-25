@@ -14,7 +14,6 @@
 #include "ash/wm/overview/window_selector_item.h"
 #include "ash/wm/splitview/split_view_overview_overlay.h"
 #include "ash/wm/window_positioning_utils.h"
-#include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
 #include "ui/aura/window.h"
@@ -26,10 +25,6 @@ namespace {
 
 // The minimum offset that will be considered as a drag event.
 constexpr int kMinimiumDragOffset = 5;
-
-// Snapping distance between the dragged window with the screen edge. It's
-// useful especially for touch events.
-constexpr int kScreenEdgeInsetForDrag = 200;
 
 // Returns true if |screen_orientation| is a primary orientation.
 bool IsPrimaryScreenOrientation(
@@ -57,7 +52,7 @@ void OverviewWindowDragController::InitiateDrag(
   item_ = item;
 
   window_selector_->SetSplitViewOverviewOverlayIndicatorType(
-      wm::GetWindowState(item_->GetWindow())->CanSnap()
+      split_view_controller_->CanSnap(item->GetWindow())
           ? IndicatorType::DRAG_AREA
           : IndicatorType::CANNOT_SNAP,
       location_in_screen);
@@ -82,9 +77,16 @@ void OverviewWindowDragController::Drag(const gfx::Point& location_in_screen) {
 
   UpdatePhantomWindowAndWindowGrid(location_in_screen);
 
-  // TODO(crbug.com/772201): The indicator should probably remain a bit longer.
-  window_selector_->SetSplitViewOverviewOverlayIndicatorType(
-      IndicatorType::NONE, gfx::Point());
+  // Show the CANNOT_SNAP ui on the split view overview overlay if the window
+  // cannot be snapped, otherwise show the drag ui only while the phantom window
+  // is hidden.
+  IndicatorType indicator_type = IndicatorType::CANNOT_SNAP;
+  if (split_view_controller_->CanSnap(item_->GetWindow())) {
+    indicator_type = IsPhantomWindowShowing() ? IndicatorType::NONE
+                                              : IndicatorType::DRAG_AREA;
+  }
+  window_selector_->SetSplitViewOverviewOverlayIndicatorType(indicator_type,
+                                                             gfx::Point());
 }
 
 void OverviewWindowDragController::CompleteDrag(
@@ -100,14 +102,20 @@ void OverviewWindowDragController::CompleteDrag(
     // If no drag was initiated (e.g., a click/tap on the overview window),
     // activate the window. If the split view is active and has a left window,
     // snap the current window to right. If the split view is active and has a
-    // right window, snap the current window to left.
+    // right window, snap the current window to left. If split view is active
+    // and the selected window cannot be snapped, exit splitview and activate
+    // the selected window, and also exit the overview.
     SplitViewController::State split_state = split_view_controller_->state();
     if (split_state == SplitViewController::NO_SNAP) {
       window_selector_->SelectWindow(item_);
-    } else {
+    } else if (split_view_controller_->CanSnap(item_->GetWindow())) {
       SnapWindow(split_state == SplitViewController::LEFT_SNAPPED
                      ? SplitViewController::RIGHT
                      : SplitViewController::LEFT);
+    } else {
+      window_selector_->set_restore_focus_window(item_->GetWindow());
+      split_view_controller_->EndSplitView();
+      window_selector_->CancelSelection();
     }
   } else {
     did_move_ = false;
@@ -128,8 +136,11 @@ void OverviewWindowDragController::UpdatePhantomWindowAndWindowGrid(
     const gfx::Point& location_in_screen) {
   // Attempt to show phantom window and move window grid only if the window is
   // snappable.
-  if (!SplitViewController::CanSnap(item_->GetWindow()))
+  if (!split_view_controller_->CanSnap(item_->GetWindow())) {
+    snap_position_ = SplitViewController::NONE;
+    phantom_window_controller_.reset();
     return;
+  }
 
   SplitViewController::SnapPosition last_snap_position = snap_position_;
   snap_position_ = GetSnapPosition(location_in_screen);
@@ -148,14 +159,6 @@ void OverviewWindowDragController::UpdatePhantomWindowAndWindowGrid(
     phantom_window_controller_.reset();
     if (snap_position_ == SplitViewController::NONE)
       return;
-  }
-
-  const bool can_snap = snap_position_ != SplitViewController::NONE &&
-                        wm::GetWindowState(item_->GetWindow())->CanSnap();
-  if (!can_snap) {
-    snap_position_ = SplitViewController::NONE;
-    phantom_window_controller_.reset();
-    return;
   }
 
   aura::Window* target_window = item_->GetWindow();

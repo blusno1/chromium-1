@@ -965,7 +965,7 @@ LayoutUnit LayoutBlockFlow::AdjustBlockChildForPagination(
     BlockChildrenLayoutInfo& layout_info,
     bool at_before_side_of_block) {
   LayoutBlockFlow* child_block_flow =
-      child.IsLayoutBlockFlow() ? ToLayoutBlockFlow(&child) : 0;
+      child.IsLayoutBlockFlow() ? ToLayoutBlockFlow(&child) : nullptr;
 
   // See if we need a soft (unforced) break in front of this child, and set the
   // pagination strut in that case. An unforced break may come from two sources:
@@ -1604,7 +1604,7 @@ LayoutBlockFlow::MarginValues LayoutBlockFlow::MarginValuesForChild(
   LayoutUnit after_margin;
 
   LayoutBlockFlow* child_layout_block_flow =
-      child.IsLayoutBlockFlow() ? ToLayoutBlockFlow(&child) : 0;
+      child.IsLayoutBlockFlow() ? ToLayoutBlockFlow(&child) : nullptr;
 
   // If the child has the same directionality as we do, then we can just return
   // its margins in the same direction.
@@ -4157,9 +4157,18 @@ LayoutUnit LayoutBlockFlow::LogicalRightFloatOffsetForLine(
 
 void LayoutBlockFlow::UpdateAncestorShouldPaintFloatingObject(
     const LayoutBox& float_box) {
+  // Normally, the ShouldPaint flags of FloatingObjects should have been set
+  // during layout, based on overhaning, intruding, self-painting status, etc.
+  // However, sometimes a layer's self painting status is affected by its
+  // compositing status, so we need to call this method during compositing
+  // update when we find a layer changes self painting status. This doesn't
+  // apply to SPv2 in which a layer's self painting status no longer depends on
+  // compositing status.
+  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
   DCHECK(float_box.IsFloating());
   bool float_box_is_self_painting_layer =
       float_box.HasLayer() && float_box.Layer()->IsSelfPaintingLayer();
+  bool found_painting_ancestor = false;
   for (LayoutObject* ancestor = float_box.Parent();
        ancestor && ancestor->IsLayoutBlockFlow();
        ancestor = ancestor->Parent()) {
@@ -4176,17 +4185,21 @@ void LayoutBlockFlow::UpdateAncestorShouldPaintFloatingObject(
       break;
 
     FloatingObject& floating_object = **it;
-    if (!float_box_is_self_painting_layer) {
-      // This repeats the logic in addOverhangingFloats() about shouldPaint
-      // flag:
+    if (!found_painting_ancestor && !float_box_is_self_painting_layer) {
+      // This tries to repeat the logic in AddOverhangingFloats() about
+      // ShouldPaint flag with the following rules:
       // - The nearest enclosing block in which the float doesn't overhang
       //   paints the float;
       // - Or even if the float overhangs, if the ancestor block has
       //   self-painting layer, it paints the float.
+      // However it is not fully consistent with AddOverhangingFloats() when
+      // a float doesn't overhang in an ancestor but overhangs in an ancestor
+      // of the ancestor. This results different ancestor painting the float,
+      // but there seems no problem for now.
       if (ancestor_block->HasSelfPaintingLayer() ||
           !ancestor_block->IsOverhangingFloat(floating_object)) {
         floating_object.SetShouldPaint(true);
-        return;
+        found_painting_ancestor = true;
       }
     } else {
       floating_object.SetShouldPaint(false);
@@ -4486,12 +4499,13 @@ void LayoutBlockFlow::PositionDialog() {
     return;
   }
 
-  LocalFrameView* frame_view = GetDocument().View();
-  LayoutUnit top = LayoutUnit((Style()->GetPosition() == EPosition::kFixed)
-                                  ? 0
-                                  : frame_view->ScrollOffsetInt().Height());
-  int visible_height =
-      frame_view->VisibleContentRect(kIncludeScrollbars).Height();
+  auto* scrollable_area = GetDocument().View()->LayoutViewportScrollableArea();
+  LayoutUnit top =
+      LayoutUnit((Style()->GetPosition() == EPosition::kFixed)
+                     ? 0
+                     : scrollable_area->ScrollOffsetInt().Height());
+
+  int visible_height = GetDocument().View()->Height();
   if (Size().Height() < visible_height)
     top += (visible_height - Size().Height()) / 2;
   SetY(top);

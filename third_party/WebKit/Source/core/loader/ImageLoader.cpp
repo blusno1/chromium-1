@@ -51,9 +51,9 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/wtf/PtrUtil.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebClientHintsType.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 
 namespace blink {
 
@@ -137,7 +137,7 @@ class ImageLoader::Task {
   WeakPersistent<ImageLoader> loader_;
   BypassMainWorldBehavior should_bypass_main_world_csp_;
   UpdateFromElementBehavior update_behavior_;
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   WeakPtrFactory<Task> weak_factory_;
   ReferrerPolicy referrer_policy_;
   KURL request_url_;
@@ -201,7 +201,8 @@ void ImageLoader::DispatchDecodeRequestsIfComplete() {
 void ImageLoader::DecodeRequestFinished(uint64_t request_id, bool success) {
   // First we find the corresponding request id, then we either resolve or
   // reject it and remove it from the list.
-  for (auto it = decode_requests_.begin(); it != decode_requests_.end(); ++it) {
+  for (auto* it = decode_requests_.begin(); it != decode_requests_.end();
+       ++it) {
     auto& request = *it;
     if (request->request_id() != request_id)
       continue;
@@ -224,7 +225,7 @@ void ImageLoader::RejectPendingDecodes(UpdateType update_type) {
   // have to reject even the pending mutation requests because conceptually they
   // would have been scheduled before the synchronous update ran, so they
   // referred to the old image.
-  for (auto it = decode_requests_.begin(); it != decode_requests_.end();) {
+  for (auto* it = decode_requests_.begin(); it != decode_requests_.end();) {
     auto& request = *it;
     if (update_type == UpdateType::kAsync &&
         request->state() == DecodeRequest::kPendingMicrotask) {
@@ -236,7 +237,7 @@ void ImageLoader::RejectPendingDecodes(UpdateType update_type) {
   }
 }
 
-DEFINE_TRACE(ImageLoader) {
+void ImageLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(image_content_);
   visitor->Trace(image_resource_for_image_document_);
   visitor->Trace(element_);
@@ -389,7 +390,7 @@ void ImageLoader::DoUpdateFromElement(BypassMainWorldBehavior bypass_behavior,
     resource_loader_options.initiator_info.name = GetElement()->localName();
     ResourceRequest resource_request(url);
     if (update_behavior == kUpdateForcedReload) {
-      resource_request.SetCachePolicy(WebCachePolicy::kBypassingCache);
+      resource_request.SetCacheMode(mojom::FetchCacheMode::kBypassCache);
       resource_request.SetPreviewsState(WebURLRequest::kPreviewsNoTransform);
     }
 
@@ -670,7 +671,7 @@ LayoutImageResource* ImageLoader::GetLayoutImageResource() {
   LayoutObject* layout_object = element_->GetLayoutObject();
 
   if (!layout_object)
-    return 0;
+    return nullptr;
 
   // We don't return style generated image because it doesn't belong to the
   // ImageLoader. See <https://bugs.webkit.org/show_bug.cgi?id=42840>
@@ -684,7 +685,7 @@ LayoutImageResource* ImageLoader::GetLayoutImageResource() {
   if (layout_object->IsVideo())
     return ToLayoutVideo(layout_object)->ImageResource();
 
-  return 0;
+  return nullptr;
 }
 
 void ImageLoader::UpdateLayoutObject() {
@@ -813,7 +814,7 @@ void ImageLoader::DecodeRequest::NotifyDecodeDispatched() {
   state_ = kDispatched;
 }
 
-DEFINE_TRACE(ImageLoader::DecodeRequest) {
+void ImageLoader::DecodeRequest::Trace(blink::Visitor* visitor) {
   visitor->Trace(resolver_);
   visitor->Trace(loader_);
 }

@@ -1443,6 +1443,7 @@ enum WebFeature {
   kMagnetometerConstructor = 1907,
   kOrientationSensorPopulateMatrix = 1908,
   kWindowOpenWithInvalidURL = 1909,
+  kCrossOriginMainFrameNulledNameAccessed = 1910,
   kMenuItemElementIconAttribute = 1911,
   kWebkitCSSMatrixSetMatrixValue = 1912,
   kWebkitCSSMatrixConstructFromString = 1913,
@@ -1552,6 +1553,7 @@ enum WebFeature {
   kSmoothScrollJSInterventionActivated = 2020,
   kBudgetAPIGetCost = 2021,
   kBudgetAPIGetBudget = 2022,
+  kCrossOriginMainFrameNulledNonEmptyNameAccessed = 2023,
   kDeprecatedTimingFunctionStepMiddle = 2024,
   kDocumentDomainSetWithNonDefaultPort = 2025,
   kDocumentDomainSetWithDefaultPort = 2026,
@@ -1720,6 +1722,16 @@ enum WebFeature {
   kPerformanceObserverForWorker = 2189,
   kPaintTimingObserved = 2190,
   kPaintTimingRequested = 2191,
+  kHTMLMediaElementMediaPlaybackRateOutOfRange = 2192,
+  kCSSFilterFunctionNegativeBrightness = 2193,
+  kCookieSet = 2194,
+  kCookieGet = 2195,
+  kGeolocationDisabledByFeaturePolicy = 2196,
+  kEncryptedMediaDisabledByFeaturePolicy = 2197,
+  kBatteryStatusGetBattery = 2198,
+  kBatteryStatusInsecureOrigin = 2199,
+  kBatteryStatusCrossOrigin = 2200,
+  kBatteryStatusSameOriginABA = 2201,
   // Add new features immediately above this line. Don't change assigned
   // numbers of any item, and don't reuse removed slots.
   // Also, run update_use_counter_feature_enum.py in

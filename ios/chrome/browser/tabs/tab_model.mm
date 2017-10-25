@@ -469,7 +469,8 @@ void CleanCertificatePolicyCache(
 
 - (void)closeTabAtIndex:(NSUInteger)index {
   DCHECK_LE(index, static_cast<NSUInteger>(INT_MAX));
-  _webStateList->CloseWebStateAt(static_cast<int>(index));
+  _webStateList->CloseWebStateAt(static_cast<int>(index),
+                                 WebStateList::CLOSE_USER_ACTION);
 }
 
 - (void)closeTab:(Tab*)tab {
@@ -477,7 +478,7 @@ void CleanCertificatePolicyCache(
 }
 
 - (void)closeAllTabs {
-  _webStateList->CloseAllWebStates();
+  _webStateList->CloseAllWebStates(WebStateList::CLOSE_USER_ACTION);
   [[NSNotificationCenter defaultCenter]
       postNotificationName:kTabModelAllTabsDidCloseNotification
                     object:self];
@@ -539,7 +540,7 @@ void CleanCertificatePolicyCache(
     return referencedFiles;
   // Check the currently open tabs for external files.
   for (Tab* tab in self) {
-    const GURL& lastCommittedURL = tab.lastCommittedURL;
+    const GURL& lastCommittedURL = tab.webState->GetLastCommittedURL();
     if (UrlIsExternalFileReference(lastCommittedURL)) {
       [referencedFiles addObject:base::SysUTF8ToNSString(
                                      lastCommittedURL.ExtractFileName())];
@@ -589,7 +590,7 @@ void CleanCertificatePolicyCache(
   // method, ensure they -autorelease introduced by ARC are processed before
   // the WebStateList destructor is called.
   @autoreleasepool {
-    [self closeAllTabs];
+    _webStateList->CloseAllWebStates(WebStateList::CLOSE_NO_FLAGS);
   }
 
   // Unregister all observers after closing all the tabs as some of them are
@@ -717,7 +718,8 @@ void CleanCertificatePolicyCache(
     Tab* tab = [self tabAtIndex:0];
     BOOL hasPendingLoad =
         tab.webState->GetNavigationManager()->GetPendingItem() != nullptr;
-    if (!hasPendingLoad && tab.lastCommittedURL == GURL(kChromeUINewTabURL)) {
+    if (!hasPendingLoad &&
+        tab.webState->GetLastCommittedURL() == kChromeUINewTabURL) {
       [self closeTab:tab];
       closedNTPTab = YES;
       oldCount = 0;

@@ -50,7 +50,8 @@ struct PassthroughResources {
   PassthroughResources();
   ~PassthroughResources();
 
-  void Destroy(bool have_context);
+  // api is null if we don't have a context (e.g. lost).
+  void Destroy(gl::GLApi* api);
 
   // Mappings from client side IDs to service side IDs.
   ClientServiceMap<GLuint, GLuint> texture_id_map;
@@ -77,29 +78,32 @@ struct PassthroughResources {
 
 class ScopedFramebufferBindingReset {
  public:
-  ScopedFramebufferBindingReset();
+  explicit ScopedFramebufferBindingReset(gl::GLApi* api);
   ~ScopedFramebufferBindingReset();
 
  private:
+  gl::GLApi* api_;
   GLint draw_framebuffer_;
   GLint read_framebuffer_;
 };
 
 class ScopedRenderbufferBindingReset {
  public:
-  ScopedRenderbufferBindingReset();
+  explicit ScopedRenderbufferBindingReset(gl::GLApi* api);
   ~ScopedRenderbufferBindingReset();
 
  private:
+  gl::GLApi* api_;
   GLint renderbuffer_;
 };
 
 class ScopedTexture2DBindingReset {
  public:
-  ScopedTexture2DBindingReset();
+  explicit ScopedTexture2DBindingReset(gl::GLApi* api);
   ~ScopedTexture2DBindingReset();
 
  private:
+  gl::GLApi* api_;
   GLint texture_;
 };
 
@@ -124,11 +128,12 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   base::WeakPtr<GLES2Decoder> AsWeakPtr() override;
 
-  bool Initialize(const scoped_refptr<gl::GLSurface>& surface,
-                  const scoped_refptr<gl::GLContext>& context,
-                  bool offscreen,
-                  const DisallowedFeatures& disallowed_features,
-                  const ContextCreationAttribHelper& attrib_helper) override;
+  gpu::ContextResult Initialize(
+      const scoped_refptr<gl::GLSurface>& surface,
+      const scoped_refptr<gl::GLContext>& context,
+      bool offscreen,
+      const DisallowedFeatures& disallowed_features,
+      const ContextCreationAttribHelper& attrib_helper) override;
 
   // Destroys the graphics context.
   void Destroy(bool have_context) override;
@@ -149,6 +154,8 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // Make this decoder's GL context current.
   bool MakeCurrent() override;
+
+  gl::GLApi* api() const { return api_; }
 
   // Gets the GLES2 Util which holds info.
   GLES2Util* GetGLES2Util() override;
@@ -275,6 +282,10 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // Lose this context.
   void MarkContextLost(error::ContextLostReason reason) override;
 
+  // Update lost context state for use when making calls to the GL context
+  // directly, and needing to know if they failed due to loss.
+  bool CheckResetStatus() override;
+
   Logger* GetLogger() override;
 
   void BeginDecoding() override;
@@ -293,6 +304,8 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   friend class GLES2DecoderPassthroughTestBase;
 
   const char* GetCommandName(unsigned int command_id) const;
+
+  void SetOptionalExtensionsRequestedForTesting(bool request_extensions);
 
   void* GetScratchMemory(size_t size);
 
@@ -348,7 +361,6 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // call to glGetError
   void InjectDriverError(GLenum error);
 
-  bool CheckResetStatus();
   bool IsRobustnessSupported();
 
   bool IsEmulatedQueryTarget(GLenum target) const;
@@ -397,6 +409,9 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // A table of CommandInfo for all the commands.
   static const CommandInfo command_info[kNumCommands - kFirstGLES2Command];
 
+  // The GLApi to make the gl calls on.
+  gl::GLApi* api_;
+
   // The GL context this decoder renders to on behalf of the client.
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
@@ -405,6 +420,10 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // The ContextGroup for this decoder uses to track resources.
   scoped_refptr<ContextGroup> group_;
   scoped_refptr<FeatureInfo> feature_info_;
+
+  // By default, all requestable extensions should be loaded at initialization
+  // time. Can be disabled for testing with only specific extensions enabled.
+  bool request_optional_extensions_ = true;
 
   // Some objects may generate resources when they are bound even if they were
   // not generated yet: texture, buffer, renderbuffer, framebuffer, transform
@@ -522,11 +541,14 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   struct EmulatedColorBuffer {
     explicit EmulatedColorBuffer(
+        gl::GLApi* api,
         const EmulatedDefaultFramebufferFormat& format_in);
     ~EmulatedColorBuffer();
 
-    bool Resize(const gfx::Size& new_size);
+    void Resize(const gfx::Size& new_size);
     void Destroy(bool have_context);
+
+    gl::GLApi* api;
 
     scoped_refptr<TexturePassthrough> texture;
 
@@ -538,6 +560,7 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   struct EmulatedDefaultFramebuffer {
     EmulatedDefaultFramebuffer(
+        gl::GLApi* api,
         const EmulatedDefaultFramebufferFormat& format_in,
         const FeatureInfo* feature_info);
     ~EmulatedDefaultFramebuffer();
@@ -551,6 +574,8 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
     bool Resize(const gfx::Size& new_size, const FeatureInfo* feature_info);
     void Destroy(bool have_context);
+
+    gl::GLApi* api;
 
     // Service ID of the framebuffer
     GLuint framebuffer_service_id = 0;

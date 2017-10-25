@@ -357,8 +357,8 @@ def _GetDesiredVsToolchainHashes():
     # Update 3 final with 10.0.15063.468 SDK and no vctip.exe.
     return ['f53e4598951162bad6330f7a167486c7ae5db1e5']
   if env_version == '2017':
-    # VS 2017 Update 3.2 with 10.0.15063.468 SDK and patched setenv.cmd.
-    return ['a9e1098bba66d2acccc377d5ee81265910f29272']
+    # VS 2017 Update 4 with 10.0.15063.468 SDK.
+    return ['88c3b62e1eb0893b8cd57e3f4859c3af27907f64']
   raise Exception('Unsupported VS version %s' % env_version)
 
 
@@ -414,7 +414,12 @@ def Update(force=False):
         os.mkdir(toolchain_dir)
       if not os.path.isdir(toolchain_dir + '.ciopfs'):
         os.mkdir(toolchain_dir + '.ciopfs')
-      subprocess.check_call([ciopfs, toolchain_dir + '.ciopfs', toolchain_dir])
+      # Without use_ino, clang's #pragma once and Wnonportable-include-path
+      # both don't work right, see https://llvm.org/PR34931
+      # use_ino doesn't slow down builds, so it seems there's no drawback to
+      # just using it always.
+      subprocess.check_call([
+          ciopfs, '-o', 'use_ino', toolchain_dir + '.ciopfs', toolchain_dir])
 
     # Necessary so that get_toolchain_if_necessary.py will put the VS toolkit
     # in the correct directory.

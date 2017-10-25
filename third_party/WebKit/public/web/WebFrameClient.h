@@ -70,7 +70,7 @@
 #include "public/platform/WebStorageQuotaType.h"
 #include "public/platform/WebSuddenTerminationDisablerType.h"
 #include "public/platform/WebURLError.h"
-#include "public/platform/WebURLLoader.h"
+#include "public/platform/WebURLLoaderFactory.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebWorkerFetchContext.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
@@ -121,6 +121,7 @@ struct WebContextMenuData;
 struct WebPluginParams;
 struct WebPopupMenuInfo;
 struct WebRect;
+struct WebRemoteScrollProperties;
 struct WebURLError;
 
 class BLINK_EXPORT WebFrameClient {
@@ -416,9 +417,10 @@ class BLINK_EXPORT WebFrameClient {
   // The frame's document has just been initialized.
   virtual void DidCreateNewDocument() {}
 
-  // The window object for the frame has been cleared of any extra
-  // properties that may have been set by script from the previously
-  // loaded document.
+  // The window object for the frame has been cleared of any extra properties
+  // that may have been set by script from the previously loaded document. This
+  // will get invoked multiple times when navigating from an initial empty
+  // document to the actual document.
   virtual void DidClearWindowObject() {}
 
   // The document element has been created.
@@ -507,7 +509,7 @@ class BLINK_EXPORT WebFrameClient {
   // Returns string to be used as a frame id in the devtools protocol.
   // It is derived from the content's devtools_frame_token, is
   // defined by the browser and passed into Blink upon frame creation.
-  virtual WebString GetDevToolsFrameToken() { return WebString(); }
+  virtual WebString GetInstrumentationToken() { return ""; }
 
   // PlzNavigate
   // Called to abort a navigation that is being handled by the browser process.
@@ -688,6 +690,12 @@ class BLINK_EXPORT WebFrameClient {
   // Informs the browser that the draggable regions have been updated.
   virtual void DraggableRegionsChanged() {}
 
+  // Scrolls a local frame in its remote process. Called on the WebFrameClient
+  // of a local frame only.
+  virtual void ScrollRectToVisibleInParentFrame(
+      const WebRect&,
+      const WebRemoteScrollProperties&) {}
+
   // Find-in-page notifications ------------------------------------------
 
   // Notifies how many matches have been found in this frame so far, for a
@@ -840,9 +848,7 @@ class BLINK_EXPORT WebFrameClient {
 
   // Loading --------------------------------------------------------------
 
-  virtual std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
-      const WebURLRequest&,
-      SingleThreadTaskRunnerRefPtr) {
+  virtual std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() {
     NOTREACHED();
     return nullptr;
   }

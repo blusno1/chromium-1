@@ -67,7 +67,7 @@ enum {
 };
 
 static void ReleaseMailboxImageResource(
-    RefPtr<blink::StaticBitmapImage>&& image,
+    scoped_refptr<blink::StaticBitmapImage>&& image,
     bool lost_resource) {
   if (lost_resource)
     image->Abandon();
@@ -141,16 +141,10 @@ static sk_sp<SkSurface> CreateSkSurface(GrContext* gr,
   if (gr)
     gr->resetContext();
 
-  // If we need color correction for all color spaces, we set the proper color
-  // space when creating the surface. If color correct rendering is only toward
-  // SRGB, we leave the surface with no color space. The painting canvas will
-  // get wrapped with a proper SkColorSpaceXformCanvas in GetOrCreateSurface().
-  sk_sp<SkColorSpace> color_space = nullptr;
-  if (RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled())
-    color_space = color_params.GetSkColorSpaceForSkSurfaces();
   SkImageInfo info = SkImageInfo::Make(
       size.Width(), size.Height(), color_params.GetSkColorType(),
-      color_params.GetSkAlphaType(), color_space);
+      color_params.GetSkAlphaType(),
+      color_params.GetSkColorSpaceForSkSurfaces());
   SkSurfaceProps disable_lcd_props(0, kUnknown_SkPixelGeometry);
   sk_sp<SkSurface> surface;
 
@@ -184,7 +178,7 @@ Canvas2DLayerBridge::Canvas2DLayerBridge(const IntSize& size,
     : ImageBufferSurface(size, color_params),
       logger_(WTF::WrapUnique(new Logger)),
       weak_ptr_factory_(this),
-      image_buffer_(0),
+      image_buffer_(nullptr),
       msaa_sample_count_(msaa_sample_count),
       bytes_allocated_(0),
       have_recorded_draw_commands_(false),
@@ -307,7 +301,7 @@ bool Canvas2DLayerBridge::PrepareGpuMemoryBufferMailboxFromImage(
       context_provider_wrapper_->ContextProvider()->GetGrContext();
   gr_context->flush();
 
-  RefPtr<ImageInfo> image_info = CreateGpuMemoryBufferBackedTexture();
+  scoped_refptr<ImageInfo> image_info = CreateGpuMemoryBufferBackedTexture();
   if (!image_info)
     return false;
 
@@ -351,10 +345,11 @@ bool Canvas2DLayerBridge::PrepareGpuMemoryBufferMailboxFromImage(
   return true;
 }
 
-RefPtr<Canvas2DLayerBridge::ImageInfo>
+scoped_refptr<Canvas2DLayerBridge::ImageInfo>
 Canvas2DLayerBridge::CreateGpuMemoryBufferBackedTexture() {
   if (!image_info_cache_.IsEmpty()) {
-    RefPtr<Canvas2DLayerBridge::ImageInfo> info = image_info_cache_.back();
+    scoped_refptr<Canvas2DLayerBridge::ImageInfo> info =
+        image_info_cache_.back();
     image_info_cache_.pop_back();
     return info;
   }
@@ -407,7 +402,7 @@ void Canvas2DLayerBridge::ClearCHROMIUMImageCache() {
 }
 
 bool Canvas2DLayerBridge::PrepareMailboxFromImage(
-    RefPtr<StaticBitmapImage>&& image,
+    scoped_refptr<StaticBitmapImage>&& image,
     MailboxInfo* mailbox_info,
     viz::TextureMailbox* out_mailbox) {
   if (!context_provider_wrapper_)
@@ -597,13 +592,7 @@ SkSurface* Canvas2DLayerBridge::GetOrCreateSurface(AccelerationHint hint) {
                              &surface_is_accelerated);
   if (!surface_)
     return nullptr;
-  if (!color_params_.LinearPixelMath()) {
-    surface_paint_canvas_ = WTF::WrapUnique(new SkiaPaintCanvas(
-        surface_->getCanvas(), color_params_.GetSkColorSpace()));
-  } else {
-    surface_paint_canvas_ =
-        WTF::WrapUnique(new SkiaPaintCanvas(surface_->getCanvas()));
-  }
+  surface_paint_canvas_ = color_params_.WrapCanvas(surface_->getCanvas());
 
   if (surface_) {
     // Always save an initial frame, to support resetting the top level matrix
@@ -823,14 +812,14 @@ void Canvas2DLayerBridge::FlushRecordingOnly() {
     // space using a SkCreateColorSpaceXformCanvas. This ensures blending will
     // be done using target space pixel values.
     SkCanvas* canvas = GetOrCreateSurface()->getCanvas();
-    std::unique_ptr<SkCanvas> color_transform_canvas;
-    if (!color_params_.LinearPixelMath()) {
-      color_transform_canvas = SkCreateColorSpaceXformCanvas(
-          canvas, color_params_.GetSkColorSpace());
-      canvas = color_transform_canvas.get();
+    std::unique_ptr<PaintCanvas> color_transform_canvas =
+        color_params_.WrapCanvas(canvas);
+
+    {
+      sk_sp<PaintRecord> recording = recorder_->finishRecordingAsPicture();
+      color_transform_canvas->drawPicture(recording);
     }
 
-    recorder_->finishRecordingAsPicture()->Playback(canvas);
     if (is_deferral_enabled_)
       StartRecording();
     have_recorded_draw_commands_ = false;
@@ -979,7 +968,7 @@ bool Canvas2DLayerBridge::PrepareTextureMailbox(
   if ((IsHibernating() || software_rendering_while_hidden_) && IsHidden())
     return false;
 
-  RefPtr<StaticBitmapImage> image =
+  scoped_refptr<StaticBitmapImage> image =
       NewImageSnapshot(kPreferAcceleration, kSnapshotReasonUnknown);
   if (!image || !image->IsValid() || !image->IsTextureBacked())
     return false;
@@ -1036,7 +1025,7 @@ void Canvas2DLayerBridge::ReleaseFrameResources(
   }
 
   if (RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled()) {
-    RefPtr<ImageInfo>& info = released_mailbox_info->image_info_;
+    scoped_refptr<ImageInfo>& info = released_mailbox_info->image_info_;
     if (info) {
       if (lost_resource || context_or_layer_bridge_lost) {
         DeleteCHROMIUMImage(context_provider_wrapper,
@@ -1130,7 +1119,7 @@ void Canvas2DLayerBridge::DoPaintInvalidation(const FloatRect& dirty_rect) {
     layer_->Layer()->InvalidateRect(EnclosingIntRect(dirty_rect));
 }
 
-RefPtr<StaticBitmapImage> Canvas2DLayerBridge::NewImageSnapshot(
+scoped_refptr<StaticBitmapImage> Canvas2DLayerBridge::NewImageSnapshot(
     AccelerationHint hint,
     SnapshotReason) {
   if (IsHibernating())
@@ -1148,7 +1137,7 @@ RefPtr<StaticBitmapImage> Canvas2DLayerBridge::NewImageSnapshot(
     GetOrCreateSurface()->notifyContentWillChange(
         SkSurface::kRetain_ContentChangeMode);
   }
-  RefPtr<StaticBitmapImage> image = StaticBitmapImage::Create(
+  scoped_refptr<StaticBitmapImage> image = StaticBitmapImage::Create(
       surface_->makeImageSnapshot(), ContextProviderWrapper());
   if (image->IsTextureBacked()) {
     static_cast<AcceleratedStaticBitmapImage*>(image.get())

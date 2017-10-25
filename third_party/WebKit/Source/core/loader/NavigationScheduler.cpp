@@ -57,7 +57,7 @@
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCachePolicy.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 
 namespace blink {
 
@@ -177,8 +177,8 @@ class ScheduledRedirect final : public ScheduledURLNavigation {
     request.SetReplacesCurrentItem(ReplacesCurrentItem());
     if (EqualIgnoringFragmentIdentifier(frame->GetDocument()->Url(),
                                         request.GetResourceRequest().Url())) {
-      request.GetResourceRequest().SetCachePolicy(
-          WebCachePolicy::kValidatingCacheData);
+      request.GetResourceRequest().SetCacheMode(
+          mojom::FetchCacheMode::kValidateCache);
     }
     request.SetClientRedirect(ClientRedirectPolicy::kClientRedirect);
     MaybeLogScheduledNavigationClobber(
@@ -258,7 +258,7 @@ class ScheduledReload final : public ScheduledNavigation {
 
   KURL Url() const override { return frame_->GetDocument()->Url(); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(frame_);
     ScheduledNavigation::Trace(visitor);
   }
@@ -317,7 +317,7 @@ class ScheduledFormSubmission final : public ScheduledNavigation {
 
   KURL Url() const override { return submission_->RequestURL(); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(submission_);
     ScheduledNavigation::Trace(visitor);
   }
@@ -536,12 +536,13 @@ void NavigationScheduler::StartTimer() {
 
   // wrapWeakPersistent(this) is safe because a posted task is canceled when the
   // task handle is destroyed on the dtor of this NavigationScheduler.
-  navigate_task_handle_ =
-      frame_->FrameScheduler()->LoadingTaskRunner()->PostDelayedCancellableTask(
-          BLINK_FROM_HERE,
-          WTF::Bind(&NavigationScheduler::NavigateTask,
-                    WrapWeakPersistent(this)),
-          TimeDelta::FromSecondsD(redirect_->Delay()));
+  navigate_task_handle_ = frame_->FrameScheduler()
+                              ->GetTaskRunner(TaskType::kUnspecedLoading)
+                              ->PostDelayedCancellableTask(
+                                  BLINK_FROM_HERE,
+                                  WTF::Bind(&NavigationScheduler::NavigateTask,
+                                            WrapWeakPersistent(this)),
+                                  TimeDelta::FromSecondsD(redirect_->Delay()));
 
   probe::frameScheduledNavigation(frame_, redirect_.Get());
 }
@@ -556,7 +557,7 @@ void NavigationScheduler::Cancel() {
   redirect_.Clear();
 }
 
-DEFINE_TRACE(NavigationScheduler) {
+void NavigationScheduler::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(redirect_);
 }

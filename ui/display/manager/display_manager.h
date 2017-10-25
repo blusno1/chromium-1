@@ -79,11 +79,16 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 #endif
   };
 
-  // How the second display will be used.
-  // 1) EXTENDED mode extends the desktop to the second dislpay.
-  // 2) MIRRORING mode copies the content of the primary display to
-  //    the 2nd display. (Software Mirroring).
-  // 3) UNIFIED mode creates single desktop across multiple displays.
+  // How secondary displays will be used.
+  // 1) EXTENDED mode extends the desktop onto additional displays, creating one
+  //    root window for each display. Each display has a shelf and status tray,
+  //    and each user window is only rendered on a single display.
+  // 2) MIRRORING mode copies the content of the primary display to the second
+  //    display via software mirroring. This only supports 2 displays for now.
+  // 3) UNIFIED mode creates a virtual desktop with a *single* root window that
+  //    spans multiple physical displays via software mirroring. The primary
+  //    physical display has a shelf and status tray, and user windows may
+  //    render spanning across multiple displays.
   enum MultiDisplayMode {
     EXTENDED = 0,
     MIRRORING,
@@ -97,7 +102,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 #if defined(OS_CHROMEOS)
   ~DisplayManager() override;
 #else
-  virtual ~DisplayManager();
+  ~DisplayManager();
 #endif
 
   DisplayLayoutStore* layout_store() { return layout_store_.get(); }
@@ -181,7 +186,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // the display resolution so that the caller needs to show a notification in
   // case the new resolution actually doesn't work.
   bool SetDisplayMode(int64_t display_id,
-                      const scoped_refptr<ManagedDisplayMode>& display_mode);
+                      const ManagedDisplayMode& display_mode);
 
   // Register per display properties.
   // |overscan_insets| is null if the display has no custom overscan insets.
@@ -212,21 +217,21 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
     return registered_internal_display_rotation_;
   }
 
-  // Returns the display mode of |display_id| which is currently used.
-  scoped_refptr<ManagedDisplayMode> GetActiveModeForDisplayId(
-      int64_t display_id) const;
+  // Fills in the display |mode| currently in use in |display_id| if found,
+  // returning true in that case, otherwise false.
+  bool GetActiveModeForDisplayId(int64_t display_id,
+                                 ManagedDisplayMode* mode) const;
 
-  // Returns the display's selected mode.
-  scoped_refptr<ManagedDisplayMode> GetSelectedModeForDisplayId(
-      int64_t display_id) const;
+  // Returns true and fills in the display's selected |mode| if found, or false.
+  bool GetSelectedModeForDisplayId(int64_t display_id,
+                                   ManagedDisplayMode* mode) const;
 
   // Sets the selected mode of |display_id| to |display_mode| if it's a
   // supported mode. This doesn't trigger reconfiguration or observers
   // notifications. This is suitable to be used from within an observer
   // notification to prevent reentrance to UpdateDisplaysWith().
-  void SetSelectedModeForDisplayId(
-      int64_t display_id,
-      const scoped_refptr<ManagedDisplayMode>& display_mode);
+  void SetSelectedModeForDisplayId(int64_t display_id,
+                                   const ManagedDisplayMode& display_mode);
 
   // Tells if the virtual resolution feature is enabled.
   bool IsDisplayUIScalingEnabled() const;
@@ -480,7 +485,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   std::map<int64_t, ManagedDisplayInfo> display_info_;
 
   // Selected display modes for displays. Key is the displays' ID.
-  std::map<int64_t, scoped_refptr<ManagedDisplayMode>> display_modes_;
+  std::map<int64_t, ManagedDisplayMode> display_modes_;
 
   // When set to true, the host window's resize event updates the display's
   // size. This is set to true when running on desktop environment (for
@@ -491,7 +496,12 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   MultiDisplayMode multi_display_mode_ = EXTENDED;
   MultiDisplayMode current_default_multi_display_mode_ = EXTENDED;
 
+  // When mirroring is enabled this is the id of the destination display.
   int64_t mirroring_display_id_ = kInvalidDisplayId;
+
+  // This is used in two distinct ways:
+  // 1. when mirroring is enabled this contains the destination display.
+  // 2. when unified mode is enabled this is the set of physical displays.
   Displays software_mirroring_display_list_;
 
   // Cached mirror mode for metrics changed notification.

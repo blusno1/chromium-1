@@ -112,11 +112,6 @@ class CommandBufferSetup {
     auto* command_line = base::CommandLine::ForCurrentProcess();
     ALLOW_UNUSED_LOCAL(command_line);
 
-#if defined(GPU_FUZZER_USE_PASSTHROUGH_CMD_DECODER)
-    command_line->AppendSwitch(switches::kUsePassthroughCmdDecoder);
-    recreate_context_ = true;
-#endif
-
 #if defined(GPU_FUZZER_USE_ANGLE)
     command_line->AppendSwitchASCII(switches::kUseGL,
                                     gl::kGLImplementationANGLEName);
@@ -130,6 +125,7 @@ class CommandBufferSetup {
     CHECK(gl::init::InitializeGLOneOffImplementation(
         gl::kGLImplementationSwiftShaderGL, false, false, false, true));
 #endif
+    discardable_manager_ = std::make_unique<ServiceDiscardableManager>();
 
 #if !defined(GPU_FUZZER_USE_STUB)
     surface_ = new gl::PbufferGLSurfaceEGL(gfx::Size());
@@ -157,7 +153,7 @@ class CommandBufferSetup {
         &translator_cache_, &completeness_cache_, feature_info,
         true /* bind_generates_resource */, &image_manager_,
         nullptr /* image_factory */, nullptr /* progress_reporter */,
-        GpuFeatureInfo(), &discardable_manager_);
+        GpuFeatureInfo(), discardable_manager_.get());
     command_buffer_.reset(new CommandBufferDirect(
         context_group->transfer_buffer_manager(), &sync_point_manager_));
 
@@ -178,16 +174,12 @@ class CommandBufferSetup {
     attrib_helper.alpha_size = 8;
     attrib_helper.depth_size = 0;
     attrib_helper.stencil_size = 0;
-#if defined(GPU_FUZZER_USE_SWIFTSHADER)
-    attrib_helper.context_type = gles2::CONTEXT_TYPE_OPENGLES2;
-#else
     attrib_helper.context_type = gles2::CONTEXT_TYPE_OPENGLES3;
-#endif
 
-    bool result =
+    auto result =
         decoder_->Initialize(surface_.get(), context_.get(), true,
                              gles2::DisallowedFeatures(), attrib_helper);
-    CHECK(result);
+    CHECK_EQ(result, gpu::ContextResult::kSuccess);
     decoder_->set_max_bucket_size(8 << 20);
     context_group->buffer_manager()->set_max_buffer_size(8 << 20);
     if (!vertex_translator_) {
@@ -275,7 +267,7 @@ class CommandBufferSetup {
   scoped_refptr<gl::GLShareGroup> share_group_;
   SyncPointManager sync_point_manager_;
   gles2::ImageManager image_manager_;
-  ServiceDiscardableManager discardable_manager_;
+  std::unique_ptr<ServiceDiscardableManager> discardable_manager_;
 
   bool recreate_context_ = false;
   scoped_refptr<gl::GLSurface> surface_;

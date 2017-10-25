@@ -67,7 +67,7 @@ void StyleGeneratedImage::RemoveClient(ImageResourceObserver* observer) {
   image_generator_value_->RemoveClient(observer);
 }
 
-RefPtr<Image> StyleGeneratedImage::GetImage(
+scoped_refptr<Image> StyleGeneratedImage::GetImage(
     const ImageResourceObserver& observer,
     const Document& document,
     const ComputedStyle& style,
@@ -82,7 +82,7 @@ bool StyleGeneratedImage::KnownToBeOpaque(const Document& document,
   return image_generator_value_->KnownToBeOpaque(document, style);
 }
 
-DEFINE_TRACE(StyleGeneratedImage) {
+void StyleGeneratedImage::Trace(blink::Visitor* visitor) {
   visitor->Trace(image_generator_value_);
   StyleImage::Trace(visitor);
 }

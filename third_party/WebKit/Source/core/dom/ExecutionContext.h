@@ -74,7 +74,7 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   MERGE_GARBAGE_COLLECTED_MIXINS();
 
  public:
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   static ExecutionContext* From(const ScriptState*);
 
@@ -193,6 +193,8 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   virtual service_manager::InterfaceProvider* GetInterfaceProvider() {
     return nullptr;
   }
+
+  scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType);
 
  protected:
   ExecutionContext();

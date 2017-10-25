@@ -8,6 +8,7 @@
 #include "core/layout/ng/inline/ng_inline_layout_algorithm.h"
 #include "core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "core/layout/ng/inline/ng_physical_text_fragment.h"
+#include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_layout_result.h"
@@ -95,27 +96,25 @@ class NGInlineNodeTest : public RenderingTest {
     return node;
   }
 
-  void CreateLine(NGInlineNode node,
-                  Vector<RefPtr<const NGPhysicalTextFragment>>* fragments_out) {
+  void CreateLine(
+      NGInlineNode node,
+      Vector<scoped_refptr<const NGPhysicalTextFragment>>* fragments_out) {
     NGPhysicalSize icb_size(LayoutUnit(200), LayoutUnit(200));
 
-    RefPtr<NGConstraintSpace> constraint_space =
+    scoped_refptr<NGConstraintSpace> constraint_space =
         NGConstraintSpaceBuilder(kHorizontalTopBottom, icb_size)
             .ToConstraintSpace(kHorizontalTopBottom);
-    RefPtr<NGLayoutResult> result =
+    scoped_refptr<NGLayoutResult> result =
         NGInlineLayoutAlgorithm(node, *constraint_space).Layout();
 
-    const NGPhysicalBoxFragment* container =
-        ToNGPhysicalBoxFragment(result->PhysicalFragment().get());
-    EXPECT_EQ(container->Children().size(), 1u);
     const NGPhysicalLineBoxFragment* line =
-        ToNGPhysicalLineBoxFragment(container->Children()[0].get());
+        ToNGPhysicalLineBoxFragment(result->PhysicalFragment().get());
     for (const auto& child : line->Children()) {
       fragments_out->push_back(ToNGPhysicalTextFragment(child.get()));
     }
   }
 
-  RefPtr<const ComputedStyle> style_;
+  scoped_refptr<const ComputedStyle> style_;
   LayoutNGBlockFlow* layout_block_flow_ = nullptr;
   LayoutObject* layout_object_ = nullptr;
   FontCachePurgePreventer purge_preventer_;
@@ -310,13 +309,13 @@ TEST_F(NGInlineNodeTest, SegmentBidiIsolate) {
 
 TEST_F(NGInlineNodeTest, CreateLineBidiIsolate) {
   UseLayoutObjectAndAhem();
-  RefPtr<ComputedStyle> style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
   style->SetLineHeight(Length(1, kFixed));
   style->GetFont().Update(nullptr);
   NGInlineNodeForTest node = CreateInlineNode();
   node = CreateBidiIsolateNode(node, style.get(), layout_object_);
   node.ShapeText();
-  Vector<RefPtr<const NGPhysicalTextFragment>> fragments;
+  Vector<scoped_refptr<const NGPhysicalTextFragment>> fragments;
   CreateLine(node, &fragments);
   ASSERT_EQ(5u, fragments.size());
   TEST_TEXT_FRAGMENT(fragments[0], 0u, 0u, 6u, TextDirection::kLtr);
@@ -330,6 +329,7 @@ TEST_F(NGInlineNodeTest, MinMaxSize) {
   LoadAhem();
   SetupHtml("t", "<div id=t style='font:10px Ahem'>AB CDEF</div>");
   NGInlineNodeForTest node = CreateInlineNode();
+  node.PrepareLayout();
   MinMaxSize sizes = node.ComputeMinMaxSize();
   EXPECT_EQ(40, sizes.min_size);
   EXPECT_EQ(70, sizes.max_size);
@@ -339,6 +339,7 @@ TEST_F(NGInlineNodeTest, MinMaxSizeElementBoundary) {
   LoadAhem();
   SetupHtml("t", "<div id=t style='font:10px Ahem'>A B<span>C D</span></div>");
   NGInlineNodeForTest node = CreateInlineNode();
+  node.PrepareLayout();
   MinMaxSize sizes = node.ComputeMinMaxSize();
   // |min_content| should be the width of "BC" because there is an element
   // boundary between "B" and "C" but no break opportunities.

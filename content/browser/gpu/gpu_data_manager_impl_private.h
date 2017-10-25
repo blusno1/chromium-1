@@ -43,14 +43,12 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   void InitializeForTesting(const gpu::GpuControlListData& gpu_blacklist_data,
                             const gpu::GPUInfo& gpu_info);
   bool IsFeatureBlacklisted(int feature) const;
-  bool IsFeatureEnabled(int feature) const;
-  bool IsWebGLEnabled() const;
-  bool IsWebGL2Enabled() const;
   gpu::GPUInfo GetGPUInfo() const;
   bool GpuAccessAllowed(std::string* reason) const;
   void RequestCompleteGpuInfoIfNeeded();
   bool IsEssentialGpuInfoAvailable() const;
   bool IsCompleteGpuInfoAvailable() const;
+  bool IsGpuFeatureInfoAvailable() const { return gpu_feature_info_available_; }
   void RequestVideoMemoryUsageStatsUpdate(
       const base::Callback<void(const gpu::VideoMemoryUsageStats& stats)>&
           callback) const;
@@ -72,6 +70,7 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   void UpdateGpuInfo(const gpu::GPUInfo& gpu_info);
   void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info);
   gpu::GpuFeatureInfo GetGpuFeatureInfo() const;
+  gpu::GpuFeatureStatus GetFeatureStatus(gpu::GpuFeatureType feature) const;
 
   void AppendRendererCommandLine(base::CommandLine* command_line) const;
 
@@ -80,9 +79,6 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   void UpdateRendererWebPrefs(WebPreferences* prefs) const;
 
   void UpdateGpuPreferences(gpu::GpuPreferences* gpu_preferences) const;
-
-  std::string GetBlacklistVersion() const;
-  std::string GetDriverBugListVersion() const;
 
   void GetBlacklistReasons(base::ListValue* reasons) const;
 
@@ -231,6 +227,7 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   // Eventually |blacklisted_features_| should be folded in to this.
   gpu::GpuFeatureInfo gpu_feature_info_;
+  bool gpu_feature_info_available_ = false;
 
   gpu::GPUInfo gpu_info_;
 

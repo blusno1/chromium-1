@@ -81,11 +81,11 @@ class StylePendingImage final : public StyleImage {
   bool UsesImageContainerSize() const override { return false; }
   void AddClient(ImageResourceObserver*) override {}
   void RemoveClient(ImageResourceObserver*) override {}
-  RefPtr<Image> GetImage(const ImageResourceObserver&,
-                         const Document&,
-                         const ComputedStyle&,
-                         const IntSize& container_size,
-                         const LayoutSize* logical_size) const override {
+  scoped_refptr<Image> GetImage(const ImageResourceObserver&,
+                                const Document&,
+                                const ComputedStyle&,
+                                const IntSize& container_size,
+                                const LayoutSize* logical_size) const override {
     NOTREACHED();
     return nullptr;
   }
@@ -93,7 +93,7 @@ class StylePendingImage final : public StyleImage {
     return false;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(value_);
     StyleImage::Trace(visitor);
   }

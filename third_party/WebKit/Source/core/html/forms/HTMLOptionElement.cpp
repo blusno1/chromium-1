@@ -89,7 +89,7 @@ HTMLOptionElement* HTMLOptionElement::CreateForJSConstructor(
 
 void HTMLOptionElement::AttachLayoutTree(AttachContext& context) {
   AttachContext option_context(context);
-  RefPtr<ComputedStyle> resolved_style;
+  scoped_refptr<ComputedStyle> resolved_style;
   if (!context.resolved_style && ParentComputedStyle()) {
     if (HTMLSelectElement* select = OwnerSelectElement())
       select->UpdateListOnLayoutObject();
@@ -173,7 +173,7 @@ int HTMLOptionElement::index() const {
     return 0;
 
   int option_index = 0;
-  for (const auto& option : select_element->GetOptionList()) {
+  for (auto* const option : select_element->GetOptionList()) {
     if (option == this)
       return option_index;
     ++option_index;

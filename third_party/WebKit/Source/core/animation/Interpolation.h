@@ -64,7 +64,6 @@ class CORE_EXPORT Interpolation : public RefCounted<Interpolation> {
   virtual void Interpolate(int iteration, double fraction) = 0;
 
   virtual bool IsInvalidatableInterpolation() const { return false; }
-  virtual bool IsLegacyStyleInterpolation() const { return false; }
   virtual bool IsTransitionInterpolation() const { return false; }
 
   virtual const PropertyHandle& GetProperty() const = 0;
@@ -79,7 +78,7 @@ class CORE_EXPORT Interpolation : public RefCounted<Interpolation> {
   Interpolation() {}
 };
 
-using ActiveInterpolations = Vector<RefPtr<Interpolation>, 1>;
+using ActiveInterpolations = Vector<scoped_refptr<Interpolation>, 1>;
 using ActiveInterpolationsMap = HashMap<PropertyHandle, ActiveInterpolations>;
 
 }  // namespace blink

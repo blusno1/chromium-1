@@ -103,8 +103,9 @@ class WorkerThreadableLoader final : public ThreadableLoader {
   void Start(const ResourceRequest&) override;
   void OverrideTimeout(unsigned long timeout) override;
   void Cancel() override;
+  void Detach() override;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   enum BlockingBehavior { kLoadSynchronously, kLoadAsynchronously };
@@ -118,7 +119,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
                                            CrossThreadClosure) = 0;
     virtual void Abort() = 0;
 
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
+    virtual void Trace(blink::Visitor* visitor) {}
   };
   class AsyncTaskForwarder;
   struct TaskWithLocation;
@@ -139,12 +140,12 @@ class WorkerThreadableLoader final : public ThreadableLoader {
    public:
     static void CreateAndStart(WorkerThreadableLoader*,
                                ThreadableLoadingContext*,
-                               RefPtr<WebTaskRunner>,
+                               scoped_refptr<WebTaskRunner>,
                                WorkerThreadLifecycleContext*,
                                std::unique_ptr<CrossThreadResourceRequestData>,
                                const ThreadableLoaderOptions&,
                                const ResourceLoaderOptions&,
-                               RefPtr<WaitableEventWithTasks>);
+                               scoped_refptr<WaitableEventWithTasks>);
     ~MainThreadLoaderHolder() override;
 
     void OverrideTimeout(unsigned long timeout_millisecond);
@@ -167,7 +168,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
 
     void ContextDestroyed(WorkerThreadLifecycleContext*) override;
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*) override;
 
    private:
     MainThreadLoaderHolder(TaskForwarder*, WorkerThreadLifecycleContext*);

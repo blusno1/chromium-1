@@ -32,6 +32,7 @@
 
 #include <memory>
 #include "bindings/core/v8/V8BindingForTesting.h"
+#include "build/build_config.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/NodeWithIndex.h"
 #include "core/dom/SynchronousMutationObserver.h"
@@ -102,7 +103,7 @@ class TestSynchronousMutationObserver
           node_to_be_removed_(node_with_index.GetNode()),
           offset_(offset) {}
 
-    DEFINE_INLINE_TRACE() {
+    void Trace(blink::Visitor* visitor) {
       visitor->Trace(node_);
       visitor->Trace(node_to_be_removed_);
     }
@@ -124,7 +125,7 @@ class TestSynchronousMutationObserver
           old_length_(old_length),
           new_length_(new_length) {}
 
-    DEFINE_INLINE_TRACE() { visitor->Trace(node_); }
+    void Trace(blink::Visitor* visitor) { visitor->Trace(node_); }
   };
 
   TestSynchronousMutationObserver(Document&);
@@ -164,7 +165,7 @@ class TestSynchronousMutationObserver
     return updated_character_data_records_;
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   // Implement |SynchronousMutationObserver| member functions.
@@ -241,7 +242,7 @@ void TestSynchronousMutationObserver::NodeWillBeRemoved(Node& node) {
   removed_nodes_.push_back(&node);
 }
 
-DEFINE_TRACE(TestSynchronousMutationObserver) {
+void TestSynchronousMutationObserver::Trace(blink::Visitor* visitor) {
   visitor->Trace(children_changed_nodes_);
   visitor->Trace(merge_text_nodes_records_);
   visitor->Trace(move_tree_to_new_document_nodes_);
@@ -265,7 +266,7 @@ class TestDocumentShutdownObserver
     return context_destroyed_called_counter_;
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   // Implement |DocumentShutdownObserver| member functions.
@@ -284,7 +285,7 @@ void TestDocumentShutdownObserver::ContextDestroyed(Document*) {
   ++context_destroyed_called_counter_;
 }
 
-DEFINE_TRACE(TestDocumentShutdownObserver) {
+void TestDocumentShutdownObserver::Trace(blink::Visitor* visitor) {
   DocumentShutdownObserver::Trace(visitor);
 }
 
@@ -319,7 +320,8 @@ class MockDocumentValidationMessageClient
   }
   void WillBeDestroyed() override {}
 
-  // DEFINE_INLINE_VIRTUAL_TRACE() { ValidationMessageClient::trace(visitor); }
+  // virtual void Trace(blink::Visitor* visitor) {
+  // ValidationMessageClient::trace(visitor); }
 };
 
 class MockWebApplicationCacheHost : public blink::WebApplicationCacheHost {
@@ -402,7 +404,7 @@ TEST_F(DocumentTest, PrintRelayout) {
 // specification.
 TEST_F(DocumentTest, LinkManifest) {
   // Test the default result.
-  EXPECT_EQ(0, GetDocument().LinkManifest());
+  EXPECT_EQ(nullptr, GetDocument().LinkManifest());
 
   // Check that we use the first manifest with <link rel=manifest>
   HTMLLinkElement* link = HTMLLinkElement::Create(GetDocument(), false);
@@ -454,9 +456,9 @@ TEST_F(DocumentTest, LinkManifest) {
   // Check that link outside of the <head> are ignored.
   GetDocument().head()->RemoveChild(link);
   GetDocument().head()->RemoveChild(link2);
-  EXPECT_EQ(0, GetDocument().LinkManifest());
+  EXPECT_EQ(nullptr, GetDocument().LinkManifest());
   GetDocument().body()->AppendChild(link);
-  EXPECT_EQ(0, GetDocument().LinkManifest());
+  EXPECT_EQ(nullptr, GetDocument().LinkManifest());
   GetDocument().head()->AppendChild(link);
   GetDocument().head()->AppendChild(link2);
 
@@ -565,7 +567,7 @@ TEST_F(DocumentTest, StyleVersion) {
 }
 
 TEST_F(DocumentTest, EnforceSandboxFlags) {
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("http://example.test");
   GetDocument().SetSecurityOrigin(origin);
   SandboxFlags mask = kSandboxNavigation;
@@ -834,7 +836,7 @@ TEST_F(DocumentTest, ValidationMessageCleanup) {
 }
 
 TEST_F(DocumentTest, SandboxDisablesAppCache) {
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("https://test.com");
   GetDocument().SetSecurityOrigin(origin);
   SandboxFlags mask = kSandboxOrigin;
@@ -854,7 +856,7 @@ TEST_F(DocumentTest, SandboxDisablesAppCache) {
 
 TEST_F(DocumentTest, SuboriginDisablesAppCache) {
   ScopedSuboriginsForTest suborigins(true);
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("https://test.com");
   Suborigin suborigin;
   suborigin.SetName("foobar");
@@ -936,6 +938,40 @@ TEST_F(DocumentTest, ViewportPropagationNoRecalc) {
   int new_element_count = GetDocument().GetStyleEngine().StyleForElementCount();
 
   EXPECT_EQ(1, new_element_count - old_element_count);
+}
+
+// Android does not support non-overlay top-level scrollbars.
+#if defined(OS_ANDROID)
+#define DISABLE_ON_ANDROID(test_name) DISABLED_##test_name
+#else
+#define DISABLE_ON_ANDROID(test_name) test_name
+#endif  // defined(OS_ANDROID)
+
+// TODO(pdr): Add support to the root layer scrolling codepaths so this test
+// passes (https://crbug.com/776607).
+TEST_F(DocumentTest, DISABLE_ON_ANDROID(ElementFromPointOnScrollbar)) {
+  // This test requires that scrollbars take up space.
+  ScopedOverlayScrollbarsForTest no_overlay_scrollbars(false);
+
+  SetHtmlInnerHTML(
+      "<style>"
+      "  body { margin: 0; }"
+      "</style>"
+      "<div id='content'>content</div>");
+
+  // A hit test close to the bottom of the page without scrollbars should hit
+  // the body element.
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 590), GetDocument().body());
+
+  // Add width which will cause a horizontal scrollbar.
+  auto* content = GetDocument().getElementById("content");
+  content->setAttribute("style", "width: 101%;");
+
+  // A hit test on the horizontal scrollbar should not return an element because
+  // it is outside the viewport.
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 590), nullptr);
+  // A hit test above the horizontal scrollbar should hit the body element.
+  EXPECT_EQ(GetDocument().ElementFromPoint(1, 580), GetDocument().body());
 }
 
 }  // namespace blink

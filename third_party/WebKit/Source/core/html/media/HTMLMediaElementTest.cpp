@@ -17,7 +17,7 @@ enum class MediaTestParam { kAudio, kVideo };
 
 class HTMLMediaElementTest : public ::testing::TestWithParam<MediaTestParam> {
  protected:
-  void SetUp() {
+  void SetUp() override {
     dummy_page_holder_ = DummyPageHolder::Create();
 
     if (GetParam() == MediaTestParam::kAudio)
@@ -28,7 +28,7 @@ class HTMLMediaElementTest : public ::testing::TestWithParam<MediaTestParam> {
 
   HTMLMediaElement* Media() { return media_.Get(); }
   void SetCurrentSrc(const String& src) {
-    KURL url(kParsedURLString, src);
+    KURL url(src);
     Media()->current_src_ = url;
   }
 

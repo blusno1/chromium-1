@@ -26,7 +26,7 @@
 #include "core/CoreExport.h"
 #include "core/css/CSSKeyframesRule.h"
 #include "core/css/MediaQueryEvaluator.h"
-#include "core/css/RuleFeature.h"
+#include "core/css/RuleFeatureSet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/resolver/MediaQueryResult.h"
 #include "platform/heap/HeapLinkedStack.h"
@@ -59,7 +59,7 @@ class MinimalRuleData {
   MinimalRuleData(StyleRule* rule, unsigned selector_index, AddRuleFlags flags)
       : rule_(rule), selector_index_(selector_index), flags_(flags) {}
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   Member<StyleRule> rule_;
   unsigned selector_index_;
@@ -112,7 +112,7 @@ class CORE_EXPORT RuleData {
     return descendant_selector_identifier_hashes_;
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   Member<StyleRule> rule_;
@@ -167,11 +167,6 @@ class CORE_EXPORT RuleSet : public GarbageCollectedFinalized<RuleSet> {
   void AddRule(StyleRule*, unsigned selector_index, AddRuleFlags);
 
   const RuleFeatureSet& Features() const { return features_; }
-
-  void UpdateInvalidationSetsForContentAttribute(
-      const StylePropertySet* property_set) {
-    features_.UpdateInvalidationSetsForContentAttribute(property_set);
-  }
 
   const HeapTerminatedArray<RuleData>* IdRules(const AtomicString& key) const {
     DCHECK(!pending_rules_);
@@ -257,7 +252,7 @@ class CORE_EXPORT RuleSet : public GarbageCollectedFinalized<RuleSet> {
   void Show() const;
 #endif
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   using PendingRuleMap =
@@ -290,7 +285,7 @@ class CORE_EXPORT RuleSet : public GarbageCollectedFinalized<RuleSet> {
     PendingRuleMap tag_rules;
     PendingRuleMap shadow_pseudo_element_rules;
 
-    DECLARE_TRACE();
+    void Trace(blink::Visitor*);
 
    private:
     PendingRuleMaps() {}

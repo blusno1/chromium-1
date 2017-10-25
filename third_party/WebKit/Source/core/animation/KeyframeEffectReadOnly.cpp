@@ -170,7 +170,7 @@ void KeyframeEffectReadOnly::ApplyEffects() {
                              IterationDuration(),
                              sampled_effect_->MutableInterpolations());
   } else {
-    Vector<RefPtr<Interpolation>> interpolations;
+    Vector<scoped_refptr<Interpolation>> interpolations;
     model_->Sample(clampTo<int>(iteration, 0), Progress(), IterationDuration(),
                    interpolations);
     if (!interpolations.IsEmpty()) {
@@ -367,7 +367,7 @@ void KeyframeEffectReadOnly::AttachCompositedLayers() {
   CompositorAnimations::AttachCompositedLayers(*target_, *GetAnimation());
 }
 
-DEFINE_TRACE(KeyframeEffectReadOnly) {
+void KeyframeEffectReadOnly::Trace(blink::Visitor* visitor) {
   visitor->Trace(target_);
   visitor->Trace(model_);
   visitor->Trace(sampled_effect_);

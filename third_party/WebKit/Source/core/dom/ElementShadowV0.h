@@ -56,8 +56,8 @@ class CORE_EXPORT ElementShadowV0 final
   void DidDistributeNode(const Node*, V0InsertionPoint*);
   void ClearDistribution();
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   explicit ElementShadowV0(ElementShadow&);

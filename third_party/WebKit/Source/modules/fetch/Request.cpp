@@ -11,11 +11,11 @@
 #include "modules/fetch/FetchManager.h"
 #include "modules/fetch/RequestInit.h"
 #include "platform/bindings/V8PrivateProperty.h"
-#include "platform/http_names.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/network/http_names.h"
 #include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/OriginAccessEntry.h"
 #include "platform/weborigin/Referrer.h"
@@ -73,7 +73,7 @@ Request* Request::CreateRequestWithRequestOrString(
   // "Let |request| be |input|'s request, if |input| is a Request object,
   // and a new request otherwise."
 
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       ExecutionContext::From(script_state)->GetSecurityOrigin();
 
   // TODO(yhirano): Implement the following steps:
@@ -261,17 +261,17 @@ Request* Request::CreateRequestWithRequestOrString(
 
   // "If |init|'s cache member is present, set |request|'s cache mode to it."
   if (init.CacheMode() == "default") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeDefault);
+    request->SetCacheMode(mojom::FetchCacheMode::kDefault);
   } else if (init.CacheMode() == "no-store") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeNoStore);
+    request->SetCacheMode(mojom::FetchCacheMode::kNoStore);
   } else if (init.CacheMode() == "reload") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeReload);
+    request->SetCacheMode(mojom::FetchCacheMode::kBypassCache);
   } else if (init.CacheMode() == "no-cache") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeNoCache);
+    request->SetCacheMode(mojom::FetchCacheMode::kValidateCache);
   } else if (init.CacheMode() == "force-cache") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeForceCache);
+    request->SetCacheMode(mojom::FetchCacheMode::kForceCache);
   } else if (init.CacheMode() == "only-if-cached") {
-    request->SetCacheMode(WebURLRequest::kFetchRequestCacheModeOnlyIfCached);
+    request->SetCacheMode(mojom::FetchCacheMode::kOnlyIfCached);
   }
 
   // "If |init|'s redirect member is present, set |request|'s redirect mode
@@ -288,6 +288,9 @@ Request* Request::CreateRequestWithRequestOrString(
   // integrity metadata to it."
   if (!init.Integrity().IsNull())
     request->SetIntegrity(init.Integrity());
+
+  if (init.Keepalive().has_value())
+    request->SetKeepalive(*init.Keepalive());
 
   // "If |init|'s method member is present, let |method| be it and run these
   // substeps:"
@@ -379,6 +382,9 @@ Request* Request::CreateRequestWithRequestOrString(
 
   // "If |init|'s body member is present, run these substeps:"
   if (init.GetBody()) {
+    // TODO(yhirano): Throw if keepalive flag is set and body is a
+    // ReadableStream. We don't support body stream setting for Request yet.
+
     // Perform the following steps:
     // - "Let |stream| and |Content-Type| be the result of extracting
     //   |init|'s body member."
@@ -412,7 +418,7 @@ Request* Request::CreateRequestWithRequestOrString(
   // non-null, run these substeps:"
   if (input_request && input_request->BodyBuffer()) {
     // "Let |dummyStream| be an empty ReadableStream object."
-    auto dummy_stream =
+    auto* dummy_stream =
         new BodyStreamBuffer(script_state, BytesConsumer::CreateClosed());
     // "Set |input|'s request's body to a new body whose stream is
     // |dummyStream|."
@@ -653,18 +659,22 @@ String Request::credentials() const {
 String Request::cache() const {
   // "The cache attribute's getter must return request's cache mode."
   switch (request_->CacheMode()) {
-    case WebURLRequest::kFetchRequestCacheModeDefault:
+    case mojom::FetchCacheMode::kDefault:
       return "default";
-    case WebURLRequest::kFetchRequestCacheModeNoStore:
+    case mojom::FetchCacheMode::kNoStore:
       return "no-store";
-    case WebURLRequest::kFetchRequestCacheModeReload:
+    case mojom::FetchCacheMode::kBypassCache:
       return "reload";
-    case WebURLRequest::kFetchRequestCacheModeNoCache:
+    case mojom::FetchCacheMode::kValidateCache:
       return "no-cache";
-    case WebURLRequest::kFetchRequestCacheModeForceCache:
+    case mojom::FetchCacheMode::kForceCache:
       return "force-cache";
-    case WebURLRequest::kFetchRequestCacheModeOnlyIfCached:
+    case mojom::FetchCacheMode::kOnlyIfCached:
       return "only-if-cached";
+    case mojom::FetchCacheMode::kUnspecifiedOnlyIfCachedStrict:
+    case mojom::FetchCacheMode::kUnspecifiedForceCacheMiss:
+      NOTREACHED();
+      break;
   }
   NOTREACHED();
   return "";
@@ -686,6 +696,10 @@ String Request::redirect() const {
 
 String Request::integrity() const {
   return request_->Integrity();
+}
+
+bool Request::keepalive() const {
+  return request_->Keepalive();
 }
 
 Request* Request::clone(ScriptState* script_state,
@@ -771,7 +785,7 @@ void Request::RefreshBody(ScriptState* script_state) {
       .Set(request.As<v8::Object>(), body_buffer);
 }
 
-DEFINE_TRACE(Request) {
+void Request::Trace(blink::Visitor* visitor) {
   Body::Trace(visitor);
   visitor->Trace(request_);
   visitor->Trace(headers_);

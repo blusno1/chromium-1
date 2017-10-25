@@ -1530,12 +1530,12 @@ viz::FrameSinkId RenderWidgetHostViewMac::GetFrameSinkId() {
 
 viz::FrameSinkId RenderWidgetHostViewMac::FrameSinkIdAtPoint(
     viz::SurfaceHittestDelegate* delegate,
-    const gfx::Point& point,
-    gfx::Point* transformed_point) {
+    const gfx::PointF& point,
+    gfx::PointF* transformed_point) {
   // The surface hittest happens in device pixels, so we need to convert the
   // |point| from DIPs to pixels before hittesting.
   float scale_factor = ui::GetScaleFactorForNativeView(cocoa_view_);
-  gfx::Point point_in_pixels = gfx::ConvertPointToPixel(scale_factor, point);
+  gfx::PointF point_in_pixels = gfx::ConvertPointToPixel(scale_factor, point);
   viz::SurfaceId id =
       browser_compositor_->GetDelegatedFrameHost()->SurfaceIdAtPoint(
           delegate, point_in_pixels, transformed_point);
@@ -1596,13 +1596,13 @@ void RenderWidgetHostViewMac::ProcessGestureEvent(
 }
 
 bool RenderWidgetHostViewMac::TransformPointToLocalCoordSpace(
-    const gfx::Point& point,
+    const gfx::PointF& point,
     const viz::SurfaceId& original_surface,
-    gfx::Point* transformed_point) {
+    gfx::PointF* transformed_point) {
   // Transformations use physical pixels rather than DIP, so conversion
   // is necessary.
   float scale_factor = ui::GetScaleFactorForNativeView(cocoa_view_);
-  gfx::Point point_in_pixels = gfx::ConvertPointToPixel(scale_factor, point);
+  gfx::PointF point_in_pixels = gfx::ConvertPointToPixel(scale_factor, point);
   if (!browser_compositor_->GetDelegatedFrameHost()
            ->TransformPointToLocalCoordSpace(point_in_pixels, original_surface,
                                              transformed_point))
@@ -1612,9 +1612,9 @@ bool RenderWidgetHostViewMac::TransformPointToLocalCoordSpace(
 }
 
 bool RenderWidgetHostViewMac::TransformPointToCoordSpaceForView(
-    const gfx::Point& point,
+    const gfx::PointF& point,
     RenderWidgetHostViewBase* target_view,
-    gfx::Point* transformed_point) {
+    gfx::PointF* transformed_point) {
   if (target_view == this) {
     *transformed_point = point;
     return true;
@@ -1774,7 +1774,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
     RenderWidgetHostImpl* host =
         RenderWidgetHostImpl::From(GetRenderWidgetHost());
     if (host && host->delegate())
-      host->delegate()->UpdateDeviceScaleFactor(display.device_scale_factor());
+      host->WasResized();
   }
 
   UpdateBackingStoreProperties();
@@ -1829,6 +1829,14 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   // See http://crbug.com/684388.
   [[self window] makeFirstResponder:nil];
   [NSApp updateWindows];
+
+  // Debug key to check if the current input context still holds onto the view.
+  NSTextInputContext* currentContext = [NSTextInputContext currentInputContext];
+  base::debug::ScopedCrashKey textInputContextCrashKey(
+      "text-input-context-client",
+      currentContext && [currentContext client] == self
+          ? "text input still held on"
+          : "text input no longer held on");
 
   [super dealloc];
 }
@@ -2325,12 +2333,15 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
     NativeWebKeyboardEvent fakeEvent = event;
     fakeEvent.SetType(blink::WebInputEvent::kKeyUp);
     fakeEvent.skip_in_browser = true;
-    widgetHost->ForwardKeyboardEventWithLatencyInfo(fakeEvent, latency_info);
+    ui::LatencyInfo fake_event_latency_info = latency_info;
+    fake_event_latency_info.set_source_event_type(ui::SourceEventType::OTHER);
+    widgetHost->ForwardKeyboardEventWithLatencyInfo(fakeEvent,
+                                                    fake_event_latency_info);
     // Not checking |renderWidgetHostView_->render_widget_host_| here because
     // a key event with |skip_in_browser| == true won't be handled by browser,
     // thus it won't destroy the widget.
 
-    widgetHost->ForwardKeyboardEventWithCommands(event, latency_info,
+    widgetHost->ForwardKeyboardEventWithCommands(event, fake_event_latency_info,
                                                  &editCommands_);
 
     // Calling ForwardKeyboardEventWithCommands() could have destroyed the

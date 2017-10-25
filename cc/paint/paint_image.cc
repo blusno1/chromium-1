@@ -18,8 +18,9 @@ base::AtomicSequenceNumber s_next_id_;
 base::AtomicSequenceNumber s_next_content_id_;
 }  // namespace
 
-const int PaintImage::kNonLazyStableId = -1;
+const PaintImage::Id PaintImage::kNonLazyStableId = -1;
 const size_t PaintImage::kDefaultFrameIndex = 0u;
+const PaintImage::Id PaintImage::kInvalidId = -2;
 
 PaintImage::PaintImage() = default;
 PaintImage::PaintImage(const PaintImage& other) = default;
@@ -41,10 +42,26 @@ bool PaintImage::operator==(const PaintImage& other) const {
          is_multipart_ == other.is_multipart_;
 }
 
+// static
+PaintImage::DecodingMode PaintImage::GetConservative(DecodingMode one,
+                                                     DecodingMode two) {
+  if (one == two)
+    return one;
+  if (one == DecodingMode::kSync || two == DecodingMode::kSync)
+    return DecodingMode::kSync;
+  if (one == DecodingMode::kUnspecified || two == DecodingMode::kUnspecified)
+    return DecodingMode::kUnspecified;
+  DCHECK_EQ(one, DecodingMode::kAsync);
+  DCHECK_EQ(two, DecodingMode::kAsync);
+  return DecodingMode::kAsync;
+}
+
+// static
 PaintImage::Id PaintImage::GetNextId() {
   return s_next_id_.GetNext();
 }
 
+// static
 PaintImage::ContentId PaintImage::GetNextContentId() {
   return s_next_content_id_.GetNext();
 }
@@ -109,13 +126,6 @@ SkISize PaintImage::GetSupportedDecodeSize(
   //  if (paint_image_generator_ && subset_rect_.IsEmpty())
   //    return paint_image_generator_->GetSupportedDecodeSize(requested_size);
   return SkISize::Make(width(), height());
-}
-
-SkImageInfo PaintImage::CreateDecodeImageInfo(const SkISize& size,
-                                              SkColorType color_type) const {
-  DCHECK(GetSupportedDecodeSize(size) == size);
-  return SkImageInfo::Make(size.width(), size.height(), color_type,
-                           kPremul_SkAlphaType);
 }
 
 bool PaintImage::Decode(void* memory,

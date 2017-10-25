@@ -124,9 +124,8 @@ void SVGPaintContext::ApplyPaintPropertyState() {
   if (object_.IsSVGRoot())
     return;
 
-  const auto* paint_properties =
-      object_.FirstFragment() ? object_.FirstFragment()->PaintProperties()
-                              : nullptr;
+  const auto& fragment = object_.FirstFragment();
+  const auto* paint_properties = fragment.PaintProperties();
   const EffectPaintPropertyNode* effect =
       paint_properties ? paint_properties->Effect() : nullptr;
   if (!effect)
@@ -232,8 +231,8 @@ void SVGPaintContext::PaintResourceSubtree(GraphicsContext& context,
   DCHECK(item);
   DCHECK(!item->NeedsLayout());
 
-  PaintInfo info(context, LayoutRect::InfiniteIntRect(), kPaintPhaseForeground,
-                 kGlobalPaintNormalPhase,
+  PaintInfo info(context, LayoutRect::InfiniteIntRect(),
+                 PaintPhase::kForeground, kGlobalPaintNormalPhase,
                  kPaintLayerPaintingRenderingResourceSubtree);
   item->Paint(info, IntPoint());
 }

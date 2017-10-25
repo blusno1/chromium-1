@@ -516,9 +516,6 @@ void Element::scrollIntoViewWithOptions(const ScrollIntoViewOptions& options) {
   if (!GetLayoutObject() || !GetDocument().GetPage())
     return;
 
-  bool make_visible_in_visual_viewport =
-      !GetDocument().GetPage()->GetSettings().GetInertVisualViewport();
-
   ScrollBehavior behavior = (options.behavior() == "smooth")
                                 ? kScrollBehaviorSmooth
                                 : kScrollBehaviorAuto;
@@ -531,9 +528,8 @@ void Element::scrollIntoViewWithOptions(const ScrollIntoViewOptions& options) {
       ToPhysicalAlignment(options, kVerticalScroll, is_horizontal_writing_mode);
 
   LayoutRect bounds = BoundingBox();
-  GetLayoutObject()->ScrollRectToVisible(
-      bounds, align_x, align_y, kProgrammaticScroll,
-      make_visible_in_visual_viewport, behavior);
+  GetLayoutObject()->ScrollRectToVisible(bounds, align_x, align_y,
+                                         kProgrammaticScroll, false, behavior);
 
   GetDocument().SetSequentialFocusNavigationStartingPoint(this);
 }
@@ -544,20 +540,16 @@ void Element::scrollIntoViewIfNeeded(bool center_if_needed) {
   if (!GetLayoutObject())
     return;
 
-  bool make_visible_in_visual_viewport =
-      !GetDocument().GetPage()->GetSettings().GetInertVisualViewport();
-
   LayoutRect bounds = BoundingBox();
-  if (center_if_needed)
+  if (center_if_needed) {
     GetLayoutObject()->ScrollRectToVisible(
         bounds, ScrollAlignment::kAlignCenterIfNeeded,
-        ScrollAlignment::kAlignCenterIfNeeded, kProgrammaticScroll,
-        make_visible_in_visual_viewport);
-  else
+        ScrollAlignment::kAlignCenterIfNeeded, kProgrammaticScroll, false);
+  } else {
     GetLayoutObject()->ScrollRectToVisible(
         bounds, ScrollAlignment::kAlignToEdgeIfNeeded,
-        ScrollAlignment::kAlignToEdgeIfNeeded, kProgrammaticScroll,
-        make_visible_in_visual_viewport);
+        ScrollAlignment::kAlignToEdgeIfNeeded, kProgrammaticScroll, false);
+  }
 }
 
 void Element::setDistributeScroll(ScrollStateCallback* scroll_state_callback,
@@ -1086,10 +1078,7 @@ void Element::ScrollFrameBy(const ScrollToOptions& scroll_to_options) {
   if (!frame || !frame->View() || !GetDocument().GetPage())
     return;
 
-  ScrollableArea* viewport =
-      GetDocument().GetPage()->GetSettings().GetInertVisualViewport()
-          ? frame->View()->LayoutViewportScrollableArea()
-          : frame->View()->GetScrollableArea();
+  ScrollableArea* viewport = frame->View()->LayoutViewportScrollableArea();
   if (!viewport)
     return;
 
@@ -1109,10 +1098,7 @@ void Element::ScrollFrameTo(const ScrollToOptions& scroll_to_options) {
   if (!frame || !frame->View() || !GetDocument().GetPage())
     return;
 
-  ScrollableArea* viewport =
-      GetDocument().GetPage()->GetSettings().GetInertVisualViewport()
-          ? frame->View()->LayoutViewportScrollableArea()
-          : frame->View()->GetScrollableArea();
+  ScrollableArea* viewport = frame->View()->LayoutViewportScrollableArea();
   if (!viewport)
     return;
 
@@ -1948,7 +1934,7 @@ void Element::DetachLayoutTree(const AttachContext& context) {
   DCHECK(NeedsAttach());
 }
 
-RefPtr<ComputedStyle> Element::StyleForLayoutObject() {
+scoped_refptr<ComputedStyle> Element::StyleForLayoutObject() {
   DCHECK(GetDocument().InStyleRecalc());
 
   // FIXME: Instead of clearing updates that may have been added from calls to
@@ -1957,9 +1943,9 @@ RefPtr<ComputedStyle> Element::StyleForLayoutObject() {
   if (ElementAnimations* element_animations = GetElementAnimations())
     element_animations->CssAnimations().ClearPendingUpdate();
 
-  RefPtr<ComputedStyle> style = HasCustomStyleCallbacks()
-                                    ? CustomStyleForLayoutObject()
-                                    : OriginalStyleForLayoutObject();
+  scoped_refptr<ComputedStyle> style = HasCustomStyleCallbacks()
+                                           ? CustomStyleForLayoutObject()
+                                           : OriginalStyleForLayoutObject();
   if (!style) {
     DCHECK(IsBeforePseudoElement() || IsAfterPseudoElement());
     return nullptr;
@@ -1987,7 +1973,7 @@ RefPtr<ComputedStyle> Element::StyleForLayoutObject() {
   return style;
 }
 
-RefPtr<ComputedStyle> Element::OriginalStyleForLayoutObject() {
+scoped_refptr<ComputedStyle> Element::OriginalStyleForLayoutObject() {
   DCHECK(GetDocument().InStyleRecalc());
   return GetDocument().EnsureStyleResolver().StyleForElement(this);
 }
@@ -2081,7 +2067,7 @@ void Element::RecalcStyle(StyleRecalcChange change) {
     DidRecalcStyle();
 }
 
-RefPtr<ComputedStyle> Element::PropagateInheritedProperties(
+scoped_refptr<ComputedStyle> Element::PropagateInheritedProperties(
     StyleRecalcChange change) {
   if (change != kIndependentInherit)
     return nullptr;
@@ -2096,7 +2082,7 @@ RefPtr<ComputedStyle> Element::PropagateInheritedProperties(
   const ComputedStyle* style = GetComputedStyle();
   if (!style || style->Animations() || style->Transitions())
     return nullptr;
-  RefPtr<ComputedStyle> new_style = ComputedStyle::Clone(*style);
+  scoped_refptr<ComputedStyle> new_style = ComputedStyle::Clone(*style);
   new_style->PropagateIndependentInheritedProperties(*parent_style);
   INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
                                 independent_inherited_styles_propagated, 1);
@@ -2109,12 +2095,12 @@ StyleRecalcChange Element::RecalcOwnStyle(StyleRecalcChange change) {
   DCHECK(change >= kIndependentInherit || NeedsStyleRecalc());
   DCHECK(ParentComputedStyle());
 
-  RefPtr<ComputedStyle> old_style = MutableComputedStyle();
+  scoped_refptr<ComputedStyle> old_style = MutableComputedStyle();
 
   // When propagating inherited changes, we don't need to do a full style recalc
   // if the only changed properties are independent. In this case, we can simply
   // set these directly on the ComputedStyle object.
-  RefPtr<ComputedStyle> new_style = PropagateInheritedProperties(change);
+  scoped_refptr<ComputedStyle> new_style = PropagateInheritedProperties(change);
   if (!new_style)
     new_style = StyleForLayoutObject();
   if (!new_style)
@@ -2152,21 +2138,24 @@ StyleRecalcChange Element::RecalcOwnStyle(StyleRecalcChange change) {
   if (local_change != kNoChange)
     UpdateCallbackSelectors(old_style.get(), new_style.get());
 
-  if (LayoutObject* layout_object = GetLayoutObject()) {
-    // kNoChange may means that the computed style didn't change, but there are
-    // additional flags in ComputedStyle which may have changed. For instance,
-    // the AffectedBy* flags. We don't need to go through the visual
-    // invalidation diffing in that case, but we replace the old ComputedStyle
-    // object with the new one to ensure the mentioned flags are up to date.
-    if (local_change == kNoChange)
-      layout_object->SetStyleInternal(new_style.get());
-    else
+  if (LayoutObject* layout_object = this->GetLayoutObject()) {
+    if (local_change != kNoChange) {
       layout_object->SetStyle(new_style.get());
+    } else {
+      // Although no change occurred, we use the new style so that the cousin
+      // style sharing code won't get fooled into believing this style is the
+      // same.
+      // FIXME: We may be able to remove this hack, see discussion in
+      // https://codereview.chromium.org/30453002/
+      layout_object->SetStyleInternal(new_style.get());
+    }
   } else {
-    if (ShouldStoreNonLayoutObjectComputedStyle(*new_style))
-      StoreNonLayoutObjectComputedStyle(new_style);
-    else if (HasRareData())
-      GetElementRareData()->ClearComputedStyle();
+    if (local_change != kNoChange) {
+      if (ShouldStoreNonLayoutObjectComputedStyle(*new_style))
+        StoreNonLayoutObjectComputedStyle(new_style);
+      else if (HasRareData())
+        GetElementRareData()->ClearComputedStyle();
+    }
   }
 
   if (GetStyleChangeType() >= kSubtreeStyleChange)
@@ -2277,11 +2266,11 @@ void Element::UpdateCallbackSelectors(const ComputedStyle* old_style,
 }
 
 void Element::AddCallbackSelectors() {
-  UpdateCallbackSelectors(0, GetComputedStyle());
+  UpdateCallbackSelectors(nullptr, GetComputedStyle());
 }
 
 void Element::RemoveCallbackSelectors() {
-  UpdateCallbackSelectors(GetComputedStyle(), 0);
+  UpdateCallbackSelectors(GetComputedStyle(), nullptr);
 }
 
 ElementShadow* Element::Shadow() const {
@@ -2880,7 +2869,7 @@ void Element::focus(const FocusParams& params) {
     return;
 
   if (GetDocument().FocusedElement() == this &&
-      GetDocument().GetFrame()->HasReceivedUserGesture()) {
+      GetDocument().GetFrame()->HasBeenActivated()) {
     // Bring up the keyboard in the context of anything triggered by a user
     // gesture. Since tracking that across arbitrary boundaries (eg.
     // animations) is difficult, for now we match IE's heuristic and bring
@@ -2932,10 +2921,12 @@ void Element::blur() {
   CancelFocusAppearanceUpdate();
   if (AdjustedFocusedElementInTreeScope() == this) {
     Document& doc = GetDocument();
-    if (doc.GetPage())
-      doc.GetPage()->GetFocusController().SetFocusedElement(0, doc.GetFrame());
-    else
+    if (doc.GetPage()) {
+      doc.GetPage()->GetFocusController().SetFocusedElement(nullptr,
+                                                            doc.GetFrame());
+    } else {
       doc.ClearFocusedElement();
+    }
   }
 }
 
@@ -3371,7 +3362,7 @@ String Element::outerText() {
 }
 
 String Element::TextFromChildren() {
-  Text* first_text_node = 0;
+  Text* first_text_node = nullptr;
   bool found_multiple_text_nodes = false;
   unsigned total_length = 0;
 
@@ -3478,7 +3469,7 @@ const ComputedStyle* Element::EnsureComputedStyle(
       layout_parent_style = parent_layout_object->Style();
   }
 
-  RefPtr<ComputedStyle> result =
+  scoped_refptr<ComputedStyle> result =
       GetDocument().EnsureStyleResolver().PseudoStyleForElement(
           this,
           PseudoStyleRequest(pseudo_element_specifier,
@@ -3512,7 +3503,8 @@ bool Element::ShouldStoreNonLayoutObjectComputedStyle(
          IsHTMLOptGroupElement(*this) || IsHTMLOptionElement(*this);
 }
 
-void Element::StoreNonLayoutObjectComputedStyle(RefPtr<ComputedStyle> style) {
+void Element::StoreNonLayoutObjectComputedStyle(
+    scoped_refptr<ComputedStyle> style) {
   DCHECK(style);
   DCHECK(ShouldStoreNonLayoutObjectComputedStyle(*style));
   EnsureElementRareData().SetComputedStyle(std::move(style));
@@ -3670,13 +3662,14 @@ ComputedStyle* Element::PseudoStyle(const PseudoStyleRequest& request,
   if (ComputedStyle* cached = style->GetCachedPseudoStyle(request.pseudo_id))
     return cached;
 
-  RefPtr<ComputedStyle> result = GetUncachedPseudoStyle(request, parent_style);
+  scoped_refptr<ComputedStyle> result =
+      GetUncachedPseudoStyle(request, parent_style);
   if (result)
     return style->AddCachedPseudoStyle(std::move(result));
   return nullptr;
 }
 
-RefPtr<ComputedStyle> Element::GetUncachedPseudoStyle(
+scoped_refptr<ComputedStyle> Element::GetUncachedPseudoStyle(
     const PseudoStyleRequest& request,
     const ComputedStyle* parent_style) {
   const ComputedStyle* style = GetComputedStyle();
@@ -3705,7 +3698,7 @@ RefPtr<ComputedStyle> Element::GetUncachedPseudoStyle(
     parent_style = style;
 
   if (request.pseudo_id == kPseudoIdFirstLineInherited) {
-    RefPtr<ComputedStyle> result =
+    scoped_refptr<ComputedStyle> result =
         GetDocument().EnsureStyleResolver().StyleForElement(this, parent_style,
                                                             parent_style);
     result->SetStyleType(kPseudoIdFirstLineInherited);
@@ -4255,7 +4248,7 @@ void Element::DidRecalcStyle() {
   DCHECK(HasCustomStyleCallbacks());
 }
 
-RefPtr<ComputedStyle> Element::CustomStyleForLayoutObject() {
+scoped_refptr<ComputedStyle> Element::CustomStyleForLayoutObject() {
   DCHECK(HasCustomStyleCallbacks());
   return OriginalStyleForLayoutObject();
 }
@@ -4622,14 +4615,14 @@ void Element::LogUpdateAttributeIfIsolatedWorldAndInDocument(
   activity_logger->LogEvent("blinkSetAttribute", argv.size(), argv.data());
 }
 
-DEFINE_TRACE(Element) {
+void Element::Trace(blink::Visitor* visitor) {
   if (HasRareData())
     visitor->Trace(GetElementRareData());
   visitor->Trace(element_data_);
   ContainerNode::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(Element) {
+void Element::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   if (HasRareData()) {
     visitor->TraceWrappersWithManualWriteBarrier(GetElementRareData());
   }

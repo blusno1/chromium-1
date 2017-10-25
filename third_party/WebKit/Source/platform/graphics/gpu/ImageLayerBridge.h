@@ -29,7 +29,7 @@ class PLATFORM_EXPORT ImageLayerBridge
   ImageLayerBridge(OpacityMode);
   ~ImageLayerBridge();
 
-  void SetImage(RefPtr<StaticBitmapImage>);
+  void SetImage(scoped_refptr<StaticBitmapImage>);
   void Dispose();
 
   // cc::TextureLayerClient implementation.
@@ -37,7 +37,7 @@ class PLATFORM_EXPORT ImageLayerBridge
                              std::unique_ptr<viz::SingleReleaseCallback>*
                                  out_release_callback) override;
 
-  void MailboxReleasedGpu(RefPtr<StaticBitmapImage>,
+  void MailboxReleasedGpu(scoped_refptr<StaticBitmapImage>,
                           const gpu::SyncToken&,
                           bool lost_resource);
 
@@ -46,7 +46,7 @@ class PLATFORM_EXPORT ImageLayerBridge
                                const gpu::SyncToken&,
                                bool lost_resource);
 
-  RefPtr<StaticBitmapImage> GetImage() { return image_; }
+  scoped_refptr<StaticBitmapImage> GetImage() { return image_; }
 
   WebLayer* PlatformLayer() const;
 
@@ -56,12 +56,12 @@ class PLATFORM_EXPORT ImageLayerBridge
 
   bool IsAccelerated() { return image_->IsTextureBacked(); }
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 
  private:
   std::unique_ptr<viz::SharedBitmap> CreateOrRecycleBitmap();
 
-  RefPtr<StaticBitmapImage> image_;
+  scoped_refptr<StaticBitmapImage> image_;
   std::unique_ptr<WebExternalTextureLayer> layer_;
   SkFilterQuality filter_quality_ = kLow_SkFilterQuality;
 

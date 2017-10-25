@@ -6,10 +6,12 @@
 
 #include "core/layout/ng/inline/ng_inline_break_token.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
+#include "core/layout/ng/inline/ng_line_box_fragment_builder.h"
 #include "core/layout/ng/inline/ng_line_breaker.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_fragment_builder.h"
+#include "core/layout/ng/ng_positioned_float.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -32,20 +34,20 @@ class NGLineBreakerTest : public NGBaseLayoutAlgorithmTest {
     if (!node.IsPrepareLayoutFinished())
       node.PrepareLayout();
 
-    RefPtr<NGConstraintSpace> space =
+    scoped_refptr<NGConstraintSpace> space =
         NGConstraintSpaceBuilder(
             NGWritingMode::kHorizontalTopBottom,
             /* icb_size */ {NGSizeIndefinite, NGSizeIndefinite})
             .SetAvailableSize({available_width, NGSizeIndefinite})
             .ToConstraintSpace(NGWritingMode::kHorizontalTopBottom);
 
-    NGFragmentBuilder container_builder(
+    NGLineBoxFragmentBuilder container_builder(
         node, &node.Style(), space->WritingMode(), space->Direction());
     container_builder.SetBfcOffset(NGBfcOffset{LayoutUnit(), LayoutUnit()});
 
-    Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats;
+    Vector<scoped_refptr<NGUnpositionedFloat>> unpositioned_floats;
 
-    RefPtr<NGInlineBreakToken> break_token;
+    scoped_refptr<NGInlineBreakToken> break_token;
 
     Vector<NGInlineItemResults> lines;
     NGExclusionSpace exclusion_space;
@@ -57,7 +59,7 @@ class NGLineBreakerTest : public NGBaseLayoutAlgorithmTest {
                                  &line_info))
         break;
 
-      break_token = line_breaker.CreateBreakToken();
+      break_token = line_breaker.CreateBreakToken(nullptr);
       lines.push_back(std::move(line_info.Results()));
     }
 

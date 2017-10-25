@@ -5,10 +5,10 @@
 #include "content/renderer/service_worker/service_worker_fetch_context_impl.h"
 
 #include "base/feature_list.h"
-#include "content/child/request_extra_data.h"
-#include "content/child/resource_dispatcher.h"
-#include "content/child/web_url_loader_impl.h"
 #include "content/public/common/content_features.h"
+#include "content/renderer/loader/request_extra_data.h"
+#include "content/renderer/loader/resource_dispatcher.h"
+#include "content/renderer/loader/web_url_loader_impl.h"
 
 namespace content {
 
@@ -31,13 +31,12 @@ void ServiceWorkerFetchContextImpl::InitializeOnWorkerThread(
   url_loader_factory_getter_ = url_loader_factory_getter_info_.Bind();
 }
 
-std::unique_ptr<blink::WebURLLoader>
-ServiceWorkerFetchContextImpl::CreateURLLoader(
-    const blink::WebURLRequest& request,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  return base::MakeUnique<content::WebURLLoaderImpl>(
-      resource_dispatcher_.get(), std::move(task_runner),
-      url_loader_factory_getter_->GetFactoryForURL(request.Url()));
+std::unique_ptr<blink::WebURLLoaderFactory>
+ServiceWorkerFetchContextImpl::CreateURLLoaderFactory() {
+  DCHECK(url_loader_factory_getter_);
+  return std::make_unique<content::WebURLLoaderFactoryImpl>(
+      resource_dispatcher_->GetWeakPtr(),
+      std::move(url_loader_factory_getter_));
 }
 
 void ServiceWorkerFetchContextImpl::WillSendRequest(

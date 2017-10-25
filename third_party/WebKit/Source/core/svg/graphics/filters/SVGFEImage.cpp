@@ -42,7 +42,7 @@
 namespace blink {
 
 FEImage::FEImage(Filter* filter,
-                 RefPtr<Image> image,
+                 scoped_refptr<Image> image,
                  SVGPreserveAspectRatio* preserve_aspect_ratio)
     : FilterEffect(filter),
       image_(std::move(image)),
@@ -62,7 +62,7 @@ FEImage::FEImage(Filter* filter,
   FilterEffect::SetOperatingInterpolationSpace(kInterpolationSpaceSRGB);
 }
 
-DEFINE_TRACE(FEImage) {
+void FEImage::Trace(blink::Visitor* visitor) {
   visitor->Trace(tree_scope_);
   visitor->Trace(preserve_aspect_ratio_);
   FilterEffect::Trace(visitor);
@@ -70,7 +70,7 @@ DEFINE_TRACE(FEImage) {
 
 FEImage* FEImage::CreateWithImage(
     Filter* filter,
-    RefPtr<Image> image,
+    scoped_refptr<Image> image,
     SVGPreserveAspectRatio* preserve_aspect_ratio) {
   return new FEImage(filter, std::move(image), preserve_aspect_ratio);
 }

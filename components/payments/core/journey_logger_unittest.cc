@@ -7,7 +7,7 @@
 #include "base/metrics/metrics_hashes.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/metrics/proto/ukm/entry.pb.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/ukm/ukm_source.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -927,6 +927,7 @@ TEST(JourneyLoggerTest, RecordJourneyStatsHistograms_TwoPaymentRequests) {
 // the Payment Request.
 TEST(JourneyLoggerTest,
      RecordJourneyStatsHistograms_CheckoutFunnelUkm_UserAborted) {
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   using UkmEntry = ukm::builders::PaymentRequest_CheckoutEvents;
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   char test_url[] = "http://www.google.com/";
@@ -943,6 +944,8 @@ TEST(JourneyLoggerTest,
 
   // Simulate that the user aborts after being shown the Payment Request and
   // clicking pay.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 1,
+                                     /*has_complete_suggestion=*/true);
   logger.SetEventOccurred(JourneyLogger::EVENT_SHOWN);
   logger.SetEventOccurred(JourneyLogger::EVENT_PAY_CLICKED);
   logger.SetAborted(JourneyLogger::ABORT_REASON_ABORTED_BY_USER);
@@ -971,6 +974,7 @@ TEST(JourneyLoggerTest,
                 JourneyLogger::EVENT_REQUEST_PAYER_EMAIL |
                 JourneyLogger::EVENT_REQUEST_METHOD_BASIC_CARD |
                 JourneyLogger::EVENT_USER_ABORTED |
+                JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT |
                 JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS,
             step_metric->value);
 }
@@ -979,6 +983,7 @@ TEST(JourneyLoggerTest,
 // completes the Payment Request.
 TEST(JourneyLoggerTest,
      RecordJourneyStatsHistograms_CheckoutFunnelUkm_Completed) {
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   using UkmEntry = ukm::builders::PaymentRequest_CheckoutEvents;
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   char test_url[] = "http://www.google.com/";
@@ -994,6 +999,8 @@ TEST(JourneyLoggerTest,
       /*requested_method_other=*/false);
 
   // Simulate that the user aborts after being shown the Payment Request.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 1,
+                                     /*has_complete_suggestion=*/true);
   logger.SetEventOccurred(JourneyLogger::EVENT_SHOWN);
   logger.SetCompleted();
 
@@ -1019,6 +1026,7 @@ TEST(JourneyLoggerTest,
                 JourneyLogger::EVENT_REQUEST_PAYER_EMAIL |
                 JourneyLogger::EVENT_REQUEST_METHOD_BASIC_CARD |
                 JourneyLogger::EVENT_COMPLETED |
+                JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT |
                 JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS,
             step_metric->value);
 }

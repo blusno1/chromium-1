@@ -16,7 +16,6 @@
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/time/time.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/omnibox_switches.h"
 #include "components/omnibox/browser/url_index_private_data.h"
 #include "components/prefs/pref_service.h"
@@ -24,6 +23,7 @@
 #include "components/variations/active_field_trials.h"
 #include "components/variations/metrics_util.h"
 #include "components/variations/variations_associated_data.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 #if defined(OS_ANDROID)
 #include "components/omnibox/browser/omnibox_pref_names.h"
@@ -165,6 +165,12 @@ const base::Feature kSpeculativeServiceWorkerStartOnQueryInput{
     "OmniboxSpeculativeServiceWorkerStartOnQueryInput",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if defined(OS_IOS)
+// Feature used to enable ZeroSuggestProvider on iOS.
+const base::Feature kZeroSuggestProviderIOS{"ZeroSuggestProviderIOS",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 }  // namespace omnibox
 
 namespace {
@@ -293,20 +299,6 @@ base::TimeDelta OmniboxFieldTrial::StopTimerFieldTrialDuration() {
   return base::TimeDelta::FromMilliseconds(1500);
 }
 
-bool OmniboxFieldTrial::InZeroSuggestFieldTrial() {
-  if (variations::GetVariationParamValue(
-          kBundledExperimentFieldTrialName, kZeroSuggestRule) == "true")
-    return true;
-  if (variations::GetVariationParamValue(
-          kBundledExperimentFieldTrialName, kZeroSuggestRule) == "false")
-    return false;
-#if defined(OS_IOS)
-  return false;
-#else
-  return true;
-#endif
-}
-
 bool OmniboxFieldTrial::InZeroSuggestMostVisitedFieldTrial(PrefService* prefs) {
   return InZeroSuggestMostVisitedWithoutSerpFieldTrial(prefs) ||
       variations::GetVariationParamValue(
@@ -327,6 +319,9 @@ bool OmniboxFieldTrial::InZeroSuggestMostVisitedWithoutSerpFieldTrial(
     return true;
 
   return false;
+#elif defined(OS_IOS)
+  // iOS defaults to MostVisitedWithoutSERP
+  return variant.empty();
 #else
   return false;
 #endif
@@ -352,8 +347,15 @@ bool OmniboxFieldTrial::InZeroSuggestPersonalizedFieldTrial(
 int OmniboxFieldTrial::GetZeroSuggestRedirectToChromeExperimentId() {
   return base::GetFieldTrialParamByFeatureAsInt(
       omnibox::kZeroSuggestRedirectToChrome,
-      OmniboxFieldTrial::kZeroSuggestRedirectToChromeExperimentIdParam,
+      kZeroSuggestRedirectToChromeExperimentIdParam,
       /*default_value=*/-1);
+}
+
+// static
+std::string OmniboxFieldTrial::GetZeroSuggestRedirectToChromeServerAddress() {
+  return base::GetFieldTrialParamValueByFeature(
+      omnibox::kZeroSuggestRedirectToChrome,
+      kZeroSuggestRedirectToChromeServerAddressParam);
 }
 
 bool OmniboxFieldTrial::ShortcutsScoringMaxRelevance(
@@ -754,7 +756,6 @@ const char OmniboxFieldTrial::kHQPTypedValueRule[] = "HQPTypedValue";
 const char OmniboxFieldTrial::kHQPAllowMatchInTLDRule[] = "HQPAllowMatchInTLD";
 const char OmniboxFieldTrial::kHQPAllowMatchInSchemeRule[] =
     "HQPAllowMatchInScheme";
-const char OmniboxFieldTrial::kZeroSuggestRule[] = "ZeroSuggest";
 const char OmniboxFieldTrial::kZeroSuggestVariantRule[] = "ZeroSuggestVariant";
 const char OmniboxFieldTrial::kDisableResultsCachingRule[] =
     "DisableResultsCaching";
@@ -825,6 +826,8 @@ const char OmniboxFieldTrial::kUIVerticalMarginParam[] = "UIVerticalMargin";
 
 const char OmniboxFieldTrial::kZeroSuggestRedirectToChromeExperimentIdParam[] =
     "ZeroSuggestRedirectToChromeExperimentID";
+const char OmniboxFieldTrial::kZeroSuggestRedirectToChromeServerAddressParam[] =
+    "ZeroSuggestRedirectToChromeServerAddress";
 
 // static
 int OmniboxFieldTrial::kDefaultMinimumTimeBetweenSuggestQueriesMs = 100;

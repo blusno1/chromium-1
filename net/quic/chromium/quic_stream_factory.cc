@@ -130,14 +130,6 @@ std::unique_ptr<base::Value> NetLogQuicConnectionMigrationFailureCallback(
   return std::move(dict);
 }
 
-std::unique_ptr<base::Value> NetLogQuicConnectionMigrationSuccessCallback(
-    QuicConnectionId connection_id,
-    NetLogCaptureMode capture_mode) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetString("connection_id", base::Uint64ToString(connection_id));
-  return std::move(dict);
-}
-
 // Helper class that is used to log a connection migration event.
 class ScopedConnectionMigrationEventLog {
  public:
@@ -174,11 +166,6 @@ void HistogramAndLogMigrationFailure(const NetLogWithSource& net_log,
   net_log.AddEvent(NetLogEventType::QUIC_CONNECTION_MIGRATION_FAILURE,
                    base::Bind(&NetLogQuicConnectionMigrationFailureCallback,
                               connection_id, reason));
-}
-
-void HistogramMigrationStatus(enum QuicConnectionMigrationStatus status) {
-  UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.ConnectionMigration", status,
-                            MIGRATION_STATUS_MAX);
 }
 
 void LogPlatformNotificationInHistogram(
@@ -1302,62 +1289,8 @@ void QuicStreamFactory::MaybeMigrateOrCloseSessions(
   while (it != all_sessions_.end()) {
     QuicChromiumClientSession* session = it->first;
     ++it;
-
-    // If session is already bound to |new_network|, move on.
-    if (session->GetDefaultSocket()->GetBoundNetwork() == new_network) {
-      HistogramAndLogMigrationFailure(
-          net_log, MIGRATION_STATUS_ALREADY_MIGRATED, session->connection_id(),
-          "Already bound to new network");
-      continue;
-    }
-
-    // Close idle sessions.
-    if (session->GetNumActiveStreams() == 0) {
-      HistogramAndLogMigrationFailure(
-          net_log, MIGRATION_STATUS_NO_MIGRATABLE_STREAMS,
-          session->connection_id(), "No active sessions");
-      session->CloseSessionOnError(
-          ERR_NETWORK_CHANGED, QUIC_CONNECTION_MIGRATION_NO_MIGRATABLE_STREAMS);
-      continue;
-    }
-
-    // If session has active streams, mark it as going away.
-    OnSessionGoingAway(session);
-
-    // Do not migrate sessions where connection migration is disabled.
-    if (session->config()->DisableConnectionMigration()) {
-      HistogramAndLogMigrationFailure(net_log, MIGRATION_STATUS_DISABLED,
-                                      session->connection_id(),
-                                      "Migration disabled");
-      if (close_if_cannot_migrate) {
-        session->CloseSessionOnError(ERR_NETWORK_CHANGED,
-                                     QUIC_IP_ADDRESS_CHANGED);
-      }
-      continue;
-    }
-
-    // Do not migrate sessions with non-migratable streams.
-    if (session->HasNonMigratableStreams()) {
-      HistogramAndLogMigrationFailure(
-          net_log, MIGRATION_STATUS_NON_MIGRATABLE_STREAM,
-          session->connection_id(), "Non-migratable stream");
-      if (close_if_cannot_migrate) {
-        session->CloseSessionOnError(
-            ERR_NETWORK_CHANGED,
-            QUIC_CONNECTION_MIGRATION_NON_MIGRATABLE_STREAM);
-      }
-      continue;
-    }
-
-    // No new network was found. Notify session, so it can wait for a
-    // new network.
-    if (new_network == NetworkChangeNotifier::kInvalidNetworkHandle) {
-      session->OnNoNewNetwork();
-      continue;
-    }
-
-    MigrateSessionToNewNetwork(session, new_network,
-                               /*close_session_on_error=*/true, net_log);
+    session->MaybeMigrateOrCloseSession(new_network, close_if_cannot_migrate,
+                                        net_log);
   }
 }
 
@@ -1373,8 +1306,8 @@ MigrationResult QuicStreamFactory::MaybeMigrateSingleSessionOnWriteError(
       NetLogEventType::QUIC_CONNECTION_MIGRATION_TRIGGERED,
       base::Bind(&NetLogQuicConnectionMigrationTriggerCallback, "WriteError"));
 
-  MigrationResult result =
-      MaybeMigrateSingleSession(session, false, migration_net_log);
+  MigrationResult result = session->MigrateToAlternateNetwork(
+      /*close_session_on_error*/ false, migration_net_log);
   migration_net_log.EndEvent(
       NetLogEventType::QUIC_CONNECTION_MIGRATION_TRIGGERED);
   return result;
@@ -1394,7 +1327,8 @@ MigrationResult QuicStreamFactory::MaybeMigrateSingleSessionOnPathDegrading(
 
   MigrationResult result = MigrationResult::FAILURE;
   if (migrate_sessions_early_) {
-    result = MaybeMigrateSingleSession(session, true, migration_net_log);
+    result = session->MigrateToAlternateNetwork(
+        /*close_session_on_error*/ true, migration_net_log);
   } else {
     HistogramAndLogMigrationFailure(
         migration_net_log, MIGRATION_STATUS_DISABLED, session->connection_id(),
@@ -1403,32 +1337,6 @@ MigrationResult QuicStreamFactory::MaybeMigrateSingleSessionOnPathDegrading(
   migration_net_log.EndEvent(
       NetLogEventType::QUIC_CONNECTION_MIGRATION_TRIGGERED);
   return result;
-}
-
-MigrationResult QuicStreamFactory::MaybeMigrateSingleSession(
-    QuicChromiumClientSession* session,
-    bool close_session_on_error,
-    const NetLogWithSource& net_log) {
-  if (!migrate_sessions_on_network_change_ ||
-      session->HasNonMigratableStreams() ||
-      session->config()->DisableConnectionMigration()) {
-    HistogramAndLogMigrationFailure(net_log, MIGRATION_STATUS_DISABLED,
-                                    session->connection_id(),
-                                    "Migration disabled");
-    return MigrationResult::FAILURE;
-  }
-  NetworkHandle new_network =
-      FindAlternateNetwork(session->GetDefaultSocket()->GetBoundNetwork());
-  if (new_network == NetworkChangeNotifier::kInvalidNetworkHandle) {
-    // No alternate network found.
-    HistogramAndLogMigrationFailure(
-        net_log, MIGRATION_STATUS_NO_ALTERNATE_NETWORK,
-        session->connection_id(), "No alternate network found");
-    return MigrationResult::NO_NEW_NETWORK;
-  }
-  OnSessionGoingAway(session);
-  return MigrateSessionToNewNetwork(session, new_network,
-                                    close_session_on_error, net_log);
 }
 
 void QuicStreamFactory::MigrateSessionToNewPeerAddress(
@@ -1444,67 +1352,18 @@ void QuicStreamFactory::MigrateSessionToNewPeerAddress(
 
   // Specifying kInvalidNetworkHandle for the |network| parameter
   // causes the session to use the default network for the new socket.
-  MigrateSessionInner(session, peer_address,
-                      NetworkChangeNotifier::kInvalidNetworkHandle,
-                      /*close_session_on_error=*/true, net_log);
+  session->Migrate(NetworkChangeNotifier::kInvalidNetworkHandle, peer_address,
+                   /*close_session_on_error*/ true, net_log);
 }
 
-MigrationResult QuicStreamFactory::MigrateSessionToNewNetwork(
-    QuicChromiumClientSession* session,
-    NetworkHandle network,
-    bool close_session_on_error,
-    const NetLogWithSource& net_log) {
-  return MigrateSessionInner(
-      session, session->connection()->peer_address().impl().socket_address(),
-      network, close_session_on_error, net_log);
-}
-
-MigrationResult QuicStreamFactory::MigrateSessionInner(
-    QuicChromiumClientSession* session,
-    IPEndPoint peer_address,
-    NetworkHandle network,
-    bool close_session_on_error,
-    const NetLogWithSource& net_log) {
+std::unique_ptr<DatagramClientSocket> QuicStreamFactory::CreateSocket(
+    NetLog* net_log,
+    const NetLogSource& source) {
   // Use OS-specified port for socket (DEFAULT_BIND) instead of
   // using the PortSuggester since the connection is being migrated
   // and not being newly created.
-  std::unique_ptr<DatagramClientSocket> socket(
-      client_socket_factory_->CreateDatagramClientSocket(
-          DatagramSocket::DEFAULT_BIND, RandIntCallback(),
-          session->net_log().net_log(), session->net_log().source()));
-  if (ConfigureSocket(socket.get(), peer_address, network) != OK) {
-    HistogramAndLogMigrationFailure(net_log, MIGRATION_STATUS_INTERNAL_ERROR,
-                                    session->connection_id(),
-                                    "Socket configuration failed");
-    if (close_session_on_error) {
-      session->CloseSessionOnError(ERR_NETWORK_CHANGED, QUIC_INTERNAL_ERROR);
-    }
-    return MigrationResult::FAILURE;
-  }
-  std::unique_ptr<QuicChromiumPacketReader> new_reader(
-      new QuicChromiumPacketReader(socket.get(), clock_, session,
-                                   yield_after_packets_, yield_after_duration_,
-                                   session->net_log()));
-  std::unique_ptr<QuicChromiumPacketWriter> new_writer(
-      new QuicChromiumPacketWriter(socket.get()));
-  new_writer->set_delegate(session);
-
-  if (!session->MigrateToSocket(std::move(socket), std::move(new_reader),
-                                std::move(new_writer))) {
-    HistogramAndLogMigrationFailure(net_log, MIGRATION_STATUS_TOO_MANY_CHANGES,
-                                    session->connection_id(),
-                                    "Too many migrations");
-    if (close_session_on_error) {
-      session->CloseSessionOnError(ERR_NETWORK_CHANGED,
-                                   QUIC_CONNECTION_MIGRATION_TOO_MANY_CHANGES);
-    }
-    return MigrationResult::FAILURE;
-  }
-  HistogramMigrationStatus(MIGRATION_STATUS_SUCCESS);
-  net_log.AddEvent(NetLogEventType::QUIC_CONNECTION_MIGRATION_SUCCESS,
-                   base::Bind(&NetLogQuicConnectionMigrationSuccessCallback,
-                              session->connection_id()));
-  return MigrationResult::SUCCESS;
+  return client_socket_factory_->CreateDatagramClientSocket(
+      DatagramSocket::DEFAULT_BIND, RandIntCallback(), net_log, source);
 }
 
 void QuicStreamFactory::OnSSLConfigChanged() {
@@ -1614,10 +1473,8 @@ int QuicStreamFactory::CreateSession(const QuicSessionKey& key,
   TRACE_EVENT0(kNetTracingCategory, "QuicStreamFactory::CreateSession");
   IPEndPoint addr = *address_list.begin();
   const QuicServerId& server_id = key.server_id();
-  DatagramSocket::BindType bind_type = DatagramSocket::DEFAULT_BIND;
   std::unique_ptr<DatagramClientSocket> socket(
-      client_socket_factory_->CreateDatagramClientSocket(
-          bind_type, RandIntCallback(), net_log.net_log(), net_log.source()));
+      CreateSocket(net_log.net_log(), net_log.source()));
 
   // Passing in kInvalidNetworkHandle binds socket to default network.
   int rv = ConfigureSocket(socket.get(), addr,
@@ -1675,8 +1532,9 @@ int QuicStreamFactory::CreateSession(const QuicSessionKey& key,
   *session = new QuicChromiumClientSession(
       connection, std::move(socket), this, quic_crypto_client_stream_factory_,
       clock_, transport_security_state_, std::move(server_info), server_id,
-      require_confirmation, yield_after_packets_, yield_after_duration_,
-      cert_verify_flags, config, &crypto_config_,
+      require_confirmation, migrate_sessions_early_,
+      migrate_sessions_on_network_change_, yield_after_packets_,
+      yield_after_duration_, cert_verify_flags, config, &crypto_config_,
       network_connection_.connection_description(), dns_resolution_start_time,
       dns_resolution_end_time, &push_promise_index_, push_delegate_,
       task_runner_, std::move(socket_performance_watcher), net_log.net_log());

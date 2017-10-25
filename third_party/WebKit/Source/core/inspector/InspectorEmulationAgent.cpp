@@ -63,7 +63,7 @@ void InspectorEmulationAgent::Restore() {
   String emulated_media;
   state_->getString(EmulationAgentState::kEmulatedMedia, &emulated_media);
   setEmulatedMedia(emulated_media);
-  auto rgba_value =
+  auto* rgba_value =
       state_->get(EmulationAgentState::kDefaultBackgroundColorOverrideRGBA);
   if (rgba_value) {
     blink::protocol::ErrorSupport errors;
@@ -136,8 +136,10 @@ Response InspectorEmulationAgent::setCPUThrottlingRate(double throttling_rate) {
   return Response::OK();
 }
 
-Response InspectorEmulationAgent::setVirtualTimePolicy(const String& policy,
-                                                       Maybe<int> budget) {
+Response InspectorEmulationAgent::setVirtualTimePolicy(
+    const String& policy,
+    Maybe<int> budget,
+    protocol::Maybe<int> max_virtual_time_task_starvation_count) {
   if (protocol::Emulation::VirtualTimePolicyEnum::Advance == policy) {
     web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
         WebViewScheduler::VirtualTimePolicy::ADVANCE);
@@ -162,6 +164,10 @@ Response InspectorEmulationAgent::setVirtualTimePolicy(const String& policy,
         budget_amount,
         WTF::Bind(&InspectorEmulationAgent::VirtualTimeBudgetExpired,
                   WrapWeakPersistent(this)));
+  }
+  if (max_virtual_time_task_starvation_count.isJust()) {
+    web_local_frame_->View()->Scheduler()->SetMaxVirtualTimeTaskStarvationCount(
+        max_virtual_time_task_starvation_count.fromJust());
   }
   return Response::OK();
 }
@@ -209,7 +215,7 @@ Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
   return Response::OK();
 }
 
-DEFINE_TRACE(InspectorEmulationAgent) {
+void InspectorEmulationAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(web_local_frame_);
   InspectorBaseAgent::Trace(visitor);
 }

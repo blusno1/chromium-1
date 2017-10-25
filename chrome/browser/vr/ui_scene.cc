@@ -9,6 +9,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "chrome/browser/vr/databinding/binding_base.h"
 #include "chrome/browser/vr/elements/draw_phase.h"
@@ -39,6 +40,7 @@ void UiScene::AddUiElement(UiElementName parent,
   if (gl_initialized_)
     element->Initialize();
   GetUiElementByName(parent)->AddChild(std::move(element));
+  is_dirty_ = true;
 }
 
 void UiScene::RemoveUiElement(int element_id) {
@@ -46,54 +48,109 @@ void UiScene::RemoveUiElement(int element_id) {
   CHECK_NE(nullptr, to_remove);
   CHECK_NE(nullptr, to_remove->parent());
   to_remove->parent()->RemoveChild(to_remove);
+  is_dirty_ = true;
 }
 
-void UiScene::AddAnimation(int element_id,
-                           std::unique_ptr<cc::Animation> animation) {
-  UiElement* element = GetUiElementById(element_id);
-  element->AddAnimation(std::move(animation));
-}
-
-void UiScene::RemoveAnimation(int element_id, int animation_id) {
-  UiElement* element = GetUiElementById(element_id);
-  element->RemoveAnimation(animation_id);
-}
-
-void UiScene::OnBeginFrame(const base::TimeTicks& current_time,
+bool UiScene::OnBeginFrame(const base::TimeTicks& current_time,
                            const gfx::Vector3dF& look_at) {
-  // Process all animations and pre-binding work. I.e., induce any time-related
-  // "dirtiness" on the scene graph.
-  for (auto& element : *root_element_) {
-    element.set_update_phase(UiElement::kDirty);
-    element.OnBeginFrame(current_time, look_at);
-    element.set_update_phase(UiElement::kUpdatedAnimations);
+  bool scene_dirty = !initialized_scene_ || is_dirty_;
+  bool needs_redraw = false;
+  initialized_scene_ = true;
+  is_dirty_ = false;
+
+  {
+    TRACE_EVENT0("gpu", "UiScene::OnBeginFrame.UpdateAnimations");
+
+    // Process all animations and pre-binding work. I.e., induce any
+    // time-related "dirtiness" on the scene graph.
+    for (auto& element : *root_element_) {
+      element.set_update_phase(UiElement::kDirty);
+      if (element.DoBeginFrame(current_time, look_at))
+        scene_dirty = true;
+      element.set_update_phase(UiElement::kUpdatedAnimations);
+    }
   }
 
-  // Propagate updates across bindings.
-  for (auto& element : *root_element_) {
-    element.UpdateBindings();
-    element.set_update_phase(UiElement::kUpdatedBindings);
+  {
+    TRACE_EVENT0("gpu", "UiScene::OnBeginFrame.UpdateBindings");
+
+    // Propagate updates across bindings.
+    for (auto& element : *root_element_) {
+      if (element.UpdateBindings())
+        scene_dirty = true;
+      element.set_update_phase(UiElement::kUpdatedBindings);
+    }
   }
 
-  // We must now update visibility since some texture update optimizations rely
-  // on accurate visibility information.
-  root_element_->UpdateComputedOpacityRecursive();
+  {
+    TRACE_EVENT0("gpu", "UiScene::OnBeginFrame.UpdateOpacity");
 
+    if (scene_dirty) {
+      // We must now update visibility since some texture update optimizations
+      // rely on accurate visibility information.
+      root_element_->UpdateComputedOpacityRecursive();
+    } else {
+      for (auto& element : *root_element_)
+        element.set_update_phase(UiElement::kUpdatedComputedOpacity);
+    }
+  }
+
+  {
+    TRACE_EVENT0("gpu", "UiScene::OnBeginFrame.UpdateTexturesAndSizes");
+
+    // Update textures and sizes.
+    // TODO(mthiesse): We should really only be updating the sizes here, and not
+    // actually redrawing the textures because we draw all of the textures as a
+    // second phase after OnBeginFrame, once we've processed input. For now this
+    // is fine, it's just a small amount of duplicated work.
+    // Textures will have to know what their size would be, if they were to draw
+    // with their current state, and changing anything other than texture
+    // synchronously in response to input should be prohibited.
+    for (auto& element : *root_element_) {
+      if (element.PrepareToDraw())
+        needs_redraw = true;
+      element.set_update_phase(UiElement::kUpdatedTexturesAndSizes);
+    }
+  }
+
+  if (!scene_dirty) {
+    // Nothing to update, so set all elements to the final update phase and
+    // return early.
+    for (auto& element : *root_element_) {
+      element.set_update_phase(UiElement::kUpdatedWorldSpaceTransform);
+    }
+    return needs_redraw;
+  }
+
+  {
+    TRACE_EVENT0("gpu", "UiScene::OnBeginFrame.UpdateLayout");
+
+    // Update layout, which depends on size.
+    for (auto& element : *root_element_) {
+      element.LayOutChildren();
+      element.set_update_phase(UiElement::kUpdatedLayout);
+    }
+  }
+
+  {
+    TRACE_EVENT0("gpu", "UiScene::OnBeginFrame.UpdateWorldSpaceTransform");
+
+    // Now that we have finalized our local values, we can safely update our
+    // final, baked transform.
+    root_element_->UpdateWorldSpaceTransformRecursive();
+  }
+
+  return scene_dirty || needs_redraw;
+}
+
+bool UiScene::UpdateTextures() {
+  bool needs_redraw = false;
   // Update textures and sizes.
   for (auto& element : *root_element_) {
-    element.PrepareToDraw();
-    element.set_update_phase(UiElement::kUpdatedTexturesAndSizes);
+    if (element.PrepareToDraw())
+      needs_redraw = true;
   }
-
-  // Update layout, which depends on size.
-  for (auto& element : *root_element_) {
-    element.LayOutChildren();
-    element.set_update_phase(UiElement::kUpdatedLayout);
-  }
-
-  // Now that we have finalized our local values, we can safely update our
-  // final, baked transform.
-  root_element_->UpdateWorldSpaceTransformRecursive();
+  return needs_redraw;
 }
 
 UiElement& UiScene::root_element() {
@@ -164,6 +221,20 @@ void UiScene::OnGlInitialized() {
   gl_initialized_ = true;
   for (auto& element : *root_element_)
     element.Initialize();
+}
+
+bool UiScene::ControllerWouldBeVisibleInTheSceneGraph() const {
+  UiElement* button = GetUiElementByName(kWebVrTimeoutMessageButton);
+  if (button && button->IsVisible())
+    return true;
+
+  UiElement* browsing_root = GetUiElementByName(k2dBrowsingRoot);
+  bool browsing_mode = browsing_root && browsing_root->IsVisible();
+
+  UiElement* spinner_bg = GetUiElementByName(kWebVrTimeoutSpinnerBackground);
+  bool transitioning_to_webvr = spinner_bg && spinner_bg->IsVisible();
+
+  return browsing_mode && !transitioning_to_webvr;
 }
 
 }  // namespace vr

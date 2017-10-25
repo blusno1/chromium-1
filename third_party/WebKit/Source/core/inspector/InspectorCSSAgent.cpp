@@ -401,7 +401,7 @@ class InspectorCSSAgent::SetStyleSheetTextAction final
     text_ = other->text_;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(style_sheet_);
     InspectorCSSAgent::StyleSheetAction::Trace(visitor);
   }
@@ -501,7 +501,7 @@ class InspectorCSSAgent::ModifyRuleAction final
     return nullptr;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(style_sheet_);
     visitor->Trace(css_rule_);
     InspectorCSSAgent::StyleSheetAction::Trace(visitor);
@@ -557,7 +557,7 @@ class InspectorCSSAgent::SetElementStyleAction final
     return style_sheet_->SetText(text_, exception_state);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(style_sheet_);
     InspectorCSSAgent::StyleSheetAction::Trace(visitor);
   }
@@ -619,7 +619,7 @@ class InspectorCSSAgent::AddRuleAction final
     return result;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(style_sheet_);
     visitor->Trace(css_rule_);
     InspectorCSSAgent::StyleSheetAction::Trace(visitor);
@@ -983,7 +983,7 @@ Response InspectorCSSAgent::getMatchedStylesForNode(
 template <class CSSRuleCollection>
 static CSSKeyframesRule* FindKeyframesRule(CSSRuleCollection* css_rules,
                                            StyleRuleKeyframes* keyframes_rule) {
-  CSSKeyframesRule* result = 0;
+  CSSKeyframesRule* result = nullptr;
   for (unsigned j = 0; css_rules && j < css_rules->length() && !result; ++j) {
     CSSRule* css_rule = css_rules->item(j);
     if (css_rule->type() == CSSRule::kKeyframesRule) {
@@ -1008,7 +1008,7 @@ InspectorCSSAgent::AnimationsForNode(Element* element) {
   Document* owner_document = element->ownerDocument();
 
   StyleResolver& style_resolver = owner_document->EnsureStyleResolver();
-  RefPtr<ComputedStyle> style = style_resolver.StyleForElement(element);
+  scoped_refptr<ComputedStyle> style = style_resolver.StyleForElement(element);
   if (!style)
     return css_keyframes_rules;
   const CSSAnimationData* animation_data = style->Animations();
@@ -1112,8 +1112,8 @@ Response InspectorCSSAgent::getComputedStyleForNode(
             .build());
   }
 
-  std::unique_ptr<HashMap<AtomicString, RefPtr<CSSVariableData>>> variables =
-      computed_style_info->GetVariables();
+  std::unique_ptr<HashMap<AtomicString, scoped_refptr<CSSVariableData>>>
+      variables = computed_style_info->GetVariables();
 
   if (variables && !variables->IsEmpty()) {
     for (const auto& it : *variables) {
@@ -2310,17 +2310,17 @@ Response InspectorCSSAgent::getBackgroundColors(
   CSSComputedStyleDeclaration* computed_style_info =
       CSSComputedStyleDeclaration::Create(element, true);
   const CSSValue* font_size =
-      computed_style_info->GetPropertyCSSValue(CSSPropertyFontSize);
+      computed_style_info->GetPropertyCSSValue(GetCSSPropertyFontSizeAPI());
   *computed_font_size = font_size->CssText();
   const CSSValue* font_weight =
-      computed_style_info->GetPropertyCSSValue(CSSPropertyFontWeight);
+      computed_style_info->GetPropertyCSSValue(GetCSSPropertyFontWeightAPI());
   *computed_font_weight = font_weight->CssText();
 
   HTMLElement* body = element->GetDocument().body();
   CSSComputedStyleDeclaration* computed_style_body =
       CSSComputedStyleDeclaration::Create(body, true);
   const CSSValue* body_font_size =
-      computed_style_body->GetPropertyCSSValue(CSSPropertyFontSize);
+      computed_style_body->GetPropertyCSSValue(GetCSSPropertyFontSizeAPI());
   *computed_body_font_size = body_font_size->CssText();
 
   return Response::OK();
@@ -2394,7 +2394,7 @@ Response InspectorCSSAgent::takeCoverageDelta(
   return Response::OK();
 }
 
-DEFINE_TRACE(InspectorCSSAgent) {
+void InspectorCSSAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(dom_agent_);
   visitor->Trace(inspected_frames_);
   visitor->Trace(network_agent_);

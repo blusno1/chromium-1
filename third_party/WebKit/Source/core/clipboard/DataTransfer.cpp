@@ -125,8 +125,10 @@ class DraggedNodeImageBuilder {
 
     PropertyTreeState border_box_properties = PropertyTreeState::Root();
     if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
-      border_box_properties =
-          *layer->GetLayoutObject().FirstFragment()->LocalBorderBoxProperties();
+      border_box_properties = *layer->GetLayoutObject()
+                                   .FirstFragment()
+                                   .GetRarePaintData()
+                                   ->LocalBorderBoxProperties();
     }
     return DataTransfer::CreateDragImageForFrame(
         *local_frame_, 1.0f,
@@ -192,7 +194,8 @@ static String ConvertDragOperationToEffectAllowed(DragOperation op) {
 // We provide the IE clipboard types (URL and Text), and the clipboard types
 // specified in the WHATWG Web Applications 1.0 draft see
 // http://www.whatwg.org/specs/web-apps/current-work/ Section 6.3.5.3
-static String NormalizeType(const String& type, bool* convert_to_url = 0) {
+static String NormalizeType(const String& type,
+                            bool* convert_to_url = nullptr) {
   String clean_type = type.StripWhiteSpace().DeprecatedLower();
   if (clean_type == kMimeTypeText ||
       clean_type.StartsWith(kMimeTypeTextPlainEtc))
@@ -343,11 +346,11 @@ void DataTransfer::ClearDragImage() {
 
 void DataTransfer::SetDragImageResource(ImageResourceContent* img,
                                         const IntPoint& loc) {
-  setDragImage(img, 0, loc);
+  setDragImage(img, nullptr, loc);
 }
 
 void DataTransfer::SetDragImageElement(Node* node, const IntPoint& loc) {
-  setDragImage(0, node, loc);
+  setDragImage(nullptr, node, loc);
 }
 
 FloatRect DataTransfer::ClipByVisualViewport(const FloatRect& rect_in_frame,
@@ -404,7 +407,8 @@ std::unique_ptr<DragImage> DataTransfer::CreateDragImageForFrame(
   skia_paint_canvas.concat(AffineTransformToSkMatrix(transform));
   builder.EndRecording(skia_paint_canvas, property_tree_state);
 
-  RefPtr<Image> image = StaticBitmapImage::Create(surface->makeImageSnapshot());
+  scoped_refptr<Image> image =
+      StaticBitmapImage::Create(surface->makeImageSnapshot());
   float screen_device_scale_factor =
       frame.GetPage()->GetChromeClient().GetScreenInfo().device_scale_factor;
 
@@ -440,13 +444,13 @@ static ImageResourceContent* GetImageResourceContent(Element* element) {
   DCHECK(element);
   LayoutObject* layout_object = element->GetLayoutObject();
   if (!layout_object || !layout_object->IsImage())
-    return 0;
+    return nullptr;
 
   LayoutImage* image = ToLayoutImage(layout_object);
   if (image->CachedImage() && !image->CachedImage()->ErrorOccurred())
     return image->CachedImage();
 
-  return 0;
+  return nullptr;
 }
 
 static void WriteImageToDataObject(DataObject* data_object,
@@ -457,7 +461,7 @@ static void WriteImageToDataObject(DataObject* data_object,
   if (!cached_image || !cached_image->GetImage() || !cached_image->IsLoaded())
     return;
 
-  RefPtr<SharedBuffer> image_buffer = cached_image->GetImage()->Data();
+  scoped_refptr<SharedBuffer> image_buffer = cached_image->GetImage()->Data();
   if (!image_buffer || !image_buffer->size())
     return;
 
@@ -663,10 +667,11 @@ String ConvertDragOperationToDropZoneOperation(DragOperation operation) {
   }
 }
 
-DEFINE_TRACE(DataTransfer) {
+void DataTransfer::Trace(blink::Visitor* visitor) {
   visitor->Trace(data_object_);
   visitor->Trace(drag_image_);
   visitor->Trace(drag_image_element_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

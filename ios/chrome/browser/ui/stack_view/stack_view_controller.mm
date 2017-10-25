@@ -49,6 +49,7 @@
 #import "ios/chrome/browser/ui/stack_view/stack_view_toolbar_controller.h"
 #import "ios/chrome/browser/ui/stack_view/title_label.h"
 #import "ios/chrome/browser/ui/toolbar/new_tab_button.h"
+#import "ios/chrome/browser/ui/toolbar/toolbar_controller_base_feature.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller_constants.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
@@ -500,6 +501,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
 }
 
 @synthesize activeCardSet = _activeCardSet;
+@synthesize animationDelegate = _animationDelegate;
 @synthesize delegate = _delegate;
 @synthesize dummyToolbarBackgroundView = _dummyToolbarBackgroundView;
 @synthesize inActiveDeckChangeAnimation = _inActiveDeckChangeAnimation;
@@ -750,6 +752,22 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   toolbarFrame.size.height = CGRectGetHeight([[_toolbarController view] frame]);
   [[_toolbarController view] setFrame:toolbarFrame];
   [self.view addSubview:[_toolbarController view]];
+
+  if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
+    [[_toolbarController view].leadingAnchor
+        constraintEqualToAnchor:self.view.leadingAnchor]
+        .active = YES;
+    [[_toolbarController view].trailingAnchor
+        constraintEqualToAnchor:self.view.trailingAnchor]
+        .active = YES;
+    [[_toolbarController view].topAnchor
+        constraintEqualToAnchor:self.view.topAnchor]
+        .active = YES;
+    [_toolbarController heightConstraint].constant =
+        [_toolbarController preferredToolbarHeightWhenAlignedToTopOfScreen];
+    [_toolbarController heightConstraint].active = YES;
+  }
+
   [self updateToolbarAppearanceWithAnimation:NO];
 
   InstallBackgroundInView(_backgroundView);
@@ -783,6 +801,15 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   _scrollGestureRecognizer = [_scrollView panGestureRecognizer];
 
   [self prepareForDisplay];
+}
+
+- (void)viewSafeAreaInsetsDidChange {
+  [super viewSafeAreaInsetsDidChange];
+  if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
+    [_toolbarController heightConstraint].constant =
+        [_toolbarController preferredToolbarHeightWhenAlignedToTopOfScreen];
+    [[_toolbarController view] setNeedsLayout];
+  }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -1581,6 +1608,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   DCHECK_NE(self.transitionStyle, STACK_TRANSITION_STYLE_NONE);
   if (self.transitionStyle == STACK_TRANSITION_STYLE_PRESENTING) {
     [_testDelegate stackViewControllerShowWithSelectedTabAnimationDidEnd];
+    [_animationDelegate tabSwitcherPresentationAnimationDidEnd:self];
     [_delegate tabSwitcherPresentationTransitionDidEnd:self];
   } else {
     [_delegate tabSwitcherDismissTransitionDidEnd:self];
@@ -1912,6 +1940,14 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   [_activeCardSet.displayView
       insertSubview:self.transitionToolbarController.view
        aboveSubview:_activeCardSet.currentCard.view];
+  if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
+    [self.transitionToolbarController.view.leadingAnchor
+        constraintEqualToAnchor:_activeCardSet.displayView.leadingAnchor]
+        .active = YES;
+    [self.transitionToolbarController.view.trailingAnchor
+        constraintEqualToAnchor:_activeCardSet.displayView.trailingAnchor]
+        .active = YES;
+  }
   CGRect toolbarFrame =
       [_activeCardSet.displayView convertRect:[_toolbarController view].frame
                                      fromView:self.view];
@@ -2102,6 +2138,11 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
       UMA_HISTOGRAM_TIMES("Toolbar.TabSwitcher.NewTabPresentationDuration",
                           base::TimeDelta::FromSecondsD(duration));
     }
+
+    // The following must come after logging metrics, because
+    // |clearInternalState| resets _activeCardSet.
+    _isActive = NO;
+    [self clearInternalState];
   };
 
   CGPoint origin = _lastTapPoint;
@@ -2705,7 +2746,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
 
 - (void)showToolsMenu {
   ToolsMenuConfiguration* configuration =
-      [[ToolsMenuConfiguration alloc] initWithDisplayView:[self view]];
+      [[ToolsMenuConfiguration alloc] initWithDisplayView:[self view]
+                                       baseViewController:self];
   [configuration setInTabSwitcher:YES];
   // When checking for the existence of tabs, catch the case where the main set
   // is both active and empty, but the incognito set has some cards.

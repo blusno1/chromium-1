@@ -55,7 +55,7 @@
 #include "core/editing/Editor.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
-#include "core/editing/TextFinder.h"
+#include "core/editing/finder/TextFinder.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/spellcheck/IdleSpellCheckCallback.h"
 #include "core/editing/spellcheck/SpellChecker.h"
@@ -88,7 +88,7 @@
 #include "core/loader/ThreadableLoader.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
-#include "core/page/ScopedPageSuspender.h"
+#include "core/page/ScopedPagePauser.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/compositing/CompositedLayerMapping.h"
 #include "core/paint/compositing/PaintLayerCompositor.h"
@@ -123,7 +123,6 @@
 #include "platform/wtf/dtoa/utils.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCache.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebClipboard.h"
 #include "public/platform/WebCoalescedInputEvent.h"
 #include "public/platform/WebFloatRect.h"
@@ -135,6 +134,7 @@
 #include "public/platform/WebURLLoaderClient.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLResponse.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebContextMenuData.h"
 #include "public/web/WebDeviceEmulationParams.h"
@@ -553,9 +553,8 @@ TEST_P(ParameterizedWebFrameTest,
   v8::Local<v8::Context> context =
       web_view_helper.LocalMainFrame()->MainWorldScriptContext();
 
-  std::unique_ptr<UserGestureIndicator> indicator =
-      LocalFrame::CreateUserGesture(main_frame->GetFrame(),
-                                    UserGestureToken::kNewGesture);
+  std::unique_ptr<UserGestureIndicator> indicator = Frame::NotifyUserActivation(
+      main_frame->GetFrame(), UserGestureToken::kNewGesture);
   ScriptExecutionCallbackHelper callback_helper(context);
   v8::Local<v8::Function> function =
       v8::Function::New(context, callback).ToLocalChecked();
@@ -1021,8 +1020,9 @@ TEST_P(ParameterizedWebFrameTest, DispatchMessageEventWithOriginCheck) {
 
 namespace {
 
-RefPtr<SerializedScriptValue> SerializeString(const StringView& message,
-                                              ScriptState* script_state) {
+scoped_refptr<SerializedScriptValue> SerializeString(
+    const StringView& message,
+    ScriptState* script_state) {
   // This is inefficient, but avoids duplicating serialization logic for the
   // sake of this test.
   NonThrowableExceptionState exception_state;
@@ -1041,7 +1041,7 @@ TEST_P(ParameterizedWebFrameTest, PostMessageThenDetach) {
   LocalFrame* frame =
       ToLocalFrame(web_view_helper.WebView()->GetPage()->MainFrame());
   NonThrowableExceptionState exception_state;
-  RefPtr<SerializedScriptValue> message =
+  scoped_refptr<SerializedScriptValue> message =
       SerializeString("message", ToScriptStateForMainWorld(frame));
   MessagePortArray message_ports;
   frame->DomWindow()->postMessage(message, message_ports, "*",
@@ -4351,7 +4351,7 @@ TEST_P(ParameterizedWebFrameTest, ClearFocusedNodeTest) {
   web_view_helper.WebView()->ClearFocusedElement();
 
   // Now retrieve the FocusedNode and test it should be null.
-  EXPECT_EQ(0, web_view_helper.WebView()->FocusedElement());
+  EXPECT_EQ(nullptr, web_view_helper.WebView()->FocusedElement());
 }
 
 class ChangedSelectionCounter : public FrameTestHelpers::TestWebFrameClient {
@@ -4874,7 +4874,7 @@ TEST_P(ParameterizedWebFrameTest, FindInPageMatchRects) {
         static_cast<FloatRect>(web_match_rects[result_index]);
 
     // Select the match by the center of its rect.
-    EXPECT_EQ(main_frame->SelectNearestFindMatch(result_rect.Center(), 0),
+    EXPECT_EQ(main_frame->SelectNearestFindMatch(result_rect.Center(), nullptr),
               result_index + 1);
 
     // Check that the find result ordering matches with our expectations.
@@ -6555,7 +6555,7 @@ TEST_P(ParameterizedWebFrameTest, ReplaceNavigationAfterHistoryNavigation) {
       URLTestHelpers::ToKURL(error_url), response, error);
   FrameTestHelpers::LoadHistoryItem(frame, error_history_item,
                                     kWebHistoryDifferentDocumentLoad,
-                                    WebCachePolicy::kUseProtocolCachePolicy);
+                                    mojom::FetchCacheMode::kDefault);
   WebString text = WebFrameContentDumper::DumpWebViewAsText(
       web_view_helper.WebView(), std::numeric_limits<size_t>::max());
   EXPECT_EQ("This should appear", text.Utf8());
@@ -6775,7 +6775,7 @@ TEST_P(ParameterizedWebFrameTest, RemoveSpellingMarkersUnderWords) {
 
 class StubbornTextCheckClient : public WebTextCheckClient {
  public:
-  StubbornTextCheckClient() : completion_(0) {}
+  StubbornTextCheckClient() : completion_(nullptr) {}
   ~StubbornTextCheckClient() override {}
 
   // WebTextCheckClient:
@@ -6808,7 +6808,7 @@ class StubbornTextCheckClient : public WebTextCheckClient {
                                               misspelling_length));
     }
     completion_->DidFinishCheckingText(results);
-    completion_ = 0;
+    completion_ = nullptr;
   }
 
   WebTextCheckingCompletion* completion_;
@@ -6911,7 +6911,8 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultsSavedInDocument) {
 
   textcheck.Kick();
   ASSERT_EQ(1U, document->Markers().Markers().size());
-  ASSERT_NE(static_cast<DocumentMarker*>(0), document->Markers().Markers()[0]);
+  ASSERT_NE(static_cast<DocumentMarker*>(nullptr),
+            document->Markers().Markers()[0]);
   EXPECT_EQ(DocumentMarker::kSpelling,
             document->Markers().Markers()[0]->GetType());
 
@@ -6925,7 +6926,8 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultsSavedInDocument) {
 
   textcheck.KickGrammar();
   ASSERT_EQ(1U, document->Markers().Markers().size());
-  ASSERT_NE(static_cast<DocumentMarker*>(0), document->Markers().Markers()[0]);
+  ASSERT_NE(static_cast<DocumentMarker*>(nullptr),
+            document->Markers().Markers()[0]);
   EXPECT_EQ(DocumentMarker::kGrammar,
             document->Markers().Markers()[0]->GetType());
 }
@@ -7279,7 +7281,7 @@ class TestNewWindowWebViewClient : public FrameTestHelpers::TestWebViewClient {
                       bool,
                       WebSandboxFlags) override {
     EXPECT_TRUE(false);
-    return 0;
+    return nullptr;
   }
 };
 
@@ -7327,7 +7329,7 @@ TEST_P(ParameterizedWebFrameTest, ModifiedClickNewWindow) {
   FrameLoadRequest frame_request(document, ResourceRequest(destination));
   frame_request.SetTriggeringEvent(event);
   std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::CreateUserGesture(frame);
+      Frame::NotifyUserActivation(frame);
   ToLocalFrame(web_view_helper.WebView()->GetPage()->MainFrame())
       ->Loader()
       .Load(frame_request);
@@ -7357,13 +7359,13 @@ TEST_P(ParameterizedWebFrameTest, BackToReload) {
 
   FrameTestHelpers::LoadHistoryItem(frame, WebHistoryItem(first_item.Get()),
                                     kWebHistoryDifferentDocumentLoad,
-                                    WebCachePolicy::kUseProtocolCachePolicy);
+                                    mojom::FetchCacheMode::kDefault);
   EXPECT_EQ(first_item.Get(),
             main_frame_loader.GetDocumentLoader()->GetHistoryItem());
 
   FrameTestHelpers::ReloadFrame(frame);
-  EXPECT_EQ(WebCachePolicy::kValidatingCacheData,
-            frame->GetDocumentLoader()->GetRequest().GetCachePolicy());
+  EXPECT_EQ(mojom::FetchCacheMode::kValidateCache,
+            frame->GetDocumentLoader()->GetRequest().GetCacheMode());
 }
 
 TEST_P(ParameterizedWebFrameTest, BackDuringChildFrameReload) {
@@ -7385,8 +7387,8 @@ TEST_P(ParameterizedWebFrameTest, BackDuringChildFrameReload) {
   item.Initialize();
   WebURL history_url(ToKURL(base_url_ + "white-1x1.png"));
   item.SetURLString(history_url.GetString());
-  WebURLRequest request = main_frame->RequestFromHistoryItem(
-      item, WebCachePolicy::kUseProtocolCachePolicy);
+  WebURLRequest request =
+      main_frame->RequestFromHistoryItem(item, mojom::FetchCacheMode::kDefault);
   main_frame->Load(request, WebFrameLoadType::kBackForward, item);
 
   FrameTestHelpers::ReloadFrame(child_frame);
@@ -7412,8 +7414,8 @@ TEST_P(ParameterizedWebFrameTest, ReloadPost) {
             frame->GetDocumentLoader()->GetRequest().HttpMethod());
 
   FrameTestHelpers::ReloadFrame(frame);
-  EXPECT_EQ(WebCachePolicy::kValidatingCacheData,
-            frame->GetDocumentLoader()->GetRequest().GetCachePolicy());
+  EXPECT_EQ(mojom::FetchCacheMode::kValidateCache,
+            frame->GetDocumentLoader()->GetRequest().GetCacheMode());
   EXPECT_EQ(kWebNavigationTypeFormResubmitted,
             frame->GetDocumentLoader()->GetNavigationType());
 }
@@ -7437,22 +7439,22 @@ TEST_P(ParameterizedWebFrameTest, LoadHistoryItemReload) {
   // Cache policy overrides should take.
   FrameTestHelpers::LoadHistoryItem(frame, WebHistoryItem(first_item),
                                     kWebHistoryDifferentDocumentLoad,
-                                    WebCachePolicy::kValidatingCacheData);
+                                    mojom::FetchCacheMode::kValidateCache);
   EXPECT_EQ(first_item.Get(),
             main_frame_loader.GetDocumentLoader()->GetHistoryItem());
-  EXPECT_EQ(WebCachePolicy::kValidatingCacheData,
-            frame->GetDocumentLoader()->GetRequest().GetCachePolicy());
+  EXPECT_EQ(mojom::FetchCacheMode::kValidateCache,
+            frame->GetDocumentLoader()->GetRequest().GetCacheMode());
 }
 
 class TestCachePolicyWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
   TestCachePolicyWebFrameClient()
-      : policy_(WebCachePolicy::kUseProtocolCachePolicy),
+      : cache_mode_(mojom::FetchCacheMode::kDefault),
         will_send_request_call_count_(0) {}
   ~TestCachePolicyWebFrameClient() override {}
 
-  WebCachePolicy GetCachePolicy() const { return policy_; }
+  mojom::FetchCacheMode GetCacheMode() const { return cache_mode_; }
   int WillSendRequestCallCount() const { return will_send_request_call_count_; }
   TestCachePolicyWebFrameClient& ChildClient(size_t i) {
     return *child_clients_[i].get();
@@ -7474,12 +7476,12 @@ class TestCachePolicyWebFrameClient
     return CreateLocalChild(*parent, scope, child_ptr);
   }
   void WillSendRequest(WebURLRequest& request) override {
-    policy_ = request.GetCachePolicy();
+    cache_mode_ = request.GetCacheMode();
     will_send_request_call_count_++;
   }
 
  private:
-  WebCachePolicy policy_;
+  mojom::FetchCacheMode cache_mode_;
   Vector<std::unique_ptr<TestCachePolicyWebFrameClient>> child_clients_;
   int will_send_request_call_count_;
 };
@@ -7502,8 +7504,7 @@ TEST_P(ParameterizedWebFrameTest, ReloadIframe) {
   EXPECT_EQ(child_client, child_frame->Client());
   EXPECT_EQ(1u, main_frame->GetFrame()->Tree().ScopedChildCount());
   EXPECT_EQ(1, child_client->WillSendRequestCallCount());
-  EXPECT_EQ(WebCachePolicy::kUseProtocolCachePolicy,
-            child_client->GetCachePolicy());
+  EXPECT_EQ(mojom::FetchCacheMode::kDefault, child_client->GetCacheMode());
 
   FrameTestHelpers::ReloadFrame(main_frame);
 
@@ -7523,8 +7524,7 @@ TEST_P(ParameterizedWebFrameTest, ReloadIframe) {
   // Sub-frames should not be forcibly revalidated.
   // TODO(toyoshim): Will consider to revalidate main resources in sub-frames
   // on reloads. Or will do only for bypassingCache.
-  EXPECT_EQ(WebCachePolicy::kUseProtocolCachePolicy,
-            new_child_client->GetCachePolicy());
+  EXPECT_EQ(mojom::FetchCacheMode::kDefault, new_child_client->GetCacheMode());
 }
 
 class TestSameDocumentWebFrameClient
@@ -7557,10 +7557,11 @@ TEST_P(ParameterizedWebFrameTest, NavigateToSame) {
   EXPECT_FALSE(client.FrameLoadTypeReloadSeen());
 
   FrameLoadRequest frame_request(
-      0, ResourceRequest(
-             ToLocalFrame(web_view_helper.WebView()->GetPage()->MainFrame())
-                 ->GetDocument()
-                 ->Url()));
+      nullptr,
+      ResourceRequest(
+          ToLocalFrame(web_view_helper.WebView()->GetPage()->MainFrame())
+              ->GetDocument()
+              ->Url()));
   ToLocalFrame(web_view_helper.WebView()->GetPage()->MainFrame())
       ->Loader()
       .Load(frame_request);
@@ -7580,8 +7581,7 @@ class TestSameDocumentWithImageWebFrameClient
   void WillSendRequest(WebURLRequest& request) override {
     if (request.GetRequestContext() == WebURLRequest::kRequestContextImage) {
       num_of_image_requests_++;
-      EXPECT_EQ(WebCachePolicy::kUseProtocolCachePolicy,
-                request.GetCachePolicy());
+      EXPECT_EQ(mojom::FetchCacheMode::kDefault, request.GetCacheMode());
     }
   }
 
@@ -7715,9 +7715,8 @@ TEST_P(ParameterizedWebFrameTest, SameDocumentHistoryNavigationCommitType) {
 
   ToLocalFrame(web_view_impl->GetPage()->MainFrame())
       ->Loader()
-      .Load(FrameLoadRequest(nullptr,
-                             item->GenerateResourceRequest(
-                                 WebCachePolicy::kUseProtocolCachePolicy)),
+      .Load(FrameLoadRequest(nullptr, item->GenerateResourceRequest(
+                                          mojom::FetchCacheMode::kDefault)),
             kFrameLoadTypeBackForward, item.Get(), kHistorySameDocumentLoad);
   EXPECT_EQ(kWebBackForwardCommit, client.LastCommitType());
 }
@@ -8078,7 +8077,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenLayerSize) {
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   Document* document = frame->GetDocument();
   std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::CreateUserGesture(frame);
+      Frame::NotifyUserActivation(frame);
   Element* div_fullscreen = document->getElementById("div1");
   Fullscreen::RequestFullscreen(*div_fullscreen);
   EXPECT_EQ(nullptr, Fullscreen::FullscreenElementFrom(*document));
@@ -8117,7 +8116,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenLayerNonScrollable) {
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   Document* document = frame->GetDocument();
   std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::CreateUserGesture(frame);
+      Frame::NotifyUserActivation(frame);
   Element* div_fullscreen = document->getElementById("div1");
   Fullscreen::RequestFullscreen(*div_fullscreen);
   EXPECT_EQ(nullptr, Fullscreen::FullscreenElementFrom(*document));
@@ -8186,7 +8185,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenMainFrame) {
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   Document* document = frame->GetDocument();
   std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::CreateUserGesture(frame);
+      Frame::NotifyUserActivation(frame);
   Fullscreen::RequestFullscreen(*document->documentElement());
   EXPECT_EQ(nullptr, Fullscreen::FullscreenElementFrom(*document));
   web_view_impl->DidEnterFullscreen();
@@ -8235,7 +8234,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenSubframe) {
           ->GetFrame();
   Document* document = frame->GetDocument();
   std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::CreateUserGesture(frame);
+      Frame::NotifyUserActivation(frame);
   Element* div_fullscreen = document->getElementById("div1");
   Fullscreen::RequestFullscreen(*div_fullscreen);
   web_view_impl->DidEnterFullscreen();
@@ -8277,7 +8276,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenNestedExit) {
 
   {
     std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::CreateUserGesture(top_doc->GetFrame());
+        Frame::NotifyUserActivation(top_doc->GetFrame());
     Fullscreen::RequestFullscreen(*top_body);
   }
   web_view_impl->DidEnterFullscreen();
@@ -8285,7 +8284,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenNestedExit) {
 
   {
     std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::CreateUserGesture(iframe_doc->GetFrame());
+        Frame::NotifyUserActivation(iframe_doc->GetFrame());
     Fullscreen::RequestFullscreen(*iframe_body);
   }
   web_view_impl->DidEnterFullscreen();
@@ -8331,7 +8330,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenWithTinyViewport) {
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::CreateUserGesture(frame);
+      Frame::NotifyUserActivation(frame);
   Fullscreen::RequestFullscreen(*frame->GetDocument()->documentElement());
   web_view_impl->DidEnterFullscreen();
   web_view_impl->UpdateAllLifecyclePhases();
@@ -8370,7 +8369,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenResizeWithTinyViewport) {
                                         ->GetLayoutViewItem();
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::CreateUserGesture(frame);
+      Frame::NotifyUserActivation(frame);
   Fullscreen::RequestFullscreen(*frame->GetDocument()->documentElement());
   web_view_impl->DidEnterFullscreen();
   web_view_impl->UpdateAllLifecyclePhases();
@@ -8436,7 +8435,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenRestoreScaleFactorUponExiting) {
   {
     LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
     std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::CreateUserGesture(frame);
+        Frame::NotifyUserActivation(frame);
     Fullscreen::RequestFullscreen(*frame->GetDocument()->body());
   }
 
@@ -8499,7 +8498,7 @@ TEST_P(ParameterizedWebFrameTest, ClearFullscreenConstraintsOnNavigation) {
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::CreateUserGesture(frame, UserGestureToken::kNewGesture);
+      Frame::NotifyUserActivation(frame, UserGestureToken::kNewGesture);
   Fullscreen::RequestFullscreen(*frame->GetDocument()->documentElement());
   web_view_impl->DidEnterFullscreen();
   web_view_impl->UpdateAllLifecyclePhases();
@@ -8572,7 +8571,7 @@ TEST_P(ParameterizedWebFrameTest, OverlayFullscreenVideo) {
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::CreateUserGesture(frame);
+      Frame::NotifyUserActivation(frame);
   HTMLVideoElement* video =
       ToHTMLVideoElement(frame->GetDocument()->getElementById("video"));
   EXPECT_TRUE(video->UsesOverlayFullscreenVideo());
@@ -8756,8 +8755,8 @@ TEST_P(ParameterizedWebFrameTest, ReloadBypassingCache) {
   web_view_helper.InitializeAndLoad(base_url_ + "foo.html");
   WebLocalFrame* frame = web_view_helper.LocalMainFrame();
   FrameTestHelpers::ReloadFrameBypassingCache(frame);
-  EXPECT_EQ(WebCachePolicy::kBypassingCache,
-            frame->GetDocumentLoader()->GetRequest().GetCachePolicy());
+  EXPECT_EQ(mojom::FetchCacheMode::kBypassCache,
+            frame->GetDocumentLoader()->GetRequest().GetCacheMode());
 }
 
 static void NodeImageTestValidation(const IntSize& reference_bitmap_size,
@@ -9708,7 +9707,7 @@ TEST_P(ParameterizedWebFrameTest, LoaderOriginAccess) {
   SchemeRegistry::RegisterURLSchemeAsDisplayIsolated("chrome");
 
   // Cross-origin request.
-  KURL resource_url(kParsedURLString, "chrome://test.pdf");
+  KURL resource_url("chrome://test.pdf");
   ResourceRequest request(resource_url);
   request.SetRequestContext(WebURLRequest::kRequestContextObject);
   request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
@@ -10006,17 +10005,17 @@ TEST_P(ParameterizedWebFrameTest,
 }
 
 // See https://crbug.com/628942.
-TEST_P(ParameterizedWebFrameTest, SuspendedPageLoadWithRemoteMainFrame) {
+TEST_P(ParameterizedWebFrameTest, PausedPageLoadWithRemoteMainFrame) {
   FrameTestHelpers::WebViewHelper helper;
   helper.InitializeRemote();
   WebRemoteFrameImpl* remote_root = helper.RemoteMainFrame();
 
-  // Check that ScopedPageSuspender properly triggers deferred loading for
+  // Check that ScopedPagePauser properly triggers deferred loading for
   // the current Page.
   Page* page = remote_root->GetFrame()->GetPage();
   EXPECT_FALSE(page->Paused());
   {
-    ScopedPageSuspender suspender;
+    ScopedPagePauser pauser;
     EXPECT_TRUE(page->Paused());
   }
   EXPECT_FALSE(page->Paused());
@@ -10032,7 +10031,7 @@ TEST_P(ParameterizedWebFrameTest, SuspendedPageLoadWithRemoteMainFrame) {
   EXPECT_FALSE(
       local_child->GetDocument()->Fetcher()->Context().DefersLoading());
   {
-    ScopedPageSuspender suspender;
+    ScopedPagePauser pauser;
     EXPECT_TRUE(page->Paused());
     EXPECT_TRUE(
         local_child->GetDocument()->Fetcher()->Context().DefersLoading());
@@ -11792,7 +11791,7 @@ TEST_F(WebFrameTest, RecordSameDocumentNavigationToHistogram) {
 
   FrameLoader& main_frame_loader =
       web_view_helper.WebView()->MainFrameImpl()->GetFrame()->Loader();
-  RefPtr<SerializedScriptValue> message =
+  scoped_refptr<SerializedScriptValue> message =
       SerializeString("message", ToScriptStateForMainWorld(frame));
   tester.ExpectTotalCount(histogramName, 0);
   main_frame_loader.UpdateForSameDocumentNavigation(
@@ -12061,11 +12060,11 @@ TEST_F(WebFrameTest, ExecuteCommandProducesUserGesture) {
   web_view_helper.InitializeAndLoad("about:blank");
   WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
 
-  EXPECT_FALSE(frame->GetFrame()->HasReceivedUserGesture());
+  EXPECT_FALSE(frame->GetFrame()->HasBeenActivated());
   frame->ExecuteScript(WebScriptSource(WebString("document.execCommand('copy');")));
-  EXPECT_FALSE(frame->GetFrame()->HasReceivedUserGesture());
+  EXPECT_FALSE(frame->GetFrame()->HasBeenActivated());
   frame->ExecuteCommand(WebString::FromUTF8("Paste"));
-  EXPECT_TRUE(frame->GetFrame()->HasReceivedUserGesture());
+  EXPECT_TRUE(frame->GetFrame()->HasBeenActivated());
 }
 
 }  // namespace blink

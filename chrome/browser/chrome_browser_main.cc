@@ -54,6 +54,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
+#include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
 #include "chrome/browser/component_updater/origin_trials_component_installer.h"
 #include "chrome/browser/component_updater/pepper_flash_component_installer.h"
@@ -66,7 +67,6 @@
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/experiments/memory_ablation_experiment.h"
 #include "chrome/browser/first_run/first_run.h"
-#include "chrome/browser/geolocation/chrome_access_token_store.h"
 #include "chrome/browser/gpu/gpu_profile_cache.h"
 #include "chrome/browser/gpu/three_d_api_observer.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
@@ -76,7 +76,6 @@
 #include "chrome/browser/metrics/renderer_uptime_tracker.h"
 #include "chrome/browser/metrics/thread_watcher.h"
 #include "chrome/browser/nacl_host/nacl_browser_delegate_impl.h"
-#include "chrome/browser/net/crl_set_fetcher.h"
 #include "chrome/browser/performance_monitor/performance_monitor.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/prefs/chrome_command_line_pref_store.h"
@@ -125,6 +124,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/component_updater/component_updater_service.h"
+#include "components/component_updater/crl_set_remover.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/google/core/browser/google_util.h"
@@ -143,7 +143,7 @@
 #include "components/prefs/pref_value_store.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/rappor/rappor_service_impl.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -161,12 +161,12 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/site_instance.h"
+#include "content/public/browser/webvr_service_provider.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
-#include "device/geolocation/geolocation_delegate.h"
-#include "device/geolocation/geolocation_provider.h"
+#include "device/vr/features/features.h"
 #include "extensions/features/features.h"
 #include "media/base/localized_strings.h"
 #include "media/media_features.h"
@@ -291,22 +291,13 @@
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_tracker.h"
 #endif
 
+#if BUILDFLAG(ENABLE_VR)
+#include "chrome/browser/vr/service/vr_service_impl.h"
+#endif
+
 using content::BrowserThread;
 
 namespace {
-
-// A provider of Geolocation services to override AccessTokenStore.
-class ChromeGeolocationDelegate : public device::GeolocationDelegate {
- public:
-  ChromeGeolocationDelegate() = default;
-
-  scoped_refptr<device::AccessTokenStore> CreateAccessTokenStore() final {
-    return new ChromeAccessTokenStore();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ChromeGeolocationDelegate);
-};
 
 // This function provides some ways to test crash and assertion handling
 // behavior of the program.
@@ -514,21 +505,23 @@ void RegisterComponentsForUpdate() {
 
   base::FilePath path;
   if (PathService::Get(chrome::DIR_USER_DATA, &path)) {
-#if defined(OS_ANDROID)
-    // The CRLSet component was enabled for some releases. This code attempts to
-    // delete it from the local disk of those how may have downloaded it.
-    g_browser_process->crl_set_fetcher()->DeleteFromDisk(path);
-#elif !defined(OS_CHROMEOS)
+    // The CRLSet component previously resided in a different location: delete
+    // the old file.
+    component_updater::DeleteLegacyCRLSet(path);
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
     // CRLSetFetcher attempts to load a CRL set from either the local disk or
     // network.
     // For Chrome OS this registration is delayed until user login.
-    g_browser_process->crl_set_fetcher()->StartInitialLoad(cus, path);
+    // On Android, we do not register at all.
+    component_updater::RegisterCRLSetComponent(cus, path);
+#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
     // Registration of the STH set fetcher here is not done for:
     // Android: Because the story around CT on Mobile is not finalized yet.
     // Chrome OS: On Chrome OS this registration is delayed until user login.
     RegisterSTHSetComponent(cus, path);
-#endif  // defined(OS_ANDROID)
+#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
     RegisterOriginTrialsComponent(cus, path);
 
     RegisterFileTypePoliciesComponent(cus, path);
@@ -1146,8 +1139,10 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
 
   SetupOriginTrialsCommandLine();
 
-  device::GeolocationProvider::SetGeolocationDelegate(
-      new ChromeGeolocationDelegate());
+#if BUILDFLAG(ENABLE_VR)
+  content::WebvrServiceProvider::SetWebvrServiceCallback(
+      base::Bind(&vr::VRServiceImpl::Create));
+#endif
 
   // Now that the command line has been mutated based on about:flags, we can
   // initialize field trials. The field trials are needed by IOThread's
@@ -1612,6 +1607,11 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
     // Note: this can pop the first run consent dialog on linux.
     first_run::DoPostImportTasks(profile_,
                                  master_prefs_->make_chrome_default_for_user);
+
+    // The first run dialog is modal, and spins a RunLoop, which could receive
+    // a SIGTERM, and call chrome::AttemptExit(). Exit cleanly in that case.
+    if (browser_shutdown::IsTryingToQuit())
+      return content::RESULT_CODE_NORMAL_EXIT;
 
     if (!master_prefs_->suppress_first_run_default_browser_prompt) {
       browser_creator_->set_show_main_browser_window(

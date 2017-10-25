@@ -26,7 +26,6 @@ const char kRouteId[] = "routeId";
 const char kSource[] = "source1";
 const char kSinkId[] = "sink";
 const char kSinkId2[] = "sink2";
-const char kSinkName[] = "sinkName";
 const int kInvalidTabId = -1;
 const char kOrigin[] = "http://origin/";
 const char kPresentationId[] = "presentationId";
@@ -208,10 +207,10 @@ void MediaRouterMojoTest::TestCreateRoute() {
   // Use a lambda function as an invocation target here to work around
   // a limitation with GMock::Invoke that prevents it from using move-only types
   // in runnable parameter lists.
-  EXPECT_CALL(
-      mock_media_route_provider_,
-      CreateRouteInternal(kSource, kSinkId, _, url::Origin(GURL(kOrigin)),
-                          kInvalidTabId, _, _, _))
+  EXPECT_CALL(mock_media_route_provider_,
+              CreateRouteInternal(kSource, kSinkId, _,
+                                  url::Origin::Create(GURL(kOrigin)),
+                                  kInvalidTabId, _, _, _))
       .WillOnce(Invoke([](const std::string& source, const std::string& sink,
                           const std::string& presentation_id,
                           const url::Origin& origin, int tab_id,
@@ -227,8 +226,8 @@ void MediaRouterMojoTest::TestCreateRoute() {
   std::vector<MediaRouteResponseCallback> route_response_callbacks;
   route_response_callbacks.push_back(base::BindOnce(
       &RouteResponseCallbackHandler::Invoke, base::Unretained(&handler)));
-  router()->CreateRoute(kSource, kSinkId, url::Origin(GURL(kOrigin)), nullptr,
-                        std::move(route_response_callbacks),
+  router()->CreateRoute(kSource, kSinkId, url::Origin::Create(GURL(kOrigin)),
+                        nullptr, std::move(route_response_callbacks),
                         base::TimeDelta::FromMilliseconds(kTimeoutMillis),
                         false);
   base::RunLoop().RunUntilIdle();
@@ -250,11 +249,11 @@ void MediaRouterMojoTest::TestJoinRoute() {
   // Use a lambda function as an invocation target here to work around
   // a limitation with GMock::Invoke that prevents it from using move-only types
   // in runnable parameter lists.
-  EXPECT_CALL(
-      mock_media_route_provider_,
-      JoinRouteInternal(
-          kSource, kPresentationId, url::Origin(GURL(kOrigin)), kInvalidTabId,
-          base::TimeDelta::FromMilliseconds(kTimeoutMillis), _, _))
+  EXPECT_CALL(mock_media_route_provider_,
+              JoinRouteInternal(
+                  kSource, kPresentationId, url::Origin::Create(GURL(kOrigin)),
+                  kInvalidTabId,
+                  base::TimeDelta::FromMilliseconds(kTimeoutMillis), _, _))
       .WillOnce(
           Invoke([&route](const std::string& source,
                           const std::string& presentation_id,
@@ -270,8 +269,9 @@ void MediaRouterMojoTest::TestJoinRoute() {
   std::vector<MediaRouteResponseCallback> route_response_callbacks;
   route_response_callbacks.push_back(base::BindOnce(
       &RouteResponseCallbackHandler::Invoke, base::Unretained(&handler)));
-  router()->JoinRoute(kSource, kPresentationId, url::Origin(GURL(kOrigin)),
-                      nullptr, std::move(route_response_callbacks),
+  router()->JoinRoute(kSource, kPresentationId,
+                      url::Origin::Create(GURL(kOrigin)), nullptr,
+                      std::move(route_response_callbacks),
                       base::TimeDelta::FromMilliseconds(kTimeoutMillis), false);
   base::RunLoop().RunUntilIdle();
 }
@@ -286,11 +286,11 @@ void MediaRouterMojoTest::TestConnectRouteByRouteId() {
   // Use a lambda function as an invocation target here to work around
   // a limitation with GMock::Invoke that prevents it from using move-only types
   // in runnable parameter lists.
-  EXPECT_CALL(
-      mock_media_route_provider_,
-      ConnectRouteByRouteIdInternal(
-          kSource, kRouteId, _, url::Origin(GURL(kOrigin)), kInvalidTabId,
-          base::TimeDelta::FromMilliseconds(kTimeoutMillis), false, _))
+  EXPECT_CALL(mock_media_route_provider_,
+              ConnectRouteByRouteIdInternal(
+                  kSource, kRouteId, _, url::Origin::Create(GURL(kOrigin)),
+                  kInvalidTabId,
+                  base::TimeDelta::FromMilliseconds(kTimeoutMillis), false, _))
       .WillOnce(Invoke(
           [&route](const std::string& source, const std::string& route_id,
                    const std::string& presentation_id,
@@ -307,7 +307,7 @@ void MediaRouterMojoTest::TestConnectRouteByRouteId() {
   route_response_callbacks.push_back(base::BindOnce(
       &RouteResponseCallbackHandler::Invoke, base::Unretained(&handler)));
   router()->ConnectRouteByRouteId(
-      kSource, kRouteId, url::Origin(GURL(kOrigin)), nullptr,
+      kSource, kRouteId, url::Origin::Create(GURL(kOrigin)), nullptr,
       std::move(route_response_callbacks),
       base::TimeDelta::FromMilliseconds(kTimeoutMillis), false);
   base::RunLoop().RunUntilIdle();
@@ -393,25 +393,6 @@ void MediaRouterMojoTest::TestSearchSinks() {
 
   router()->SearchSinks(kSinkId, kSource, search_input, domain,
                         std::move(sink_callback));
-  base::RunLoop().RunUntilIdle();
-}
-
-void MediaRouterMojoTest::TestProvideSinks() {
-  std::vector<MediaSinkInternal> sinks;
-  MediaSink sink(kSinkId, kSinkName, SinkIconType::CAST);
-  CastSinkExtraData extra_data;
-  net::IPAddress ip_address;
-  EXPECT_TRUE(ip_address.AssignFromIPLiteral("192.168.1.3"));
-  extra_data.ip_endpoint = net::IPEndPoint(ip_address, 0);
-  extra_data.capabilities = 2;
-  extra_data.cast_channel_id = 3;
-  MediaSinkInternal expected_sink(sink, extra_data);
-  sinks.push_back(expected_sink);
-  std::string provider_name = "cast";
-
-  EXPECT_CALL(mock_media_route_provider_, ProvideSinks(provider_name, sinks));
-
-  router()->ProvideSinks(provider_name, sinks);
   base::RunLoop().RunUntilIdle();
 }
 

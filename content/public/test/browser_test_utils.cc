@@ -709,6 +709,32 @@ void SimulateMouseClickAt(WebContents* web_contents,
       mouse_event);
 }
 
+void SimulateRoutedMouseClickAt(WebContents* web_contents,
+                                int modifiers,
+                                blink::WebMouseEvent::Button button,
+                                const gfx::Point& point) {
+  content::WebContentsImpl* web_contents_impl =
+      static_cast<content::WebContentsImpl*>(web_contents);
+  content::RenderWidgetHostViewBase* rwhvb =
+      static_cast<content::RenderWidgetHostViewBase*>(
+          web_contents->GetRenderWidgetHostView());
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::kMouseDown, modifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+  mouse_event.button = button;
+  mouse_event.SetPositionInWidget(point.x(), point.y());
+  // Mac needs positionInScreen for events to plugins.
+  gfx::Rect offset = web_contents->GetContainerBounds();
+  mouse_event.SetPositionInScreen(point.x() + offset.x(),
+                                  point.y() + offset.y());
+  mouse_event.click_count = 1;
+  web_contents_impl->GetInputEventRouter()->RouteMouseEvent(rwhvb, &mouse_event,
+                                                            ui::LatencyInfo());
+  mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+  web_contents_impl->GetInputEventRouter()->RouteMouseEvent(rwhvb, &mouse_event,
+                                                            ui::LatencyInfo());
+}
+
 void SimulateMouseEvent(WebContents* web_contents,
                         blink::WebInputEvent::Type type,
                         const gfx::Point& point) {
@@ -1805,20 +1831,21 @@ bool MainThreadFrameObserver::OnMessageReceived(const IPC::Message& msg) {
 
 InputMsgWatcher::InputMsgWatcher(RenderWidgetHost* render_widget_host,
                                  blink::WebInputEvent::Type type)
-    : BrowserMessageFilter(InputMsgStart),
+    : render_widget_host_(render_widget_host),
       wait_for_type_(type),
       ack_result_(INPUT_EVENT_ACK_STATE_UNKNOWN),
-      ack_source_(static_cast<uint32_t>(InputEventAckSource::UNKNOWN)) {
-  render_widget_host->GetProcess()->AddFilter(this);
+      ack_source_(InputEventAckSource::UNKNOWN) {
+  render_widget_host->AddInputEventObserver(this);
 }
 
-InputMsgWatcher::~InputMsgWatcher() {}
+InputMsgWatcher::~InputMsgWatcher() {
+  render_widget_host_->RemoveInputEventObserver(this);
+}
 
-void InputMsgWatcher::ReceivedAck(blink::WebInputEvent::Type ack_type,
-                                  uint32_t ack_state,
-                                  uint32_t ack_source) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (wait_for_type_ == ack_type) {
+void InputMsgWatcher::OnInputEventAck(InputEventAckSource ack_source,
+                                      InputEventAckState ack_state,
+                                      const blink::WebInputEvent& event) {
+  if (event.GetType() == wait_for_type_) {
     ack_result_ = ack_state;
     ack_source_ = ack_source;
     if (!quit_.is_null())
@@ -1826,34 +1853,22 @@ void InputMsgWatcher::ReceivedAck(blink::WebInputEvent::Type ack_type,
   }
 }
 
-bool InputMsgWatcher::OnMessageReceived(const IPC::Message& message) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (message.type() == InputHostMsg_HandleInputEvent_ACK::ID) {
-    InputHostMsg_HandleInputEvent_ACK::Param params;
-    InputHostMsg_HandleInputEvent_ACK::Read(&message, &params);
-    blink::WebInputEvent::Type ack_type = std::get<0>(params).type;
-    InputEventAckState ack_state = std::get<0>(params).state;
-    InputEventAckSource ack_source = std::get<0>(params).source;
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&InputMsgWatcher::ReceivedAck, this, ack_type, ack_state,
-                       static_cast<uint32_t>(ack_source)));
-  }
-  return false;
-}
-
 bool InputMsgWatcher::HasReceivedAck() const {
   return ack_result_ != INPUT_EVENT_ACK_STATE_UNKNOWN;
 }
 
-uint32_t InputMsgWatcher::WaitForAck() {
+InputEventAckState InputMsgWatcher::WaitForAck() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (HasReceivedAck())
-    return ack_result_;
   base::RunLoop run_loop;
   base::AutoReset<base::Closure> reset_quit(&quit_, run_loop.QuitClosure());
   run_loop.Run();
   return ack_result_;
+}
+
+InputEventAckState InputMsgWatcher::GetAckStateWaitIfNecessary() {
+  if (HasReceivedAck())
+    return ack_result_;
+  return WaitForAck();
 }
 
 #if defined(OS_WIN)
@@ -2255,5 +2270,38 @@ MockOverscrollController* MockOverscrollController::Create(
 }
 
 #endif  // defined(USE_AURA)
+
+ContextMenuFilter::ContextMenuFilter()
+    : content::BrowserMessageFilter(FrameMsgStart),
+      message_loop_runner_(new content::MessageLoopRunner),
+      handled_(false) {}
+
+bool ContextMenuFilter::OnMessageReceived(const IPC::Message& message) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  if (message.type() == FrameHostMsg_ContextMenu::ID) {
+    FrameHostMsg_ContextMenu::Param params;
+    FrameHostMsg_ContextMenu::Read(&message, &params);
+    content::ContextMenuParams menu_params = std::get<0>(params);
+    content::BrowserThread::PostTask(
+        content::BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&ContextMenuFilter::OnContextMenu, this, menu_params));
+  }
+  return false;
+}
+
+void ContextMenuFilter::Wait() {
+  if (!handled_)
+    message_loop_runner_->Run();
+}
+
+ContextMenuFilter::~ContextMenuFilter() {}
+
+void ContextMenuFilter::OnContextMenu(
+    const content::ContextMenuParams& params) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  handled_ = true;
+  last_params_ = params;
+  message_loop_runner_->Quit();
+}
 
 }  // namespace content

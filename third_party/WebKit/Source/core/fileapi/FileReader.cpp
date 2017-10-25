@@ -76,7 +76,7 @@ class FileReader::ThrottlingController final
  public:
   static ThrottlingController* From(ExecutionContext* context) {
     if (!context)
-      return 0;
+      return nullptr;
 
     ThrottlingController* controller = static_cast<ThrottlingController*>(
         Supplement<ExecutionContext>::From(*context, SupplementName()));
@@ -118,7 +118,7 @@ class FileReader::ThrottlingController final
     probe::AsyncTaskCanceled(context, reader);
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(pending_readers_);
     visitor->Trace(running_readers_);
     Supplement<ExecutionContext>::Trace(visitor);
@@ -467,7 +467,7 @@ void FileReader::FireEvent(const AtomicString& type) {
         ProgressEvent::Create(type, false, loader_->BytesLoaded(), 0));
 }
 
-DEFINE_TRACE(FileReader) {
+void FileReader::Trace(blink::Visitor* visitor) {
   visitor->Trace(error_);
   EventTargetWithInlineData::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);

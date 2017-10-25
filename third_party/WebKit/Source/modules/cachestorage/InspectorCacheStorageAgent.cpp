@@ -86,7 +86,7 @@ ProtocolResponse ParseCacheId(const String& id,
 ProtocolResponse AssertCacheStorage(
     const String& security_origin,
     std::unique_ptr<WebServiceWorkerCacheStorage>* result) {
-  RefPtr<SecurityOrigin> sec_origin =
+  scoped_refptr<SecurityOrigin> sec_origin =
       SecurityOrigin::CreateFromString(security_origin);
 
   // Cache Storage API is restricted to trustworthy origins.
@@ -304,7 +304,7 @@ class GetCacheResponsesForRequestData
  public:
   GetCacheResponsesForRequestData(const DataRequestParams& params,
                                   const WebServiceWorkerRequest& request,
-                                  RefPtr<ResponsesAccumulator> accum)
+                                  scoped_refptr<ResponsesAccumulator> accum)
       : params_(params), request_(request), accumulator_(std::move(accum)) {}
   ~GetCacheResponsesForRequestData() override {}
 
@@ -322,7 +322,7 @@ class GetCacheResponsesForRequestData
  private:
   DataRequestParams params_;
   WebServiceWorkerRequest request_;
-  RefPtr<ResponsesAccumulator> accumulator_;
+  scoped_refptr<ResponsesAccumulator> accumulator_;
 };
 
 class GetCacheKeysForRequestData
@@ -345,7 +345,7 @@ class GetCacheKeysForRequestData
       callback_->sendSuccess(std::move(array), false);
       return;
     }
-    RefPtr<ResponsesAccumulator> accumulator =
+    scoped_refptr<ResponsesAccumulator> accumulator =
         WTF::AdoptRef(new ResponsesAccumulator(requests.size(), params_,
                                                std::move(callback_)));
 
@@ -459,7 +459,7 @@ class GetCacheForDeleteEntry
     BatchOperation delete_operation;
     delete_operation.operation_type =
         WebServiceWorkerCache::kOperationTypeDelete;
-    delete_operation.request.SetURL(KURL(kParsedURLString, request_spec_));
+    delete_operation.request.SetURL(KURL(request_spec_));
     Vector<BatchOperation> operations;
     operations.push_back(delete_operation);
     cache.release()->DispatchBatch(std::move(delete_request),
@@ -484,7 +484,7 @@ class CachedResponseFileReaderLoaderClient final
 
  public:
   static void Load(ExecutionContext* context,
-                   RefPtr<BlobDataHandle> blob,
+                   scoped_refptr<BlobDataHandle> blob,
                    std::unique_ptr<RequestCachedResponseCallback> callback) {
     new CachedResponseFileReaderLoaderClient(context, std::move(blob),
                                              std::move(callback));
@@ -515,7 +515,7 @@ class CachedResponseFileReaderLoaderClient final
  private:
   CachedResponseFileReaderLoaderClient(
       ExecutionContext* context,
-      RefPtr<BlobDataHandle>&& blob,
+      scoped_refptr<BlobDataHandle>&& blob,
       std::unique_ptr<RequestCachedResponseCallback>&& callback)
       : loader_(
             FileReaderLoader::Create(FileReaderLoader::kReadByClient, this)),
@@ -530,7 +530,7 @@ class CachedResponseFileReaderLoaderClient final
 
   std::unique_ptr<FileReaderLoader> loader_;
   std::unique_ptr<RequestCachedResponseCallback> callback_;
-  RefPtr<SharedBuffer> data_;
+  scoped_refptr<SharedBuffer> data_;
 };
 
 class CachedResponseMatchCallback
@@ -573,7 +573,7 @@ InspectorCacheStorageAgent::InspectorCacheStorageAgent(InspectedFrames* frames)
 
 InspectorCacheStorageAgent::~InspectorCacheStorageAgent() = default;
 
-DEFINE_TRACE(InspectorCacheStorageAgent) {
+void InspectorCacheStorageAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(frames_);
   InspectorBaseAgent::Trace(visitor);
 }
@@ -581,7 +581,7 @@ DEFINE_TRACE(InspectorCacheStorageAgent) {
 void InspectorCacheStorageAgent::requestCacheNames(
     const String& security_origin,
     std::unique_ptr<RequestCacheNamesCallback> callback) {
-  RefPtr<SecurityOrigin> sec_origin =
+  scoped_refptr<SecurityOrigin> sec_origin =
       SecurityOrigin::CreateFromString(security_origin);
 
   // Cache Storage API is restricted to trustworthy origins.
@@ -669,7 +669,7 @@ void InspectorCacheStorageAgent::requestCachedResponse(
     return;
   }
   WebServiceWorkerRequest request;
-  request.SetURL(KURL(kParsedURLString, request_url));
+  request.SetURL(KURL(request_url));
   ExecutionContext* context = nullptr;
   response = GetExecutionContext(frames_, cache_id, &context);
   if (!response.isSuccess())

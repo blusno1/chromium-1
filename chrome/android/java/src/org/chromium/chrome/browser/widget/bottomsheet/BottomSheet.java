@@ -18,7 +18,6 @@ import android.os.Build;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 import android.util.AttributeSet;
-import android.util.DisplayMetrics;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -31,7 +30,6 @@ import android.widget.PopupWindow.OnDismissListener;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.SysUtils;
 import org.chromium.base.VisibleForTesting;
@@ -151,9 +149,6 @@ public class BottomSheet
     /** The fraction of the width of the screen that, when swiped, will cause the sheet to move. */
     private static final float SWIPE_ALLOWED_FRACTION = 0.2f;
 
-    /** The threshold of application screen height for showing a tall bottom navigation bar. */
-    private static final float TALL_BOTTOM_NAV_THRESHOLD_DP = 683.0f;
-
     /**
      * Information about the different scroll states of the sheet. Order is important for these,
      * they go from smallest to largest.
@@ -179,12 +174,6 @@ public class BottomSheet
 
     /** The height of the shadow that sits above the toolbar. */
     private final int mToolbarShadowHeight;
-
-    /** The height of the bottom navigation bar that appears when the bottom sheet is expanded. */
-    private final int mBottomNavHeight;
-
-    /** Whether a tall bottom navigation bar should be used */
-    private final boolean mUseTallBottomNav;
 
     /** The {@link BottomSheetMetrics} used to record user actions and histograms. */
     private final BottomSheetMetrics mMetrics;
@@ -281,6 +270,9 @@ public class BottomSheet
 
     /** The token used to enable browser controls persistence. */
     private int mPersistentControlsToken;
+
+    /** A help bubble that points to the bottom sheet, helping users find bookmarks, et. al. */
+    private ViewAnchoredTextBubble mHelpBubble;
 
     /**
      * An interface defining content that can be displayed inside of the bottom sheet for Chrome
@@ -494,15 +486,6 @@ public class BottomSheet
                 getResources().getDimensionPixelSize(R.dimen.chrome_home_min_full_half_distance);
         mToolbarShadowHeight =
                 getResources().getDimensionPixelOffset(R.dimen.toolbar_shadow_height);
-
-        DisplayMetrics metrics =
-                ContextUtils.getApplicationContext().getResources().getDisplayMetrics();
-        mUseTallBottomNav =
-                Float.compare(Math.max(metrics.heightPixels, metrics.widthPixels) / metrics.density,
-                        TALL_BOTTOM_NAV_THRESHOLD_DP)
-                >= 0;
-        mBottomNavHeight = getResources().getDimensionPixelSize(
-                mUseTallBottomNav ? R.dimen.bottom_nav_height_tall : R.dimen.bottom_nav_height);
 
         mVelocityTracker = VelocityTracker.obtain();
 
@@ -1675,20 +1658,6 @@ public class BottomSheet
     }
 
     /**
-     * @return Whether the Google 'G' logo should be shown in the location bar.
-     */
-    public boolean shouldShowGoogleGInLocationBar() {
-        return mNtpController.shouldShowGoogleGInLocationBar();
-    }
-
-    /**
-     * @return Whether a tall bottom navigation bar should be used.
-     */
-    public boolean useTallBottomNav() {
-        return mUseTallBottomNav;
-    }
-
-    /**
      * Checks whether the sheet can be moved. It cannot be moved when the activity is in overview
      * mode, when "find in page" is visible, or when the toolbar is hidden.
      */
@@ -1753,10 +1722,10 @@ public class BottomSheet
                 ? R.string.bottom_sheet_accessibility_expand_button_help_bubble_message
                 : stringId;
 
-        ViewAnchoredTextBubble helpBubble = new ViewAnchoredTextBubble(
+        mHelpBubble = new ViewAnchoredTextBubble(
                 getContext(), anchorView, stringId, accessibilityStringId);
-        helpBubble.setDismissOnTouchInteraction(true);
-        helpBubble.addOnDismissListener(new OnDismissListener() {
+        mHelpBubble.setDismissOnTouchInteraction(true);
+        mHelpBubble.addOnDismissListener(new OnDismissListener() {
             @Override
             public void onDismiss() {
                 if (fromMenu) {
@@ -1766,6 +1735,8 @@ public class BottomSheet
                 }
 
                 ViewHighlighter.turnOffHighlight(anchorView);
+
+                mHelpBubble = null;
             }
         });
 
@@ -1775,8 +1746,8 @@ public class BottomSheet
 
         int inset = getContext().getResources().getDimensionPixelSize(
                 R.dimen.bottom_sheet_help_bubble_inset);
-        helpBubble.setInsetPx(0, inset, 0, inset);
-        helpBubble.show();
+        mHelpBubble.setInsetPx(0, inset, 0, inset);
+        mHelpBubble.show();
     }
 
     /**
@@ -1808,10 +1779,13 @@ public class BottomSheet
     }
 
     /**
-     * @return The height of the bottom navigation menu.
+     * @return The height of the bottom navigation menu. Returns 0 if the {@link ChromeActivity} or
+     * {@link BottomSheetContentController} are null.
      */
-    public float getBottomNavHeight() {
-        return mBottomNavHeight;
+    public int getBottomNavHeight() {
+        BottomSheetContentController contentController =
+                mActivity != null ? mActivity.getBottomSheetContentController() : null;
+        return contentController != null ? contentController.getBottomNavHeight() : 0;
     }
 
     /**
@@ -1826,5 +1800,13 @@ public class BottomSheet
      */
     public boolean isUsingExpandButton() {
         return mDefaultToolbarView.isUsingExpandButton();
+    }
+
+    /**
+     * @return The bottom sheet's help bubble if it exists.
+     */
+    @VisibleForTesting
+    public @Nullable ViewAnchoredTextBubble getHelpBubbleForTests() {
+        return mHelpBubble;
     }
 }

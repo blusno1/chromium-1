@@ -40,17 +40,6 @@ const char kAllowInsecureLocalhost[] = "allow-insecure-localhost";
 const char kAllowLoopbackInPeerConnection[] =
     "allow-loopback-in-peer-connection";
 
-// Enables the sandboxed processes to run without a job object assigned to them.
-// This flag is required to allow Chrome to run in RemoteApps or Citrix. This
-// flag can reduce the security of the sandboxed processes and allow them to do
-// certain API calls like shut down Windows or access the clipboard. Also we
-// lose the chance to kill some processes until the outer job that owns them
-// finishes.
-const char kAllowNoSandboxJob[]             = "allow-no-sandbox-job";
-
-// Allows debugging of sandboxed processes (see zygote_main_linux.cc).
-const char kAllowSandboxDebugging[]         = "allow-sandbox-debugging";
-
 // Uses the android SkFontManager on linux. The specified directory should
 // include the configuration xml file with the name "fonts.xml".
 // This is used in blimp to emulate android fonts on linux.
@@ -169,8 +158,8 @@ const char kDisableGpuMemoryBufferCompositorResources[] =
 const char kDisableGpuMemoryBufferVideoFrames[] =
     "disable-gpu-memory-buffer-video-frames";
 
-// Disable the limit on the number of times the GPU process may be restarted.
-// For tests and platforms where software fallback is disabled.
+// For tests, to disable the limit on the number of times the GPU process may be
+// restarted.
 const char kDisableGpuProcessCrashLimit[] = "disable-gpu-process-crash-limit";
 
 // When using CPU rasterizing disable low resolution tiling. This uses
@@ -180,6 +169,10 @@ const char kDisableLowResTiling[] = "disable-low-res-tiling";
 
 // Disable the GPU process sandbox.
 const char kDisableGpuSandbox[]             = "disable-gpu-sandbox";
+
+// Disable the thread that crashes the GPU process if it stops responding to
+// messages.
+const char kDisableGpuWatchdog[] = "disable-gpu-watchdog";
 
 // Suppresses hang monitor dialogs in renderer processes.  This may allow slow
 // unload handlers on a page to prevent the tab from closing, but the Task
@@ -215,6 +208,11 @@ const char kDisableMojoLocalStorage[] = "disable-mojo-local-storage";
 
 // Disables usage of the namespace sandbox.
 const char kDisableNamespaceSandbox[]       = "disable-namespace-sandbox";
+
+// Disables clearing the rendering output of a renderer when it didn't commit
+// new output for a while after a top-frame navigation.
+const char kDisableNewContentRenderingTimeout[] =
+    "disable-new-content-rendering-timeout";
 
 // Disables the Web Notification and the Push APIs.
 const char kDisableNotifications[]          = "disable-notifications";
@@ -267,12 +265,6 @@ const char kDisableRendererBackgrounding[]  = "disable-renderer-backgrounding";
 // Whether the resize lock is disabled. Default is false. This is generally only
 // useful for tests that want to force disabling.
 const char kDisableResizeLock[] = "disable-resize-lock";
-
-// Disable the seccomp filter sandbox (seccomp-bpf) (Linux only).
-const char kDisableSeccompFilterSandbox[]   = "disable-seccomp-filter-sandbox";
-
-// Disable the setuid sandbox (Linux only).
-const char kDisableSetuidSandbox[]          = "disable-setuid-sandbox";
 
 // Disable shared workers.
 const char kDisableSharedWorkers[]          = "disable-shared-workers";
@@ -559,11 +551,8 @@ const char kGpuLauncher[]                   = "gpu-launcher";
 // Makes this process a GPU sub-process.
 const char kGpuProcess[]                    = "gpu-process";
 
-// Allows shmat() system call in the GPU sandbox.
-const char kGpuSandboxAllowSysVShm[]        = "gpu-sandbox-allow-sysv-shm";
-
-// Makes GPU sandbox failures fatal.
-const char kGpuSandboxFailuresFatal[]       = "gpu-sandbox-failures-fatal";
+// Starts the GPU sandbox before creating a GL context.
+const char kGpuSandboxStartEarly[] = "gpu-sandbox-start-early";
 
 // Causes the GPU process to display a dialog on launch.
 const char kGpuStartupDialog[]              = "gpu-startup-dialog";
@@ -668,10 +657,6 @@ const char kNoSandbox[]                     = "no-sandbox";
 // zygote to work.
 const char kNoZygote[] = "no-zygote";
 
-// Enable or disable appcontainer/lowbox for renderer on Win8+ platforms.
-const char kEnableAppContainer[]           = "enable-appcontainer";
-const char kDisableAppContainer[]          = "disable-appcontainer";
-
 // Number of worker threads used to rasterize content.
 const char kNumRasterThreads[]              = "num-raster-threads";
 
@@ -767,12 +752,11 @@ const char kProxyServer[] = "proxy-server";
 // Defaults to disabled.
 const char kPullToRefresh[] = "pull-to-refresh";
 
-// Enables more web features over insecure connections. Designed to be used
-// for testing purposes only.
-const char kReduceSecurityForTesting[]      = "reduce-security-for-testing";
-
 // Register Pepper plugins (see pepper_plugin_list.cc for its format).
 const char kRegisterPepperPlugins[]         = "register-pepper-plugins";
+
+// Enables remote debug over stdio pipes [in=3, out=4].
+const char kRemoteDebuggingPipe[] = "remote-debugging-pipe";
 
 // Enables remote debug over HTTP on the specified port.
 const char kRemoteDebuggingPort[]           = "remote-debugging-port";
@@ -1070,9 +1054,6 @@ const char kDeviceScaleFactor[]     = "device-scale-factor";
 
 // Disable the Legacy Window which corresponds to the size of the WebContents.
 const char kDisableLegacyIntermediateWindow[] = "disable-legacy-window";
-
-// Disables the Win32K process mitigation policy for child processes.
-const char kDisableWin32kLockDown[] = "disable-win32k-lockdown";
 
 // Enables experimental hardware acceleration for VP8/VP9 video decoding.
 // Bitmask - 0x1=Microsoft, 0x2=AMD, 0x03=Try all.

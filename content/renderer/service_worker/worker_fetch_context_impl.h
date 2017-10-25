@@ -7,13 +7,14 @@
 
 #include "content/common/service_worker/service_worker_provider.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/service_worker_modes.h"
 #include "content/public/common/url_loader_factory.mojom.h"
+#include "content/public/renderer/child_url_loader_factory_getter.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/WebKit/public/platform/WebApplicationCacheHost.h"
 #include "third_party/WebKit/public/platform/WebWorkerFetchContext.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -45,9 +46,7 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
   // blink::WebWorkerFetchContext implementation:
   void InitializeOnWorkerThread(
       scoped_refptr<base::SingleThreadTaskRunner>) override;
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
-      const blink::WebURLRequest& request,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
+  std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
   void WillSendRequest(blink::WebURLRequest&) override;
   bool IsControlledByServiceWorker() const override;
   void SetDataSaverEnabled(bool) override;
@@ -99,7 +98,7 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
 
   // Updated when mojom::ServiceWorkerWorkerClient::SetControllerServiceWorker()
   // is called from the browser process via mojo IPC.
-  int controller_version_id_ = kInvalidServiceWorkerVersionId;
+  int controller_version_id_ = blink::mojom::kInvalidServiceWorkerVersionId;
 
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   std::unique_ptr<blink::WebDocumentSubresourceFilter::Builder>

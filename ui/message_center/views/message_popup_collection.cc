@@ -43,7 +43,7 @@ const int kMouseExitedDeferTimeoutMs = 200;
 
 // The margin between messages (and between the anchor unless
 // first_item_has_no_margin was specified).
-const int kToastMarginY = kMarginBetweenItems;
+const int kToastMarginY = kMarginBetweenPopups;
 
 }  // namespace.
 
@@ -106,11 +106,6 @@ void MessagePopupCollection::RemoveNotification(
 std::unique_ptr<ui::MenuModel> MessagePopupCollection::CreateMenuModel(
     const Notification& notification) {
   return tray_->CreateNotificationMenuModel(notification);
-}
-
-bool MessagePopupCollection::HasClickedListener(
-    const std::string& notification_id) {
-  return message_center_->HasClickedListener(notification_id);
 }
 
 void MessagePopupCollection::ClickOnNotificationButton(

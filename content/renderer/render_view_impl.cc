@@ -41,10 +41,6 @@
 #include "cc/base/switches.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "components/viz/client/client_shared_bitmap_manager.h"
-#include "content/child/appcache/appcache_dispatcher.h"
-#include "content/child/appcache/web_application_cache_host_impl.h"
-#include "content/child/request_extra_data.h"
-#include "content/child/v8_value_converter_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/dom_storage/dom_storage_types.h"
@@ -73,6 +69,8 @@
 #include "content/public/renderer/render_view_observer.h"
 #include "content/public/renderer/render_view_visitor.h"
 #include "content/public/renderer/window_features_converter.h"
+#include "content/renderer/appcache/appcache_dispatcher.h"
+#include "content/renderer/appcache/web_application_cache_host_impl.h"
 #include "content/renderer/browser_plugin/browser_plugin.h"
 #include "content/renderer/browser_plugin/browser_plugin_manager.h"
 #include "content/renderer/dom_storage/webstoragenamespace_impl.h"
@@ -83,6 +81,7 @@
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/input/input_handler_manager.h"
 #include "content/renderer/internal_document_state_data.h"
+#include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/media/audio_device_factory.h"
 #include "content/renderer/media/media_stream_dispatcher.h"
 #include "content/renderer/media/video_capture_impl_manager.h"
@@ -96,6 +95,7 @@
 #include "content/renderer/resizing_mode_selector.h"
 #include "content/renderer/savable_resources.h"
 #include "content/renderer/speech_recognition_dispatcher.h"
+#include "content/renderer/v8_value_converter_impl.h"
 #include "content/renderer/web_ui_extension_data.h"
 #include "media/audio/audio_output_device.h"
 #include "media/base/media_switches.h"
@@ -1172,7 +1172,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(PageMsg_UpdateWindowScreenRect,
                         OnUpdateWindowScreenRect)
     IPC_MESSAGE_HANDLER(PageMsg_SetZoomLevel, OnSetZoomLevel)
-    IPC_MESSAGE_HANDLER(PageMsg_SetDeviceScaleFactor, OnSetDeviceScaleFactor);
     IPC_MESSAGE_HANDLER(PageMsg_WasHidden, OnPageWasHidden)
     IPC_MESSAGE_HANDLER(PageMsg_WasShown, OnPageWasShown)
     IPC_MESSAGE_HANDLER(PageMsg_SetHistoryOffsetAndLength,
@@ -1353,10 +1352,11 @@ WebView* RenderViewImpl::CreateView(WebLocalFrame* creator,
       params->disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB;
   bool opened_by_user_gesture = params->user_gesture;
 
+  mojom::CreateNewWindowStatus status;
   mojom::CreateNewWindowReplyPtr reply;
   auto* frame_host = creator_frame->GetFrameHost();
-  bool err = !frame_host->CreateNewWindow(std::move(params), &reply);
-  if (err || reply->route_id == MSG_ROUTING_NONE)
+  bool err = !frame_host->CreateNewWindow(std::move(params), &status, &reply);
+  if (err || status == mojom::CreateNewWindowStatus::kIgnore)
     return nullptr;
 
   // For Android WebView, we support a pop-up like behavior for window.open()
@@ -1365,8 +1365,16 @@ WebView* RenderViewImpl::CreateView(WebLocalFrame* creator,
   // passed. We also don't need to consume user gestures to protect against
   // multiple windows being opened, because, well, the app doesn't support
   // multiple windows.
-  if (reply->route_id == GetRoutingID())
+  // TODO(dcheng): It's awkward that this is plumbed into Blink but not really
+  // used much in Blink, except to enable layout testing... perhaps this should
+  // be checked directly in the browser side.
+  if (status == mojom::CreateNewWindowStatus::kReuse)
     return webview();
+
+  DCHECK(reply);
+  DCHECK_NE(MSG_ROUTING_NONE, reply->route_id);
+  DCHECK_NE(MSG_ROUTING_NONE, reply->main_frame_route_id);
+  DCHECK_NE(MSG_ROUTING_NONE, reply->main_frame_widget_route_id);
 
   WebUserGestureIndicator::ConsumeUserGesture();
 
@@ -1400,6 +1408,7 @@ WebView* RenderViewImpl::CreateView(WebLocalFrame* creator,
   view_params.swapped_out = false;
   view_params.replicated_frame_state.frame_policy.sandbox_flags = sandbox_flags;
   view_params.replicated_frame_state.name = frame_name_utf8;
+  view_params.devtools_main_frame_token = reply->devtools_main_frame_token;
   // Even if the main frame has a name, the main frame's unique name is always
   // the empty string.
   view_params.hidden = is_background_tab;
@@ -1881,6 +1890,10 @@ gfx::Size RenderViewImpl::GetSize() const {
 
 float RenderViewImpl::GetDeviceScaleFactor() const {
   return device_scale_factor_;
+}
+
+float RenderViewImpl::GetZoomLevel() const {
+  return page_zoom_level_;
 }
 
 const WebPreferences& RenderViewImpl::GetWebkitPreferences() {

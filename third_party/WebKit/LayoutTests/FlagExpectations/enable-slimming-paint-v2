@@ -903,6 +903,7 @@ Bug(none) paint/invalidation/overflow-changed-on-child-of-composited-layer.html 
 Bug(none) paint/invalidation/overflow-hidden-yet-scrolled-with-custom-scrollbar.html [ Failure ]
 Bug(none) paint/invalidation/overflow-hidden-yet-scrolled.html [ Failure ]
 Bug(none) paint/invalidation/paint-invalidation-with-reparent-across-frame-boundaries.html [ Failure ]
+Bug(none) paint/invalidation/scrollbar-ancestor-clip-change.html [ Failure ]
 Bug(none) paint/invalidation/svg/resize-svg-invalidate-children-2.html [ Failure ]
 Bug(none) paint/invalidation/svg/resize-svg-invalidate-children.html [ Failure ]
 
@@ -938,6 +939,7 @@ Bug(none) paint/invalidation/svg/use-clipped-hit.svg [ Failure ]
 Bug(none) paint/invalidation/svg/zoom-coords-viewattr-01-b.svg [ Failure ]
 
 # Extra raster invalidations.
+Bug(none) compositing/overflow/do-not-repaint-if-scrolling-composited-layers.html [ Failure ]
 Bug(none) paint/invalidation/compositing/clipping-should-not-repaint-composited-descendants.html [ Failure ]
 Bug(none) paint/invalidation/compositing/fixed-scroll-in-empty-root-layer.html [ Failure ]
 Bug(none) paint/invalidation/compositing/resize-repaint.html [ Failure ]
@@ -1710,6 +1712,8 @@ crbug.com/762098 compositing/overflow/non-composited-sticky-element-in-main-thre
 
 # Subsequence under-invalidation of scroller related to ScrollHitTest.
 crbug.com/738613 compositing/overflow/overflow-scroll-with-pointer-events-toggle.html [ Failure Crash ]
+# Null pointer in PaintArtifactCompositor::ScrollHitTestLayerForPendingLayer().
+crbug.com/738613 paint/invalidation/compositing/pointer-events-composited-scrolling.html [ Crash ]
 
 # See comment regarding this test in NeverFixTests. It also fails for other
 # reasons, in particular that the composited layerization algorithm provides
@@ -1779,3 +1783,9 @@ Bug(none) svg/W3C-SVG-1.1/text-align-05-b.svg [ Failure ]
 Bug(none) svg/W3C-SVG-1.1/text-text-05-t.svg [ Failure ]
 Bug(none) svg/W3C-SVG-1.1/text-text-06-t.svg [ Failure ]
 Bug(none) svg/transforms/text-with-pattern-with-svg-transform.svg [ Failure ]
+
+Bug(none) fast/multicol/composited-relpos-2nd-column.html [ Failure ]
+Bug(none) fast/multicol/newmulticol/clipping-overflow-hidden.html [ Failure ]
+Bug(none) fast/multicol/newmulticol/clipping-top-overflow.html [ Failure ]
+Bug(none) fast/multicol/overflow-content.html [ Failure ]
+Bug(none) fast/multicol/scale-transform-text.html [ Failure ]

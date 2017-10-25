@@ -47,6 +47,7 @@
 #include "net/http/http_response_info.h"
 #include "third_party/WebKit/common/origin_trials/trial_token_validator.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 
 namespace content {
@@ -282,7 +283,7 @@ ServiceWorkerVersion::ServiceWorkerVersion(
     : version_id_(version_id),
       registration_id_(registration->id()),
       script_url_(script_url),
-      script_origin_(script_url_),
+      script_origin_(url::Origin::Create(script_url_)),
       scope_(registration->pattern()),
       fetch_handler_existence_(FetchHandlerExistence::UNKNOWN),
       site_for_uma_(ServiceWorkerMetrics::SiteFromURL(scope_)),
@@ -294,7 +295,7 @@ ServiceWorkerVersion::ServiceWorkerVersion(
       validator_(base::MakeUnique<blink::TrialTokenValidator>(
           base::MakeUnique<TrialPolicyImpl>())),
       weak_factory_(this) {
-  DCHECK_NE(kInvalidServiceWorkerVersionId, version_id);
+  DCHECK_NE(blink::mojom::kInvalidServiceWorkerVersionId, version_id);
   DCHECK(context_);
   DCHECK(registration);
   DCHECK(script_url_.is_valid());
@@ -774,8 +775,8 @@ void ServiceWorkerVersion::Doom() {
 
 void ServiceWorkerVersion::SetValidOriginTrialTokens(
     const blink::TrialTokenValidator::FeatureToTokensMap& tokens) {
-  origin_trial_tokens_ =
-      validator_->GetValidTokens(url::Origin(scope()), tokens, clock_->Now());
+  origin_trial_tokens_ = validator_->GetValidTokens(
+      url::Origin::Create(scope()), tokens, clock_->Now());
 }
 
 void ServiceWorkerVersion::SetDevToolsAttached(bool attached) {
@@ -827,7 +828,7 @@ void ServiceWorkerVersion::SetMainScriptHttpResponseInfo(
   //     wasn't set in the entry.
   if (!origin_trial_tokens_) {
     origin_trial_tokens_ = validator_->GetValidTokensFromHeaders(
-        url::Origin(scope()), http_info.headers.get(), clock_->Now());
+        url::Origin::Create(scope()), http_info.headers.get(), clock_->Now());
   }
 
   for (auto& observer : listeners_)
@@ -1565,7 +1566,8 @@ void ServiceWorkerVersion::StartWorkerInternal() {
       // |embedded_worker_| whose owner is |this|.
       base::BindOnce(&CompleteProviderHostPreparation, base::Unretained(this),
                      std::move(pending_provider_host), context()),
-      mojo::MakeRequest(&event_dispatcher_), std::move(installed_scripts_info),
+      mojo::MakeRequest(&event_dispatcher_),
+      mojo::MakeRequest(&controller_ptr_), std::move(installed_scripts_info),
       base::BindOnce(&ServiceWorkerVersion::OnStartSentAndScriptEvaluated,
                      weak_factory_.GetWeakPtr()));
   event_dispatcher_.set_connection_error_handler(base::BindOnce(
@@ -1616,9 +1618,10 @@ void ServiceWorkerVersion::SetTimeoutTimerInterval(base::TimeDelta interval) {
 }
 
 void ServiceWorkerVersion::OnTimeoutTimer() {
-  DCHECK(running_status() == EmbeddedWorkerStatus::STARTING ||
-         running_status() == EmbeddedWorkerStatus::RUNNING ||
-         running_status() == EmbeddedWorkerStatus::STOPPING)
+  // TODO(horo): This CHECK is for debugging crbug.com/759938.
+  CHECK(running_status() == EmbeddedWorkerStatus::STARTING ||
+        running_status() == EmbeddedWorkerStatus::RUNNING ||
+        running_status() == EmbeddedWorkerStatus::STOPPING)
       << static_cast<int>(running_status());
 
   if (!context_)
@@ -1706,8 +1709,9 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
 }
 
 void ServiceWorkerVersion::PingWorker() {
-  DCHECK(running_status() == EmbeddedWorkerStatus::STARTING ||
-         running_status() == EmbeddedWorkerStatus::RUNNING);
+  // TODO(horo): This CHECK is for debugging crbug.com/759938.
+  CHECK(running_status() == EmbeddedWorkerStatus::STARTING ||
+        running_status() == EmbeddedWorkerStatus::RUNNING);
   // base::Unretained here is safe because event_dispatcher is owned by |this|.
   event_dispatcher()->Ping(base::BindOnce(
       &ServiceWorkerVersion::OnPongFromWorker, base::Unretained(this)));
@@ -1723,14 +1727,23 @@ void ServiceWorkerVersion::OnPingTimeout() {
 }
 
 void ServiceWorkerVersion::StopWorkerIfIdle() {
-  if (HasWork() && !ping_controller_->IsTimedOut())
-    return;
   if (running_status() == EmbeddedWorkerStatus::STOPPED ||
       running_status() == EmbeddedWorkerStatus::STOPPING ||
       !stop_callbacks_.empty()) {
     return;
   }
 
+  // StopWorkerIfIdle() may be called for two reasons: "idle-timeout" or
+  // "ping-timeout". For idle-timeout (i.e. ping hasn't timed out), first check
+  // if the worker really is idle.
+  if (!ping_controller_->IsTimedOut()) {
+    // S13nServiceWorker: We don't stop the service worker for idle-timeout
+    // in the browser process when Servicification is enabled, as events
+    // might be dispatched directly without going through the browser-process.
+    // TODO(kinuko): Re-implement timers. (crbug.com/774374)
+    if (HasWork() || ServiceWorkerUtils::IsServicificationEnabled())
+      return;
+  }
   embedded_worker_->StopIfIdle();
 }
 
@@ -1758,7 +1771,7 @@ void ServiceWorkerVersion::RecordStartWorkerResult(
 
   if (installed_scripts_sender_) {
     ServiceWorkerMetrics::RecordInstalledScriptsSenderStatus(
-        installed_scripts_sender_->finished_reason());
+        installed_scripts_sender_->last_finished_reason());
   }
   ServiceWorkerMetrics::RecordStartWorkerStatus(status, purpose,
                                                 IsInstalled(prestart_status));
@@ -1936,6 +1949,7 @@ void ServiceWorkerVersion::OnStoppedInternal(EmbeddedWorkerStatus old_status) {
   pending_requests_.Clear();
   external_request_uuid_to_request_id_.clear();
   event_dispatcher_.reset();
+  controller_ptr_.reset();
   installed_scripts_sender_.reset();
 
   for (auto& observer : listeners_)

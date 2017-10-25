@@ -9,12 +9,13 @@
 #include <set>
 
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "platform/PlatformExport.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/scheduler/base/task_queue.h"
+#include "platform/scheduler/util/tracing_helper.h"
 
 namespace base {
 namespace trace_event {
@@ -29,10 +30,9 @@ namespace scheduler {
 class RendererSchedulerImpl;
 class MainThreadTaskQueue;
 class TaskQueue;
-class WebTaskRunnerImpl;
 class WebViewSchedulerImpl;
 
-class WebFrameSchedulerImpl : public WebFrameScheduler {
+class PLATFORM_EXPORT WebFrameSchedulerImpl : public WebFrameScheduler {
  public:
   WebFrameSchedulerImpl(RendererSchedulerImpl* renderer_scheduler,
                         WebViewSchedulerImpl* parent_web_view_scheduler,
@@ -54,12 +54,7 @@ class WebFrameSchedulerImpl : public WebFrameScheduler {
   void SetCrossOrigin(bool cross_origin) override;
   bool IsCrossOrigin() const override;
   WebFrameScheduler::FrameType GetFrameType() const override;
-  RefPtr<WebTaskRunner> LoadingTaskRunner() override;
-  RefPtr<WebTaskRunner> LoadingControlTaskRunner() override;
-  RefPtr<WebTaskRunner> ThrottleableTaskRunner() override;
-  RefPtr<WebTaskRunner> DeferrableTaskRunner() override;
-  RefPtr<WebTaskRunner> PausableTaskRunner() override;
-  RefPtr<WebTaskRunner> UnpausableTaskRunner() override;
+  scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType) override;
   WebViewScheduler* GetWebViewScheduler() override;
   void WillNavigateBackForwardSoon() override;
   void DidStartProvisionalLoad(bool is_main_frame) override;
@@ -76,6 +71,18 @@ class WebFrameSchedulerImpl : public WebFrameScheduler {
   bool IsExemptFromThrottling() const override;
 
   bool has_active_connection() const { return active_connection_count_; }
+
+  void OnTraceLogEnabled();
+
+  // TODO(hajimehoshi): Some tests like RendererSchedulerImplTest depends on
+  // these functions. These are public or a lot of FORWARD_DECLARE_TEST and
+  // FRIEND_TEST_ALL_PREFIXES would be required. Fix the tests not to use these.
+  scoped_refptr<WebTaskRunner> LoadingTaskRunner();
+  scoped_refptr<WebTaskRunner> LoadingControlTaskRunner();
+  scoped_refptr<WebTaskRunner> ThrottleableTaskRunner();
+  scoped_refptr<WebTaskRunner> DeferrableTaskRunner();
+  scoped_refptr<WebTaskRunner> PausableTaskRunner();
+  scoped_refptr<WebTaskRunner> UnpausableTaskRunner();
 
  private:
   friend class WebViewSchedulerImpl;
@@ -117,22 +124,18 @@ class WebFrameSchedulerImpl : public WebFrameScheduler {
       throttleable_queue_enabled_voter_;
   std::unique_ptr<TaskQueue::QueueEnabledVoter> deferrable_queue_enabled_voter_;
   std::unique_ptr<TaskQueue::QueueEnabledVoter> pausable_queue_enabled_voter_;
-  RefPtr<WebTaskRunnerImpl> loading_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> loading_control_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> throttleable_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> deferrable_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> pausable_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> unpausable_web_task_runner_;
   RendererSchedulerImpl* renderer_scheduler_;        // NOT OWNED
   WebViewSchedulerImpl* parent_web_view_scheduler_;  // NOT OWNED
   base::trace_event::BlameContext* blame_context_;   // NOT OWNED
   std::set<Observer*> loader_observers_;             // NOT OWNED
   WebFrameScheduler::ThrottlingState throttling_state_;
-  bool frame_visible_;
-  bool page_visible_;
-  bool page_stopped_;
-  bool frame_paused_;
-  bool cross_origin_;
+  // TODO(kraynov): Find a way to distinguish different frames
+  // (probably by grouping on TraceViewer side).
+  TraceableState<bool, kTracingCategoryNameInfo> frame_visible_;
+  TraceableState<bool, kTracingCategoryNameInfo> page_visible_;
+  TraceableState<bool, kTracingCategoryNameInfo> page_stopped_;
+  TraceableState<bool, kTracingCategoryNameInfo> frame_paused_;
+  TraceableState<bool, kTracingCategoryNameInfo> cross_origin_;
   WebFrameScheduler::FrameType frame_type_;
   int active_connection_count_;
 

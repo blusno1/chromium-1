@@ -2393,8 +2393,6 @@ _PEPPER_INTERFACES = [
 #               'extension': True.
 # not_shared:   For GENn types, True if objects can't be shared between contexts
 # es3:          ES3 API. True if the function requires an ES3 or WebGL2 context.
-# id_mapping:   A list of resource type names whose client side IDs need to be
-#               mapped to service side IDs.  This is only used for ES3 APIs.
 
 _FUNCTION_INFO = {
   'ActiveTexture': {
@@ -2571,16 +2569,6 @@ _FUNCTION_INFO = {
     'state': 'ColorMask',
     'no_gl': True,
     'expectation': False,
-  },
-  'ConsumeTextureCHROMIUM': {
-    'decoder_func': 'DoConsumeTextureCHROMIUM',
-    'impl_func': False,
-    'type': 'PUT',
-    'count': 16,  # GL_MAILBOX_SIZE_CHROMIUM
-    'unit_test': False,
-    'client_test': False,
-    'extension': "CHROMIUM_texture_mailbox",
-    'trace_level': 2,
   },
   'CopyBufferSubData': {
     'decoder_func': 'DoCopyBufferSubData',
@@ -3228,8 +3216,8 @@ _FUNCTION_INFO = {
   'GetSynciv': {
     'type': 'GETn',
     'cmd_args': 'GLuint sync, GLenumSyncParameter pname, void* values',
+    'decoder_func': 'DoGetSynciv',
     'result': ['SizedResult<GLint>'],
-    'id_mapping': ['Sync'],
     'es3': True,
   },
   'GetTexParameterfv': {
@@ -3424,7 +3412,6 @@ _FUNCTION_INFO = {
   },
   'IsSync': {
     'type': 'Is',
-    'id_mapping': [ 'Sync' ],
     'cmd_args': 'GLuint sync',
     'decoder_func': 'DoIsSync',
     'expectation': False,
@@ -4619,6 +4606,7 @@ _FUNCTION_INFO = {
     'needs_size': True,
     'extension': 'CHROMIUM_raster_transport',
     'extension_flag': 'chromium_raster_transport',
+    'cmd_args': 'void* list',
   },
   'EndRasterCHROMIUM': {
     'decoder_func': 'DoEndRasterCHROMIUM',
@@ -4909,56 +4897,9 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
 
   def WriteHandlerImplementation(self, func, f):
     """Writes the handler implementation for this command."""
-    if func.IsES3() and func.GetInfo('id_mapping'):
-      code_no_gen = """  if (!group_->Get%(type)sServiceId(
-        %(var)s, &%(service_var)s)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "%(func)s", "invalid %(var)s id");
-    return error::kNoError;
-  }
-"""
-      code_gen = """  if (!group_->Get%(type)sServiceId(
-        %(var)s, &%(service_var)s)) {
-    if (!group_->bind_generates_resource()) {
-      LOCAL_SET_GL_ERROR(
-          GL_INVALID_OPERATION, "%(func)s", "invalid %(var)s id");
-      return error::kNoError;
-    }
-    GLuint client_id = %(var)s;
-    gl%(gen_func)s(1, &%(service_var)s);
-    Create%(type)s(client_id, %(service_var)s);
-  }
-"""
-      gen_func = func.GetInfo('gen_func')
-      for id_type in func.GetInfo('id_mapping'):
-        service_var = id_type.lower()
-        if id_type == 'Sync':
-          service_var = "service_%s" % service_var
-          f.write("  GLsync %s = 0;\n" % service_var)
-        if id_type == 'Sampler' and func.IsType('Bind'):
-          # No error generated when binding a reserved zero sampler.
-          args = [arg.name for arg in func.GetOriginalArgs()]
-          f.write("""  if(%(var)s == 0) {
-    %(func)s(%(args)s);
-    return error::kNoError;
-  }""" % { 'var': id_type.lower(),
-           'func': func.GetGLFunctionName(),
-           'args': ", ".join(args) })
-        if gen_func and id_type in gen_func:
-          f.write(code_gen % { 'type': id_type,
-                                  'var': id_type.lower(),
-                                  'service_var': service_var,
-                                  'func': func.GetGLFunctionName(),
-                                  'gen_func': gen_func })
-        else:
-          f.write(code_no_gen % { 'type': id_type,
-                                     'var': id_type.lower(),
-                                     'service_var': service_var,
-                                     'func': func.GetGLFunctionName() })
     args = []
     for arg in func.GetOriginalArgs():
-      if arg.type == "GLsync":
-        args.append("service_%s" % arg.name)
-      elif arg.name.endswith("size") and arg.type == "GLsizei":
+      if arg.name.endswith("size") and arg.type == "GLsizei":
         args.append("num_%s" % func.GetLastOriginalArg().name)
       elif arg.name == "length":
         args.append("nullptr")
@@ -5006,23 +4947,13 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     """Writes the code to set data_size used in validation"""
     pass
 
-  def __WriteIdMapping(self, func, f):
-    """Writes client side / service side ID mapping."""
-    if not func.IsES3() or not func.GetInfo('id_mapping'):
-      return
-    for id_type in func.GetInfo('id_mapping'):
-      f.write("  group_->Get%sServiceId(%s, &%s);\n" %
-                 (id_type, id_type.lower(), id_type.lower()))
-
   def WriteImmediateHandlerImplementation (self, func, f):
     """Writes the handler impl for the immediate version of a command."""
-    self.__WriteIdMapping(func, f)
     f.write("  %s(%s);\n" %
                (func.GetGLFunctionName(), func.MakeOriginalArgString("")))
 
   def WriteBucketHandlerImplementation (self, func, f):
     """Writes the handler impl for the bucket version of a command."""
-    self.__WriteIdMapping(func, f)
     f.write("  %s(%s);\n" %
                (func.GetGLFunctionName(), func.MakeOriginalArgString("")))
 
@@ -6080,7 +6011,7 @@ class GENnHandler(TypeHandler):
   def WriteImmediateHandlerImplementation(self, func, f):
     """Overrriden from TypeHandler."""
     param_name = func.GetLastOriginalArg().name
-    f.write("  auto %(name)s_copy = base::MakeUnique<GLuint[]>(n);\n"
+    f.write("  auto %(name)s_copy = std::make_unique<GLuint[]>(n);\n"
             "  GLuint* %(name)s_safe = %(name)s_copy.get();\n"
             "  std::copy(%(name)s, %(name)s + n, %(name)s_safe);\n"
             "  if (!CheckUniqueAndNonNullIds(n, %(name)s_safe) ||\n"
@@ -9475,7 +9406,7 @@ class Function(object):
     """Gets the function to call to execute GL for this command."""
     if self.GetInfo('decoder_func'):
       return self.GetInfo('decoder_func')
-    return "gl%s" % self.original_name
+    return "api()->gl%sFn" % self.original_name
 
   def GetGLTestFunctionName(self):
     gl_func_name = self.GetInfo('gl_test_func')
@@ -10223,9 +10154,9 @@ class GLGenerator(object):
                 return;
             }
             if (enable)
-              glEnable(cap);
+              api()->glEnableFn(cap);
             else
-              glDisable(cap);
+              api()->glDisableFn(cap);
           }
           """)
     self.generated_cpp_filenames.append(filename)
@@ -10399,7 +10330,7 @@ void ContextState::InitState(const ContextState *prev_state) const {
               if test_prev:
                 f.write(")\n")
               f.write(
-                  "  gl%s(%s, %s);\n" %
+                  "  api()->gl%sFn(%s, %s);\n" %
                   (state['func'], ('GL_FRONT', 'GL_BACK')[ndx],
                    ", ".join(args)))
           elif state['type'] == 'NamedParameter':
@@ -10417,7 +10348,7 @@ void ContextState::InitState(const ContextState *prev_state) const {
                   operation.append("  if (prev_state->%s != %s) {\n  " %
                                       (item_name, item_name))
 
-              operation.append("  gl%s(%s, %s);\n" %
+              operation.append("  api()->gl%sFn(%s, %s);\n" %
                              (state['func'],
                              (item['enum_set']
                                  if 'enum_set' in item else item['enum']),
@@ -10448,7 +10379,8 @@ void ContextState::InitState(const ContextState *prev_state) const {
             if 'custom_function' in state:
               f.write("  %s(%s);\n" % (state['func'], ", ".join(args)))
             else:
-              f.write("  gl%s(%s);\n" % (state['func'], ", ".join(args)))
+              f.write("  api()->gl%sFn(%s);\n" % (state['func'],
+                                                  ", ".join(args)))
 
       f.write("  if (prev_state) {")
       WriteStates(True)

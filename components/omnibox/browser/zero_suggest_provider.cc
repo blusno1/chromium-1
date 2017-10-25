@@ -20,8 +20,6 @@
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
-#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -40,6 +38,8 @@
 #include "net/base/escape.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "url/gurl.h"
 
 namespace {
@@ -349,8 +349,8 @@ bool ZeroSuggestProvider::StoreSuggestionResponse(
 
   // If we received an empty result list, we should update the display, as it
   // may be showing cached results that should not be shown.
-  const base::ListValue* root_list = NULL;
-  const base::ListValue* results_list = NULL;
+  const base::ListValue* root_list = nullptr;
+  const base::ListValue* results_list = nullptr;
   if (parsed_data.GetAsList(&root_list) &&
       root_list->GetList(1, &results_list) &&
       results_list->empty())
@@ -423,7 +423,7 @@ void ZeroSuggestProvider::ConvertResultsToAutocompleteMatches() {
   const TemplateURL* default_provider =
       template_url_service->GetDefaultSearchProvider();
   // Fail if we can't set the clickthrough URL for query suggestions.
-  if (default_provider == NULL ||
+  if (default_provider == nullptr ||
       !default_provider->SupportsReplacement(
           template_url_service->search_terms_data()))
     return;

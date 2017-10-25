@@ -38,14 +38,6 @@
 #include "components/tracing/child/child_trace_message_filter.h"
 #include "content/child/child_histogram_fetcher_impl.h"
 #include "content/child/child_process.h"
-#include "content/child/child_resource_message_filter.h"
-#include "content/child/fileapi/file_system_dispatcher.h"
-#include "content/child/fileapi/webfilesystem_impl.h"
-#include "content/child/notifications/notification_dispatcher.h"
-#include "content/child/quota_dispatcher.h"
-#include "content/child/quota_message_filter.h"
-#include "content/child/resource_dispatcher.h"
-#include "content/child/service_worker/service_worker_message_filter.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/field_trial_recorder.mojom.h"
@@ -76,6 +68,7 @@
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/runner/common/client_util.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 
 #if defined(OS_POSIX)
 #include "base/posix/global_descriptors.h"
@@ -477,43 +470,17 @@ void ChildThreadImpl::Init(const Options& options) {
   thread_safe_sender_ = new ThreadSafeSender(
       message_loop_->task_runner(), sync_message_filter_.get());
 
-  resource_dispatcher_.reset(new ResourceDispatcher(
-      this, message_loop()->task_runner()));
-  file_system_dispatcher_.reset(new FileSystemDispatcher());
-
-  resource_message_filter_ =
-      new ChildResourceMessageFilter(resource_dispatcher());
-
   auto registry = base::MakeUnique<service_manager::BinderRegistry>();
   registry->AddInterface(base::Bind(&ChildHistogramFetcherFactoryImpl::Create),
                          GetIOTaskRunner());
   GetServiceManagerConnection()->AddConnectionFilter(
       base::MakeUnique<SimpleConnectionFilter>(std::move(registry)));
 
-  service_worker_message_filter_ =
-      new ServiceWorkerMessageFilter(thread_safe_sender_.get());
+  InitTracing();
 
-  quota_message_filter_ =
-      new QuotaMessageFilter(thread_safe_sender_.get());
-  quota_dispatcher_.reset(new QuotaDispatcher(thread_safe_sender_.get(),
-                                              quota_message_filter_.get()));
-  notification_dispatcher_ =
-      new NotificationDispatcher(thread_safe_sender_.get());
-
-  channel_->AddFilter(resource_message_filter_.get());
-  channel_->AddFilter(quota_message_filter_->GetFilter());
-  channel_->AddFilter(notification_dispatcher_->GetFilter());
-  channel_->AddFilter(service_worker_message_filter_->GetFilter());
-
+  // In single process mode, browser-side tracing and memory will cover the
+  // whole process including renderers.
   if (!IsInBrowserProcess()) {
-    // In single process mode, browser-side tracing and memory will cover the
-    // whole process including renderers.
-    channel_->AddFilter(new tracing::ChildTraceMessageFilter(
-        ChildProcess::current()->io_task_runner()));
-
-    chrome_trace_event_agent_ =
-        base::MakeUnique<tracing::ChromeTraceEventAgent>(GetConnector());
-
     if (service_manager_connection_) {
       std::string process_type_str =
           base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -609,6 +576,28 @@ void ChildThreadImpl::Init(const Options& options) {
 #endif
 }
 
+void ChildThreadImpl::InitTracing() {
+  // In single process mode, browser-side tracing and memory will cover the
+  // whole process including renderers.
+  if (IsInBrowserProcess())
+    return;
+
+  // Tracing adds too much overhead to the profiling service. The only
+  // way to determine if this is the profiling service is by checking the
+  // sandbox type.
+  service_manager::SandboxType sandbox_type =
+      service_manager::SandboxTypeFromCommandLine(
+          *base::CommandLine::ForCurrentProcess());
+  if (sandbox_type == service_manager::SANDBOX_TYPE_PROFILING)
+    return;
+
+  channel_->AddFilter(new tracing::ChildTraceMessageFilter(
+      ChildProcess::current()->io_task_runner()));
+
+  chrome_trace_event_agent_ =
+      base::MakeUnique<tracing::ChromeTraceEventAgent>(GetConnector());
+}
+
 ChildThreadImpl::~ChildThreadImpl() {
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   IPC::Logging::GetInstance()->SetIPCSender(NULL);
@@ -631,9 +620,6 @@ ChildThreadImpl::~ChildThreadImpl() {
 void ChildThreadImpl::Shutdown() {
   // Delete objects that hold references to blink so derived classes can
   // safely shutdown blink in their Shutdown implementation.
-  file_system_dispatcher_.reset();
-  quota_dispatcher_.reset();
-  WebFileSystemImpl::DeleteThreadSpecificInstance();
 }
 
 bool ChildThreadImpl::ShouldBeDestroyed() {
@@ -729,12 +715,6 @@ void ChildThreadImpl::SetThreadPriority(base::PlatformThreadId id,
 #endif
 
 bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
-  // Resource responses are sent to the resource dispatcher.
-  if (resource_dispatcher_->OnMessageReceived(msg))
-    return true;
-  if (file_system_dispatcher_->OnMessageReceived(msg))
-    return true;
-
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ChildThreadImpl, msg)
     IPC_MESSAGE_HANDLER(ChildProcessMsg_Shutdown, OnShutdown)

@@ -66,7 +66,7 @@ class CORE_EXPORT InspectorLayerTreeAgent final
   }
 
   ~InspectorLayerTreeAgent() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   void Restore() override;
 
@@ -131,7 +131,7 @@ class CORE_EXPORT InspectorLayerTreeAgent final
   Member<InspectedFrames> inspected_frames_;
   Client* client_;
 
-  typedef HashMap<String, RefPtr<PictureSnapshot>> SnapshotById;
+  typedef HashMap<String, scoped_refptr<PictureSnapshot>> SnapshotById;
   SnapshotById snapshot_by_id_;
   bool suppress_layer_paint_events_;
 };

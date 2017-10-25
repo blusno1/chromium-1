@@ -124,7 +124,8 @@ class AURA_EXPORT WindowManagerClient {
   virtual void SetDisplayConfiguration(
       const std::vector<display::Display>& displays,
       std::vector<ui::mojom::WmViewportMetricsPtr> viewport_metrics,
-      int64_t primary_display_id) = 0;
+      int64_t primary_display_id,
+      const std::vector<display::Display>& mirrors) = 0;
 
   // Adds |display| as a new display moving |window_tree_host| to the new
   // display. This results in closing the previous display |window_tree_host|
@@ -260,6 +261,10 @@ class AURA_EXPORT WindowManagerDelegate {
   // Called when a client requests that its activation be given to another
   // window.
   virtual void OnWmDeactivateWindow(Window* window) = 0;
+
+  // Called when a client requests that a generic action be performed. |window|
+  // can never be null.
+  virtual void OnWmPerformAction(Window* window, const std::string& action);
 
   // Called when an event is blocked by a modal window. |window| is the modal
   // window that blocked the event.

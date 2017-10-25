@@ -727,6 +727,14 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Accel_PowerButton_Screenshot">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User takes a screenshot by pressing power button and volume down key
+    simultaneously on tablet mode.
+  </description>
+</action>
+
 <action name="Accel_PrevWindow_F5">
   <obsolete>Unused as of 08/2017</obsolete>
   <owner>jamescook@chromium.org</owner>
@@ -1139,6 +1147,13 @@ should be able to be added at any place in this file.
   <owner>miu@chromium.org</owner>
   <description>
     User clicked the tab alert indicator button to unmute the tab.
+  </description>
+</action>
+
+<action name="Android.ChromeHome.AcceptedSurvey">
+  <owner>danielpark@chromium.org</owner>
+  <description>
+    User clicked on the invite to take a survey in the survey infobar.
   </description>
 </action>
 
@@ -3696,6 +3711,15 @@ should be able to be added at any place in this file.
   <owner>donnd@chromium.org</owner>
   <description>
     The user did a swip or fling to expand the Contextual Search panel.
+  </description>
+</action>
+
+<action name="ContextualSearch.SmartSelectionSuppressed">
+  <owner>donnd@chromium.org</owner>
+  <description>
+    The user did a long-press that would normally trigger Contextual Search but
+    the UX was suppressed to allow Smart Selection to handle the gesture
+    instead.
   </description>
 </action>
 
@@ -10332,6 +10356,14 @@ should be able to be added at any place in this file.
 <action name="Media.Controls.Pause">
   <owner>mlamouri@chromium.org</owner>
   <description>The user paused a media element from the controls.</description>
+</action>
+
+<action name="Media.Controls.PauseOverlay">
+  <owner>beccahughes@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <description>
+    The user paused a media element from the pause overlay button.
+  </description>
 </action>
 
 <action name="Media.Controls.Play">

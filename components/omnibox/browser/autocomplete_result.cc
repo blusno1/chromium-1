@@ -12,8 +12,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
-#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
@@ -21,6 +19,8 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_switches.h"
 #include "components/url_formatter/url_fixer.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 
 // static
 size_t AutocompleteResult::GetMaxMatches() {
@@ -154,14 +154,12 @@ void AutocompleteResult::SortAndCull(
 
   if (default_match_ != matches_.end()) {
     const base::string16 debug_info =
-        base::ASCIIToUTF16("fill_into_edit=") +
-        default_match_->fill_into_edit +
+        base::ASCIIToUTF16("fill_into_edit=") + default_match_->fill_into_edit +
         base::ASCIIToUTF16(", provider=") +
-        ((default_match_->provider != NULL)
-            ? base::ASCIIToUTF16(default_match_->provider->GetName())
-            : base::string16()) +
-        base::ASCIIToUTF16(", input=") +
-        input.text();
+        ((default_match_->provider != nullptr)
+             ? base::ASCIIToUTF16(default_match_->provider->GetName())
+             : base::string16()) +
+        base::ASCIIToUTF16(", input=") + input.text();
 
     // We should only get here with an empty omnibox for automatic suggestions
     // on focus on the NTP; in these cases hitting enter should do nothing, so

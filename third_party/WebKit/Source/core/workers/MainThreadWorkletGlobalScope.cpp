@@ -10,22 +10,16 @@
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/probe/CoreProbes.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 
 namespace blink {
 
 MainThreadWorkletGlobalScope::MainThreadWorkletGlobalScope(
     LocalFrame* frame,
-    const KURL& url,
-    const String& user_agent,
-    RefPtr<SecurityOrigin> security_origin,
+    std::unique_ptr<GlobalScopeCreationParams> creation_params,
     v8::Isolate* isolate,
     WorkerReportingProxy& reporting_proxy)
-    : WorkletGlobalScope(url,
-                         user_agent,
-                         std::move(security_origin),
-                         isolate,
-                         nullptr /* worker_clients */,
-                         reporting_proxy),
+    : WorkletGlobalScope(std::move(creation_params), isolate, reporting_proxy),
       ContextClient(frame) {}
 
 MainThreadWorkletGlobalScope::~MainThreadWorkletGlobalScope() {}
@@ -53,7 +47,7 @@ CoreProbeSink* MainThreadWorkletGlobalScope::GetProbeSink() {
   return probe::ToCoreProbeSink(GetFrame());
 }
 
-DEFINE_TRACE(MainThreadWorkletGlobalScope) {
+void MainThreadWorkletGlobalScope::Trace(blink::Visitor* visitor) {
   WorkletGlobalScope::Trace(visitor);
   ContextClient::Trace(visitor);
 }

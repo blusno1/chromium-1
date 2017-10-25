@@ -24,34 +24,29 @@ class CORE_EXPORT NGFragmentBuilder final : public NGContainerFragmentBuilder {
 
  public:
   NGFragmentBuilder(NGLayoutInputNode,
-                    RefPtr<const ComputedStyle>,
+                    scoped_refptr<const ComputedStyle>,
                     NGWritingMode,
                     TextDirection);
 
   // Build a fragment for LayoutObject without NGLayoutInputNode. LayoutInline
   // has NGInlineItem but does not have corresponding NGLayoutInputNode.
   NGFragmentBuilder(LayoutObject*,
-                    RefPtr<const ComputedStyle>,
+                    scoped_refptr<const ComputedStyle>,
                     NGWritingMode,
                     TextDirection);
 
-  ~NGFragmentBuilder();
+  ~NGFragmentBuilder() override;
 
   using WeakBoxList = PersistentHeapLinkedHashSet<WeakMember<NGBlockNode>>;
 
-  NGFragmentBuilder& SetBlockSize(LayoutUnit);
   NGLogicalSize Size() const final { return {inline_size_, block_size_}; }
 
   NGFragmentBuilder& SetIntrinsicBlockSize(LayoutUnit);
 
   using NGContainerFragmentBuilder::AddChild;
 
-  NGContainerFragmentBuilder& AddChild(RefPtr<NGLayoutResult>,
-                                       const NGBfcOffset& child_bfc_offset,
-                                       const NGBfcOffset& parent_bfc_offset);
-
   // Our version of AddChild captures any child NGBreakTokens.
-  NGContainerFragmentBuilder& AddChild(RefPtr<NGPhysicalFragment>,
+  NGContainerFragmentBuilder& AddChild(scoped_refptr<NGPhysicalFragment>,
                                        const NGLogicalOffset&) final;
 
   // Add a break token for a child that doesn't yet have any fragments, because
@@ -60,8 +55,8 @@ class CORE_EXPORT NGFragmentBuilder final : public NGContainerFragmentBuilder {
   NGFragmentBuilder& AddBreakBeforeChild(NGLayoutInputNode child);
 
   // Update if we have fragmented in this flow.
-  NGFragmentBuilder& PropagateBreak(RefPtr<NGLayoutResult>);
-  NGFragmentBuilder& PropagateBreak(RefPtr<NGPhysicalFragment>);
+  NGFragmentBuilder& PropagateBreak(scoped_refptr<NGLayoutResult>);
+  NGFragmentBuilder& PropagateBreak(scoped_refptr<NGPhysicalFragment>);
 
   // Builder has non-trivial out-of-flow descendant methods.
   // These methods are building blocks for implementation of
@@ -114,13 +109,16 @@ class CORE_EXPORT NGFragmentBuilder final : public NGContainerFragmentBuilder {
   // do not provide a setter here.
 
   // Creates the fragment. Can only be called once.
-  RefPtr<NGLayoutResult> ToBoxFragment();
+  scoped_refptr<NGLayoutResult> ToBoxFragment();
 
-  RefPtr<NGLayoutResult> Abort(NGLayoutResult::NGLayoutResultStatus);
+  scoped_refptr<NGLayoutResult> Abort(NGLayoutResult::NGLayoutResultStatus);
 
   // A vector of child offsets. Initially set by AddChild().
   const Vector<NGLogicalOffset>& Offsets() const { return offsets_; }
   Vector<NGLogicalOffset>& MutableOffsets() { return offsets_; }
+
+  NGPhysicalFragment::NGBoxType BoxType() const;
+  NGFragmentBuilder& SetBoxType(NGPhysicalFragment::NGBoxType);
 
   bool DidBreak() const { return did_break_; }
 
@@ -143,14 +141,14 @@ class CORE_EXPORT NGFragmentBuilder final : public NGContainerFragmentBuilder {
   NGLayoutInputNode node_;
   LayoutObject* layout_object_;
 
-  LayoutUnit block_size_;
   LayoutUnit intrinsic_block_size_;
 
+  NGPhysicalFragment::NGBoxType box_type_;
   bool did_break_;
   LayoutUnit used_block_size_;
 
-  Vector<RefPtr<NGBreakToken>> child_break_tokens_;
-  RefPtr<NGBreakToken> last_inline_break_token_;
+  Vector<scoped_refptr<NGBreakToken>> child_break_tokens_;
+  scoped_refptr<NGBreakToken> last_inline_break_token_;
 
   Vector<NGBaseline> baselines_;
 

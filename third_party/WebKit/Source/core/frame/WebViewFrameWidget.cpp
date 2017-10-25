@@ -242,11 +242,15 @@ CompositorAnimationHost* WebViewFrameWidget::AnimationHost() const {
   return web_view_->AnimationHost();
 }
 
+WebHitTestResult WebViewFrameWidget::HitTestResultAt(const WebPoint& point) {
+  return web_view_->HitTestResultAt(point);
+}
+
 HitTestResult WebViewFrameWidget::CoreHitTestResultAt(const WebPoint& point) {
   return web_view_->CoreHitTestResultAt(point);
 }
 
-DEFINE_TRACE(WebViewFrameWidget) {
+void WebViewFrameWidget::Trace(blink::Visitor* visitor) {
   visitor->Trace(main_frame_);
   WebFrameWidgetBase::Trace(visitor);
 }

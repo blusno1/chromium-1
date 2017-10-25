@@ -100,8 +100,10 @@
                     "name": "Tracking",
                     "params": {
                         "availability": "any",
-                        "event_trigger": "name:chrome_home_menu_header_iph_trigger;comparator:any;window:680;storage:680",
-                        "event_used": "name:chrome_home_menu_header_clicked;comparator:any;window:680;storage:680",
+                        "event_1": "name:bottom_sheet_expanded;comparator:<50;window:680;storage:680",
+                        "event_3": "name:chrome_home_non_home_content_shown;comparator:<20;window:680;storage:680",
+                        "event_trigger": "name:chrome_home_menu_header_iph_trigger;comparator:<100;window:680;storage:680",
+                        "event_used": "name:chrome_home_menu_header_clicked;comparator:<20;window:680;storage:680",
                         "session_rate": "any",
                         "session_rate_impact": "none"
                     },
@@ -465,6 +467,46 @@
             ]
         }
     ],
+    "AutofillSuppressDisusedAddresses": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "ios",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "AutofillSuppressDisusedAddresses"
+                    ]
+                }
+            ]
+        }
+    ],
+    "AutofillSuppressDisusedCreditCards": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "ios",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "AutofillSuppressDisusedCreditCards"
+                    ]
+                }
+            ]
+        }
+    ],
     "AutofillUpstreamRequestCvcIfMissing": [
         {
             "platforms": [
@@ -760,6 +802,7 @@
                 {
                     "name": "Enabled",
                     "enable_features": [
+                        "ChromeHomeOptOutSnackbar",
                         "ChromeHomePromo"
                     ]
                 }
@@ -934,18 +977,6 @@
                     "enable_features": [
                         "DataReductionProxyMainMenu"
                     ]
-                }
-            ]
-        }
-    ],
-    "DataReductionProxyPreviewsBlackListTransition": [
-        {
-            "platforms": [
-                "android"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled"
                 }
             ]
         }
@@ -1728,23 +1759,6 @@
             ]
         }
     ],
-    "MarkNonSecureAs": [
-        {
-            "platforms": [
-                "android",
-                "chromeos",
-                "ios",
-                "linux",
-                "mac",
-                "win"
-            ],
-            "experiments": [
-                {
-                    "name": "non-secure-while-incognito-or-editing"
-                }
-            ]
-        }
-    ],
     "MediaFoundationH264Encoding": [
         {
             "platforms": [
@@ -1922,6 +1936,25 @@
                     },
                     "enable_features": [
                         "NTPLaunchAfterInactivity"
+                    ]
+                }
+            ]
+        }
+    ],
+    "NTPLessThanEightMostLikelyTiles": [
+        {
+            "platforms": [
+                "android",
+                "ios"
+            ],
+            "experiments": [
+                {
+                    "name": "OneOrMoreMLTiles",
+                    "params": {
+                        "min_suggestions": "1"
+                    },
+                    "enable_features": [
+                        "UseSuggestionsEvenIfFew"
                     ]
                 }
             ]
@@ -2686,25 +2719,6 @@
             ]
         }
     ],
-    "RafAlignedTouchInput": [
-        {
-            "platforms": [
-                "android",
-                "chromeos",
-                "linux",
-                "mac",
-                "win"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "RafAlignedTouchInput"
-                    ]
-                }
-            ]
-        }
-    ],
     "ReaderModeUI": [
         {
             "platforms": [
@@ -2868,6 +2882,28 @@
                     "enable_features": [
                         "ReportRendererPeakMemoryStats",
                         "ResourceLoadScheduler"
+                    ]
+                }
+            ]
+        }
+    ],
+    "SRTExperimentalEngineTrial": [
+        {
+            "platforms": [
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "NewCleaner_Launch",
+                    "params": {
+                        "download_group": "canary/eset",
+                        "experiment_group_for_reporting": "Experiment2",
+                        "tag": "canary_eset"
+                    },
+                    "enable_features": [
+                        "DownloadCleanupToolByBitness",
+                        "ExperimentalSwReporterEngine",
+                        "ExperimentalSwReporterEngineOnAllArchitectures"
                     ]
                 }
             ]
@@ -3132,6 +3168,25 @@
             ]
         }
     ],
+    "ServiceWorkerPaymentApps": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "ServiceWorkerPaymentApps"
+                    ]
+                }
+            ]
+        }
+    ],
     "ServiceWorkerScriptStreaming": [
         {
             "platforms": [
@@ -3218,21 +3273,6 @@
             "experiments": [
                 {
                     "name": "ExperimentYes"
-                }
-            ]
-        }
-    ],
-    "SkipCompositingSmallScrollers": [
-        {
-            "platforms": [
-                "android"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "SkipCompositingSmallScrollers"
-                    ]
                 }
             ]
         }
@@ -3370,13 +3410,13 @@
             ],
             "experiments": [
                 {
-                    "name": "Experiment2",
+                    "name": "Experiment2V2",
                     "params": {
                         "variant": "experiment2"
                     }
                 },
                 {
-                    "name": "Experiment",
+                    "name": "ExperimentV2",
                     "params": {
                         "variant": "experiment"
                     }
@@ -3388,7 +3428,7 @@
                     }
                 },
                 {
-                    "name": "Experiment3",
+                    "name": "Experiment3V2",
                     "params": {
                         "variant": "experiment3"
                     }
@@ -3798,6 +3838,24 @@
             ]
         }
     ],
+    "VoiceSearchOnLocalNtp": [
+        {
+            "platforms": [
+                "chromeos",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "VoiceSearchOnLocalNtp"
+                    ]
+                }
+            ]
+        }
+    ],
     "VsyncAlignedInput": [
         {
             "platforms": [
@@ -3923,6 +3981,25 @@
                     "enable_features": [
                         "AsyncWheelEvents",
                         "TouchpadAndWheelScrollLatching"
+                    ]
+                }
+            ]
+        }
+    ],
+    "WorkStealingInScriptRunner": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "WorkStealingInScriptRunner"
                     ]
                 }
             ]

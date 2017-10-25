@@ -185,11 +185,6 @@ class NET_EXPORT NetworkQualityEstimator
   // network quality estimation.
   void SetUseSmallResponsesForTesting(bool use_small_responses);
 
-  // |add_default_platform_observations| should be false only if |this| should
-  // not generate observations based on the platform and/or connection type.
-  void SetAddDefaultPlatformObservationsForTesting(
-      bool add_default_platform_observations);
-
   // If |disable_offline_check| is set to true, then the device offline check is
   // disabled when computing the effective connection type or when writing the
   // prefs.
@@ -290,9 +285,10 @@ class NET_EXPORT NetworkQualityEstimator
 
   // Notifies |this| of a new transport layer RTT. Called by socket watchers.
   // Protected for testing.
-  void OnUpdatedRTTAvailable(SocketPerformanceWatcherFactory::Protocol protocol,
-                             const base::TimeDelta& rtt,
-                             const base::Optional<nqe::internal::IPHash>& host);
+  void OnUpdatedTransportRTTAvailable(
+      SocketPerformanceWatcherFactory::Protocol protocol,
+      const base::TimeDelta& rtt,
+      const base::Optional<nqe::internal::IPHash>& host);
 
   // Returns an estimate of network quality at the specified |percentile|.
   // |disallowed_observation_sources| is the list of observation sources that
@@ -523,6 +519,10 @@ class NET_EXPORT NetworkQualityEstimator
 
   const char* GetNameForStatistic(int i) const;
 
+  // Gathers metrics for the next connection type. Called when there is a change
+  // in the connection type.
+  void GatherEstimatesForNextConnectionType();
+
   // Params to configure the network quality estimator.
   const std::unique_ptr<NetworkQualityEstimatorParams> params_;
 
@@ -534,10 +534,6 @@ class NET_EXPORT NetworkQualityEstimator
   // effective connection type or when writing the prefs. Set to true only for
   // testing.
   bool disable_offline_check_;
-
-  // If true, default values provided by the platform are used for estimation.
-  // Set to false only for testing.
-  bool add_default_platform_observations_;
 
   // Tick clock used by the network quality estimator.
   std::unique_ptr<base::TickClock> tick_clock_;

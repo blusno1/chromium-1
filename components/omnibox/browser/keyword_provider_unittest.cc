@@ -14,7 +14,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_scheme_classifier.h"
 #include "components/omnibox/browser/mock_autocomplete_provider_client.h"
@@ -26,6 +25,7 @@
 #include "components/variations/variations_associated_data.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "url/gurl.h"
 
 using base::ASCIIToUTF16;
@@ -59,7 +59,7 @@ class KeywordProviderTest : public testing::Test {
     const MatchType<ResultType> output[3];
   };
 
-  KeywordProviderTest() : kw_provider_(NULL) {
+  KeywordProviderTest() : kw_provider_(nullptr) {
     // Destroy the existing FieldTrialList before creating a new one to avoid
     // a DCHECK.
     field_trial_list_.reset();
@@ -138,7 +138,7 @@ void KeywordProviderTest::SetUpClientAndKeywordProvider() {
 
 void KeywordProviderTest::TearDown() {
   client_.reset();
-  kw_provider_ = NULL;
+  kw_provider_ = nullptr;
 }
 
 template<class ResultType>
@@ -476,7 +476,7 @@ TEST_F(KeywordProviderTest, RemoveKeyword) {
   template_url_service->Remove(
       template_url_service->GetTemplateURLForKeyword(ASCIIToUTF16("aaaa")));
   ASSERT_TRUE(template_url_service->GetTemplateURLForKeyword(
-                  ASCIIToUTF16("aaaa")) == NULL);
+                  ASCIIToUTF16("aaaa")) == nullptr);
 }
 
 TEST_F(KeywordProviderTest, GetKeywordForInput) {

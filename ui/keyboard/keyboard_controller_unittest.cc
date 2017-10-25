@@ -29,11 +29,16 @@
 #include "ui/compositor/test/layer_animator_test_controller.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/keyboard/container_full_width_behavior.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
 #include "ui/keyboard/keyboard_test_util.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/wm/core/default_activation_client.h"
+
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
+#endif
 
 namespace keyboard {
 namespace {
@@ -116,40 +121,6 @@ class TestFocusController : public ui::EventHandler {
   DISALLOW_COPY_AND_ASSIGN(TestFocusController);
 };
 
-class TestKeyboardUI : public KeyboardUI {
- public:
-  TestKeyboardUI(ui::InputMethod* input_method) : input_method_(input_method) {}
-  ~TestKeyboardUI() override {
-    // Destroy the window before the delegate.
-    window_.reset();
-  }
-
-  // Overridden from KeyboardUI:
-  bool HasContentsWindow() const override { return !!window_; }
-  bool ShouldWindowOverscroll(aura::Window* window) const override {
-    return true;
-  }
-  aura::Window* GetContentsWindow() override {
-    if (!window_) {
-      window_.reset(new aura::Window(&delegate_));
-      window_->Init(ui::LAYER_NOT_DRAWN);
-      window_->set_owned_by_parent(false);
-    }
-    return window_.get();
-  }
-  ui::InputMethod* GetInputMethod() override { return input_method_; }
-  void ReloadKeyboardIfNeeded() override {}
-  void InitInsets(const gfx::Rect& keyboard_bounds) override {}
-  void ResetInsets() override {}
-
- private:
-  std::unique_ptr<aura::Window> window_;
-  aura::test::TestWindowDelegate delegate_;
-  ui::InputMethod* input_method_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestKeyboardUI);
-};
-
 // Keeps a count of all the events a window receives.
 class EventObserver : public ui::EventHandler {
  public:
@@ -207,8 +178,6 @@ class TestKeyboardLayoutDelegate : public KeyboardLayoutDelegate {
 
 }  // namespace
 
-// Test parameter indicates if the new window behavior for the accessibility
-// keyboard should be used.
 class KeyboardControllerTest : public testing::Test,
                                public KeyboardControllerObserver {
  public:
@@ -235,7 +204,7 @@ class KeyboardControllerTest : public testing::Test,
     focus_controller_.reset(new TestFocusController(root_window()));
     layout_delegate_.reset(new TestKeyboardLayoutDelegate());
     controller_.reset(
-        new KeyboardController(base::MakeUnique<TestKeyboardUI>(
+        new KeyboardController(std::make_unique<TestKeyboardUI>(
                                    aura_test_helper_->host()->GetInputMethod()),
                                layout_delegate_.get()));
     controller()->AddObserver(this);
@@ -306,6 +275,15 @@ class KeyboardControllerTest : public testing::Test,
   }
 
   void ResetController() { controller_.reset(); }
+
+  void RunLoop(base::RunLoop* run_loop) {
+#if defined(USE_OZONE)
+    // TODO(crbug/776357): Figure out why the initializer randomly doesn't run
+    // for some tests. In the mean time, prevent flaky Ozone crash.
+    ui::OzonePlatform::InitializeForGPU(ui::OzonePlatform::InitParams());
+#endif
+    run_loop->Run();
+  }
 
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<aura::test::AuraTestHelper> aura_test_helper_;
@@ -467,7 +445,8 @@ TEST_F(KeyboardControllerTest, VisibilityChangeWithTextInputTypeChange) {
   EXPECT_TRUE(keyboard_container->IsVisible());
   EXPECT_TRUE(WillHideKeyboard());
   // Wait for hide keyboard to finish.
-  run_loop.Run();
+
+  RunLoop(&run_loop);
   EXPECT_FALSE(keyboard_container->IsVisible());
 
   SetFocus(&input_client_1);
@@ -543,7 +522,7 @@ TEST_F(KeyboardControllerTest, AlwaysVisibleWhenLocked) {
   EXPECT_TRUE(WillHideKeyboard());
 
   // Wait for hide keyboard to finish.
-  run_loop.Run();
+  RunLoop(&run_loop);
   EXPECT_FALSE(keyboard_container->IsVisible());
 }
 
@@ -606,7 +585,7 @@ TEST_F(KeyboardControllerAnimationTest, ContainerAnimation) {
   EXPECT_TRUE(contents_window()->IsVisible());
   float show_start_opacity = layer->opacity();
   gfx::Transform transform;
-  transform.Translate(0, kAnimationDistance);
+  transform.Translate(0, keyboard::kFullWidthKeyboardAnimationDistance);
   EXPECT_EQ(transform, layer->transform());
   // animation occurs in a cloned layer, so the actual final bounds should
   // already be applied to the container.

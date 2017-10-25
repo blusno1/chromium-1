@@ -44,7 +44,7 @@
 #include "components/feature_engagement/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -405,6 +405,12 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
       chrome::ToggleFullscreenToolbar(browser_);
       break;
+    case IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS: {
+      PrefService* prefs = profile()->GetPrefs();
+      prefs->SetBoolean(prefs::kAllowJavascriptAppleEvents,
+                        !prefs->GetBoolean(prefs::kAllowJavascriptAppleEvents));
+      break;
+    }
 #endif
     case IDC_EXIT:
       Exit();
@@ -988,6 +994,10 @@ void BrowserCommandController::UpdateCommandsForDevTools() {
                                         dev_tools_enabled);
   command_updater_.UpdateCommandEnabled(IDC_DEV_TOOLS_TOGGLE,
                                         dev_tools_enabled);
+#if defined(OS_MACOSX)
+  command_updater_.UpdateCommandEnabled(IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS,
+                                        dev_tools_enabled);
+#endif
 }
 
 void BrowserCommandController::UpdateCommandsForBookmarkEditing() {

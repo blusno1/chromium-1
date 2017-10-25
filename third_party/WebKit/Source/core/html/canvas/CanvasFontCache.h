@@ -33,7 +33,7 @@ class CORE_EXPORT CanvasFontCache final
   void PruneAll();
   unsigned size();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   static unsigned MaxFonts();
   unsigned HardMaxFonts();
@@ -61,7 +61,7 @@ class CORE_EXPORT CanvasFontCache final
   ListHashSet<String> font_lru_list_;
   std::unique_ptr<FontCachePurgePreventer> main_cache_purge_preventer_;
   Member<Document> document_;
-  RefPtr<ComputedStyle> default_font_style_;
+  scoped_refptr<ComputedStyle> default_font_style_;
   bool pruning_scheduled_;
 };
 

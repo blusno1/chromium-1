@@ -53,7 +53,7 @@ const String& HistoryItem::UrlString() const {
 }
 
 KURL HistoryItem::Url() const {
-  return KURL(kParsedURLString, url_string_);
+  return KURL(url_string_);
 }
 
 const Referrer& HistoryItem::GetReferrer() const {
@@ -117,7 +117,7 @@ void HistoryItem::ClearDocumentState() {
   document_state_vector_.clear();
 }
 
-void HistoryItem::SetStateObject(RefPtr<SerializedScriptValue> object) {
+void HistoryItem::SetStateObject(scoped_refptr<SerializedScriptValue> object) {
   state_object_ = std::move(object);
 }
 
@@ -138,7 +138,7 @@ void HistoryItem::SetFormInfoFromRequest(const ResourceRequest& request) {
   }
 }
 
-void HistoryItem::SetFormData(RefPtr<EncodedFormData> form_data) {
+void HistoryItem::SetFormData(scoped_refptr<EncodedFormData> form_data) {
   form_data_ = std::move(form_data);
 }
 
@@ -151,10 +151,10 @@ EncodedFormData* HistoryItem::FormData() {
 }
 
 ResourceRequest HistoryItem::GenerateResourceRequest(
-    WebCachePolicy cache_policy) {
+    mojom::FetchCacheMode cache_mode) {
   ResourceRequest request(url_string_);
   request.SetHTTPReferrer(referrer_);
-  request.SetCachePolicy(cache_policy);
+  request.SetCacheMode(cache_mode);
   if (form_data_) {
     request.SetHTTPMethod(HTTPNames::POST);
     request.SetHTTPBody(form_data_);
@@ -164,7 +164,7 @@ ResourceRequest HistoryItem::GenerateResourceRequest(
   return request;
 }
 
-DEFINE_TRACE(HistoryItem) {
+void HistoryItem::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_state_);
 }
 

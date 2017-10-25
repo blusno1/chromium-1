@@ -35,7 +35,6 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/google/core/browser/google_switches.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -60,6 +59,7 @@
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_status.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 using base::ASCIIToUTF16;
 
@@ -3222,9 +3222,6 @@ TEST_F(SearchProviderTest, CanSendURL) {
   template_url_data.id = SEARCH_ENGINE_GOOGLE;
   TemplateURL google_template_url(template_url_data);
 
-  // Create field trial.
-  CreateFieldTrial(OmniboxFieldTrial::kZeroSuggestRule, true);
-
   ChromeAutocompleteProviderClient client(&profile_);
 
   // Not signed in.
@@ -3240,16 +3237,6 @@ TEST_F(SearchProviderTest, CanSendURL) {
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), &client));
-
-  // Not in field trial.
-  ResetFieldTrialList();
-  CreateFieldTrial(OmniboxFieldTrial::kZeroSuggestRule, false);
-  EXPECT_TRUE(SearchProvider::CanSendURL(
-      GURL("http://www.google.com/search"),
-      GURL("https://www.google.com/complete/search"), &google_template_url,
-      metrics::OmniboxEventProto::OTHER, SearchTermsData(), &client));
-  ResetFieldTrialList();
-  CreateFieldTrial(OmniboxFieldTrial::kZeroSuggestRule, true);
 
   // Invalid page URL.
   EXPECT_FALSE(SearchProvider::CanSendURL(

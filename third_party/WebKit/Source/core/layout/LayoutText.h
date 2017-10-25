@@ -36,7 +36,7 @@ namespace blink {
 
 class AbstractInlineTextBox;
 class InlineTextBox;
-class NGOffsetMappingResult;
+class NGOffsetMapping;
 
 // LayoutText is the root class for anything that represents
 // a text node (see core/dom/Text.h).
@@ -73,7 +73,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   // FIXME: If the node argument is not a Text node or the string argument is
   // not the content of the Text node, updating text-transform property
   // doesn't re-transform the string.
-  LayoutText(Node*, RefPtr<StringImpl>);
+  LayoutText(Node*, scoped_refptr<StringImpl>);
 #if DCHECK_IS_ON()
   ~LayoutText() override;
 #endif
@@ -85,7 +85,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   virtual bool IsTextFragment() const;
   virtual bool IsWordBreak() const;
 
-  virtual RefPtr<StringImpl> OriginalText() const;
+  virtual scoped_refptr<StringImpl> OriginalText() const;
 
   void ExtractTextBox(InlineTextBox*);
   void AttachTextBox(InlineTextBox*);
@@ -175,15 +175,15 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   float FirstRunX() const;
   float FirstRunY() const;
 
-  virtual void SetText(RefPtr<StringImpl>, bool force = false);
-  void SetTextWithOffset(RefPtr<StringImpl>,
+  virtual void SetText(scoped_refptr<StringImpl>, bool force = false);
+  void SetTextWithOffset(scoped_refptr<StringImpl>,
                          unsigned offset,
                          unsigned len,
                          bool force = false);
 
   // TODO(kojii): setTextInternal() is temporarily public for NGInlineNode.
   // This will be back to protected when NGInlineNode can paint directly.
-  virtual void SetTextInternal(RefPtr<StringImpl>);
+  virtual void SetTextInternal(scoped_refptr<StringImpl>);
 
   virtual void TransformText();
 
@@ -201,9 +201,21 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   // whitespace) output.
   bool HasTextBoxes() const { return FirstTextBox(); }
 
+  // Returns true if the offset (0-based in the |text_| string) is next to a
+  // non-collapsed non-linebreak character, or before a forced linebreak (<br>,
+  // or segment break in node with style white-space: pre/pre-line/pre-wrap).
+  // TODO(editing-dev): The behavior is introduced by crrev.com/e3eb4e in
+  // InlineTextBox::ContainsCaretOffset(). Try to understand it.
+  virtual bool ContainsCaretOffset(int) const;
+
+  // Return true if the offset (0-based in the |text_| string) is before/after a
+  // non-collapsed character in this LayoutText, respectively.
+  virtual bool IsBeforeNonCollapsedCharacter(unsigned) const;
+  virtual bool IsAfterNonCollapsedCharacter(unsigned) const;
+
   int CaretMinOffset() const override;
   int CaretMaxOffset() const override;
-  unsigned ResolvedTextLength() const;
+  virtual unsigned ResolvedTextLength() const;
 
   // True if any character remains after CSS white-space collapsing.
   bool HasNonCollapsedText() const;
@@ -220,7 +232,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   void RemoveAndDestroyTextBoxes();
 
-  RefPtr<AbstractInlineTextBox> FirstAbstractInlineTextBox();
+  scoped_refptr<AbstractInlineTextBox> FirstAbstractInlineTextBox();
 
   float HyphenWidth(const Font&, TextDirection);
 
@@ -253,7 +265,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   void InvalidateDisplayItemClients(PaintInvalidationReason) const override;
 
   bool ShouldUseNGAlternatives() const;
-  const NGOffsetMappingResult& GetNGOffsetMapping() const;
+  const NGOffsetMapping& GetNGOffsetMapping() const;
 
   bool CanBeSelectionLeafInternal() const final { return true; }
 

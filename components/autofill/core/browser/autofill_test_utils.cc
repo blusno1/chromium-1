@@ -27,7 +27,7 @@
 #include "components/prefs/testing_pref_store.h"
 #include "components/signin/core/browser/account_fetcher_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/common/signin_pref_names.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::ASCIIToUTF16;
@@ -238,6 +238,14 @@ AutofillProfile GetFullProfile2() {
                  "48838",
                  "US",
                  "13105557889");
+  return profile;
+}
+
+AutofillProfile GetFullCanadianProfile() {
+  AutofillProfile profile(base::GenerateGUID(), "http://www.example.com/");
+  SetProfileInfo(&profile, "Wayne", "", "Gretzky", "wayne@hockey.com", "NHL",
+                 "123 Hockey rd.", "Apt 8", "Moncton", "New Brunswick",
+                 "E1A 0A6", "CA", "15068531212");
   return profile;
 }
 

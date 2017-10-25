@@ -180,6 +180,7 @@ android_library("chrome_java") {
     ":chrome_public_apk_template_resources",
     ":document_tab_model_info_proto_java",
     ":partner_location_descriptor_proto_java",
+    ":thumbnail_cache_entry_proto_java",
     "$google_play_services_package:google_play_services_auth_base_java",
     "$google_play_services_package:google_play_services_base_java",
     "$google_play_services_package:google_play_services_basement_java",
@@ -211,7 +212,6 @@ android_library("chrome_java") {
     "//components/ntp_tiles/android:ntp_tiles_java",
     "//components/offline_items_collection/core:core_java",
     "//components/payments/content/android:java",
-    "//components/payments/mojom:mojom_parser_java",
     "//components/policy/android:policy_java",
     "//components/safe_browsing/android:safe_browsing_java",
     "//components/signin/core/browser/android:java",
@@ -278,6 +278,7 @@ android_library("chrome_java") {
     "//chrome:page_info_connection_type_javagen",
     "//chrome:page_info_action_javagen",
     "//chrome:payments_journey_logger_enum_javagen",
+    "//chrome:pref_enum_javagen",
     "//chrome:quick_action_category_enum_javagen",
     "//chrome:sad_tab_event_enum_javagen",
     "//chrome:signin_metrics_enum_javagen",
@@ -365,6 +366,13 @@ proto_java_library("partner_location_descriptor_proto_java") {
   ]
 }
 
+proto_java_library("thumbnail_cache_entry_proto_java") {
+  proto_path = "java/src/org/chromium/chrome/browser/widget"
+  sources = [
+    "$proto_path/thumbnail_cache_entry.proto",
+  ]
+}
+
 java_cpp_template("resource_id_javagen") {
   sources = [
     "java/ResourceId.template",
@@ -398,7 +406,6 @@ junit_binary("chrome_junit_tests") {
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/offline_items_collection/core:core_java",
     "//components/payments/content/android:java",
-    "//components/payments/mojom:mojom_parser_java",
     "//components/signin/core/browser/android:java",
     "//components/signin/core/browser/android:signin_java_test_support",
     "//components/sync:sync_java_test_support",
@@ -484,6 +491,7 @@ android_library("chrome_test_java") {
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/crash/android:javatests",
     "//components/dom_distiller/core/android:dom_distiller_core_java",
+    "//components/feature_engagement:feature_engagement_java",
     "//components/gcm_driver/android:gcm_driver_java",
     "//components/gcm_driver/instance_id/android:instance_id_driver_java",
     "//components/gcm_driver/instance_id/android:instance_id_driver_test_support_java",
@@ -495,7 +503,6 @@ android_library("chrome_test_java") {
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/offline_items_collection/core:core_java",
     "//components/payments/content/android:java",
-    "//components/payments/mojom:mojom_parser_java",
     "//components/policy/android:policy_java",
     "//components/policy/android:policy_java_test_support",
     "//components/signin/core/browser/android:java",
@@ -594,6 +601,7 @@ if (enable_vr) {
       "javatests/src/org/chromium/chrome/browser/vr_shell/util/VrShellDelegateUtils.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/util/VrTestRuleUtils.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/util/VrTransitionUtils.java",
+      "javatests/src/org/chromium/chrome/browser/vr_shell/TestVrShellDelegate.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrFeedbackInfoBarTest.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrInstallUpdateInfoBarTest.java",
       "javatests/src/org/chromium/chrome/browser/vr_shell/VrShellCompositorViewHolderTest.java",
@@ -1147,6 +1155,7 @@ instrumentation_test_apk("chrome_sync_shell_test_apk") {
     "//chrome/test/android:chrome_java_test_support",
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/policy/android:policy_java",
+    "//components/signin/core/browser/android:java",
     "//components/signin/core/browser/android:signin_java_test_support",
     "//components/sync:sync_java_test_support",
     "//components/sync:test_support_proto_java",

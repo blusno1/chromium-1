@@ -32,6 +32,7 @@ class XboxController {
     XBOX_360_CONTROLLER,
     XBOX_ONE_CONTROLLER_2013,
     XBOX_ONE_CONTROLLER_2015,
+    XBOX_ONE_ELITE_CONTROLLER,
     XBOX_ONE_S_CONTROLLER
   };
 
@@ -81,6 +82,8 @@ class XboxController {
    public:
     virtual void XboxControllerGotData(XboxController* controller,
                                        const Data& data) = 0;
+    virtual void XboxControllerGotGuideData(XboxController* controller,
+                                            bool guide) = 0;
     virtual void XboxControllerError(XboxController* controller) = 0;
   };
 
@@ -178,6 +181,8 @@ class XboxDataFetcher : public GamepadDataFetcher,
   void RemoveControllerByLocationID(uint32_t id);
   void XboxControllerGotData(XboxController* controller,
                              const XboxController::Data& data) override;
+  void XboxControllerGotGuideData(XboxController* controller,
+                                  bool guide) override;
   void XboxControllerError(XboxController* controller) override;
 
   std::set<XboxController*> controllers_;
@@ -194,6 +199,8 @@ class XboxDataFetcher : public GamepadDataFetcher,
   base::mac::ScopedIOObject<io_iterator_t> xbox_one_2013_device_removed_iter_;
   base::mac::ScopedIOObject<io_iterator_t> xbox_one_2015_device_added_iter_;
   base::mac::ScopedIOObject<io_iterator_t> xbox_one_2015_device_removed_iter_;
+  base::mac::ScopedIOObject<io_iterator_t> xbox_one_elite_device_added_iter_;
+  base::mac::ScopedIOObject<io_iterator_t> xbox_one_elite_device_removed_iter_;
   base::mac::ScopedIOObject<io_iterator_t> xbox_one_s_device_added_iter_;
   base::mac::ScopedIOObject<io_iterator_t> xbox_one_s_device_removed_iter_;
 

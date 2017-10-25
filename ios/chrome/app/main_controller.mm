@@ -25,6 +25,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "components/component_updater/component_updater_service.h"
+#include "components/component_updater/crl_set_remover.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/tracker.h"
@@ -82,7 +83,6 @@
 #include "ios/chrome/browser/metrics/first_user_action_recorder.h"
 #import "ios/chrome/browser/metrics/previous_session_info.h"
 #import "ios/chrome/browser/net/cookie_util.h"
-#include "ios/chrome/browser/net/crl_set_fetcher.h"
 #include "ios/chrome/browser/payments/ios_payment_instrument_launcher.h"
 #include "ios/chrome/browser/payments/ios_payment_instrument_launcher_factory.h"
 #import "ios/chrome/browser/payments/payment_request_constants.h"
@@ -103,7 +103,6 @@
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
 #import "ios/chrome/browser/ui/authentication/signed_in_accounts_view_controller.h"
-#import "ios/chrome/browser/ui/authentication/signin_interaction_controller.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/chrome_web_view_factory.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
@@ -122,10 +121,11 @@
 #import "ios/chrome/browser/ui/history/history_panel_view_controller.h"
 #import "ios/chrome/browser/ui/main/browser_view_wrangler.h"
 #import "ios/chrome/browser/ui/main/main_coordinator.h"
-#import "ios/chrome/browser/ui/main/main_view_controller.h"
+#import "ios/chrome/browser/ui/main/view_controller_swapping.h"
 #import "ios/chrome/browser/ui/orientation_limiting_navigation_controller.h"
 #import "ios/chrome/browser/ui/promos/signin_promo_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
+#import "ios/chrome/browser/ui/signin_interaction/signin_interaction_coordinator.h"
 #import "ios/chrome/browser/ui/stack_view/stack_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -147,7 +147,7 @@
 #include "ios/web/net/web_http_protocol_handler_delegate.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_capabilities.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_view_creation_util.h"
 #include "ios/web/public/webui/web_ui_ios_controller_factory.h"
 #include "mojo/edk/embedder/embedder.h"
@@ -217,9 +217,9 @@ void RegisterComponentsForUpdate() {
   base::FilePath path;
   const bool success = PathService::Get(ios::DIR_USER_DATA, &path);
   DCHECK(success);
-  // CRLSetFetcher attempts to load a CRL set from either the local disk or
-  // network.
-  GetApplicationContext()->GetCRLSetFetcher()->StartInitialLoad(cus, path);
+  // Clean up any legacy CRLSet on the local disk - CRLSet used to be shipped
+  // as a component on iOS but is not anymore.
+  component_updater::DeleteLegacyCRLSet(path);
 }
 
 // Used to update the current BVC mode if a new tab is added while the stack
@@ -263,9 +263,6 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 
   // View controller for switching tabs.
   UIViewController<TabSwitcher>* _tabSwitcherController;
-
-  // Controller to display the re-authentication flow.
-  SigninInteractionController* _signinInteractionController;
 
   // YES while animating the dismissal of stack view.
   BOOL _dismissingStackView;
@@ -341,10 +338,11 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 }
 
 // Pointer to the main view controller, always owned by the main window.
-@property(weak, nonatomic, readonly) MainViewController* mainViewController;
+@property(weak, nonatomic, readonly)
+    UIViewController<ViewControllerSwapping>* mainViewController;
 
 // The main coordinator, lazily created the first time it is accessed. Manages
-// the MainViewController. This property should not be accessed before the
+// the main view controller. This property should not be accessed before the
 // browser has started up to the FOREGROUND stage.
 @property(nonatomic, readonly) MainCoordinator* mainCoordinator;
 
@@ -353,6 +351,12 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 // enabled.
 @property(nonatomic, readwrite)
     NTPTabOpeningPostOpeningAction NTPActionAfterTabSwitcherDismissal;
+
+// The SigninInteractionCoordinator to present Sign In UI. It is created the
+// first time Sign In UI is needed to be presented and should not be destroyed
+// while the UI is presented.
+@property(nonatomic, strong)
+    SigninInteractionCoordinator* signinInteractionCoordinator;
 
 // Activates browsing and enables web views if |enabled| is YES.
 // Disables browsing and purges web views if |enabled| is NO.
@@ -376,8 +380,8 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 - (void)startVoiceSearchInCurrentBVCWithOriginView:(UIView*)originView;
 // Dismisses the tab switcher UI without animation into the given model.
 - (void)dismissTabSwitcherWithoutAnimationInModel:(TabModel*)tabModel;
-// Dismisses and clears |signinInteractionController|.
-- (void)dismissSigninInteractionController;
+// Dismisses |signinInteractionCoordinator|.
+- (void)dismissSigninInteractionCoordinator;
 // Called when the last incognito tab was closed.
 - (void)lastIncognitoTabClosed;
 // Called when the last regular tab was closed.
@@ -517,6 +521,7 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 @synthesize startupParameters = _startupParameters;
 @synthesize metricsMediator = _metricsMediator;
 @synthesize settingsNavigationController = _settingsNavigationController;
+@synthesize signinInteractionCoordinator = _signinInteractionCoordinator;
 
 #pragma mark - Application lifecycle
 
@@ -853,7 +858,7 @@ const int kExternalFilesCleanupDelaySeconds = 60;
   return _browserViewWrangler;
 }
 
-- (MainViewController*)mainViewController {
+- (UIViewController<ViewControllerSwapping>*)mainViewController {
   return self.mainCoordinator.mainViewController;
 }
 
@@ -896,8 +901,6 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 }
 
 - (void)stopChromeMain {
-  GetApplicationContext()->SetIsShuttingDown();
-
   [_spotlightManager shutdown];
   _spotlightManager = nil;
 
@@ -1398,16 +1401,16 @@ const int kExternalFilesCleanupDelaySeconds = 60;
   }
 }
 
-- (void)showClearBrowsingDataSettings {
+- (void)showClearBrowsingDataSettingsFromViewController:
+    (UIViewController*)baseViewController {
   if (_settingsNavigationController)
     return;
   _settingsNavigationController = [SettingsNavigationController
       newClearBrowsingDataController:_mainBrowserState
                             delegate:self];
-  [[self topPresentedViewController]
-      presentViewController:_settingsNavigationController
-                   animated:YES
-                 completion:nil];
+  [baseViewController presentViewController:_settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
 }
 
 - (void)showAutofillSettings {
@@ -1473,7 +1476,7 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 
 - (void)showSignin:(ShowSigninCommand*)command {
   if (command.operation == AUTHENTICATION_OPERATION_DISMISS) {
-    [self dismissSigninInteractionController];
+    [self dismissSigninInteractionCoordinator];
   } else {
     [self showSigninWithOperation:command.operation
                          identity:command.identity
@@ -1484,23 +1487,19 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 }
 
 - (void)showAddAccount {
-  if (_signinInteractionController) {
-    // Avoid showing the sign in screen if there is already a sign-in operation
-    // in progress.
-    return;
+  if (!self.signinInteractionCoordinator) {
+    self.signinInteractionCoordinator = [[SigninInteractionCoordinator alloc]
+        initWithBrowserState:_mainBrowserState
+                  dispatcher:self.mainBVC.dispatcher];
   }
 
-  _signinInteractionController = [[SigninInteractionController alloc]
-          initWithBrowserState:_mainBrowserState
-      presentingViewController:[self topPresentedViewController]
-                   accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN
-                   promoAction:signin_metrics::PromoAction::
-                                   PROMO_ACTION_NO_SIGNIN_PROMO
-                    dispatcher:self.mainBVC.dispatcher];
-
-  [_signinInteractionController addAccountWithCompletion:^(BOOL success) {
-    _signinInteractionController = nil;
-  }];
+  [self.signinInteractionCoordinator
+      addAccountWithAccessPoint:signin_metrics::AccessPoint::
+                                    ACCESS_POINT_UNKNOWN
+                    promoAction:signin_metrics::PromoAction::
+                                    PROMO_ACTION_NO_SIGNIN_PROMO
+       presentingViewController:[self topPresentedViewController]
+                     completion:nil];
 }
 
 #pragma mark - ApplicationSettingsCommands
@@ -1759,8 +1758,8 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 }
 
 - (void)displayCurrentBVC {
-  [self.mainViewController setActiveViewController:self.currentBVC
-                                        completion:nil];
+  [self.mainViewController showTabViewController:self.currentBVC
+                                      completion:nil];
 }
 
 - (TabModel*)currentTabModel {
@@ -1824,16 +1823,13 @@ const int kExternalFilesCleanupDelaySeconds = 60;
                                             mainBVC:self.mainBVC
                                              otrBVC:self.otrBVC];
     [_tabSwitcherController setTransitionContext:transitionContext];
-    [self.mainViewController setActiveViewController:_tabSwitcherController
-                                          completion:nil];
-    [_tabSwitcherController showWithSelectedTabAnimation];
   } else {
     // User interaction is disabled when the stack controller is dismissed.
     [[_tabSwitcherController view] setUserInteractionEnabled:YES];
-    [self.mainViewController setActiveViewController:_tabSwitcherController
-                                          completion:nil];
-    [_tabSwitcherController showWithSelectedTabAnimation];
   }
+
+  [self.mainViewController showTabSwitcher:_tabSwitcherController
+                                completion:nil];
 }
 
 - (BOOL)shouldOpenNTPTabOnActivationOfTabModel:(TabModel*)tabModel {
@@ -1991,7 +1987,7 @@ const int kExternalFilesCleanupDelaySeconds = 60;
                  completion:nil];
 }
 
-- (void)showSettings {
+- (void)showSettingsFromViewController:(UIViewController*)baseViewController {
   if (_settingsNavigationController)
     return;
   [[DeferredInitializationRunner sharedInstance]
@@ -2000,10 +1996,9 @@ const int kExternalFilesCleanupDelaySeconds = 60;
   _settingsNavigationController = [SettingsNavigationController
       newSettingsMainControllerWithBrowserState:_mainBrowserState
                                        delegate:self];
-  [[self topPresentedViewController]
-      presentViewController:_settingsNavigationController
-                   animated:YES
-                 completion:nil];
+  [baseViewController presentViewController:_settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
 }
 
 - (void)showSigninWithOperation:(AuthenticationOperation)operation
@@ -2013,24 +2008,11 @@ const int kExternalFilesCleanupDelaySeconds = 60;
                        callback:(ShowSigninCommandCompletionCallback)callback {
   DCHECK_NE(AUTHENTICATION_OPERATION_DISMISS, operation);
 
-  if (_signinInteractionController) {
-    // Avoid showing the sign in screen if there is already a sign-in operation
-    // in progress.
-    return;
+  if (!self.signinInteractionCoordinator) {
+    self.signinInteractionCoordinator = [[SigninInteractionCoordinator alloc]
+        initWithBrowserState:_mainBrowserState
+                  dispatcher:self.mainBVC.dispatcher];
   }
-
-  _signinInteractionController = [[SigninInteractionController alloc]
-          initWithBrowserState:_mainBrowserState
-      presentingViewController:[self topPresentedViewController]
-                   accessPoint:accessPoint
-                   promoAction:promoAction
-                    dispatcher:self.mainBVC.dispatcher];
-
-  signin_ui::CompletionCallback completion = ^(BOOL success) {
-    _signinInteractionController = nil;
-    if (callback)
-      callback(success);
-  };
 
   switch (operation) {
     case AUTHENTICATION_OPERATION_DISMISS:
@@ -2038,21 +2020,27 @@ const int kExternalFilesCleanupDelaySeconds = 60;
       NOTREACHED();
       break;
     case AUTHENTICATION_OPERATION_REAUTHENTICATE:
-      [_signinInteractionController reAuthenticateWithCompletion:completion];
+      [self.signinInteractionCoordinator
+          reAuthenticateWithAccessPoint:accessPoint
+                            promoAction:promoAction
+               presentingViewController:[self topPresentedViewController]
+                             completion:callback];
       break;
     case AUTHENTICATION_OPERATION_SIGNIN:
-      [_signinInteractionController signInWithIdentity:identity
-                                            completion:completion];
+      [self.signinInteractionCoordinator
+                signInWithIdentity:identity
+                       accessPoint:accessPoint
+                       promoAction:promoAction
+          presentingViewController:[self topPresentedViewController]
+                        completion:callback];
       break;
   }
 }
 
-- (void)dismissSigninInteractionController {
-  // The sign-in interaction controller is destroyed as a result of calling
-  // |cancelAndDismiss|. Destroying it here may lead to a missing call of the
-  // |ShowSigninCommandCompletionCallback| passed when starting a show sign-in
-  // operation.
-  [_signinInteractionController cancelAndDismiss];
+- (void)dismissSigninInteractionCoordinator {
+  // The SigninInteractionCoordinator must not be destroyed at this point, as
+  // it may dismiss the sign in UI in a future callback.
+  [self.signinInteractionCoordinator cancelAndDismiss];
 }
 
 - (void)closeSettingsAnimated:(BOOL)animated
@@ -2099,7 +2087,8 @@ const int kExternalFilesCleanupDelaySeconds = 60;
       targetMode == ApplicationMode::NORMAL ? self.mainBVC : self.otrBVC;
 
   Tab* currentTabInTargetBVC = [[targetBVC tabModel] currentTab];
-  if (!(currentTabInTargetBVC && IsURLNtp(currentTabInTargetBVC.visibleURL))) {
+  if (!(currentTabInTargetBVC.webState &&
+        IsURLNtp(currentTabInTargetBVC.webState->GetVisibleURL()))) {
     return [targetBVC addSelectedTabWithURL:URL
                                     atIndex:NSNotFound
                                  transition:transition
@@ -2249,7 +2238,7 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 
   // Cancel interaction with SSO.
   // First, cancel the signin interaction.
-  [_signinInteractionController cancel];
+  [self.signinInteractionCoordinator cancel];
 
   // Then, depending on what the SSO view controller is presented on, dismiss
   // it.
@@ -2260,7 +2249,7 @@ const int kExternalFilesCleanupDelaySeconds = 60;
   };
   ProceduralBlock completionWithoutBVC = ^{
     // This will dismiss the SSO view controller.
-    [self dismissSigninInteractionController];
+    [self dismissSigninInteractionCoordinator];
     if (completion)
       completion();
   };
@@ -2494,10 +2483,6 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 
 - (void)setTabSwitcherController:(UIViewController<TabSwitcher>*)controller {
   _tabSwitcherController = controller;
-}
-
-- (SigninInteractionController*)signinInteractionController {
-  return _signinInteractionController;
 }
 
 - (UIViewController*)topPresentedViewController {

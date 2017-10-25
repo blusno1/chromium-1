@@ -27,11 +27,11 @@
 #include "modules/fetch/ResponseInit.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8PrivateProperty.h"
-#include "platform/http_names.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/network/EncodedFormData.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/NetworkUtils.h"
+#include "platform/network/http_names.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/WebCORS.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
@@ -163,7 +163,7 @@ Response* Response::Create(ScriptState* script_state,
     body_buffer = new BodyStreamBuffer(
         script_state, new FormDataBytesConsumer(array_buffer_view));
   } else if (V8FormData::hasInstance(body, isolate)) {
-    RefPtr<EncodedFormData> form_data =
+    scoped_refptr<EncodedFormData> form_data =
         V8FormData::ToImpl(body.As<v8::Object>())->EncodeMultiPartFormData();
     // Here we handle formData->boundary() as a C-style string. See
     // FormDataEncoder::generateUniqueBoundaryString.
@@ -173,7 +173,7 @@ Response* Response::Create(ScriptState* script_state,
         script_state,
         new FormDataBytesConsumer(execution_context, std::move(form_data)));
   } else if (V8URLSearchParams::hasInstance(body, isolate)) {
-    RefPtr<EncodedFormData> form_data =
+    scoped_refptr<EncodedFormData> form_data =
         V8URLSearchParams::ToImpl(body.As<v8::Object>())->ToEncodedFormData();
     body_buffer = new BodyStreamBuffer(
         script_state,
@@ -467,7 +467,7 @@ void Response::RefreshBody(ScriptState* script_state) {
       .Set(response.As<v8::Object>(), body_buffer);
 }
 
-DEFINE_TRACE(Response) {
+void Response::Trace(blink::Visitor* visitor) {
   Body::Trace(visitor);
   visitor->Trace(response_);
   visitor->Trace(headers_);

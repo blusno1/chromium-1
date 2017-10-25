@@ -89,7 +89,7 @@ class CORE_EXPORT UseCounter {
     // remove a reference to the observer and stop notifications.
     virtual bool OnCountFeature(WebFeature) = 0;
 
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
+    virtual void Trace(blink::Visitor* visitor) {}
   };
 
   // "count" sets the bit for this feature to 1. Repeated calls are ignored.
@@ -139,7 +139,18 @@ class CORE_EXPORT UseCounter {
   // reporting disabled.
   bool HasRecordedMeasurement(WebFeature) const;
 
-  DECLARE_TRACE();
+  // Triggers a use counter if a feature, which is currently available in all
+  // frames, would be blocked by the introduction of feature policy. This takes
+  // two counters (which may be the same). It triggers |blockedCrossOrigin| if
+  // the frame is cross-origin relative to the top-level document, and triggers
+  // |blockedSameOrigin| if it is same-origin with the top level, but is
+  // embedded in any way through a cross-origin frame. (A->B->A embedding)
+  static void CountIfFeatureWouldBeBlockedByFeaturePolicy(
+      const LocalFrame&,
+      WebFeature blockedCrossOrigin,
+      WebFeature blockedSameOrigin);
+
+  void Trace(blink::Visitor*);
 
  private:
   // Notifies that a feature is newly counted to |m_observers|. This shouldn't

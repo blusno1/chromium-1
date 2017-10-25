@@ -77,7 +77,7 @@ class HTMLImageElement::ViewportChangeListener final
       element_->NotifyViewportChanged();
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(element_);
     MediaQueryListListener::Trace(visitor);
   }
@@ -94,7 +94,6 @@ HTMLImageElement::HTMLImageElement(Document& document, bool created_by_parser)
       image_device_pixel_ratio_(1.0f),
       source_(nullptr),
       layout_disposition_(LayoutDisposition::kPrimaryContent),
-      decoding_mode_(Image::kUnspecifiedDecode),
       form_was_set_by_parser_(false),
       element_created_by_parser_(created_by_parser),
       is_fallback_image_(false),
@@ -113,7 +112,7 @@ HTMLImageElement* HTMLImageElement::Create(Document& document,
 
 HTMLImageElement::~HTMLImageElement() {}
 
-DEFINE_TRACE(HTMLImageElement) {
+void HTMLImageElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(image_loader_);
   visitor->Trace(listener_);
   visitor->Trace(form_);
@@ -375,16 +374,9 @@ void HTMLImageElement::AttachLayoutTree(AttachContext& context) {
   if (GetLayoutObject() && GetLayoutObject()->IsImage()) {
     LayoutImage* layout_image = ToLayoutImage(GetLayoutObject());
     LayoutImageResource* layout_image_resource = layout_image->ImageResource();
-    if (is_fallback_image_) {
-      float device_scale_factor =
-          blink::DeviceScaleFactorDeprecated(layout_image->GetFrame());
-      std::pair<Image*, float> broken_image_and_image_scale_factor =
-          ImageResourceContent::BrokenImage(device_scale_factor);
-      ImageResourceContent* new_image_resource =
-          ImageResourceContent::CreateLoaded(
-              broken_image_and_image_scale_factor.first);
-      layout_image->ImageResource()->SetImageResource(new_image_resource);
-    }
+    if (is_fallback_image_)
+      layout_image_resource->UseBrokenImage();
+
     if (layout_image_resource->HasImage())
       return;
 
@@ -451,10 +443,8 @@ unsigned HTMLImageElement::width() {
     // if the image is available, use its width
     if (ImageResourceContent* image_content = GetImageLoader().GetContent()) {
       return image_content
-          ->ImageSize(LayoutObject::ShouldRespectImageOrientation(nullptr),
-                      1.0f)
-          .Width()
-          .ToUnsigned();
+          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
+          .Width();
     }
   }
 
@@ -474,10 +464,8 @@ unsigned HTMLImageElement::height() {
     // if the image is available, use its height
     if (ImageResourceContent* image_content = GetImageLoader().GetContent()) {
       return image_content
-          ->ImageSize(LayoutObject::ShouldRespectImageOrientation(nullptr),
-                      1.0f)
-          .Height()
-          .ToUnsigned();
+          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
+          .Height();
     }
   }
 
@@ -495,8 +483,8 @@ LayoutSize HTMLImageElement::DensityCorrectedIntrinsicDimensions() const {
 
   RespectImageOrientationEnum respect_image_orientation =
       LayoutObject::ShouldRespectImageOrientation(GetLayoutObject());
-  LayoutSize natural_size =
-      image_resource->ImageSize(respect_image_orientation, 1);
+  LayoutSize natural_size(
+      image_resource->IntrinsicSize(respect_image_orientation));
   natural_size.Scale(pixel_density);
   return natural_size;
 }
@@ -531,12 +519,12 @@ const String& HTMLImageElement::currentSrc() const {
   // Return the picked URL string in case of load error.
   if (GetImageLoader().HadError())
     return best_fit_image_url_;
-  // Initially, the pending request turns into current request when it is either
-  // available or broken.  We use the image's dimensions as a proxy to it being
-  // in any of these states.
+  // Initially, the pending request turns into current request when it is
+  // either available or broken. Check for the resource being in error or
+  // having an image to determine these states.
   ImageResourceContent* image_content = GetImageLoader().GetContent();
-  if (!image_content || !image_content->GetImage() ||
-      !image_content->GetImage()->width())
+  if (!image_content ||
+      (!image_content->ErrorOccurred() && !image_content->HasImage()))
     return g_empty_atom;
 
   return image_content->Url().GetString();
@@ -652,9 +640,8 @@ FloatSize HTMLImageElement::DefaultDestinationSize(
     return ToSVGImage(CachedImage()->GetImage())
         ->ConcreteObjectSize(default_object_size);
 
-  LayoutSize size;
-  size = image->ImageSize(
-      LayoutObject::ShouldRespectImageOrientation(GetLayoutObject()), 1.0f);
+  LayoutSize size(image->IntrinsicSize(
+      LayoutObject::ShouldRespectImageOrientation(GetLayoutObject())));
   if (GetLayoutObject() && GetLayoutObject()->IsLayoutImage() &&
       image->GetImage() && !image->GetImage()->HasRelativeSize())
     size.Scale(ToLayoutImage(GetLayoutObject())->ImageDevicePixelRatio());
@@ -805,7 +792,7 @@ void HTMLImageElement::SetLayoutDisposition(
   }
 }
 
-RefPtr<ComputedStyle> HTMLImageElement::CustomStyleForLayoutObject() {
+scoped_refptr<ComputedStyle> HTMLImageElement::CustomStyleForLayoutObject() {
   switch (layout_disposition_) {
     case LayoutDisposition::kPrimaryContent:  // Fall through.
     case LayoutDisposition::kCollapsed:

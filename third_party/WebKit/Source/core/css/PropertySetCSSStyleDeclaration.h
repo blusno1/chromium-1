@@ -45,7 +45,7 @@ class AbstractPropertySetCSSStyleDeclaration : public CSSStyleDeclaration {
   virtual Element* ParentElement() const { return 0; }
   StyleSheetContents* ContextStyleSheet() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   CSSRule* parentRule() const override { return 0; }
@@ -91,7 +91,7 @@ class PropertySetCSSStyleDeclaration
   PropertySetCSSStyleDeclaration(MutableStylePropertySet& property_set)
       : property_set_(&property_set) {}
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   MutableStylePropertySet& PropertySet() const final {
@@ -114,8 +114,8 @@ class StyleRuleCSSStyleDeclaration : public PropertySetCSSStyleDeclaration {
 
   void Reattach(MutableStylePropertySet&);
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  protected:
   StyleRuleCSSStyleDeclaration(MutableStylePropertySet&, CSSRule*);
@@ -138,7 +138,7 @@ class InlineCSSStyleDeclaration final
   explicit InlineCSSStyleDeclaration(Element* parent_element)
       : parent_element_(parent_element) {}
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   MutableStylePropertySet& PropertySet() const override;

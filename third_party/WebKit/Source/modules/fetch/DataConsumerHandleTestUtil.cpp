@@ -101,11 +101,11 @@ void DataConsumerHandleTestUtil::Thread::Shutdown() {
 class DataConsumerHandleTestUtil::ReplayingHandle::ReaderImpl final
     : public Reader {
  public:
-  ReaderImpl(RefPtr<Context> context, Client* client)
+  ReaderImpl(scoped_refptr<Context> context, Client* client)
       : context_(std::move(context)) {
     context_->AttachReader(client);
   }
-  ~ReaderImpl() { context_->DetachReader(); }
+  ~ReaderImpl() override { context_->DetachReader(); }
 
   WebDataConsumerHandle::Result BeginRead(const void** buffer,
                                           Flags flags,
@@ -117,7 +117,7 @@ class DataConsumerHandleTestUtil::ReplayingHandle::ReaderImpl final
   }
 
  private:
-  RefPtr<Context> context_;
+  scoped_refptr<Context> context_;
 };
 
 void DataConsumerHandleTestUtil::ReplayingHandle::Context::Add(
@@ -233,7 +233,7 @@ void DataConsumerHandleTestUtil::ReplayingHandle::Context::Notify() {
   DCHECK(reader_thread_);
   reader_thread_->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
-      CrossThreadBind(&Context::NotifyInternal, WrapRefPtr(this)));
+      CrossThreadBind(&Context::NotifyInternal, WrapRefCounted(this)));
 }
 
 void DataConsumerHandleTestUtil::ReplayingHandle::Context::NotifyInternal() {

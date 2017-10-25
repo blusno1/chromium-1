@@ -25,6 +25,7 @@ const int kVendorMicrosoft = 0x045e;
 const int kProductXbox360Controller = 0x028e;
 const int kProductXboxOneController2013 = 0x02d1;
 const int kProductXboxOneController2015 = 0x02dd;
+const int kProductXboxOneEliteController = 0x02e3;
 const int kProductXboxOneSController = 0x02ea;
 
 const int kXbox360ReadEndpoint = 1;
@@ -45,6 +46,7 @@ enum {
 
 enum {
   XBOX_ONE_STATUS_MESSAGE_BUTTONS = 0x20,
+  XBOX_ONE_STATUS_MESSAGE_GUIDE = 0x07
 };
 
 enum {
@@ -116,10 +118,26 @@ struct XboxOneButtonData {
   int16_t stick_right_x;
   int16_t stick_right_y;
 };
+
+struct XboxOneEliteButtonData {
+  // The Xbox One Elite controller supports button remapping and exposes both
+  // the mapped and unmapped data in the button state report.
+  XboxOneButtonData button_data;
+  XboxOneButtonData true_button_data;
+  int8_t paddle;
+};
+
+struct XboxOneGuideData {
+  uint8_t down;
+  uint8_t dummy1;
+};
 #pragma pack(pop)
 
 static_assert(sizeof(Xbox360ButtonData) == 18, "xbox button data wrong size");
 static_assert(sizeof(XboxOneButtonData) == 14, "xbox button data wrong size");
+static_assert(sizeof(XboxOneEliteButtonData) == 29,
+              "xbox button data wrong size");
+static_assert(sizeof(XboxOneGuideData) == 2, "xbox button data wrong size");
 
 // From MSDN:
 // http://msdn.microsoft.com/en-us/library/windows/desktop/ee417001(v=vs.85).aspx#dead_zone
@@ -218,7 +236,6 @@ void NormalizeXboxOneButtonData(const XboxOneButtonData& data,
   normalized_data->buttons[11] = data.dpad_down;
   normalized_data->buttons[12] = data.dpad_left;
   normalized_data->buttons[13] = data.dpad_right;
-  normalized_data->buttons[14] = data.sync;
   normalized_data->triggers[0] = NormalizeXboxOneTrigger(data.trigger_left);
   normalized_data->triggers[1] = NormalizeXboxOneTrigger(data.trigger_right);
   NormalizeAxis(data.stick_left_x, data.stick_left_y, kLeftThumbDeadzone,
@@ -245,6 +262,8 @@ XboxController::ControllerType ControllerTypeFromIds(int vendor_id,
         return XboxController::XBOX_ONE_CONTROLLER_2013;
       case kProductXboxOneController2015:
         return XboxController::XBOX_ONE_CONTROLLER_2015;
+      case kProductXboxOneEliteController:
+        return XboxController::XBOX_ONE_ELITE_CONTROLLER;
       case kProductXboxOneSController:
         return XboxController::XBOX_ONE_S_CONTROLLER;
       default:
@@ -318,6 +337,7 @@ bool XboxController::OpenDevice(io_service_t service) {
       break;
     case XBOX_ONE_CONTROLLER_2013:
     case XBOX_ONE_CONTROLLER_2015:
+    case XBOX_ONE_ELITE_CONTROLLER:
     case XBOX_ONE_S_CONTROLLER:
       read_endpoint_ = kXboxOneReadEndpoint;
       control_endpoint_ = kXboxOneControlEndpoint;
@@ -445,6 +465,7 @@ bool XboxController::OpenDevice(io_service_t service) {
         return false;
       if (controller_type_ == XBOX_ONE_CONTROLLER_2013 ||
           controller_type_ == XBOX_ONE_CONTROLLER_2015 ||
+          controller_type_ == XBOX_ONE_ELITE_CONTROLLER ||
           controller_type_ == XBOX_ONE_S_CONTROLLER)
         WriteXboxOneInit();
     }
@@ -486,6 +507,7 @@ int XboxController::GetVendorId() const {
     case XBOX_360_CONTROLLER:
     case XBOX_ONE_CONTROLLER_2013:
     case XBOX_ONE_CONTROLLER_2015:
+    case XBOX_ONE_ELITE_CONTROLLER:
     case XBOX_ONE_S_CONTROLLER:
       return kVendorMicrosoft;
     default:
@@ -501,6 +523,8 @@ int XboxController::GetProductId() const {
       return kProductXboxOneController2013;
     case XBOX_ONE_CONTROLLER_2015:
       return kProductXboxOneController2015;
+    case XBOX_ONE_ELITE_CONTROLLER:
+      return kProductXboxOneEliteController;
     case XBOX_ONE_S_CONTROLLER:
       return kProductXboxOneSController;
     default:
@@ -599,12 +623,20 @@ void XboxController::ProcessXboxOnePacket(size_t length) {
   length -= 4;
   switch (type) {
     case XBOX_ONE_STATUS_MESSAGE_BUTTONS: {
-      if (length != sizeof(XboxOneButtonData))
+      if (length != sizeof(XboxOneButtonData) &&
+          length != sizeof(XboxOneEliteButtonData))
         return;
       XboxOneButtonData* data = reinterpret_cast<XboxOneButtonData*>(buffer);
       Data normalized_data;
       NormalizeXboxOneButtonData(*data, &normalized_data);
       delegate_->XboxControllerGotData(this, normalized_data);
+      break;
+    }
+    case XBOX_ONE_STATUS_MESSAGE_GUIDE: {
+      if (length != sizeof(XboxOneGuideData))
+        return;
+      XboxOneGuideData* data = reinterpret_cast<XboxOneGuideData*>(buffer);
+      delegate_->XboxControllerGotGuideData(this, data->down);
       break;
     }
     default:
@@ -718,6 +750,12 @@ bool XboxDataFetcher::RegisterForNotifications() {
   CFRunLoopAddSource(CFRunLoopGetCurrent(), source_, kCFRunLoopDefaultMode);
 
   listening_ = true;
+
+  if (!RegisterForDeviceNotifications(kVendorMicrosoft,
+                                      kProductXboxOneEliteController,
+                                      &xbox_one_elite_device_added_iter_,
+                                      &xbox_one_elite_device_removed_iter_))
+    return false;
 
   if (!RegisterForDeviceNotifications(kVendorMicrosoft,
                                       kProductXboxOneController2013,
@@ -875,15 +913,33 @@ void XboxDataFetcher::XboxControllerGotData(XboxController* controller,
   pad.buttons[6].value = data.triggers[0];
   pad.buttons[7].pressed = data.triggers[1] > kDefaultButtonPressedThreshold;
   pad.buttons[7].value = data.triggers[1];
-  for (size_t i = 8; i < 17; i++) {
+  for (size_t i = 8; i < 16; i++) {
     pad.buttons[i].pressed = data.buttons[i - 2];
     pad.buttons[i].value = data.buttons[i - 2] ? 1.0f : 0.0f;
+  }
+  if (controller->GetControllerType() == XboxController::XBOX_360_CONTROLLER) {
+    pad.buttons[16].pressed = data.buttons[14];
+    pad.buttons[16].value = data.buttons[14] ? 1.0f : 0.0f;
   }
   for (size_t i = 0; i < arraysize(data.axes); i++) {
     pad.axes[i] = data.axes[i];
   }
 
-  pad.timestamp = base::TimeTicks::Now().ToInternalValue();
+  pad.timestamp = (base::TimeTicks::Now() - base::TimeTicks()).InMicroseconds();
+}
+
+void XboxDataFetcher::XboxControllerGotGuideData(XboxController* controller,
+                                                 bool guide) {
+  PadState* state = GetPadState(controller->location_id());
+  if (!state)
+    return;  // No available slot for this device
+
+  Gamepad& pad = state->data;
+
+  pad.buttons[16].pressed = guide;
+  pad.buttons[16].value = guide ? 1.0f : 0.0f;
+
+  pad.timestamp = (base::TimeTicks::Now() - base::TimeTicks()).InMicroseconds();
 }
 
 void XboxDataFetcher::XboxControllerError(XboxController* controller) {

@@ -20,6 +20,7 @@
  *   BLUETOOTH_DEVICES: (undefined|!settings.Route),
  *   CERTIFICATES: (undefined|!settings.Route),
  *   CHANGE_PICTURE: (undefined|!settings.Route),
+ *   CHROME_CLEANUP: (undefined|!settings.Route),
  *   CLEAR_BROWSER_DATA: (undefined|!settings.Route),
  *   CLOUD_PRINTERS: (undefined|!settings.Route),
  *   CUPS_PRINTERS: (undefined|!settings.Route),
@@ -135,7 +136,7 @@ cr.define('settings', function() {
 
       // |path| extends this route's path if it doesn't have a leading slash.
       // If it does have a leading slash, it's just set as the new route's URL.
-      var newUrl = path[0] == '/' ? path : this.path + '/' + path;
+      var newUrl = path[0] == '/' ? path : `${this.path}/${path}`;
 
       var route = new Route(newUrl);
       route.parent = this;
@@ -380,6 +381,12 @@ cr.define('settings', function() {
         r.TRIGGERED_RESET_DIALOG =
             r.ADVANCED.createChild('/triggeredResetProfileSettings');
         r.TRIGGERED_RESET_DIALOG.isNavigableDialog = true;
+        // <if expr="is_win">
+        // This should only be added if the feature is enabled.
+        if (loadTimeData.getBoolean('userInitiatedCleanupsEnabled')) {
+          r.CHROME_CLEANUP = r.RESET.createChild('/cleanup');
+        }
+        // </if>
       }
     }
 

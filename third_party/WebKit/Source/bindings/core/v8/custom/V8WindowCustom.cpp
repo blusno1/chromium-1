@@ -171,7 +171,7 @@ void V8Window::openerAttributeSetterCustom(
     // impl->frame() has to be a non-null LocalFrame.  Otherwise, the
     // same-origin check would have failed.
     DCHECK(impl->GetFrame());
-    ToLocalFrame(impl->GetFrame())->Loader().SetOpener(0);
+    ToLocalFrame(impl->GetFrame())->Loader().SetOpener(nullptr);
   }
 
   // Delete the accessor from the inner object.
@@ -244,8 +244,9 @@ void V8Window::postMessageMethodCustom(
 
   SerializedScriptValue::SerializeOptions options;
   options.transferables = &transferables;
-  RefPtr<SerializedScriptValue> message = SerializedScriptValue::Serialize(
-      info.GetIsolate(), info[0], options, exception_state);
+  scoped_refptr<SerializedScriptValue> message =
+      SerializedScriptValue::Serialize(info.GetIsolate(), info[0], options,
+                                       exception_state);
   if (exception_state.HadException())
     return;
 

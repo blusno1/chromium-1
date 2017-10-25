@@ -33,10 +33,12 @@ class NavigationThrottleCallbackRunner : public NavigationThrottle {
       NavigationHandle* handle,
       const base::Closure& on_will_start_request,
       const base::Closure& on_will_redirect_request,
+      const base::Closure& on_will_fail_request,
       const base::Closure& on_will_process_response)
       : NavigationThrottle(handle),
         on_will_start_request_(on_will_start_request),
         on_will_redirect_request_(on_will_redirect_request),
+        on_will_fail_request_(on_will_fail_request),
         on_will_process_response_(on_will_process_response) {}
 
   NavigationThrottle::ThrottleCheckResult WillStartRequest() override {
@@ -46,6 +48,11 @@ class NavigationThrottleCallbackRunner : public NavigationThrottle {
 
   NavigationThrottle::ThrottleCheckResult WillRedirectRequest() override {
     on_will_redirect_request_.Run();
+    return NavigationThrottle::PROCEED;
+  }
+
+  NavigationThrottle::ThrottleCheckResult WillFailRequest() override {
+    on_will_fail_request_.Run();
     return NavigationThrottle::PROCEED;
   }
 
@@ -61,6 +68,7 @@ class NavigationThrottleCallbackRunner : public NavigationThrottle {
  private:
   base::Closure on_will_start_request_;
   base::Closure on_will_redirect_request_;
+  base::Closure on_will_fail_request_;
   base::Closure on_will_process_response_;
 };
 
@@ -73,6 +81,19 @@ RenderFrameHost* NavigationSimulator::NavigateAndCommitFromBrowser(
   NavigationSimulator simulator(url, true /* browser_initiated */,
                                 static_cast<WebContentsImpl*>(web_contents),
                                 nullptr);
+  simulator.Commit();
+  return simulator.GetFinalRenderFrameHost();
+}
+
+// static
+RenderFrameHost* NavigationSimulator::Reload(WebContents* web_contents) {
+  NavigationEntry* entry =
+      web_contents->GetController().GetLastCommittedEntry();
+  CHECK(entry);
+  NavigationSimulator simulator(entry->GetURL(), true /* browser_initiated */,
+                                static_cast<WebContentsImpl*>(web_contents),
+                                nullptr);
+  simulator.SetReloadType(ReloadType::NORMAL);
   simulator.Commit();
   return simulator.GetFinalRenderFrameHost();
 }
@@ -98,6 +119,23 @@ RenderFrameHost* NavigationSimulator::NavigateAndFailFromBrowser(
   NavigationSimulator simulator(url, true /* browser_initiated */,
                                 static_cast<WebContentsImpl*>(web_contents),
                                 nullptr);
+  simulator.Fail(net_error_code);
+  if (net_error_code == net::ERR_ABORTED)
+    return nullptr;
+  simulator.CommitErrorPage();
+  return simulator.GetFinalRenderFrameHost();
+}
+
+// static
+RenderFrameHost* NavigationSimulator::ReloadAndFail(WebContents* web_contents,
+                                                    int net_error_code) {
+  NavigationEntry* entry =
+      web_contents->GetController().GetLastCommittedEntry();
+  CHECK(entry);
+  NavigationSimulator simulator(entry->GetURL(), true /* browser_initiated */,
+                                static_cast<WebContentsImpl*>(web_contents),
+                                nullptr);
+  simulator.SetReloadType(ReloadType::NORMAL);
   simulator.Fail(net_error_code);
   if (net_error_code == net::ERR_ABORTED)
     return nullptr;
@@ -383,11 +421,13 @@ void NavigationSimulator::Commit() {
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = handle_->pending_nav_entry_id();
   params.url = navigation_url_;
-  params.origin = url::Origin(navigation_url_);
+  params.origin = url::Origin::Create(navigation_url_);
   params.transition = transition_;
   params.should_update_history = true;
-  params.did_create_new_entry = !ui::PageTransitionCoreTypeIs(
-      transition_, ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+  params.did_create_new_entry =
+      !ui::PageTransitionCoreTypeIs(transition_,
+                                    ui::PAGE_TRANSITION_AUTO_SUBFRAME) &&
+      reload_type_ == ReloadType::NONE;
   params.gesture =
       has_user_gesture_ ? NavigationGestureUser : NavigationGestureAuto;
   params.contents_mime_type = "text/html";
@@ -437,12 +477,23 @@ void NavigationSimulator::Fail(int error_code) {
 
   bool should_result_in_error_page = error_code != net::ERR_ABORTED;
   if (IsBrowserSideNavigationEnabled()) {
+    PrepareCompleteCallbackOnHandle();
     NavigationRequest* request = frame_tree_node_->navigation_request();
     CHECK(request);
     TestNavigationURLLoader* url_loader =
         static_cast<TestNavigationURLLoader*>(request->loader_for_testing());
     CHECK(url_loader);
     url_loader->SimulateError(error_code);
+    if (error_code != net::ERR_ABORTED) {
+      DCHECK(!IsRendererDebugURL(navigation_url_));
+      WaitForThrottleChecksComplete();
+      NavigationThrottle::ThrottleCheckResult result =
+          GetLastThrottleCheckResult();
+      if (result.action() == NavigationThrottle::CANCEL ||
+          result.action() == NavigationThrottle::CANCEL_AND_IGNORE) {
+        should_result_in_error_page = false;
+      }
+    }
   } else {
     FrameHostMsg_DidFailProvisionalLoadWithError_Params error_params;
     error_params.error_code = error_code;
@@ -492,8 +543,10 @@ void NavigationSimulator::CommitErrorPage() {
       base::TimeTicks::Now()));
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = handle_->pending_nav_entry_id();
-  params.did_create_new_entry = !ui::PageTransitionCoreTypeIs(
-      transition_, ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+  params.did_create_new_entry =
+      !ui::PageTransitionCoreTypeIs(transition_,
+                                    ui::PAGE_TRANSITION_AUTO_SUBFRAME) &&
+      reload_type_ == ReloadType::NONE;
   params.url = navigation_url_;
   params.transition = transition_;
   params.was_within_same_document = false;
@@ -538,7 +591,7 @@ void NavigationSimulator::CommitSameDocument() {
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.nav_entry_id = 0;
   params.url = navigation_url_;
-  params.origin = url::Origin(navigation_url_);
+  params.origin = url::Origin::Create(navigation_url_);
   params.transition = transition_;
   params.should_update_history = true;
   params.did_create_new_entry = false;
@@ -568,6 +621,8 @@ void NavigationSimulator::CommitSameDocument() {
 void NavigationSimulator::SetTransition(ui::PageTransition transition) {
   CHECK_EQ(INITIALIZATION, state_)
       << "The transition cannot be set after the navigation has started";
+  CHECK_EQ(ReloadType::NONE, reload_type_)
+      << "The transition cannot be specified for reloads";
   transition_ = transition;
 }
 
@@ -575,6 +630,16 @@ void NavigationSimulator::SetHasUserGesture(bool has_user_gesture) {
   CHECK_EQ(INITIALIZATION, state_) << "The has_user_gesture parameter cannot "
                                       "be set after the navigation has started";
   has_user_gesture_ = has_user_gesture;
+}
+
+void NavigationSimulator::SetReloadType(ReloadType reload_type) {
+  CHECK_EQ(INITIALIZATION, state_) << "The reload_type parameter cannot "
+                                      "be set after the navigation has started";
+  CHECK(browser_initiated_) << "The reload_type parameter can only be set for "
+                               "browser-intiated navigations";
+  reload_type_ = reload_type;
+  if (reload_type_ != ReloadType::NONE)
+    transition_ = ui::PAGE_TRANSITION_RELOAD;
 }
 
 void NavigationSimulator::SetReferrer(const Referrer& referrer) {
@@ -650,6 +715,8 @@ void NavigationSimulator::DidStartNavigation(
                      weak_factory_.GetWeakPtr()),
           base::Bind(&NavigationSimulator::OnWillRedirectRequest,
                      weak_factory_.GetWeakPtr()),
+          base::Bind(&NavigationSimulator::OnWillFailRequest,
+                     weak_factory_.GetWeakPtr()),
           base::Bind(&NavigationSimulator::OnWillProcessResponse,
                      weak_factory_.GetWeakPtr())));
 
@@ -690,13 +757,22 @@ void NavigationSimulator::OnWillRedirectRequest() {
   num_will_redirect_request_called_++;
 }
 
+void NavigationSimulator::OnWillFailRequest() {
+  num_will_fail_request_called_++;
+}
+
 void NavigationSimulator::OnWillProcessResponse() {
   num_will_process_response_called_++;
 }
 
 bool NavigationSimulator::SimulateBrowserInitiatedStart() {
-  web_contents_->GetController().LoadURL(navigation_url_, referrer_,
-                                         transition_, std::string());
+  if (reload_type_ != ReloadType::NONE) {
+    web_contents_->GetController().Reload(reload_type_,
+                                          false /*check_for_repost */);
+  } else {
+    web_contents_->GetController().LoadURL(navigation_url_, referrer_,
+                                           transition_, std::string());
+  }
 
   // The navigation url might have been rewritten by the NavigationController.
   // Update it.

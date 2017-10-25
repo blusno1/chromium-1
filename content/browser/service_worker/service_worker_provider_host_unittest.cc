@@ -30,6 +30,7 @@
 #include "content/test/test_content_client.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
@@ -469,7 +470,7 @@ class MockServiceWorkerContainer : public mojom::ServiceWorkerContainer {
 
   ~MockServiceWorkerContainer() override = default;
 
-  void SetController(const ServiceWorkerObjectInfo& controller,
+  void SetController(blink::mojom::ServiceWorkerObjectInfoPtr controller,
                      const std::vector<blink::mojom::WebFeature>& used_features,
                      bool should_notify_controllerchange) override {
     was_set_controller_called_ = true;
@@ -543,6 +544,7 @@ TEST_F(ServiceWorkerProviderHostTest, ActiveIsNotController) {
       registration1_.get(), GURL("https://www.example.com/sw.js"),
       1 /* version_id */, helper_->context()->AsWeakPtr());
   registration1_->SetInstallingVersion(version);
+
 
   // Finish the navigation.
   host->SetDocumentUrl(GURL("https://www.example.com/page"));

@@ -62,7 +62,6 @@
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/StringHash.h"
-#include "public/platform/WebCachePolicy.h"
 
 namespace blink {
 
@@ -110,7 +109,7 @@ ScriptLoader::ScriptLoader(ScriptElementBase* element,
 
 ScriptLoader::~ScriptLoader() {}
 
-DEFINE_TRACE(ScriptLoader) {
+void ScriptLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_);
   visitor->Trace(resource_);
   visitor->Trace(pending_script_);
@@ -119,7 +118,7 @@ DEFINE_TRACE(ScriptLoader) {
   PendingScriptClient::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ScriptLoader) {
+void ScriptLoader::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(pending_script_);
   visitor->TraceWrappers(module_tree_client_);
 }
@@ -847,7 +846,7 @@ ScriptLoader::ExecuteScriptResult ScriptLoader::DoExecuteScript(
                   script->GetScriptType() == ScriptType::kModule ||
                   is_imported_script
               ? context_document
-              : 0);
+              : nullptr);
 
   // 4. "Let old script element be the value to which the script element's
   //     node document's currentScript object was most recently set."
@@ -974,14 +973,9 @@ void ScriptLoader::PendingScriptFinished(PendingScript* pending_script) {
   DCHECK_EQ(pending_script_, pending_script);
   DCHECK_EQ(pending_script_->GetScriptType(), GetScriptType());
 
-  // We do not need this script in the memory cache. The primary goals of
-  // sending this fetch request are to let the third party server know
-  // about the document.write scripts intervention and populate the http
-  // cache for subsequent uses.
   if (document_write_intervention_ ==
       DocumentWriteIntervention::kFetchDocWrittenScriptDeferIdle) {
     DCHECK_EQ(pending_script_->GetScriptType(), ScriptType::kClassic);
-    pending_script_->RemoveFromMemoryCache();
     pending_script_->StopWatchingForLoad();
     return;
   }

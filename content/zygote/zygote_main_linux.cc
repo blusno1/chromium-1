@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -35,9 +36,9 @@
 #include "content/common/sandbox_linux/sandbox_debug_handling_linux.h"
 #include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/common/zygote_commands_linux.h"
+#include "content/public/common/common_sandbox_support_linux.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
-#include "content/public/common/sandbox_linux.h"
 #include "content/public/common/zygote_fork_delegate_linux.h"
 #include "content/zygote/zygote_linux.h"
 #include "media/media_features.h"
@@ -47,16 +48,13 @@
 #include "sandbox/linux/services/namespace_sandbox.h"
 #include "sandbox/linux/services/thread_helpers.h"
 #include "sandbox/linux/suid/client/setuid_sandbox_client.h"
+#include "services/service_manager/sandbox/sandbox.h"
 #include "third_party/WebKit/public/web/linux/WebFontRendering.h"
 #include "third_party/boringssl/src/include/openssl/crypto.h"
 #include "third_party/boringssl/src/include/openssl/rand.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #include "third_party/skia/include/ports/SkFontConfigInterface.h"
 #include "third_party/skia/include/ports/SkFontMgr_android.h"
-
-#if defined(OS_LINUX)
-#include <sys/prctl.h>
-#endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/common/pepper_plugin_list.h"
@@ -153,7 +151,7 @@ static void ProxyLocaltimeCallToBrowser(time_t input, struct tm* output,
                                         char* timezone_out,
                                         size_t timezone_out_len) {
   base::Pickle request;
-  request.WriteInt(LinuxSandbox::METHOD_LOCALTIME);
+  request.WriteInt(SandboxLinux::METHOD_LOCALTIME);
   request.WriteString(
       std::string(reinterpret_cast<char*>(&input), sizeof(input)));
 
@@ -512,7 +510,7 @@ static void DropAllCapabilities(int proc_fd) {
   CHECK(sandbox::Credentials::DropAllCapabilities(proc_fd));
 }
 
-static void EnterNamespaceSandbox(LinuxSandbox* linux_sandbox,
+static void EnterNamespaceSandbox(SandboxLinux* linux_sandbox,
                                   base::Closure* post_fork_parent_callback) {
   linux_sandbox->EngageNamespaceSandbox();
 
@@ -525,7 +523,7 @@ static void EnterNamespaceSandbox(LinuxSandbox* linux_sandbox,
   }
 }
 
-static void EnterLayerOneSandbox(LinuxSandbox* linux_sandbox,
+static void EnterLayerOneSandbox(SandboxLinux* linux_sandbox,
                                  const bool using_layer1_sandbox,
                                  base::Closure* post_fork_parent_callback) {
   DCHECK(linux_sandbox);
@@ -558,7 +556,7 @@ bool ZygoteMain(
 
   std::vector<int> fds_to_close_post_fork;
 
-  LinuxSandbox* linux_sandbox = LinuxSandbox::GetInstance();
+  SandboxLinux* linux_sandbox = SandboxLinux::GetInstance();
 
   // Skip pre-initializing sandbox under --no-sandbox for crbug.com/444900.
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -617,10 +615,12 @@ bool ZygoteMain(
 
   const int sandbox_flags = linux_sandbox->GetStatus();
 
-  const bool setuid_sandbox_engaged = sandbox_flags & kSandboxLinuxSUID;
+  const bool setuid_sandbox_engaged =
+      sandbox_flags & service_manager::Sandbox::kSUID;
   CHECK_EQ(using_setuid_sandbox, setuid_sandbox_engaged);
 
-  const bool namespace_sandbox_engaged = sandbox_flags & kSandboxLinuxUserNS;
+  const bool namespace_sandbox_engaged =
+      sandbox_flags & service_manager::Sandbox::kUserNS;
   CHECK_EQ(using_namespace_sandbox, namespace_sandbox_engaged);
 
   Zygote zygote(sandbox_flags, std::move(fork_delegates), extra_children,

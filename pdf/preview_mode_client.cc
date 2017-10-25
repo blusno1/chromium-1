@@ -102,36 +102,34 @@ void PreviewModeClient::SubmitForm(const std::string& url,
   NOTREACHED();
 }
 
-std::string PreviewModeClient::ShowFileSelectionDialog() {
-  NOTREACHED();
-  return std::string();
-}
-
 pp::URLLoader PreviewModeClient::CreateURLLoader() {
   NOTREACHED();
   return pp::URLLoader();
 }
 
-void PreviewModeClient::ScheduleCallback(int id, int delay_in_ms) {
+void PreviewModeClient::ScheduleCallback(int id, base::TimeDelta delay) {
   NOTREACHED();
 }
 
-void PreviewModeClient::ScheduleTouchTimerCallback(int id, int delay_in_ms) {
+void PreviewModeClient::ScheduleTouchTimerCallback(int id,
+                                                   base::TimeDelta delay) {
   NOTREACHED();
 }
 
-void PreviewModeClient::SearchString(const base::char16* string,
-                                     const base::char16* term,
-                                     bool case_sensitive,
-                                     std::vector<SearchStringResult>* results) {
+std::vector<PDFEngine::Client::SearchStringResult>
+PreviewModeClient::SearchString(const base::char16* string,
+                                const base::char16* term,
+                                bool case_sensitive) {
   NOTREACHED();
+  return std::vector<SearchStringResult>();
 }
 
 void PreviewModeClient::DocumentPaintOccurred() {
   NOTREACHED();
 }
 
-void PreviewModeClient::DocumentLoadComplete(int page_count) {
+void PreviewModeClient::DocumentLoadComplete(
+    const PDFEngine::DocumentFeatures& document_features) {
   client_->PreviewDocumentLoadComplete();
 }
 

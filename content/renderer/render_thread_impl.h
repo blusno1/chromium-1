@@ -129,21 +129,28 @@ class AudioRendererMixerManager;
 class BlobMessageFilter;
 class BrowserPluginManager;
 class CacheStorageDispatcher;
+class CategorizedWorkerPool;
+class ChildResourceMessageFilter;
 class CompositorForwardingMessageFilter;
 class DevToolsAgentFilter;
 class DomStorageDispatcher;
+class FileSystemDispatcher;
 class FrameSwapMessageQueue;
+class GpuVideoAcceleratorFactoriesImpl;
 class IndexedDBDispatcher;
 class InputHandlerManager;
 class MidiMessageFilter;
+class NotificationDispatcher;
 class P2PSocketDispatcher;
 class PeerConnectionDependencyFactory;
 class PeerConnectionTracker;
-class CategorizedWorkerPool;
+class QuotaDispatcher;
+class QuotaMessageFilter;
 class RenderThreadObserver;
 class RendererBlinkPlatformImpl;
-class GpuVideoAcceleratorFactoriesImpl;
+class ResourceDispatcher;
 class ResourceDispatchThrottler;
+class ServiceWorkerMessageFilter;
 class VideoCaptureImplManager;
 
 #if defined(OS_ANDROID)
@@ -227,6 +234,7 @@ class CONTENT_EXPORT RenderThreadImpl
       blink::scheduler::RendererProcessType type) override;
 
   // IPC::Listener implementation via ChildThreadImpl:
+  bool OnMessageReceived(const IPC::Message& msg) override;
   void OnAssociatedInterfaceRequest(
       const std::string& name,
       mojo::ScopedInterfaceEndpointHandle handle) override;
@@ -324,8 +332,24 @@ class CONTENT_EXPORT RenderThreadImpl
     return audio_input_message_filter_.get();
   }
 
+  FileSystemDispatcher* file_system_dispatcher() const {
+    return file_system_dispatcher_.get();
+  }
+
   MidiMessageFilter* midi_message_filter() {
     return midi_message_filter_.get();
+  }
+
+  QuotaDispatcher* quota_dispatcher() const {
+    return quota_dispatcher_.get();
+  }
+
+  QuotaMessageFilter* quota_message_filter() const {
+    return quota_message_filter_.get();
+  }
+
+  ResourceDispatcher* resource_dispatcher() const {
+    return resource_dispatcher_.get();
   }
 
 #if defined(OS_ANDROID)
@@ -367,6 +391,10 @@ class CONTENT_EXPORT RenderThreadImpl
   viz::ClientSharedBitmapManager* shared_bitmap_manager() const {
     DCHECK(shared_bitmap_manager_);
     return shared_bitmap_manager_.get();
+  }
+
+  NotificationDispatcher* notification_dispatcher() const {
+    return notification_dispatcher_.get();
   }
 
   mojom::RenderFrameMessageFilter* render_frame_message_filter();
@@ -611,14 +639,20 @@ class CONTENT_EXPORT RenderThreadImpl
   std::unique_ptr<IndexedDBDispatcher> main_thread_indexed_db_dispatcher_;
   std::unique_ptr<blink::scheduler::RendererScheduler> renderer_scheduler_;
   std::unique_ptr<RendererBlinkPlatformImpl> blink_platform_impl_;
+  std::unique_ptr<ResourceDispatcher> resource_dispatcher_;
   std::unique_ptr<ResourceDispatchThrottler> resource_dispatch_throttler_;
   std::unique_ptr<CacheStorageDispatcher> main_thread_cache_storage_dispatcher_;
+  std::unique_ptr<FileSystemDispatcher> file_system_dispatcher_;
+  std::unique_ptr<QuotaDispatcher> quota_dispatcher_;
 
   // Used on the renderer and IPC threads.
   scoped_refptr<BlobMessageFilter> blob_message_filter_;
   scoped_refptr<AudioInputMessageFilter> audio_input_message_filter_;
   scoped_refptr<MidiMessageFilter> midi_message_filter_;
   scoped_refptr<DevToolsAgentFilter> devtools_agent_message_filter_;
+  scoped_refptr<ServiceWorkerMessageFilter> service_worker_message_filter_;
+  scoped_refptr<ChildResourceMessageFilter> resource_message_filter_;
+  scoped_refptr<QuotaMessageFilter> quota_message_filter_;
 
   std::unique_ptr<BrowserPluginManager> browser_plugin_manager_;
 
@@ -649,6 +683,8 @@ class CONTENT_EXPORT RenderThreadImpl
 
   std::unique_ptr<viz::ClientSharedBitmapManager> shared_bitmap_manager_;
 
+  scoped_refptr<NotificationDispatcher> notification_dispatcher_;
+
   // The time Blink was initialized. Used for UMA.
   base::TimeTicks blink_initialized_time_;
 
@@ -664,8 +700,7 @@ class CONTENT_EXPORT RenderThreadImpl
   // The number of idle handler calls that skip sending idle notifications.
   int idle_notifications_to_skip_;
 
-  std::unique_ptr<blink::scheduler::RendererScheduler::RendererPauseHandle>
-      webkit_shared_timer_suspended_handle_;
+  bool webkit_shared_timer_suspended_;
 
   // Used to control layout test specific behavior.
   std::unique_ptr<LayoutTestDependencies> layout_test_deps_;

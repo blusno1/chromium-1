@@ -8,6 +8,7 @@ import android.app.Activity;
 import android.content.DialogInterface;
 import android.os.Bundle;
 import android.support.annotation.IntDef;
+import android.support.annotation.VisibleForTesting;
 import android.support.v7.widget.SwitchCompat;
 import android.view.View;
 import android.widget.CompoundButton;
@@ -15,6 +16,7 @@ import android.widget.CompoundButton;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.SysUtils;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -25,6 +27,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.PromoDialog;
+import org.chromium.ui.base.DeviceFormFactor;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -35,6 +38,13 @@ import java.lang.ref.WeakReference;
  * activity to bring a user in or out of the feature.
  */
 public class ChromeHomePromoDialog extends PromoDialog {
+    /** Notified about dialog events. */
+    public static interface ChromeHomePromoDialogTestObserver {
+        void onDialogShown(ChromeHomePromoDialog shownDialog);
+    }
+
+    private static ChromeHomePromoDialogTestObserver sTestObserver;
+
     /** Reasons that the promo was shown. */
     @IntDef({ShowReason.NTP, ShowReason.MENU, ShowReason.STARTUP, ShowReason.BOUNDARY})
     @Retention(RetentionPolicy.SOURCE)
@@ -82,6 +92,14 @@ public class ChromeHomePromoDialog extends PromoDialog {
     }
 
     @Override
+    public void show() {
+        if (DeviceFormFactor.isTablet()) {
+            throw new RuntimeException("Promo should not be shown for tablet devices!");
+        }
+        super.show();
+    }
+
+    @Override
     protected DialogParams getDialogParams() {
         PromoDialog.DialogParams params = new PromoDialog.DialogParams();
         params.headerStringResource = R.string.chrome_home_promo_dialog_title;
@@ -122,6 +140,8 @@ public class ChromeHomePromoDialog extends PromoDialog {
 
         toggle.setChecked(true);
         addControl(toggleLayout);
+
+        if (sTestObserver != null) sTestObserver.onDialogShown(this);
     }
 
     /**
@@ -205,5 +225,15 @@ public class ChromeHomePromoDialog extends PromoDialog {
         FeatureUtilities.switchChromeHomeUserSetting(userSetting);
 
         if (restartRequired) restartChromeInstances();
+    }
+
+    /**
+     * An observer to be notified about dialog events.  Used for testing. Must be called on the UI
+     * thread.
+     */
+    @VisibleForTesting
+    public static void setObserverForTests(ChromeHomePromoDialogTestObserver observer) {
+        ThreadUtils.assertOnUiThread();
+        sTestObserver = observer;
     }
 }

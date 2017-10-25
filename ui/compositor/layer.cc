@@ -175,7 +175,7 @@ Layer::~Layer() {
 }
 
 std::unique_ptr<Layer> Layer::Clone() const {
-  auto clone = base::MakeUnique<Layer>(type_);
+  auto clone = std::make_unique<Layer>(type_);
 
   // Background filters.
   clone->SetBackgroundBlur(background_blur_sigma_);
@@ -189,7 +189,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetLayerInverted(layer_inverted_);
   clone->SetLayerBlur(layer_blur_sigma_);
   if (alpha_shape_)
-    clone->SetAlphaShape(base::MakeUnique<ShapeRects>(*alpha_shape_));
+    clone->SetAlphaShape(std::make_unique<ShapeRects>(*alpha_shape_));
 
   // cc::Layer state.
   if (surface_layer_) {
@@ -218,7 +218,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
 
 std::unique_ptr<Layer> Layer::Mirror() {
   auto mirror = Clone();
-  mirrors_.emplace_back(base::MakeUnique<LayerMirror>(this, mirror.get()));
+  mirrors_.emplace_back(std::make_unique<LayerMirror>(this, mirror.get()));
   return mirror;
 }
 
@@ -575,7 +575,7 @@ bool Layer::ShouldDraw() const {
 // static
 void Layer::ConvertPointToLayer(const Layer* source,
                                 const Layer* target,
-                                gfx::Point* point) {
+                                gfx::PointF* point) {
   if (source == target)
     return;
 
@@ -1078,6 +1078,11 @@ void Layer::DidChangeLayerOpacity(float old_opacity, float new_opacity) {
     delegate_->OnLayerOpacityChanged(old_opacity, new_opacity);
 }
 
+void Layer::DidChangeLayerTransform() {
+  if (delegate_)
+    delegate_->OnLayerTransformed();
+}
+
 void Layer::CollectAnimators(
     std::vector<scoped_refptr<LayerAnimator>>* animators) {
   if (animator_ && animator_->is_animating())
@@ -1111,22 +1116,22 @@ void Layer::StackRelativeTo(Layer* child, Layer* other, bool above) {
 }
 
 bool Layer::ConvertPointForAncestor(const Layer* ancestor,
-                                    gfx::Point* point) const {
+                                    gfx::PointF* point) const {
   gfx::Transform transform;
   bool result = GetTargetTransformRelativeTo(ancestor, &transform);
-  auto p = gfx::Point3F(gfx::PointF(*point));
+  auto p = gfx::Point3F(*point);
   transform.TransformPoint(&p);
-  *point = gfx::ToFlooredPoint(p.AsPointF());
+  *point = p.AsPointF();
   return result;
 }
 
 bool Layer::ConvertPointFromAncestor(const Layer* ancestor,
-                                     gfx::Point* point) const {
+                                     gfx::PointF* point) const {
   gfx::Transform transform;
   bool result = GetTargetTransformRelativeTo(ancestor, &transform);
-  auto p = gfx::Point3F(gfx::PointF(*point));
+  auto p = gfx::Point3F(*point);
   transform.TransformPointReverse(&p);
-  *point = gfx::ToFlooredPoint(p.AsPointF());
+  *point = p.AsPointF();
   return result;
 }
 
@@ -1293,10 +1298,6 @@ void Layer::CreateCcLayer() {
   cc_layer_->SetLayerClient(this);
   cc_layer_->SetElementId(cc::ElementId(cc_layer_->id()));
   RecomputePosition();
-}
-
-gfx::Transform Layer::transform() const {
-  return cc_layer_->transform();
 }
 
 void Layer::RecomputeDrawsContentAndUVRect() {

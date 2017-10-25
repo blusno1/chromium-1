@@ -2,16 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/build_config.h"
 #include "ui/base/ui_base_switches.h"
 
 namespace features {
 
-#if defined(OS_WIN)
-// Enables stylus appearing as touch when in contact with digitizer.
-const base::Feature kDirectManipulationStylus = {
-    "DirectManipulationStylus", base::FEATURE_ENABLED_BY_DEFAULT};
-#endif  // defined(OS_WIN)
+// Enables the floating virtual keyboard behavior.
+const base::Feature kEnableFloatingVirtualKeyboard = {
+    "enable-floating-virtual-keyboard", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 
@@ -35,10 +32,10 @@ const char kShowMacOverlayBorders[] = "show-mac-overlay-borders";
 
 #if defined(OS_WIN)
 // Disables merging the key event (WM_KEY*) with the char event (WM_CHAR).
-const char kDisableMergeKeyCharEvents[]     = "disable-merge-key-char-events";
+const char kDisableMergeKeyCharEvents[] = "disable-merge-key-char-events";
 
 // Enables merging the key event (WM_KEY*) with the char event (WM_CHAR).
-const char kEnableMergeKeyCharEvents[]     = "enable-merge-key-char-events";
+const char kEnableMergeKeyCharEvents[] = "enable-merge-key-char-events";
 #endif
 
 // Disables layer-edge anti-aliasing in the compositor.
@@ -94,10 +91,6 @@ const char kTopChromeMDMaterialHybrid[] = "material-hybrid";
 // Classic, non-material, mode for the |kTopChromeMD| switch.
 const char kTopChromeMDNonMaterial[] = "non-material";
 
-// Applies the material design mode passed via --top-chrome-md to elements
-// throughout Chrome (not just top Chrome).
-const char kExtendMdToSecondaryUi[] = "secondary-ui-md";
-
 // Disable partial swap which is needed for some OpenGL drivers / emulators.
 const char kUIDisablePartialSwap[] = "ui-disable-partial-swap";
 
@@ -112,6 +105,9 @@ const char kUIDisablePartialSwap[] = "ui-disable-partial-swap";
 // Pink: Overdrawn three times.
 // Red: Overdrawn four or more times.
 const char kShowOverdrawFeedback[] = "show-overdraw-feedback";
+
+// Use draw occlusion to skip draw quads when they are not shown on screen.
+const char kEnableDrawOcclusion[] = "enable-draw-occlusion";
 
 // Use SkiaRenderer instead of GLRenderer for direct rendering.
 const char kUseSkiaRenderer[] = "use-skia-renderer";

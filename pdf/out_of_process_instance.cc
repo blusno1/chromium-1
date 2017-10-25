@@ -10,9 +10,9 @@
 #include <algorithm>  // for min/max()
 #include <cmath>      // for log() and pow()
 #include <list>
+#include <memory>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -404,7 +404,7 @@ bool OutOfProcessInstance::Init(uint32_t argc,
   // Allow the plugin to handle find requests.
   SetPluginToHandleFindRequests();
 
-  text_input_ = base::MakeUnique<pp::TextInput_Dev>(this);
+  text_input_ = std::make_unique<pp::TextInput_Dev>(this);
 
   const char* stream_url = nullptr;
   const char* original_url = nullptr;
@@ -1096,7 +1096,7 @@ void OutOfProcessInstance::DidOpen(int32_t result) {
 
 void OutOfProcessInstance::DidOpenPreview(int32_t result) {
   if (result == PP_OK) {
-    preview_client_ = base::MakeUnique<PreviewModeClient>(this);
+    preview_client_ = std::make_unique<PreviewModeClient>(this);
     preview_engine_ = PDFEngine::Create(preview_client_.get());
     preview_engine_->HandleDocumentLoad(embed_preview_loader_);
   } else {
@@ -1294,7 +1294,7 @@ void OutOfProcessInstance::GetDocumentPassword(
   }
 
   password_callback_ =
-      base::MakeUnique<pp::CompletionCallbackWithOutput<pp::Var>>(callback);
+      std::make_unique<pp::CompletionCallbackWithOutput<pp::Var>>(callback);
   pp::VarDictionary message;
   message.Set(pp::Var(kType), pp::Var(kJSGetPasswordType));
   PostMessage(message);
@@ -1377,13 +1377,6 @@ void OutOfProcessInstance::FormDidOpen(int32_t result) {
   }
 }
 
-std::string OutOfProcessInstance::ShowFileSelectionDialog() {
-  // Seems like very low priority to implement, since the pdf has no way to get
-  // the file data anyways.  Javascript doesn't let you do this synchronously.
-  NOTREACHED();
-  return std::string();
-}
-
 pp::URLLoader OutOfProcessInstance::CreateURLLoader() {
   if (full_) {
     if (!did_call_start_loading_) {
@@ -1401,42 +1394,47 @@ pp::URLLoader OutOfProcessInstance::CreateURLLoader() {
   return CreateURLLoaderInternal();
 }
 
-void OutOfProcessInstance::ScheduleTouchTimerCallback(int id, int delay_in_ms) {
-  pp::CompletionCallback callback = callback_factory_.NewCallback(
-      &OutOfProcessInstance::OnClientTouchTimerFired);
-  pp::Module::Get()->core()->CallOnMainThread(delay_in_ms, callback, id);
-}
-
-void OutOfProcessInstance::ScheduleCallback(int id, int delay_in_ms) {
+void OutOfProcessInstance::ScheduleCallback(int id, base::TimeDelta delay) {
   pp::CompletionCallback callback =
       callback_factory_.NewCallback(&OutOfProcessInstance::OnClientTimerFired);
-  pp::Module::Get()->core()->CallOnMainThread(delay_in_ms, callback, id);
+  pp::Module::Get()->core()->CallOnMainThread(delay.InMilliseconds(), callback,
+                                              id);
 }
 
-void OutOfProcessInstance::SearchString(
-    const base::char16* string,
-    const base::char16* term,
-    bool case_sensitive,
-    std::vector<SearchStringResult>* results) {
+void OutOfProcessInstance::ScheduleTouchTimerCallback(int id,
+                                                      base::TimeDelta delay) {
+  pp::CompletionCallback callback = callback_factory_.NewCallback(
+      &OutOfProcessInstance::OnClientTouchTimerFired);
+  pp::Module::Get()->core()->CallOnMainThread(delay.InMilliseconds(), callback,
+                                              id);
+}
+
+std::vector<PDFEngine::Client::SearchStringResult>
+OutOfProcessInstance::SearchString(const base::char16* string,
+                                   const base::char16* term,
+                                   bool case_sensitive) {
   PP_PrivateFindResult* pp_results;
-  int count = 0;
+  uint32_t count = 0;
   pp::PDF::SearchString(this, reinterpret_cast<const unsigned short*>(string),
                         reinterpret_cast<const unsigned short*>(term),
                         case_sensitive, &pp_results, &count);
 
-  results->resize(count);
-  for (int i = 0; i < count; ++i) {
-    (*results)[i].start_index = pp_results[i].start_index;
-    (*results)[i].length = pp_results[i].length;
+  std::vector<SearchStringResult> results(count);
+  for (uint32_t i = 0; i < count; ++i) {
+    results[i].start_index = pp_results[i].start_index;
+    results[i].length = pp_results[i].length;
   }
 
   pp::Memory_Dev memory;
   memory.MemFree(pp_results);
+
+  return results;
 }
 
 void OutOfProcessInstance::DocumentPaintOccurred() {}
 
-void OutOfProcessInstance::DocumentLoadComplete(int page_count) {
+void OutOfProcessInstance::DocumentLoadComplete(
+    const PDFEngine::DocumentFeatures& document_features) {
   // Clear focus state for OSK.
   FormTextFieldFocusChange(false);
 
@@ -1501,7 +1499,16 @@ void OutOfProcessInstance::DocumentLoadComplete(int page_count) {
   }
 
   pp::PDF::SetContentRestriction(this, content_restrictions);
-  HistogramCustomCounts("PDF.PageCount", page_count, 1, 1000000, 50);
+  HistogramCustomCounts("PDF.PageCount", document_features.page_count, 1,
+                        1000000, 50);
+  HistogramEnumeration("PDF.HasAttachment",
+                       document_features.has_attachments ? 1 : 0, 2);
+  HistogramEnumeration("PDF.IsLinearized",
+                       document_features.is_linearized ? 1 : 0, 2);
+  HistogramEnumeration("PDF.IsTagged", document_features.is_tagged ? 1 : 0, 2);
+  HistogramEnumeration("PDF.FormType",
+                       static_cast<int32_t>(document_features.form_type),
+                       static_cast<int32_t>(PDFEngine::FormType::kCount));
 }
 
 void OutOfProcessInstance::RotateClockwise() {
@@ -1819,7 +1826,6 @@ void OutOfProcessInstance::HistogramEnumeration(const std::string& name,
                                                 int32_t boundary_value) {
   if (IsPrintPreview())
     return;
-
   uma_.HistogramEnumeration(name, sample, boundary_value);
 }
 

@@ -30,6 +30,9 @@ class ReadingListModel;
 
 // The top-level toolbar view.
 @property(nonatomic, readonly, strong) ToolbarView* view;
+// The view containing all the content of the toolbar. It respects the trailing
+// and leading anchors of the safe area.
+@property(nonatomic, readonly, strong) UIView* contentView;
 // The view for the toolbar background image. This is a subview of |view| to
 // allow clients to alter the transparency of the background image without
 // affecting the other components of the toolbar.
@@ -45,6 +48,10 @@ class ReadingListModel;
 
 // Style of this toolbar.
 @property(nonatomic, readonly, assign) ToolbarControllerStyle style;
+
+// Returns the constraint controlling the height of the toolbar. If the
+// constraint does not exist, creates it but does not activate it.
+@property(nonatomic, readonly) NSLayoutConstraint* heightConstraint;
 
 // The reading list model reflected by the toolbar.
 @property(nonatomic, readwrite, assign) ReadingListModel* readingListModel;
@@ -131,6 +138,7 @@ class ReadingListModel;
 // Update the view's layout to take into account the new safe area insets.
 - (void)safeAreaInsetsDidChange;
 
+// Returns the preferred toolbar height in the current orientation.
 - (CGFloat)preferredToolbarHeightWhenAlignedToTopOfScreen;
 
 @end

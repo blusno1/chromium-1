@@ -24,7 +24,7 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
   WorkerOrWorkletGlobalScope(v8::Isolate*,
                              WorkerClients*,
                              WorkerReportingProxy&);
-  virtual ~WorkerOrWorkletGlobalScope();
+  ~WorkerOrWorkletGlobalScope() override;
 
   // ExecutionContext
   bool IsWorkerOrWorkletGlobalScope() const final { return true; }
@@ -75,7 +75,9 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
 
   WorkerReportingProxy& ReportingProxy() { return reporting_proxy_; }
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
+
+  scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType);
 
  private:
   CrossThreadPersistent<WorkerClients> worker_clients_;

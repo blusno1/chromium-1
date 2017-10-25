@@ -222,19 +222,19 @@ const WebInputEvent* WebViewImpl::CurrentInputEvent() {
 // Used to defer all page activity in cases where the embedder wishes to run
 // a nested event loop. Using a stack enables nesting of message loop
 // invocations.
-static Vector<std::unique_ptr<ScopedPageSuspender>>& PageSuspenderStack() {
-  DEFINE_STATIC_LOCAL(Vector<std::unique_ptr<ScopedPageSuspender>>,
-                      suspender_stack, ());
-  return suspender_stack;
+static Vector<std::unique_ptr<ScopedPagePauser>>& PagePauserStack() {
+  DEFINE_STATIC_LOCAL(Vector<std::unique_ptr<ScopedPagePauser>>, pauser_stack,
+                      ());
+  return pauser_stack;
 }
 
 void WebView::WillEnterModalLoop() {
-  PageSuspenderStack().push_back(WTF::MakeUnique<ScopedPageSuspender>());
+  PagePauserStack().push_back(WTF::MakeUnique<ScopedPagePauser>());
 }
 
 void WebView::DidExitModalLoop() {
-  DCHECK(PageSuspenderStack().size());
-  PageSuspenderStack().pop_back();
+  DCHECK(PagePauserStack().size());
+  PagePauserStack().pop_back();
 }
 
 // static
@@ -281,8 +281,8 @@ class ColorOverlay final : public PageOverlay::Delegate {
             graphics_context, page_overlay, DisplayItem::kPageOverlay))
       return;
     FloatRect rect(0, 0, size.width, size.height);
-    DrawingRecorder drawing_recorder(graphics_context, page_overlay,
-                                     DisplayItem::kPageOverlay, rect);
+    DrawingRecorder recorder(graphics_context, page_overlay,
+                             DisplayItem::kPageOverlay, rect);
     graphics_context.FillRect(rect, color_);
   }
 
@@ -441,7 +441,7 @@ void WebViewImpl::HandleMouseDown(LocalFrame& main_frame,
   // If there is a popup open, close it as the user is clicking on the page
   // (outside of the popup). We also save it so we can prevent a click on an
   // element from immediately reopening the same popup.
-  RefPtr<WebPagePopupImpl> page_popup;
+  scoped_refptr<WebPagePopupImpl> page_popup;
   if (event.button == WebMouseEvent::Button::kLeft) {
     page_popup = page_popup_;
     HidePopups();
@@ -451,7 +451,7 @@ void WebViewImpl::HandleMouseDown(LocalFrame& main_frame,
   // Take capture on a mouse down on a plugin so we can send it mouse events.
   // If the hit node is a plugin but a scrollbar is over it don't start mouse
   // capture because it will interfere with the scrollbar receiving events.
-  IntPoint point(event.PositionInWidget().x, event.PositionInWidget().y);
+  LayoutPoint point(event.PositionInWidget());
   if (event.button == WebMouseEvent::Button::kLeft &&
       page_->MainFrame()->IsLocalFrame()) {
     point =
@@ -514,8 +514,7 @@ void WebViewImpl::MouseContextMenu(const WebMouseEvent& event) {
   WebMouseEvent transformed_event =
       TransformWebMouseEvent(MainFrameImpl()->GetFrameView(), event);
   transformed_event.menu_source_type = kMenuSourceMouse;
-  IntPoint position_in_root_frame =
-      FlooredIntPoint(transformed_event.PositionInRootFrame());
+  LayoutPoint position_in_root_frame(transformed_event.PositionInRootFrame());
 
   // Find the right target frame. See issue 1186900.
   HitTestResult result = HitTestResultForRootFramePos(position_in_root_frame);
@@ -1098,8 +1097,8 @@ WebRect WebViewImpl::ComputeBlockBound(const WebPoint& point_in_root_frame,
     return WebRect();
 
   // Use the point-based hit test to find the node.
-  IntPoint point = MainFrameImpl()->GetFrameView()->RootFrameToContents(
-      IntPoint(point_in_root_frame.x, point_in_root_frame.y));
+  LayoutPoint point = MainFrameImpl()->GetFrameView()->RootFrameToContents(
+      LayoutPoint(point_in_root_frame));
   HitTestRequest::HitTestRequestType hit_type =
       HitTestRequest::kReadOnly | HitTestRequest::kActive |
       (ignore_clipping ? HitTestRequest::kIgnoreClipping : 0);
@@ -2042,7 +2041,7 @@ WebInputEventResult WebViewImpl::HandleInputEvent(
         break;
       case WebInputEvent::kMouseDown:
         event_type = EventTypeNames::mousedown;
-        gesture_indicator = LocalFrame::CreateUserGesture(
+        gesture_indicator = Frame::NotifyUserActivation(
             node->GetDocument().GetFrame(), UserGestureToken::kNewGesture);
         mouse_capture_gesture_token_ = gesture_indicator->CurrentToken();
         break;
@@ -3132,7 +3131,9 @@ void WebViewImpl::ResetScrollAndScaleState() {
 
 void WebViewImpl::PerformMediaPlayerAction(const WebMediaPlayerAction& action,
                                            const WebPoint& location) {
-  HitTestResult result = HitTestResultForViewportPos(location);
+  HitTestResult result = HitTestResultForRootFramePos(
+      page_->GetVisualViewport().ViewportToRootFrame(location));
+
   Node* node = result.InnerNode();
   if (!IsHTMLVideoElement(*node) && !IsHTMLAudioElement(*node))
     return;
@@ -3163,7 +3164,7 @@ void WebViewImpl::PerformMediaPlayerAction(const WebMediaPlayerAction& action,
 void WebViewImpl::PerformPluginAction(const WebPluginAction& action,
                                       const WebPoint& location) {
   // FIXME: Location is probably in viewport coordinates
-  HitTestResult result = HitTestResultForRootFramePos(location);
+  HitTestResult result = HitTestResultForRootFramePos(LayoutPoint(location));
   Node* node = result.InnerNode();
   if (!IsHTMLObjectElement(*node) && !IsHTMLEmbedElement(*node))
     return;
@@ -3201,8 +3202,8 @@ HitTestResult WebViewImpl::CoreHitTestResultAt(
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       MainFrameImpl()->GetFrame()->GetDocument()->Lifecycle());
   LocalFrameView* view = MainFrameImpl()->GetFrameView();
-  IntPoint point_in_root_frame =
-      view->ContentsToFrame(view->ViewportToContents(point_in_viewport));
+  LayoutPoint point_in_root_frame = view->ContentsToFrame(
+      view->ViewportToContents(LayoutPoint(point_in_viewport)));
   return HitTestResultForRootFramePos(point_in_root_frame);
 }
 
@@ -3544,18 +3545,11 @@ Element* WebViewImpl::FocusedElement() const {
   return document->FocusedElement();
 }
 
-HitTestResult WebViewImpl::HitTestResultForViewportPos(
-    const IntPoint& pos_in_viewport) {
-  IntPoint root_frame_point(
-      page_->GetVisualViewport().ViewportToRootFrame(pos_in_viewport));
-  return HitTestResultForRootFramePos(root_frame_point);
-}
-
 HitTestResult WebViewImpl::HitTestResultForRootFramePos(
-    const IntPoint& pos_in_root_frame) {
+    const LayoutPoint& pos_in_root_frame) {
   if (!page_->MainFrame()->IsLocalFrame())
     return HitTestResult();
-  IntPoint doc_point(
+  LayoutPoint doc_point(
       page_->DeprecatedLocalMainFrame()->View()->RootFrameToContents(
           pos_in_root_frame));
   HitTestResult result =

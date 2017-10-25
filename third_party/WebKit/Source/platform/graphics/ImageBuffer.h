@@ -116,12 +116,6 @@ class PLATFORM_EXPORT ImageBuffer {
   void FinalizeFrame();
   void DoPaintInvalidation(const FloatRect& dirty_rect);
 
-  bool WritePixels(const SkImageInfo&,
-                   const void* pixels,
-                   size_t row_bytes,
-                   int x,
-                   int y);
-
   void WillOverwriteCanvas() { surface_->WillOverwriteCanvas(); }
 
   bool GetImageData(Multiply, const IntRect&, WTF::ArrayBufferContents&) const;
@@ -155,7 +149,7 @@ class PLATFORM_EXPORT ImageBuffer {
 
   void NotifySurfaceInvalid();
 
-  RefPtr<StaticBitmapImage> NewImageSnapshot(
+  scoped_refptr<StaticBitmapImage> NewImageSnapshot(
       AccelerationHint = kPreferNoAcceleration,
       SnapshotReason = kSnapshotReasonUnknown) const;
 

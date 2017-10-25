@@ -86,7 +86,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
                            AnimationTimeline*,
                            ExceptionState&);
 
-  ~Animation();
+  ~Animation() override;
   void Dispose();
 
   // Returns whether the animation is finished.
@@ -209,7 +209,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
 
   void InvalidateKeyframeEffect(const TreeScope&);
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  protected:
   DispatchEventResult DispatchEventInternal(Event*) override;
@@ -341,7 +341,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
 
     void Detach();
 
-    DEFINE_INLINE_TRACE() { visitor->Trace(animation_); }
+    void Trace(blink::Visitor* visitor) { visitor->Trace(animation_); }
 
     CompositorAnimationPlayer* Player() const {
       return compositor_player_.get();

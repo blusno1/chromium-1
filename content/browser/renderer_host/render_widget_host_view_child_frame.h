@@ -25,9 +25,9 @@
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_export.h"
-#include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/readback_types.h"
 #include "content/public/browser/touch_selection_controller_client_manager.h"
+#include "content/public/common/input_event_ack_state.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
@@ -142,14 +142,15 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
                          const ui::LatencyInfo& latency) override;
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
                            const ui::LatencyInfo& latency) override;
-  gfx::Point TransformPointToRootCoordSpace(const gfx::Point& point) override;
-  bool TransformPointToLocalCoordSpace(const gfx::Point& point,
+  gfx::PointF TransformPointToRootCoordSpaceF(
+      const gfx::PointF& point) override;
+  bool TransformPointToLocalCoordSpace(const gfx::PointF& point,
                                        const viz::SurfaceId& original_surface,
-                                       gfx::Point* transformed_point) override;
+                                       gfx::PointF* transformed_point) override;
   bool TransformPointToCoordSpaceForView(
-      const gfx::Point& point,
+      const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
-      gfx::Point* transformed_point) override;
+      gfx::PointF* transformed_point) override;
 
   bool IsRenderWidgetHostViewChildFrame() override;
 
@@ -214,6 +215,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // This returns the origin of this views's bounding rect in the coordinates
   // of the root RenderWidgetHostView.
   gfx::Point GetViewOriginInRoot() const;
+
+  RenderWidgetHostViewBase* GetRootRenderWidgetHostView() const;
 
  protected:
   friend class RenderWidgetHostView;

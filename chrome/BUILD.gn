@@ -113,6 +113,9 @@ if (!is_android && !is_mac) {
     if (use_aura && (is_win || is_linux)) {
       data_deps += [ "//chrome/app:service_manifests" ]
     }
+    if (is_chromeos) {
+      data_deps += [ "//sandbox/linux:chrome_sandbox" ]
+    }
   }
 
   template("chrome_binary") {
@@ -267,6 +270,15 @@ if (!is_android && !is_mac) {
         # See https://bugs.chromium.org/p/chromium/issues/detail?id=583532
         if (is_chromeos && is_debug && target_cpu == "arm") {
           ldflags += [ "-Wl,--long-plt" ]
+        }
+
+        if (!is_component_build && !using_sanitizer) {
+          version_script = "//build/linux/chrome.map"
+          inputs = [
+            version_script,
+          ]
+          ldflags += [ "-Wl,--version-script=" +
+                       rebase_path(version_script, root_build_dir) ]
         }
 
         if (use_pangocairo) {
@@ -1528,7 +1540,6 @@ group("extra_resources") {
   public_deps = [
     "//chrome/browser/resources:invalidations_resources",
     "//chrome/browser/resources:net_internals_resources",
-    "//chrome/browser/resources:password_manager_internals_resources",
     "//chrome/browser/resources:quota_internals_resources",
     "//chrome/browser/resources:task_scheduler_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
@@ -1684,6 +1695,12 @@ if (is_android) {
   java_cpp_enum("payments_journey_logger_enum_javagen") {
     sources = [
       "../components/payments/core/journey_logger.h",
+    ]
+  }
+
+  java_cpp_enum("pref_enum_javagen") {
+    sources = [
+      "browser/android/preferences/prefs.h",
     ]
   }
 

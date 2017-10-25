@@ -293,6 +293,14 @@ void DocumentThreadableLoader::StartBlinkCORS(const ResourceRequest& request) {
 
   ResourceRequest new_request(request);
 
+  // Set the service worker mode to none if "bypass for network" in DevTools is
+  // enabled.
+  bool should_bypass_service_worker = false;
+  probe::shouldBypassServiceWorker(GetExecutionContext(),
+                                   &should_bypass_service_worker);
+  if (should_bypass_service_worker)
+    new_request.SetServiceWorkerMode(WebURLRequest::ServiceWorkerMode::kNone);
+
   // Process the CORS protocol inside the DocumentThreadableLoader for the
   // following cases:
   //
@@ -316,10 +324,10 @@ void DocumentThreadableLoader::StartBlinkCORS(const ResourceRequest& request) {
   // intercepted since LoadPreflightRequest() sets the flag to kNone in
   // advance.
   if (!async_ ||
-      request.GetServiceWorkerMode() !=
+      new_request.GetServiceWorkerMode() !=
           WebURLRequest::ServiceWorkerMode::kAll ||
       !SchemeRegistry::ShouldTreatURLSchemeAsAllowingServiceWorkers(
-          request.Url().Protocol()) ||
+          new_request.Url().Protocol()) ||
       !loading_context_->GetResourceFetcher()->IsControlledByServiceWorker()) {
     DispatchInitialRequestBlinkCORS(new_request);
     return;
@@ -554,6 +562,13 @@ void DocumentThreadableLoader::Cancel() {
   DispatchDidFail(ResourceError::CancelledError(GetResource()->Url()));
 }
 
+void DocumentThreadableLoader::Detach() {
+  Resource* resource = GetResource();
+  if (resource)
+    resource->SetDetachable();
+  Clear();
+}
+
 void DocumentThreadableLoader::SetDefersLoading(bool value) {
   if (GetResource())
     GetResource()->SetDefersLoading(value);
@@ -721,9 +736,9 @@ bool DocumentThreadableLoader::RedirectReceivedBlinkCORS(
   //
   // See https://fetch.spec.whatwg.org/#http-redirect-fetch.
   if (cors_flag_) {
-    RefPtr<SecurityOrigin> original_origin =
+    scoped_refptr<SecurityOrigin> original_origin =
         SecurityOrigin::Create(original_url);
-    RefPtr<SecurityOrigin> new_origin = SecurityOrigin::Create(new_url);
+    scoped_refptr<SecurityOrigin> new_origin = SecurityOrigin::Create(new_url);
     if (!original_origin->IsSameSchemeHostPort(new_origin.get()))
       security_origin_ = SecurityOrigin::CreateUnique();
   }
@@ -1245,7 +1260,7 @@ void DocumentThreadableLoader::LoadRequestSync(
   if (!client_)
     return;
 
-  if (RefPtr<const SharedBuffer> data = resource->ResourceBuffer()) {
+  if (scoped_refptr<const SharedBuffer> data = resource->ResourceBuffer()) {
     data->ForEachSegment([this](const char* segment, size_t segment_size,
                                 size_t segment_offset) -> bool {
       HandleReceivedData(segment, segment_size);
@@ -1323,7 +1338,7 @@ ExecutionContext* DocumentThreadableLoader::GetExecutionContext() const {
   return loading_context_->GetExecutionContext();
 }
 
-DEFINE_TRACE(DocumentThreadableLoader) {
+void DocumentThreadableLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(resource_);
   visitor->Trace(loading_context_);
   ThreadableLoader::Trace(visitor);

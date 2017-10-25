@@ -12,7 +12,7 @@
 namespace blink {
 
 DOMTimerCoordinator::DOMTimerCoordinator(
-    RefPtr<WebTaskRunner> timer_task_runner)
+    scoped_refptr<WebTaskRunner> timer_task_runner)
     : circular_sequential_id_(0),
       timer_nesting_level_(0),
       timer_task_runner_(std::move(timer_task_runner)) {}
@@ -40,7 +40,7 @@ DOMTimer* DOMTimerCoordinator::RemoveTimeoutByID(int timeout_id) {
   return removed_timer;
 }
 
-DEFINE_TRACE(DOMTimerCoordinator) {
+void DOMTimerCoordinator::Trace(blink::Visitor* visitor) {
   visitor->Trace(timers_);
 }
 
@@ -57,7 +57,7 @@ int DOMTimerCoordinator::NextID() {
 }
 
 void DOMTimerCoordinator::SetTimerTaskRunner(
-    RefPtr<WebTaskRunner> timer_task_runner) {
+    scoped_refptr<WebTaskRunner> timer_task_runner) {
   timer_task_runner_ = std::move(timer_task_runner);
 }
 

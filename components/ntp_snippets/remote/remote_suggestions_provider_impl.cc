@@ -725,6 +725,7 @@ void RemoteSuggestionsProviderImpl::ClearHistory(
 
 void RemoteSuggestionsProviderImpl::ClearCachedSuggestions(Category category) {
   if (!initialized()) {
+    categories_clear_when_initialized_.insert(category);
     return;
   }
 
@@ -1200,7 +1201,31 @@ void RemoteSuggestionsProviderImpl::PrependArticleSuggestion(
   std::vector<std::unique_ptr<RemoteSuggestion>> suggestions;
   suggestions.push_back(std::move(remote_suggestion));
 
-  SanitizeReceivedSuggestions(content->dismissed, &suggestions);
+  // Ignore the pushed suggestion if:
+  //
+  // - Incomplete.
+  // - Has been dismissed.
+  // - Present in the current suggestions.
+  // - Possibly shown on older surfaces (i.e. archived).
+  //
+  // We do not check the database, because it just persists current suggestions.
+
+  RemoveIncompleteSuggestions(&suggestions);
+  EraseMatchingSuggestions(&suggestions, content->dismissed);
+  EraseMatchingSuggestions(&suggestions, content->suggestions);
+
+  // Check archived suggestions.
+  base::EraseIf(
+      suggestions,
+      [&content](const std::unique_ptr<RemoteSuggestion>& suggestion) {
+        const std::vector<std::string>& ids = suggestion->GetAllIDs();
+        for (const auto& archived_suggestion : content->archived) {
+          if (base::ContainsValue(ids, archived_suggestion->id())) {
+            return true;
+          }
+        }
+        return false;
+      });
 
   if (!suggestions.empty()) {
     content->suggestions.insert(content->suggestions.begin(),
@@ -1220,6 +1245,11 @@ void RemoteSuggestionsProviderImpl::PrependArticleSuggestion(
 
     database_->SaveSnippets(content->suggestions);
   }
+}
+
+void RemoteSuggestionsProviderImpl::
+    RefreshSuggestionsUponPushToRefreshRequest() {
+  RefetchInTheBackground({});
 }
 
 void RemoteSuggestionsProviderImpl::DismissSuggestionFromCategoryContent(
@@ -1403,6 +1433,9 @@ void RemoteSuggestionsProviderImpl::
     if (!breaking_news_raw_data_provider_->IsListening()) {
       breaking_news_raw_data_provider_->StartListening(
           base::Bind(&RemoteSuggestionsProviderImpl::PrependArticleSuggestion,
+                     base::Unretained(this)),
+          base::Bind(&RemoteSuggestionsProviderImpl::
+                         RefreshSuggestionsUponPushToRefreshRequest,
                      base::Unretained(this)));
     }
   } else {
@@ -1490,6 +1523,13 @@ void RemoteSuggestionsProviderImpl::EnterState(State state) {
              category_contents_.end());
 
       UpdateAllCategoryStatus(CategoryStatus::AVAILABLE);
+
+      if (!categories_clear_when_initialized_.empty()) {
+        for (auto category : categories_clear_when_initialized_) {
+          ClearCachedSuggestions(category);
+        }
+        categories_clear_when_initialized_.clear();
+      }
       if (clear_history_dependent_state_when_initialized_) {
         clear_history_dependent_state_when_initialized_ = false;
         ClearHistoryDependentState();
@@ -1509,6 +1549,12 @@ void RemoteSuggestionsProviderImpl::EnterState(State state) {
       // suggestions below tells the scheduler to fetch them again if the
       // scheduler is not disabled. It is disabled; thus the calls are ignored.
       NotifyStateChanged();
+      if (!categories_clear_when_initialized_.empty()) {
+        for (auto category : categories_clear_when_initialized_) {
+          ClearCachedSuggestions(category);
+        }
+        categories_clear_when_initialized_.clear();
+      }
       if (clear_history_dependent_state_when_initialized_) {
         clear_history_dependent_state_when_initialized_ = false;
         ClearHistoryDependentState();

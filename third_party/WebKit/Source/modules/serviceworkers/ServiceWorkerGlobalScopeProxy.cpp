@@ -41,6 +41,7 @@
 #include "core/origin_trials/origin_trials.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "core/workers/WorkerThread.h"
 #include "modules/background_fetch/BackgroundFetchClickEvent.h"
 #include "modules/background_fetch/BackgroundFetchClickEventInit.h"
 #include "modules/background_fetch/BackgroundFetchEvent.h"
@@ -119,7 +120,7 @@ ServiceWorkerGlobalScopeProxy::~ServiceWorkerGlobalScopeProxy() {
   DCHECK(!embedded_worker_);
 }
 
-DEFINE_TRACE(ServiceWorkerGlobalScopeProxy) {
+void ServiceWorkerGlobalScopeProxy::Trace(blink::Visitor* visitor) {
   visitor->Trace(parent_frame_task_runners_);
 }
 
@@ -385,7 +386,7 @@ void ServiceWorkerGlobalScopeProxy::DispatchForeignFetchEvent(
 
   ScriptState::Scope scope(
       WorkerGlobalScope()->ScriptController()->GetScriptState());
-  RefPtr<SecurityOrigin> origin =
+  scoped_refptr<SecurityOrigin> origin =
       SecurityOrigin::Create(web_request.ReferrerUrl());
   WaitUntilObserver* wait_until_observer = WaitUntilObserver::Create(
       WorkerGlobalScope(), WaitUntilObserver::kFetch, fetch_event_id);

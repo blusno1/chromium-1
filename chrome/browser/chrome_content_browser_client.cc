@@ -168,7 +168,7 @@
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/db/database_manager.h"
 #include "components/safe_browsing/password_protection/password_protection_navigation_throttle.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/task_scheduler_util/browser/initialization.h"
@@ -606,6 +606,13 @@ int GetCrashSignalFD(const base::CommandLine& command_line) {
 
   if (process_type == switches::kGpuProcess) {
     static breakpad::CrashHandlerHostLinux* crash_handler = NULL;
+    if (!crash_handler)
+      crash_handler = CreateCrashHandlerHost(process_type);
+    return crash_handler->GetDeathSignalSocket();
+  }
+
+  if (process_type == switches::kUtilityProcess) {
+    static breakpad::CrashHandlerHostLinux* crash_handler = nullptr;
     if (!crash_handler)
       crash_handler = CreateCrashHandlerHost(process_type);
     return crash_handler->GetDeathSignalSocket();
@@ -1435,7 +1442,8 @@ ChromeContentBrowserClient::GetOriginsRequiringDedicatedProcess() {
   std::vector<url::Origin> isolated_origin_list;
 
   if (base::FeatureList::IsEnabled(features::kSignInProcessIsolation))
-    isolated_origin_list.emplace_back(GaiaUrls::GetInstance()->gaia_url());
+    isolated_origin_list.emplace_back(
+        url::Origin::Create(GaiaUrls::GetInstance()->gaia_url()));
 
   return isolated_origin_list;
 }
@@ -1571,7 +1579,14 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
                                     client_info->client_id);
   }
 #elif defined(OS_POSIX)
-  if (breakpad::IsCrashReporterEnabled()) {
+  bool enable_crash_reporter = breakpad::IsCrashReporterEnabled();
+#if defined(OS_CHROMEOS)
+  // Chrome OS uses the OS-level crash_reporter for mash services, so disable
+  // breakpad in-process crashing dumping.
+  if (command_line->HasSwitch(switches::kMashServiceName))
+    enable_crash_reporter = false;
+#endif
+  if (enable_crash_reporter) {
     std::string switch_value;
     std::unique_ptr<metrics::ClientInfo> client_info =
         GoogleUpdateSettings::LoadMetricsClientInfo();
@@ -1847,11 +1862,9 @@ void ChromeContentBrowserClient::AdjustUtilityServiceProcessCommandLine(
     const service_manager::Identity& identity,
     base::CommandLine* command_line) {
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
-  // Mash services do their own resource loading.
   if (mash_service_registry::IsMashServiceName(identity.name())) {
-    // This switch is used purely for debugging to make it easier to know what
-    // service a process is running.
-    command_line->AppendSwitchASCII("mash-service-name", identity.name());
+    command_line->AppendSwitchASCII(switches::kMashServiceName,
+                                    identity.name());
   }
   bool copy_switches = false;
   if (identity.name() == ui::mojom::kServiceName) {
@@ -2276,7 +2289,7 @@ void ChromeContentBrowserClient::SelectClientCertificate(
 
   if (filter.get()) {
     // Try to automatically select a client certificate.
-    if (filter->IsType(base::Value::Type::DICTIONARY)) {
+    if (filter->is_dict()) {
       base::DictionaryValue* filter_dict =
           static_cast<base::DictionaryValue*>(filter.get());
 
@@ -2933,7 +2946,7 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
                  g_browser_process->rappor_service()),
       ui_task_runner);
   registry->AddInterface(
-      base::Bind(&ukm::UkmInterface::Create, g_browser_process->ukm_recorder()),
+      base::Bind(&ukm::UkmInterface::Create, ukm::UkmRecorder::Get()),
       ui_task_runner);
   if (NetBenchmarking::CheckBenchmarkingEnabled()) {
     Profile* profile =
@@ -3298,9 +3311,8 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
           prerender::PrerenderContents::FromWebContents(
               handle->GetWebContents());
       if (!prerender_contents) {
-        auto intent_picker_cb = base::Bind(ShowIntentPickerBubble());
-        auto url_to_arc_throttle = base::MakeUnique<arc::ArcNavigationThrottle>(
-            handle, intent_picker_cb);
+        auto url_to_arc_throttle =
+            base::MakeUnique<arc::ArcNavigationThrottle>(handle);
         throttles.push_back(std::move(url_to_arc_throttle));
       }
     }

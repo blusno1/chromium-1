@@ -82,8 +82,7 @@ template <typename NodeType>
 class StaticNodeTypeList;
 using StaticNodeList = StaticNodeTypeList<Node>;
 
-class Internals final : public GarbageCollected<Internals>,
-                        public ScriptWrappable {
+class Internals final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -190,6 +189,14 @@ class Internals final : public GarbageCollected<Internals>,
                                   const String& marker_type,
                                   unsigned index,
                                   ExceptionState&);
+  unsigned markerBackgroundColorForNode(Node*,
+                                        const String& marker_type,
+                                        unsigned index,
+                                        ExceptionState&);
+  unsigned markerUnderlineColorForNode(Node*,
+                                       const String& marker_type,
+                                       unsigned index,
+                                       ExceptionState&);
   void addTextMatchMarker(const Range*,
                           const String& match_status,
                           ExceptionState&);
@@ -422,8 +429,8 @@ class Internals final : public GarbageCollected<Internals>,
   DOMRectList* draggableRegions(Document*, ExceptionState&);
   DOMRectList* nonDraggableRegions(Document*, ExceptionState&);
 
-  DOMArrayBuffer* serializeObject(RefPtr<SerializedScriptValue>) const;
-  RefPtr<SerializedScriptValue> deserializeBuffer(DOMArrayBuffer*) const;
+  DOMArrayBuffer* serializeObject(scoped_refptr<SerializedScriptValue>) const;
+  scoped_refptr<SerializedScriptValue> deserializeBuffer(DOMArrayBuffer*) const;
 
   DOMArrayBuffer* serializeWithInlineWasm(ScriptValue) const;
   ScriptValue deserializeBufferContainingWasm(ScriptState*,
@@ -482,7 +489,7 @@ class Internals final : public GarbageCollected<Internals>,
   ScriptPromise promiseCheckOverload(ScriptState*, Document*);
   ScriptPromise promiseCheckOverload(ScriptState*, Location*, long, long);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void setValueForUser(HTMLInputElement*, const String&);
 

@@ -72,7 +72,6 @@
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/KeyboardCodes.h"
 #include "platform/exported/WrappedResourceResponse.h"
@@ -80,6 +79,7 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/CullRect.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/ForeignLayerDisplayItem.h"
 #include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
@@ -161,13 +161,12 @@ void WebPluginContainerImpl::Paint(GraphicsContext& context,
     return;
   }
 
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-          context, *element_->GetLayoutObject(), DisplayItem::Type::kWebPlugin))
+  if (DrawingRecorder::UseCachedDrawingIfPossible(
+          context, *element_->GetLayoutObject(), DisplayItem::kWebPlugin))
     return;
 
-  LayoutObjectDrawingRecorder drawing_recorder(
-      context, *element_->GetLayoutObject(), DisplayItem::Type::kWebPlugin,
-      cull_rect.rect_);
+  DrawingRecorder recorder(context, *element_->GetLayoutObject(),
+                           DisplayItem::kWebPlugin, cull_rect.rect_);
   context.Save();
 
   // The plugin is positioned in the root frame's coordinates, so it needs to
@@ -357,13 +356,12 @@ int WebPluginContainerImpl::PrintBegin(
 void WebPluginContainerImpl::PrintPage(int page_number,
                                        GraphicsContext& gc,
                                        const IntRect& print_rect) {
-  if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
-          gc, *element_->GetLayoutObject(), DisplayItem::Type::kWebPlugin))
+  if (DrawingRecorder::UseCachedDrawingIfPossible(
+          gc, *element_->GetLayoutObject(), DisplayItem::kWebPlugin))
     return;
 
-  LayoutObjectDrawingRecorder drawing_recorder(gc, *element_->GetLayoutObject(),
-                                               DisplayItem::Type::kWebPlugin,
-                                               print_rect);
+  DrawingRecorder recorder(gc, *element_->GetLayoutObject(),
+                           DisplayItem::kWebPlugin, print_rect);
   gc.Save();
 
   WebCanvas* canvas = gc.Canvas();
@@ -507,7 +505,7 @@ WebString WebPluginContainerImpl::ExecuteScriptURL(const WebURL& url,
   std::unique_ptr<UserGestureIndicator> gesture_indicator;
   if (popups_allowed) {
     gesture_indicator =
-        LocalFrame::CreateUserGesture(frame, UserGestureToken::kNewGesture);
+        Frame::NotifyUserActivation(frame, UserGestureToken::kNewGesture);
   }
 
   v8::HandleScope handle_scope(ToIsolate(frame));
@@ -545,8 +543,8 @@ bool WebPluginContainerImpl::IsRectTopmost(const WebRect& rect) {
   if (!frame)
     return false;
 
-  IntRect document_rect(frame_rect_.X() + rect.x, frame_rect_.Y() + rect.y,
-                        rect.width, rect.height);
+  LayoutRect document_rect(frame_rect_.X() + rect.x, frame_rect_.Y() + rect.y,
+                           rect.width, rect.height);
   // hitTestResultAtPoint() takes a padding rectangle.
   // FIXME: We'll be off by 1 when the width or height is even.
   LayoutPoint center = document_rect.Center();
@@ -747,7 +745,7 @@ void WebPluginContainerImpl::Dispose() {
   }
 }
 
-DEFINE_TRACE(WebPluginContainerImpl) {
+void WebPluginContainerImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_);
   ContextClient::Trace(visitor);
   PluginView::Trace(visitor);
@@ -820,9 +818,8 @@ void WebPluginContainerImpl::HandleWheelEvent(WheelEvent* event) {
   // Translate the root frame position to content coordinates.
   absolute_location = ParentFrameView().RootFrameToContents(absolute_location);
 
-  IntPoint local_point =
-      RoundedIntPoint(element_->GetLayoutObject()->AbsoluteToLocal(
-          absolute_location, kUseTransforms));
+  FloatPoint local_point = element_->GetLayoutObject()->AbsoluteToLocal(
+      absolute_location, kUseTransforms);
   WebMouseWheelEvent translated_event = event->NativeEvent().FlattenTransform();
   translated_event.SetPositionInWidget(local_point.X(), local_point.Y());
 

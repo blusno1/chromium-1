@@ -32,7 +32,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/line/InlineTextBox.h"
-#include "core/layout/ng/inline/ng_offset_mapping_result.h"
+#include "core/layout/ng/inline/ng_offset_mapping.h"
 
 namespace blink {
 
@@ -68,9 +68,9 @@ bool EditCommand::IsRenderedCharacter(const Position& position) {
   const int offset_in_node = position.OffsetInContainerNode();
 
   // Use NG offset mapping when LayoutNG is enabled.
-  if (const NGOffsetMappingResult* mapping =
+  if (const NGOffsetMapping* mapping =
           GetNGOffsetMappingFor(node, offset_in_node)) {
-    return mapping->IsNonCollapsedCharacter(node, offset_in_node);
+    return mapping->IsBeforeNonCollapsedCharacter(node, offset_in_node);
   }
 
   // TODO(editing-dev): This doesn't handle first-letter correctly. Fix it.
@@ -102,7 +102,7 @@ void SimpleEditCommand::DoReapply() {
   DoApply(&editing_state);
 }
 
-DEFINE_TRACE(EditCommand) {
+void EditCommand::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(parent_);
 }

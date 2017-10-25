@@ -37,7 +37,7 @@
 #include "content/public/common/url_constants.h"
 #include "net/base/escape.h"
 
-static const char kDataFile[] = "targets-data.json";
+static const char kTargetsDataFile[] = "targets-data.json";
 
 static const char kProcessIdField[]  = "processId";
 static const char kRouteIdField[]  = "routeId";
@@ -115,10 +115,11 @@ std::unique_ptr<base::DictionaryValue> BuildTargetDescriptor(
                                accessibility_mode);
 }
 
-bool HandleRequestCallback(BrowserContext* current_context,
-                           const std::string& path,
-                           const WebUIDataSource::GotDataCallback& callback) {
-  if (path != kDataFile)
+bool HandleAccessibilityRequestCallback(
+    BrowserContext* current_context,
+    const std::string& path,
+    const WebUIDataSource::GotDataCallback& callback) {
+  if (path != kTargetsDataFile)
     return false;
   std::unique_ptr<base::ListValue> rvh_list(new base::ListValue());
 
@@ -201,10 +202,10 @@ AccessibilityUI::AccessibilityUI(WebUI* web_ui) : WebUIController(web_ui) {
   html_source->AddResourcePath("accessibility.js", IDR_ACCESSIBILITY_JS);
   html_source->SetDefaultResource(IDR_ACCESSIBILITY_HTML);
   html_source->SetRequestFilter(
-      base::Bind(&HandleRequestCallback,
+      base::Bind(&HandleAccessibilityRequestCallback,
                  web_ui->GetWebContents()->GetBrowserContext()));
 
-  html_source->UseGzip({kDataFile});
+  html_source->UseGzip({kTargetsDataFile});
 
   BrowserContext* browser_context =
       web_ui->GetWebContents()->GetBrowserContext();

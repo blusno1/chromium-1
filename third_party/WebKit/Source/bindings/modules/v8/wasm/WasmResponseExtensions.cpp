@@ -83,7 +83,7 @@ class FetchDataLoaderAsWasmModule final : public FetchDataLoader,
     return AbortCompilation();
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(consumer_);
     visitor->Trace(client_);
     FetchDataLoader::Trace(visitor);
@@ -100,7 +100,7 @@ class FetchDataLoaderAsWasmModule final : public FetchDataLoader,
   Member<BytesConsumer> consumer_;
   Member<FetchDataLoader::Client> client_;
   v8::WasmModuleObjectBuilderStreaming builder_;
-  const RefPtr<ScriptState> script_state_;
+  const scoped_refptr<ScriptState> script_state_;
 };
 
 // TODO(mtrofin): WasmDataLoaderClient is necessary so we may provide an

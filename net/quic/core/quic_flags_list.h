@@ -110,19 +110,11 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_rate_recovery, false)
 // from duplicate keys into a single delimted header.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_handle_duplicate_trailers, true)
 
-// If true, disables support for the packets-based QUIC congestion control
-// algorithms.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_disable_packets_based_cc, true)
-
 // When enabled, ack frame uses a deque internally instead of a set.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_frames_deque2, false)
 
 // If true, enable QUIC v42.
 QUIC_FLAG(bool, FLAGS_quic_enable_version_42, false)
-
-// When true, allows the LRTT connection option to cause QUIC BBR to exit
-// STARTUP when in recovery and there has been no bandwidth increase for 1RTT.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_exit_startup_on_loss, true)
 
 // If buffered data in QUIC stream is less than this threshold, buffers all
 // provided data or asks upper layer for more data.
@@ -139,17 +131,8 @@ QUIC_FLAG(bool, FLAGS_quic_supports_tls_handshake, false)
 // or 1/8 RTT.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_ack_decimation, false)
 
-// If true, in QUIC, set dispatcher framer\'s version to client packet's
-// version in QuicDispatcher::OnStatelessRejectorProcessDone.
-QUIC_FLAG(
-    bool,
-    FLAGS_quic_reloadable_flag_quic_set_version_on_async_get_proof_returns,
-    true)
-
 // If true, check for packet number underflow when reading ack blocks.
-QUIC_FLAG(bool,
-          FLAGS_quic_reloadable_flag_sanitize_framer_addrange_input,
-          false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_sanitize_framer_addrange_input, true)
 
 // If true, QUIC v40 is enabled which includes changes to RST_STREAM, ACK
 // and STREAM frames match IETF format.
@@ -177,3 +160,15 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_send_reset_token_in_shlo, false)
 
 // Default enable all cubic fixes in QUIC Cubic by default.
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_cubic_fixes, false)
+
+// If true, enable QUIC v43.
+QUIC_FLAG(bool, FLAGS_quic_enable_version_43, false)
+
+// If true, allows one address change when UDP proxying.
+QUIC_FLAG(bool,
+          FLAGS_quic_reloadable_flag_quic_allow_address_change_for_udp_proxy,
+          false)
+
+// If true, allow a new BBR connection option to use a slower STARTUP once loss
+// occurs
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_slower_startup, false)

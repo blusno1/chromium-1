@@ -301,7 +301,7 @@ bool ScriptRunner::DoTryStream(ScriptLoader* script_loader) {
   return success;
 }
 
-DEFINE_TRACE(ScriptRunner) {
+void ScriptRunner::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(pending_in_order_scripts_);
   visitor->Trace(pending_async_scripts_);
@@ -309,7 +309,7 @@ DEFINE_TRACE(ScriptRunner) {
   visitor->Trace(in_order_scripts_to_execute_soon_);
 }
 
-DEFINE_TRACE_WRAPPERS(ScriptRunner) {
+void ScriptRunner::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   for (const auto& loader : pending_in_order_scripts_)
     visitor->TraceWrappers(loader);
   for (const auto& loader : pending_async_scripts_)

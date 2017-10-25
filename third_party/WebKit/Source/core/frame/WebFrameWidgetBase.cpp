@@ -268,7 +268,7 @@ void WebFrameWidgetBase::RequestDecode(const PaintImage& image,
   View()->RequestDecode(image, std::move(callback));
 }
 
-DEFINE_TRACE(WebFrameWidgetBase) {
+void WebFrameWidgetBase::Trace(blink::Visitor* visitor) {
   visitor->Trace(current_drag_data_);
 }
 
@@ -296,12 +296,12 @@ void WebFrameWidgetBase::PointerLockMouseEvent(
       if (!GetPage() || !GetPage()->GetPointerLockController().GetElement())
         break;
       gesture_indicator =
-          LocalFrame::CreateUserGesture(GetPage()
-                                            ->GetPointerLockController()
-                                            .GetElement()
-                                            ->GetDocument()
-                                            .GetFrame(),
-                                        UserGestureToken::kNewGesture);
+          Frame::NotifyUserActivation(GetPage()
+                                          ->GetPointerLockController()
+                                          .GetElement()
+                                          ->GetDocument()
+                                          .GetFrame(),
+                                      UserGestureToken::kNewGesture);
       pointer_lock_gesture_token_ = gesture_indicator->CurrentToken();
       break;
     case WebInputEvent::kMouseUp:

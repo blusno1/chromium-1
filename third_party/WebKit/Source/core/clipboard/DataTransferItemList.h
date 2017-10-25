@@ -44,9 +44,7 @@ class File;
 
 class ExceptionState;
 
-class DataTransferItemList final
-    : public GarbageCollected<DataTransferItemList>,
-      public ScriptWrappable {
+class DataTransferItemList final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -61,7 +59,7 @@ class DataTransferItemList final
                         ExceptionState&);
   DataTransferItem* add(File*);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   DataTransferItemList(DataTransfer*, DataObject*);

@@ -36,7 +36,7 @@
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/weborigin/Referrer.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/WebCachePolicy.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 
 namespace blink {
 
@@ -92,7 +92,7 @@ class CORE_EXPORT HistoryItem final
   void SetURLString(const String&);
   void SetReferrer(const Referrer&);
 
-  void SetStateObject(RefPtr<SerializedScriptValue>);
+  void SetStateObject(scoped_refptr<SerializedScriptValue>);
   SerializedScriptValue* StateObject() const { return state_object_.get(); }
 
   void SetItemSequenceNumber(long long number) {
@@ -113,12 +113,12 @@ class CORE_EXPORT HistoryItem final
   }
 
   void SetFormInfoFromRequest(const ResourceRequest&);
-  void SetFormData(RefPtr<EncodedFormData>);
+  void SetFormData(scoped_refptr<EncodedFormData>);
   void SetFormContentType(const AtomicString&);
 
-  ResourceRequest GenerateResourceRequest(WebCachePolicy);
+  ResourceRequest GenerateResourceRequest(mojom::FetchCacheMode);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   HistoryItem();
@@ -147,10 +147,10 @@ class CORE_EXPORT HistoryItem final
   HistoryScrollRestorationType scroll_restoration_type_;
 
   // Support for HTML5 History
-  RefPtr<SerializedScriptValue> state_object_;
+  scoped_refptr<SerializedScriptValue> state_object_;
 
   // info used to repost form data
-  RefPtr<EncodedFormData> form_data_;
+  scoped_refptr<EncodedFormData> form_data_;
   AtomicString form_content_type_;
 };  // class HistoryItem
 

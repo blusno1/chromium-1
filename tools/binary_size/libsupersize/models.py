@@ -83,6 +83,9 @@ DIFF_STATUS_REMOVED = 3
 DIFF_PREFIX_BY_STATUS = ['= ', '~ ', '+ ', '- ']
 
 
+STRING_LITERAL_NAME = 'string literal'
+
+
 class SizeInfo(object):
   """Represents all size information for a single binary.
 
@@ -117,7 +120,9 @@ class SizeInfo(object):
   @property
   def symbols(self):
     if self._symbols is None:
+      logging.debug('Clustering symbols')
       self._symbols = self.raw_symbols._Clustered()
+      logging.debug('Done clustering symbols')
     return self._symbols
 
   @symbols.setter
@@ -157,7 +162,9 @@ class DeltaSizeInfo(object):
   @property
   def symbols(self):
     if self._symbols is None:
+      logging.debug('Clustering symbols')
       self._symbols = self.raw_symbols._Clustered()
+      logging.debug('Done clustering symbols')
     return self._symbols
 
   @symbols.setter
@@ -247,6 +254,9 @@ class BaseSymbol(object):
   def IsGeneratedByToolchain(self):
     return '.' in self.name or (
         self.name.endswith(']') and not self.name.endswith('[]'))
+
+  def IsStringLiteral(self):
+    return self.full_name == STRING_LITERAL_NAME
 
   def IterLeafSymbols(self):
     yield self
@@ -805,14 +815,17 @@ class SymbolGroup(BaseSymbol):
 
     The main function of clustering is to put symbols that were broken into
     multiple parts under a group so that they once again look like a single
-    symbol. It also groups together symbols like "** merge strings".
+    symbol. This is to prevent someone thinking that a symbol got smaller, when
+    all it did was get split into parts.
+
+    It also groups together "** symbol gap", since these are mostly just noise.
 
     To view created groups:
       Print(size_info.symbols.WhereIsGroup())
     """
     def cluster_func(symbol):
       name = symbol.full_name
-      if not name:
+      if not name or symbol.IsStringLiteral():
         # min_count=2 will ensure order is maintained while not being grouped.
         # "&" to distinguish from real symbol names, id() to ensure uniqueness.
         name = '&' + hex(id(symbol))
@@ -843,6 +856,30 @@ class SymbolGroup(BaseSymbol):
           cluster_func, min_count=2, group_factory=group_factory))
 
     return self._CreateTransformed(ret)
+
+  def GroupedByAliases(self, same_name_only=False, min_count=2):
+    """Groups by symbol.aliases (leaving non-aliases alone).
+
+    Useful when wanting an overview of symbol sizes without having their PSS
+    divided by number of aliases.
+
+    Args:
+      same_name_only: When True, groups only aliases with the same full_name
+                      (those that differ only by path).
+      min_count: Miniumum number of symbols for a group. If fewer than this many
+                 symbols end up in a group, they will not be put within a group.
+                 Use a negative value to omit symbols entirely rather than
+                 include them outside of a group.
+    """
+    def group_factory(_, symbols):
+      sym = symbols[0]
+      return self._CreateTransformed(
+          symbols, full_name=sym.full_name, template_name=sym.template_name,
+          name=sym.name, section_name=sym.section_name)
+
+    return self.GroupedBy(
+        lambda s: (same_name_only and s.full_name, id(s.aliases or s)),
+        min_count=min_count, group_factory=group_factory)
 
   def GroupedBySectionName(self):
     return self.GroupedBy(lambda s: s.section_name)

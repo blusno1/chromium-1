@@ -39,9 +39,7 @@ namespace blink {
 class ExceptionState;
 class LocalFrame;
 
-class Storage final : public GarbageCollected<Storage>,
-                      public ScriptWrappable,
-                      public ContextClient {
+class Storage final : public ScriptWrappable, public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Storage);
 
@@ -74,7 +72,7 @@ class Storage final : public GarbageCollected<Storage>,
   void NamedPropertyEnumerator(Vector<String>&, ExceptionState&);
   bool NamedPropertyQuery(const AtomicString&, ExceptionState&);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   Storage(LocalFrame*, StorageArea*);

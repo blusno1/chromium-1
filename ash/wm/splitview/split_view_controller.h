@@ -67,7 +67,7 @@ class ASH_EXPORT SplitViewController : public aura::WindowObserver,
   static bool ShouldAllowSplitView();
 
   // Returns true if |window| can be activated and snapped.
-  static bool CanSnap(aura::Window* window);
+  bool CanSnap(aura::Window* window);
 
   // Returns true if split view mode is active.
   bool IsSplitViewModeActive() const;
@@ -153,7 +153,7 @@ class ASH_EXPORT SplitViewController : public aura::WindowObserver,
   // Notifies observers that the split view state has been changed.
   void NotifySplitViewStateChanged(State previous_state, State state);
 
-  // Notifies observers that the split view divider pisition has been changed.
+  // Notifies observers that the split view divider position has been changed.
   void NotifyDividerPositionChanged();
 
   // Gets the default value of |divider_position_|.
@@ -192,9 +192,9 @@ class ASH_EXPORT SplitViewController : public aura::WindowObserver,
                  gfx::Rect* left_or_top_rect,
                  gfx::Rect* right_or_bottom_rect);
 
-  // Finds the closest fix location for |divider_postion_| and updates its
+  // Finds the closest fix location for |divider_position_| and updates its
   // value.
-  void MoveDividerToClosestFixedPostion();
+  void MoveDividerToClosestFixedPosition();
 
   // Returns true if we should end split view mode after resizing, i.e., the
   // split view divider is near to the edge of the screen.
@@ -207,6 +207,13 @@ class ASH_EXPORT SplitViewController : public aura::WindowObserver,
   // Returns the maximum value of the |divider_position_|. It should always be
   // the length of the longer side of the current display's work area bounds.
   int GetDividerEndPosition();
+
+  // If there are two snapped windows, closing/minimizing one of them will open
+  // overview window grid on the closed/minimized window side of the screen. If
+  // there is only one snapped windows, closing/minimizing the sanpped window
+  // will end split view mode and adjust the overview window grid bounds if the
+  // overview mode is active at that moment.
+  void OnSnappedWindowMinimizedOrDestroyed(aura::Window* window);
 
   // The current left/right snapped window.
   aura::Window* left_window_ = nullptr;

@@ -50,8 +50,8 @@ class MODULES_EXPORT PasswordCredential final : public Credential {
   const KURL& iconURL() const;
 
   // Internal methods
-  RefPtr<EncodedFormData> EncodeFormData(String& content_type) const;
-  DECLARE_VIRTUAL_TRACE();
+  scoped_refptr<EncodedFormData> EncodeFormData(String& content_type) const;
+  virtual void Trace(blink::Visitor*);
 
  private:
   PasswordCredential(WebPasswordCredential*);

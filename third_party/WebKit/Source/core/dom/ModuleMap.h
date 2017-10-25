@@ -32,8 +32,8 @@ class CORE_EXPORT ModuleMap final : public GarbageCollected<ModuleMap>,
   static ModuleMap* Create(Modulator* modulator) {
     return new ModuleMap(modulator);
   }
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script
   void FetchSingleModuleScript(const ModuleScriptFetchRequest&,

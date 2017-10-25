@@ -968,8 +968,13 @@ const char kWindows10CustomTitlebar[]       = "windows10-custom-titlebar";
 #endif  // defined(OS_WIN)
 
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
-// Used to enable Mus+ash.
+// Enables Mus+ash (out-of-process ash and mus). See //ash/README.md
 const char kMash[]                          = "mash";
+
+// Provides the name of the mojo service running in a mash utility process.
+// NOTE: Used by the Chrome OS crash_reporter to identify mash processes. If you
+// change or remove the flag please update platform2/crash_reporter.
+const char kMashServiceName[] = "mash-service-name";
 
 // Used to enable mus as a separate process, but chrome+ash still together.
 const char kMus[] = "mus";
@@ -1000,12 +1005,12 @@ const char kEnableWaylandServer[] = "enable-wayland-server";
 #endif
 
 #if defined(OS_WIN) || defined(OS_LINUX)
-extern const char kDisableInputImeAPI[] = "disable-input-ime-api";
-extern const char kEnableInputImeAPI[] = "enable-input-ime-api";
+const char kDisableInputImeAPI[] = "disable-input-ime-api";
+const char kEnableInputImeAPI[] = "enable-input-ime-api";
 #endif
 
 #if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
-extern const char kEnableNewAppMenuIcon[] = "enable-new-app-menu-icon";
+const char kEnableNewAppMenuIcon[] = "enable-new-app-menu-icon";
 #endif
 
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)

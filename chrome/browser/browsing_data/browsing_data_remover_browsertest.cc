@@ -12,10 +12,11 @@
 #include "base/run_loop.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-
 #include "chrome/browser/browsing_data/cache_counter.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/browsing_data/site_data_counting_helper.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -24,6 +25,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -36,10 +38,7 @@
 #include "content/public/test/browsing_data_remover_test_util.h"
 #include "content/public/test/download_test_observer.h"
 #include "net/dns/mock_host_resolver.h"
-#include "net/http/transport_security_state.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using content::BrowserThread;
@@ -69,6 +68,13 @@ class BrowsingDataRemoverBrowserTest : public InProcessBrowserTest {
     ASSERT_EQ(data, result);
   }
 
+  bool RunScriptAndGetBool(const std::string& script) {
+    bool data;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+        browser()->tab_strip_model()->GetActiveWebContents(), script, &data));
+    return data;
+  }
+
   void VerifyDownloadCount(size_t expected) {
     content::DownloadManager* download_manager =
         content::BrowserContext::GetDownloadManager(browser()->profile());
@@ -78,7 +84,7 @@ class BrowsingDataRemoverBrowserTest : public InProcessBrowserTest {
   }
 
   void DownloadAnItem() {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    base::ScopedAllowBlockingForTesting allow_blocking;
     base::ScopedTempDir downloads_directory;
     ASSERT_TRUE(downloads_directory.CreateUniqueTempDir());
     browser()->profile()->GetPrefs()->SetFilePath(
@@ -141,6 +147,69 @@ class BrowsingDataRemoverBrowserTest : public InProcessBrowserTest {
     completion_observer.BlockUntilCompletion();
   }
 
+  // Test a data type by creating a value and checking it is counted by the
+  // cookie counter. Then it deletes the value and checks that it has been
+  // deleted and the cookie counter is back to zero.
+  void TestSiteData(const std::string& type) {
+    EXPECT_EQ(0, GetSiteDataCount());
+    GURL url = embedded_test_server()->GetURL("/browsing_data/site_data.html");
+    ui_test_utils::NavigateToURL(browser(), url);
+    // We don't want to measure site engagement entries.
+    RemoveSiteEngagement();
+    EXPECT_EQ(0, GetSiteDataCount());
+    EXPECT_FALSE(HasDataForType(type));
+
+    SetDataForType(type);
+    EXPECT_EQ(1, GetSiteDataCount());
+    EXPECT_TRUE(HasDataForType(type));
+
+    RemoveAndWait(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA);
+    EXPECT_EQ(0, GetSiteDataCount());
+    EXPECT_FALSE(HasDataForType(type));
+  }
+
+  // Test that storage systems like filesystem and websql, where just an access
+  // creates an empty store, are counted and deleted correctly.
+  void TestEmptySiteData(const std::string& type) {
+    EXPECT_EQ(0, GetSiteDataCount());
+    GURL url = embedded_test_server()->GetURL("/browsing_data/site_data.html");
+    ui_test_utils::NavigateToURL(browser(), url);
+    RemoveSiteEngagement();
+    EXPECT_EQ(0, GetSiteDataCount());
+    // Opening a store of this type creates a site data entry.
+    EXPECT_FALSE(HasDataForType(type));
+    EXPECT_EQ(1, GetSiteDataCount());
+    RemoveAndWait(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA);
+    EXPECT_EQ(0, GetSiteDataCount());
+  }
+
+  bool HasDataForType(const std::string& type) {
+    return RunScriptAndGetBool("has" + type + "()");
+  }
+
+  void SetDataForType(const std::string& type) {
+    ASSERT_TRUE(RunScriptAndGetBool("set" + type + "()"));
+  }
+
+  void RemoveSiteEngagement() {
+    HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+        ->ClearSettingsForOneType(CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT);
+  }
+
+  int GetSiteDataCount() {
+    base::RunLoop run_loop;
+    int count = -1;
+    (new SiteDataCountingHelper(
+         browser()->profile(), base::Time(),
+         base::Bind(&BrowsingDataRemoverBrowserTest::OnCookieCountResult,
+                    base::Unretained(this), base::Unretained(&run_loop),
+                    base::Unretained(&count))))
+        ->CountAndDestroySelfWhenFinished();
+
+    run_loop.Run();
+    return count;
+  }
+
  private:
   void OnCacheSizeResult(
       base::RunLoop* run_loop,
@@ -155,43 +224,10 @@ class BrowsingDataRemoverBrowserTest : public InProcessBrowserTest {
             ->Value();
     run_loop->Quit();
   }
-};
 
-class BrowsingDataRemoverTransportSecurityStateBrowserTest
-    : public BrowsingDataRemoverBrowserTest {
- public:
-  BrowsingDataRemoverTransportSecurityStateBrowserTest() {}
-
-  void SetUpOnMainThread() override {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(
-            &BrowsingDataRemoverTransportSecurityStateBrowserTest::
-                SetUpTransportSecurityState,
-            base::Unretained(this),
-            base::RetainedRef(browser()->profile()->GetRequestContext())));
-  }
-
-  void CheckTransportSecurityState(
-      scoped_refptr<net::URLRequestContextGetter> context_getter,
-      bool should_be_cleared) {
-    net::TransportSecurityState* state =
-        context_getter->GetURLRequestContext()->transport_security_state();
-    if (should_be_cleared)
-      EXPECT_FALSE(state->ShouldUpgradeToSSL("example.test"));
-    else
-      EXPECT_TRUE(state->ShouldUpgradeToSSL("example.test"));
-  }
-
- protected:
-  void SetUpTransportSecurityState(
-      scoped_refptr<net::URLRequestContextGetter> context_getter) {
-    net::TransportSecurityState* state =
-        context_getter->GetURLRequestContext()->transport_security_state();
-    base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
-    EXPECT_FALSE(state->ShouldUpgradeToSSL("example.test"));
-    state->AddHSTS("example.test", expiry, false);
-    EXPECT_TRUE(state->ShouldUpgradeToSSL("example.test"));
+  void OnCookieCountResult(base::RunLoop* run_loop, int* out_count, int count) {
+    *out_count = count;
+    run_loop->Quit();
   }
 };
 
@@ -228,7 +264,6 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, DownloadProhibited) {
 // Verify can modify database after deleting it.
 IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, Database) {
   GURL url = embedded_test_server()->GetURL("/simple_database.html");
-  LOG(ERROR) << url;
   ui_test_utils::NavigateToURL(browser(), url);
 
   RunScriptAndCheckResult("createTable()", "done");
@@ -265,7 +300,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, Cache) {
   // of |url1|, but not for |kExampleHost|, which is the origin of |url2|.
   std::unique_ptr<BrowsingDataFilterBuilder> filter_builder =
       BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST);
-  filter_builder->AddOrigin(url::Origin(url1));
+  filter_builder->AddOrigin(url::Origin::Create(url1));
   RemoveWithFilterAndWait(content::BrowsingDataRemover::DATA_TYPE_CACHE,
                           std::move(filter_builder));
 
@@ -276,7 +311,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, Cache) {
   // Another partial deletion with the same filter should have no effect.
   filter_builder =
       BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST);
-  filter_builder->AddOrigin(url::Origin(url1));
+  filter_builder->AddOrigin(url::Origin::Create(url1));
   RemoveWithFilterAndWait(content::BrowsingDataRemover::DATA_TYPE_CACHE,
                           std::move(filter_builder));
   EXPECT_EQ(new_size, GetCacheSize());
@@ -301,36 +336,76 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
   block_state = ExternalProtocolHandler::GetBlockState("tel", profile);
   ASSERT_EQ(ExternalProtocolHandler::UNKNOWN, block_state);
 }
-
-// Verify that TransportSecurityState data is cleared for REMOVE_CACHE.
-IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverTransportSecurityStateBrowserTest,
-                       ClearTransportSecurityState) {
-  RemoveAndWait(content::BrowsingDataRemover::DATA_TYPE_CACHE);
-  base::RunLoop run_loop;
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &BrowsingDataRemoverTransportSecurityStateBrowserTest::
-              CheckTransportSecurityState,
-          base::Unretained(this),
-          base::RetainedRef(browser()->profile()->GetRequestContext()),
-          true /* should be cleared */),
-      run_loop.QuitClosure());
+// Visiting a site creates a site engagement entry. Test that it is counted and
+// deleted properly.
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, SiteEngagementDeletion) {
+  EXPECT_EQ(0, GetSiteDataCount());
+  GURL url = embedded_test_server()->GetURL("/browsing_data/site_data.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_EQ(1, GetSiteDataCount());
+  RemoveAndWait(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA);
+  EXPECT_EQ(0, GetSiteDataCount());
 }
 
-// Verify that TransportSecurityState data is not cleared if REMOVE_CACHE is not
-// set.
-IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverTransportSecurityStateBrowserTest,
-                       PreserveTransportSecurityState) {
-  RemoveAndWait(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA);
-  base::RunLoop run_loop;
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &BrowsingDataRemoverTransportSecurityStateBrowserTest::
-              CheckTransportSecurityState,
-          base::Unretained(this),
-          base::RetainedRef(browser()->profile()->GetRequestContext()),
-          false /* should not be cleared */),
-      run_loop.QuitClosure());
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, CookieDeletion) {
+  TestSiteData("Cookie");
+}
+
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, LocalStorageDeletion) {
+  TestSiteData("LocalStorage");
+}
+
+// TODO(crbug.com/772337): DISABLED until session storage is working correctly.
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
+                       DISABLED_SessionStorageDeletion) {
+  TestSiteData("SessionStorage");
+}
+
+// Test that session storage is not counted until crbug.com/772337 is fixed.
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, SessionStorageCounting) {
+  EXPECT_EQ(0, GetSiteDataCount());
+  GURL url = embedded_test_server()->GetURL("/browsing_data/site_data.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+  RemoveSiteEngagement();
+  EXPECT_EQ(0, GetSiteDataCount());
+  SetDataForType("SessionStorage");
+  EXPECT_EQ(0, GetSiteDataCount());
+  EXPECT_TRUE(HasDataForType("SessionStorage"));
+}
+
+// TODO(crbug.com/776711): This test is flaky on all plattforms.
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
+                       DISABLED_ServiceWorkerDeletion) {
+  TestSiteData("ServiceWorker");
+}
+
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, CacheStorageDeletion) {
+  TestSiteData("CacheStorage");
+}
+
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, FileSystemDeletion) {
+  TestSiteData("FileSystem");
+}
+
+// Test that empty filesystems are deleted correctly.
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, EmptyFileSystem) {
+  TestEmptySiteData("FileSystem");
+}
+
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, WebSqlDeletion) {
+  TestSiteData("WebSql");
+}
+
+// Test that empty websql dbs are deleted correctly.
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, EmptyWebSql) {
+  TestEmptySiteData("WebSql");
+}
+
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, IndexedDbDeletion) {
+  TestSiteData("IndexedDb");
+}
+
+// Test that empty indexed dbs are deleted correctly.
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, EmptyIndexedDb) {
+  TestEmptySiteData("IndexedDb");
 }

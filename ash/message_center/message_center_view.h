@@ -19,7 +19,7 @@
 #include "ui/views/view.h"
 
 namespace gfx {
-class MultiAnimation;
+class SlideAnimation;
 }  // namespace gfx
 
 namespace message_center {
@@ -73,7 +73,9 @@ class ASH_EXPORT MessageCenterView
   void OnWillChangeFocus(views::View* before, views::View* now) override {}
   void OnDidChangeFocus(views::View* before, views::View* now) override;
 
+  // Fallback background color when the device does not support blur.
   static const SkColor kBackgroundColor;
+
   static const size_t kMaxVisibleNotifications;
 
  protected:
@@ -101,7 +103,6 @@ class ASH_EXPORT MessageCenterView
                           bool by_user) override;
   std::unique_ptr<ui::MenuModel> CreateMenuModel(
       const message_center::Notification& notification) override;
-  bool HasClickedListener(const std::string& notification_id) override;
   void ClickOnNotificationButton(const std::string& notification_id,
                                  int button_index) override;
   void ClickOnSettingsButton(const std::string& notification_id) override;
@@ -138,6 +139,14 @@ class ASH_EXPORT MessageCenterView
   void SetNotificationViewForTest(message_center::MessageView* view);
   void UpdateNotification(const std::string& notification_id);
 
+  // There are three patterns for animation.
+  // - Only MessageCenterView height changes.
+  // - Both MessageCenterview and NotifierSettingsView moves at same velocity.
+  // - Only NotifierSettingsView moves.
+  // Thus, these two methods are needed.
+  int GetSettingsHeightForWidth(int width) const;
+  int GetContentHeightDuringAnimation(int width) const;
+
   message_center::MessageCenter* message_center_;
   message_center::MessageCenterTray* tray_;
 
@@ -153,7 +162,7 @@ class ASH_EXPORT MessageCenterView
 
   // Animation managing transition between message center and settings (and vice
   // versa).
-  std::unique_ptr<gfx::MultiAnimation> settings_transition_animation_;
+  std::unique_ptr<gfx::SlideAnimation> settings_transition_animation_;
 
   // Helper data to keep track of the transition between settings and
   // message center views.

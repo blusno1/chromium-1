@@ -92,14 +92,6 @@ cr.define('extensions', function() {
         },
       },
 
-      /** @private {extensions.ShowingType} */
-      listType_: Number,
-
-      itemsList_: {
-        type: Array,
-        computed: 'computeList_(listType_)',
-      },
-
       /**
        * Prevents page content from showing before data is first loaded.
        * @private
@@ -108,6 +100,18 @@ cr.define('extensions', function() {
         type: Boolean,
         value: false,
       },
+
+      /** @private */
+      showDrawer_: Boolean,
+
+      /** @private */
+      showLoadErrorDialog_: Boolean,
+
+      /** @private */
+      showOptionsDialog_: Boolean,
+
+      /** @private */
+      showPackDialog_: Boolean,
 
       // <if expr="chromeos">
       /** @private */
@@ -132,7 +136,7 @@ cr.define('extensions', function() {
     currentPage_: null,
 
     /**
-     * The ID of the listner on |extensions.navigation|. Stored so that the
+     * The ID of the listener on |extensions.navigation|. Stored so that the
      * listener can be removed when this element is detached (happens in tests).
      * @private {?number}
      */
@@ -177,18 +181,6 @@ cr.define('extensions', function() {
       return this.$['keyboard-shortcuts'];
     },
 
-    get packDialog() {
-      return this.$['pack-dialog'];
-    },
-
-    get loadError() {
-      return this.$['load-error'];
-    },
-
-    get optionsDialog() {
-      return this.$['options-dialog'];
-    },
-
     get errorPage() {
       return this.$['error-page'];
     },
@@ -207,24 +199,17 @@ cr.define('extensions', function() {
      * @private
      */
     onFilterChanged_: function(event) {
+      if (this.currentPage_.page !== Page.LIST)
+        extensions.navigation.navigateTo({page: Page.LIST});
       this.filter = /** @type {string} */ (event.detail);
     },
 
     /** @private */
     onMenuButtonTap_: function() {
-      this.$.drawer.openDrawer();
-
-      // Sidebar needs manager to inform it of what to highlight since it
-      // has no access to item-specific page.
-      let page = extensions.navigation.getCurrentPage();
-      if (page.extensionId) {
-        // Find out what type of item we're looking at, and replace page info
-        // with that list type.
-        const data = assert(this.getData_(page.extensionId));
-        page = {page: Page.LIST, type: extensions.getItemListType(data)};
-      }
-
-      this.$.sidebar.updateSelected(page);
+      this.showDrawer_ = true;
+      this.async(() => {
+        this.$$('#drawer').openDrawer();
+      });
     },
 
     /**
@@ -233,12 +218,20 @@ cr.define('extensions', function() {
      * @private
      */
     getListId_: function(item) {
-      const type = extensions.getItemListType(item);
-      if (type == extensions.ShowingType.APPS)
-        return 'apps';
-      else if (type == extensions.ShowingType.EXTENSIONS)
-        return 'extensions';
-
+      const ExtensionType = chrome.developerPrivate.ExtensionType;
+      switch (item.type) {
+        case ExtensionType.HOSTED_APP:
+        case ExtensionType.LEGACY_PACKAGED_APP:
+        case ExtensionType.PLATFORM_APP:
+          return 'apps';
+        case ExtensionType.EXTENSION:
+        case ExtensionType.SHARED_MODULE:
+          return 'extensions';
+        case ExtensionType.THEME:
+          assertNotReached(
+              'Don\'t send themes to the chrome://extensions page');
+          break;
+      }
       assertNotReached();
     },
 
@@ -320,6 +313,18 @@ cr.define('extensions', function() {
     },
 
     /**
+     * @param {!chrome.developerPrivate.LoadError} loadError
+     */
+    showLoadError: function(loadError) {
+      this.showLoadErrorDialog_ = true;
+      this.async(() => {
+        const dialog = this.$$('#load-error');
+        dialog.loadError = loadError;
+        dialog.show();
+      });
+    },
+
+    /**
      * @param {Page} page
      * @return {!(extensions.KeyboardShortcuts |
      *            extensions.DetailView |
@@ -346,18 +351,23 @@ cr.define('extensions', function() {
      * @private
      */
     changePage_: function(newPage) {
-      this.$.drawer.closeDrawer();
-      if (this.optionsDialog && this.optionsDialog.open)
-        this.optionsDialog.close();
+      const drawer = this.$$('#drawer');
+      if (drawer && drawer.open) {
+        drawer.closeDrawer();
+        this.showDrawer_ = false;
+      }
+
+      const optionsDialog = this.$$('#options-dialog');
+      if (optionsDialog && optionsDialog.open) {
+        optionsDialog.close();
+        this.showOptionsDialog_ = false;
+      }
 
       const fromPage = this.currentPage_ ? this.currentPage_.page : null;
       const toPage = newPage.page;
       let data;
       if (newPage.extensionId)
         data = assert(this.getData_(newPage.extensionId));
-
-      if (newPage.hasOwnProperty('type'))
-        this.listType_ = /** @type {extensions.ShowingType} */ (newPage.type);
 
       if (toPage == Page.DETAILS)
         this.detailViewItem_ = assert(data);
@@ -375,15 +385,41 @@ cr.define('extensions', function() {
       if (newPage.subpage) {
         assert(newPage.subpage == Dialog.OPTIONS);
         assert(newPage.extensionId);
-        this.optionsDialog.show(data);
+        this.showOptionsDialog_ = true;
+        this.async(() => {
+          this.$$('#options-dialog').show(data);
+        });
       }
 
       this.currentPage_ = newPage;
     },
 
     /** @private */
+    onDrawerClose_: function() {
+      this.showDrawer_ = false;
+    },
+
+    /** @private */
+    onLoadErrorDialogClose_: function() {
+      this.showLoadErrorDialog_ = false;
+    },
+
+    /** @private */
+    onOptionsDialogClose_: function() {
+      this.showOptionsDialog_ = false;
+    },
+
+    /** @private */
     onPackTap_: function() {
-      this.$['pack-dialog'].show();
+      this.showPackDialog_ = true;
+      this.async(() => {
+        this.$$('#pack-dialog').show();
+      });
+    },
+
+    /** @private */
+    onPackDialogClose_: function() {
+      this.showPackDialog_ = false;
     },
 
     // <if expr="chromeos">
@@ -396,24 +432,6 @@ cr.define('extensions', function() {
       this.showKioskDialog_ = false;
     },
     // </if>
-
-    /**
-     * @param {!extensions.ShowingType} listType
-     * @private
-     */
-    computeList_: function(listType) {
-      // TODO(scottchen): the .slice is required to trigger the binding
-      // correctly, otherwise the list won't rerender. Should investigate
-      // the performance implication, or find better ways to trigger change.
-      switch (listType) {
-        case extensions.ShowingType.EXTENSIONS:
-          this.linkPaths('itemsList_', 'extensions');
-          return this.extensions;
-        case extensions.ShowingType.APPS:
-          this.linkPaths('itemsList_', 'apps');
-          return this.apps;
-      }
-    }
   });
 
   return {Manager: Manager};

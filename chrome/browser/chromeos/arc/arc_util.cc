@@ -20,7 +20,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
-#include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -72,7 +71,7 @@ base::LazyInstance<std::set<AccountId>>::DestructorAtExit
 // Returns whether ARC can run on the filesystem mounted at |path|.
 // This function should run only on threads where IO operations are allowed.
 bool IsArcCompatibleFilesystem(const base::FilePath& path) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   // If it can be verified it is not on ecryptfs, then it is ok.
   struct statfs statfs_buf;
@@ -223,13 +222,6 @@ bool IsArcAllowedForProfile(const Profile* profile) {
   if (!user_flow || !user_flow->CanStartArc()) {
     VLOG_IF(1, IsReportingFirstTimeForProfile(profile))
         << "ARC is not allowed in the current user flow.";
-    return false;
-  }
-
-  if (chromeos::UserSessionManager::NeedRestartToApplyPerSessionFlagsForProfile(
-          profile)) {
-    // Quickly restarting ARC instance can cause black screen. crbug.com/758820.
-    VLOG(1) << "Do not start ARC because chrome will restart";
     return false;
   }
 

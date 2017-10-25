@@ -18,8 +18,8 @@
   [self showAlert:@"dismissModalDialogs"];
 }
 
-- (void)showSettings {
-  [self showAlert:@"showSettings"];
+- (void)showSettingsFromViewController:(UIViewController*)baseViewController {
+  [self showAlert:@"showSettingsFromViewController:"];
 }
 
 - (void)switchModesAndOpenNewTab:(OpenNewTabCommand*)newTabCommand {
@@ -50,8 +50,9 @@
   [self showAlert:@"dismissTabSwitcher"];
 }
 
-- (void)showClearBrowsingDataSettings {
-  [self showAlert:@"showClearBrowsingDataSettings"];
+- (void)showClearBrowsingDataSettingsFromViewController:
+    (UIViewController*)baseViewController {
+  [self showAlert:@"showClearBrowsingDataSettingsFromViewController:"];
 }
 
 - (void)showAutofillSettings {

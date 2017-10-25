@@ -454,12 +454,13 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserDisableWebSecurityTest,
       base::TimeTicks(), FrameMsg_UILoadMetricsReportType::NO_REPORT,
       file_url,  // base_url_for_data_url
       GURL(), PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET", nullptr,
-      base::Optional<SourceLocation>(), CSPDisposition::CHECK);
+      base::Optional<SourceLocation>(), CSPDisposition::CHECK,
+      false /* started_from_context_menu */);
   BeginNavigationParams begin_params(
       std::string(), net::LOAD_NORMAL, false, false,
       REQUEST_CONTEXT_TYPE_LOCATION,
       blink::WebMixedContentContextType::kBlockable, false,
-      url::Origin(data_url));
+      url::Origin::Create(data_url));
   FrameHostMsg_BeginNavigation msg(rfh->GetRoutingID(), common_params,
                                    begin_params);
 

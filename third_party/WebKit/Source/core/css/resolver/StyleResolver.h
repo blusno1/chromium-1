@@ -70,29 +70,29 @@ class CORE_EXPORT StyleResolver final
   ~StyleResolver();
   void Dispose();
 
-  RefPtr<ComputedStyle> StyleForElement(
+  scoped_refptr<ComputedStyle> StyleForElement(
       Element*,
       const ComputedStyle* parent_style = nullptr,
       const ComputedStyle* layout_parent_style = nullptr,
       RuleMatchingBehavior = kMatchAllRules);
 
-  static RefPtr<AnimatableValue> CreateAnimatableValueSnapshot(
+  static scoped_refptr<AnimatableValue> CreateAnimatableValueSnapshot(
       Element&,
       const ComputedStyle& base_style,
       const ComputedStyle* parent_style,
       CSSPropertyID,
       const CSSValue*);
 
-  RefPtr<ComputedStyle> PseudoStyleForElement(
+  scoped_refptr<ComputedStyle> PseudoStyleForElement(
       Element*,
       const PseudoStyleRequest&,
       const ComputedStyle* parent_style,
       const ComputedStyle* layout_parent_style);
 
-  RefPtr<ComputedStyle> StyleForPage(int page_index);
-  RefPtr<ComputedStyle> StyleForText(Text*);
+  scoped_refptr<ComputedStyle> StyleForPage(int page_index);
+  scoped_refptr<ComputedStyle> StyleForText(Text*);
 
-  static RefPtr<ComputedStyle> StyleForViewport(Document&);
+  static scoped_refptr<ComputedStyle> StyleForViewport(Document&);
 
   // TODO(esprehn): StyleResolver should probably not contain tree walking
   // state, instead we should pass a context object during recalcStyle.
@@ -145,12 +145,12 @@ class CORE_EXPORT StyleResolver final
 
   static bool HasAuthorBackground(const StyleResolverState&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit StyleResolver(Document&);
 
-  static RefPtr<ComputedStyle> InitialStyleForElement(Document&);
+  static scoped_refptr<ComputedStyle> InitialStyleForElement(Document&);
 
   // FIXME: This should probably go away, folded into FontBuilder.
   void UpdateFont(StyleResolverState&);
@@ -165,6 +165,7 @@ class CORE_EXPORT StyleResolver final
                                     unsigned rules_to_include);
   void MatchRuleSet(ElementRuleCollector&, RuleSet*);
   void MatchUARules(ElementRuleCollector&);
+  void MatchUserRules(ElementRuleCollector&);
   void MatchScopedRules(const Element&, ElementRuleCollector&);
   void MatchAuthorRules(const Element&, ElementRuleCollector&);
   void MatchAuthorRulesV0(const Element&, ElementRuleCollector&);

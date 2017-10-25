@@ -7,9 +7,9 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/macros.h"
-#include "components/metrics/proto/reporting_info.pb.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/reporting_info.pb.h"
 
 namespace metrics {
 
@@ -22,7 +22,7 @@ class NetMetricsLogUploaderTest : public testing::Test {
     ReportingInfo reporting_info;
     reporting_info.set_attempt_count(10);
     uploader_.reset(new NetMetricsLogUploader(
-        NULL, "http://dummy_server", "dummy_mime", MetricsLogUploader::UMA,
+        nullptr, "http://dummy_server", "dummy_mime", MetricsLogUploader::UMA,
         base::Bind(&NetMetricsLogUploaderTest::OnUploadCompleteReuseUploader,
                    base::Unretained(this))));
     uploader_->UploadLog("initial_dummy_data", "initial_dummy_hash",

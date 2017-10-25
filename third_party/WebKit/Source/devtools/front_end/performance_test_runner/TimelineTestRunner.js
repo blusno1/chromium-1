@@ -39,7 +39,10 @@ PerformanceTestRunner.timelinePropertyFormatters = {
   allottedMilliseconds: 'formatAsTypeName',
   timedOut: 'formatAsTypeName',
   networkTime: 'formatAsTypeName',
-  timing: 'formatAsTypeName'
+  timing: 'formatAsTypeName',
+  streamed: 'formatAsTypeName',
+  producedCacheSize: 'formatAsTypeName',
+  consumedCacheSize: 'formatAsTypeName'
 };
 
 PerformanceTestRunner.InvalidationFormatters = {
@@ -372,7 +375,7 @@ PerformanceTestRunner.loadTimeline = function(timelineData) {
 TestRunner.initAsync(`
   function wrapCallFunctionForTimeline(f) {
     var script = document.createElement('script');
-    script.textContent = '(' + f.toString() + ')()\n//# sourceURL=wrapCallFunctionForTimeline.js';
+    script.textContent = '(' + f.toString() + ')()\\n//# sourceURL=wrapCallFunctionForTimeline.js';
     document.body.appendChild(script);
   }
 

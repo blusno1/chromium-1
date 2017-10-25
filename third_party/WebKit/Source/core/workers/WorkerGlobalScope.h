@@ -90,7 +90,7 @@ class CORE_EXPORT WorkerGlobalScope
       String source_code,
       std::unique_ptr<Vector<char>> cached_meta_data) override;
   bool IsClosing() const final { return closing_; }
-  virtual void Dispose();
+  void Dispose() override;
   WorkerThread* GetThread() const final { return thread_; }
 
   void ExceptionUnhandled(int exception_id);
@@ -157,8 +157,8 @@ class CORE_EXPORT WorkerGlobalScope
   double TimeOrigin() const { return time_origin_; }
   WorkerSettings* GetWorkerSettings() const { return worker_settings_.get(); }
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*) override;
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  protected:
   WorkerGlobalScope(std::unique_ptr<GlobalScopeCreationParams>,
@@ -177,8 +177,7 @@ class CORE_EXPORT WorkerGlobalScope
       const Vector<CSPHeaderAndType>& headers);
 
   // |kNotHandled| is used when the script was not in
-  // InstalledScriptsManager, which means either it was not an installed script
-  // or it was already taken.
+  // InstalledScriptsManager, which means it was not an installed script.
   enum class LoadResult { kSuccess, kFailed, kNotHandled };
 
   // Tries to load the script synchronously from the

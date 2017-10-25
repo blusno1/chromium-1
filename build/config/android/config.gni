@@ -44,7 +44,7 @@ if (is_android) {
   if (!defined(default_android_sdk_root)) {
     default_android_sdk_root = "//third_party/android_tools/sdk"
     default_android_sdk_version = "26"
-    default_android_sdk_build_tools_version = "26.0.0"
+    default_android_sdk_build_tools_version = "26.0.2"
     default_android_sdk_tools_version_suffix = "-25.3.2"
   }
 
@@ -63,8 +63,7 @@ if (is_android) {
   }
 
   if (!defined(default_android_keystore_path)) {
-    default_android_keystore_path =
-        "//build/android/ant/chromium-debug.keystore"
+    default_android_keystore_path = "//build/android/chromium-debug.keystore"
     default_android_keystore_name = "chromiumdebugkey"
     default_android_keystore_password = "chromium"
   }
@@ -159,6 +158,11 @@ if (is_android) {
     # Adds intrumentation to each function. Writes a file with the order that
     # functions are called at startup.
     use_order_profiling = false
+
+    # Use a ligthweight variant of order profiling. Does nothing without
+    # use_order_profiling set above. Will either replace use_order_profiling
+    # or be removed.
+    use_lightweight_order_profiling = false
 
     # Builds secondary abi for APKs, supports build 32-bit arch as secondary
     # abi in 64-bit Monochrome and WebView.
@@ -368,13 +372,8 @@ if (is_android) {
   }
 
   if (defined(android_secondary_abi_cpu)) {
-    if (is_clang) {
-      android_secondary_abi_toolchain =
-          "//build/toolchain/android:android_clang_${android_secondary_abi_cpu}"
-    } else {
-      android_secondary_abi_toolchain =
-          "//build/toolchain/android:android_${android_secondary_abi_cpu}"
-    }
+    android_secondary_abi_toolchain =
+        "//build/toolchain/android:android_clang_${android_secondary_abi_cpu}"
   }
 }
 

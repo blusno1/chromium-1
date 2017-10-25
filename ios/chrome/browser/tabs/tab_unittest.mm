@@ -112,11 +112,13 @@ const char kValidFilenameUrl[] = "http://www.hostname.com/filename.pdf";
 @end
 
 @implementation ExternalAppLauncherMock
-typedef BOOL (^openURLBlockType)(const GURL&, BOOL);
+typedef BOOL (^openURLBlockType)(const GURL&, const GURL&, BOOL);
 
-- (BOOL)openURL:(const GURL&)url linkClicked:(BOOL)linkClicked {
+- (BOOL)requestToOpenURL:(const GURL&)url
+           sourcePageURL:(const GURL&)sourceURL
+             linkClicked:(BOOL)linkClicked {
   return static_cast<openURLBlockType>([self blockForSelector:_cmd])(
-      url, linkClicked);
+      url, sourceURL, linkClicked);
 }
 @end
 
@@ -410,18 +412,25 @@ TEST_F(TabTest, GetSuggestedFilenameFromDefaultName) {
 }
 
 TEST_F(TabTest, SnapshotIsNotRemovedDuringShutdown) {
-  GetApplicationContext()->SetIsShuttingDown();
   id mockSnapshotManager = OCMClassMock([SnapshotManager class]);
   tab_.snapshotManager = mockSnapshotManager;
   [[mockSnapshotManager reject] removeImageWithSessionID:[OCMArg any]];
   web_state_impl_.reset();
 }
 
-TEST_F(TabTest, ClosingWebStateRemovesSnapshot) {
+TEST_F(TabTest, ClosingWebStateDoesNotRemoveSnapshot) {
   id mockSnapshotManager = OCMClassMock([SnapshotManager class]);
   tab_.snapshotManager = mockSnapshotManager;
+  [[mockSnapshotManager reject] removeImageWithSessionID:[OCMArg any]];
   web_state_impl_.reset();
+}
+
+TEST_F(TabTest, CallingRemoveSnapshotRemovesSnapshot) {
+  id mockSnapshotManager = OCMClassMock([SnapshotManager class]);
+  tab_.snapshotManager = mockSnapshotManager;
+  [tab_ removeSnapshot];
   [[mockSnapshotManager verify] removeImageWithSessionID:[OCMArg any]];
+  web_state_impl_.reset();
 }
 
 }  // namespace

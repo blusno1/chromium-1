@@ -69,7 +69,7 @@ SelectionController::SelectionController(LocalFrame& frame)
       mouse_down_allows_multi_click_(false),
       selection_state_(SelectionState::kHaveNotStartedSelection) {}
 
-DEFINE_TRACE(SelectionController) {
+void SelectionController::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(original_base_in_flat_tree_);
   DocumentShutdownObserver::Trace(visitor);
@@ -476,9 +476,12 @@ void SelectionController::UpdateSelectionForMouseDrag(
       DispatchSelectStart(target) != DispatchEventResult::kNotCanceled)
     return;
 
-  // TODO(yosin) We should check |targetPosition|, and
-  // |newSelection| are valid for |m_frame->document()|.
-  // |dispatchSelectStart()| can change them by "selectstart" event handler.
+  // |DispatchSelectStart()| can change |GetDocument()| or invalidate
+  // target_position by 'selectstart' event handler.
+  // TODO(editing-dev): We should also add a regression test when above
+  // behaviour happens. See crbug.com/775149.
+  if (!Selection().IsAvailable() || !target_position.IsValidFor(GetDocument()))
+    return;
 
   const bool should_extend_selection =
       selection_state_ == SelectionState::kExtendedSelection;
@@ -548,6 +551,15 @@ bool SelectionController::UpdateSelectionForMouseDownDispatchingSelectStart(
   return true;
 }
 
+static bool IsEmptyWordRange(const EphemeralRangeInFlatTree range) {
+  const String& str = PlainText(
+      range, TextIteratorBehavior::Builder()
+                 .SetEmitsObjectReplacementCharacter(
+                     HasEditableStyle(*range.StartPosition().AnchorNode()))
+                 .Build());
+  return str.IsEmpty() || str.SimplifyWhiteSpace().ContainsOnlyWhitespace();
+}
+
 bool SelectionController::SelectClosestWordFromHitTestResult(
     const HitTestResult& result,
     AppendTrailingWhitespace append_trailing_whitespace,
@@ -584,26 +596,18 @@ bool SelectionController::SelectClosestWordFromHitTestResult(
   if (new_selection.IsNone() || new_selection.Start() > new_selection.End())
     return false;
 
-  HandleVisibility visibility = HandleVisibility::kNotVisible;
   if (select_input_event_type == SelectInputEventType::kTouch) {
     // If node doesn't have text except space, tab or line break, do not
     // select that 'empty' area.
     EphemeralRangeInFlatTree range(new_selection.Start(), new_selection.End());
-    const String& str = PlainText(
-        range,
-        TextIteratorBehavior::Builder()
-            .SetEmitsObjectReplacementCharacter(HasEditableStyle(*inner_node))
-            .Build());
-    if (str.IsEmpty() || str.SimplifyWhiteSpace().ContainsOnlyWhitespace())
+    if (IsEmptyWordRange(range))
       return false;
 
-    if (new_selection.RootEditableElement() &&
-        pos.DeepEquivalent() == VisiblePositionInFlatTree::LastPositionInNode(
-                                    *new_selection.RootEditableElement())
-                                    .DeepEquivalent())
+    Element* const editable = new_selection.RootEditableElement();
+    if (editable && pos.DeepEquivalent() ==
+                        VisiblePositionInFlatTree::LastPositionInNode(*editable)
+                            .DeepEquivalent())
       return false;
-
-    visibility = HandleVisibility::kVisible;
   }
 
   const SelectionInFlatTree& adjusted_selection =
@@ -614,7 +618,10 @@ bool SelectionController::SelectClosestWordFromHitTestResult(
   return UpdateSelectionForMouseDownDispatchingSelectStart(
       inner_node,
       ExpandSelectionToRespectUserSelectAll(inner_node, adjusted_selection),
-      TextGranularity::kWord, visibility);
+      TextGranularity::kWord,
+      select_input_event_type == SelectInputEventType::kTouch
+          ? HandleVisibility::kVisible
+          : HandleVisibility::kNotVisible);
 }
 
 void SelectionController::SelectClosestMisspellingFromHitTestResult(

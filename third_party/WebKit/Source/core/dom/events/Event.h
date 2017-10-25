@@ -42,8 +42,7 @@ class EventDispatchMediator;
 class EventTarget;
 class ScriptState;
 
-class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
-                          public ScriptWrappable {
+class CORE_EXPORT Event : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -122,6 +121,8 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
   // and not change functionality since observing the presence of listeners
   // is dangerous.
   virtual void DoneDispatchingEventAtCurrentTarget() {}
+
+  void SetRelatedTargetIfExists(EventTarget* related_target);
 
   unsigned short eventPhase() const { return event_phase_; }
   void SetEventPhase(unsigned short event_phase) { event_phase_ = event_phase; }
@@ -241,7 +242,7 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
     return prevent_default_called_on_uncancelable_event_;
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   Event();

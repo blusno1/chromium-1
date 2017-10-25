@@ -135,7 +135,9 @@ class TabStripModel {
   // Retrieve the Profile associated with this TabStripModel.
   Profile* profile() const { return profile_; }
 
-  // Retrieve the index of the currently active WebContents.
+  // Retrieve the index of the currently active WebContents. This will be
+  // ui::ListSelectionModel::kUnselectedIndex if no tab is currently selected
+  // (this happens while the tab strip is being initialized or is empty).
   int active_index() const { return selection_model_.active(); }
 
   // Returns true if the tabstrip is currently closing all open tabs (via a
@@ -247,9 +249,8 @@ class TabStripModel {
       TabStripModelObserver::TabChangeType change_type);
 
   // Cause a tab to display a UI indication to the user that it needs their
-  // attention. The UI indication will be cleared when the tab is next
-  // activated. Only call this for a tab that is not the active tab.
-  void TabNeedsAttentionAt(int index);
+  // attention.
+  void SetTabNeedsAttentionAt(int index, bool attention);
 
   // Close all tabs at once. Code can use closing_all() above to defer
   // operations that might otherwise by invoked by the flurry of detach/select
@@ -347,7 +348,7 @@ class TabStripModel {
   bool IsTabSelected(int index) const;
 
   // Sets the selection to match that of |source|.
-  void SetSelectionFromModel(const ui::ListSelectionModel& source);
+  void SetSelectionFromModel(ui::ListSelectionModel source);
 
   const ui::ListSelectionModel& selection_model() const {
     return selection_model_;
@@ -512,8 +513,7 @@ class TabStripModel {
   // Sets the selection to |new_model| and notifies any observers.
   // Note: This function might end up sending 0 to 3 notifications in the
   // following order: TabDeactivated, ActiveTabChanged, TabSelectionChanged.
-  void SetSelection(const ui::ListSelectionModel& new_model,
-                    NotifyTypes notify_types);
+  void SetSelection(ui::ListSelectionModel new_model, NotifyTypes notify_types);
 
   // Selects either the next tab (|forward| is true), or the previous tab
   // (|forward| is false).

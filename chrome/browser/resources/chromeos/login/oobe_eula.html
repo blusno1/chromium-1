@@ -60,11 +60,11 @@
         <h1 class="title" i18n-content="oobeEulaSectionTitle"></h1>
       </div>
       <div class="footer flex layout vertical">
-        <iframe id="crosEulaFrame" src="chrome://terms"
+        <webview id="crosEulaFrame"
             role="document" class="flex focus-on-show"
             i18n-values="aria-label:oobeEulaIframeLabel"
-            on-load="onFrameLoad_">
-        </iframe>
+            on-contentload="onFrameLoad_">
+        </webview>
         <a id="installationSettings" href="#"
             on-tap="onInstallationSettingsClicked_"
             i18n-content="eulaSystemInstallationSettings">
@@ -72,13 +72,13 @@
         <div id="logging" class="layout horizontal">
           <paper-checkbox id="usageStats" checked="{{usageStatsChecked}}"
               on-change="onUsageChanged_">
-            <div id="usageStatsLabelContainer">
-              <span i18n-content="checkboxLogging"></span>
-              <a id="" href="#" i18n-content="learnMore"
-                  on-tap="onUsageStatsHelpLinkClicked_">
-              </a>
-            </div>
           </paper-checkbox>
+          <div id="usageStatsLabelContainer">
+            <span i18n-content="checkboxLogging"></span>
+            <a id="" href="#" i18n-content="learnMore"
+                on-tap="onUsageStatsHelpLinkClicked_">
+            </a>
+          </div>
         </div>
       </div>
       <div class="bottom-buttons flex layout horizontal">

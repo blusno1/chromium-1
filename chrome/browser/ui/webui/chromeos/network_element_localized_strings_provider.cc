@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/net/shill_error.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/login/login_state.h"
 #include "components/login/localized_values_builder.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -204,11 +205,19 @@ void AddDetailsLocalizedStrings(content::WebUIDataSource* html_source) {
       {"networkCellularScan", IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN},
       {"networkCellularScanCompleted",
        IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN_COMPLETED},
+      {"networkCellularScanConnectedHelp",
+       IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN_CONNECTED_HELP},
       {"networkCellularScanning",
        IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCANNING},
       {"networkCellularNoNetworks",
        IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_NO_NETWORKS},
       {"networkNameservers", IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS},
+      {"networkNameserversAutomatic",
+       IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_AUTOMATIC},
+      {"networkNameserversCustom",
+       IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_CUSTOM},
+      {"networkNameserversGoogle",
+       IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_GOOGLE},
       {"networkProxyWpad", IDS_SETTINGS_INTERNET_NETWORK_PROXY_WPAD},
   };
   for (const auto& entry : localized_strings)
@@ -236,6 +245,16 @@ void AddConfigLocalizedStrings(content::WebUIDataSource* html_source) {
   };
   for (const auto& entry : localized_strings)
     html_source->AddLocalizedString(entry.name, entry.id);
+
+  // Login screen and public account users can only create shared network
+  // configurations. Other users default to unshared network configurations.
+  // NOTE: Guest and kiosk users can only create unshared network configs.
+  // NOTE: Insecure wifi networks are always shared.
+  html_source->AddBoolean("shareNetworkDefault",
+                          !LoginState::Get()->UserHasNetworkProfile());
+  // Only authenticated users can toggle the share state.
+  html_source->AddBoolean("shareNetworkAllowEnable",
+                          LoginState::Get()->IsUserAuthenticated());
 }
 
 void AddErrorLocalizedStrings(content::WebUIDataSource* html_source) {

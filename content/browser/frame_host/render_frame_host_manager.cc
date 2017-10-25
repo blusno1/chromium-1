@@ -450,7 +450,6 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
 
     // We should only hear this from our current renderer.
     DCHECK_EQ(render_frame_host_.get(), render_frame_host);
-    EnsureRenderFrameHostVisibilityConsistent();
 
     // If the current RenderFrameHost has a pending WebUI it must be committed.
     // Note: When one tries to move same-site commit logic into RenderFrameHost
@@ -813,6 +812,7 @@ RenderFrameHostImpl* RenderFrameHostManager::GetFrameHostForNavigation(
     notify_webui_of_rf_creation = true;
 
     if (navigation_rfh == render_frame_host_.get()) {
+      EnsureRenderFrameHostVisibilityConsistent();
       // TODO(nasko): This is a very ugly hack. The Chrome extensions process
       // manager still uses NotificationService and expects to see a
       // RenderViewHost changed notification after WebContents and
@@ -1223,7 +1223,8 @@ RenderFrameHostManager::GetSiteInstanceForNavigation(
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
   if (!frame_tree_node_->IsMainFrame() && !new_instance_impl->HasProcess() &&
       new_instance_impl->HasSite() &&
-      policy->IsIsolatedOrigin(url::Origin(new_instance_impl->GetSiteURL()))) {
+      policy->IsIsolatedOrigin(
+          url::Origin::Create(new_instance_impl->GetSiteURL()))) {
     new_instance_impl->set_process_reuse_policy(
         SiteInstanceImpl::ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE);
   }
@@ -1355,10 +1356,8 @@ RenderFrameHostManager::DetermineSiteInstanceForURL(
     // renderers created for particular chrome urls (e.g. the chrome-native://
     // scheme) can be reused for subsequent navigations in the same WebContents.
     // See http://crbug.com/386542.
-    if (dest_is_restore &&
-        GetContentClient()->browser()->ShouldAssignSiteForURL(dest_url)) {
+    if (dest_is_restore && SiteInstanceImpl::ShouldAssignSiteForURL(dest_url))
       current_instance_impl->SetSite(dest_url);
-    }
 
     return SiteInstanceDescriptor(current_instance_impl);
   }
@@ -1478,8 +1477,19 @@ bool RenderFrameHostManager::IsRendererTransferNeededForNavigation(
     const GURL& dest_url) {
   // A transfer is not needed if the current SiteInstance doesn't yet have a
   // site.  This is the case for tests that use NavigateToURL.
+  //
+  // One exception is that a siteless SiteInstance may still have a process,
+  // which might be unsuitable for |dest_url|.  For example, another navigation
+  // could share that process (e.g., when over process limit) and lock it to a
+  // different origin before this SiteInstance sets its site.  Hence, we also
+  // check for cases like this.  See https://crbug.com/773809.
+  //
+  // TODO(alexmos): We should always check HasWrongProcessForURL regardless of
+  // HasSite, but currently we cannot do that because of hosted app workarounds
+  // (see https://crbug.com/92669).  Revisit this once hosted apps swap
+  // processes for cross-site web iframes and popups.
   if (!rfh->GetSiteInstance()->HasSite())
-    return false;
+    return rfh->GetSiteInstance()->HasWrongProcessForURL(dest_url);
 
   // We do not currently swap processes for navigations in webview tag guests.
   if (rfh->GetSiteInstance()->GetSiteURL().SchemeIs(kGuestScheme))
@@ -2701,7 +2711,7 @@ bool RenderFrameHostManager::CanSubframeSwapProcess(
   // If dest_url is a unique origin like about:blank, then the need for a swap
   // is determined by the source_instance or dest_instance.
   GURL resolved_url = dest_url;
-  if (url::Origin(resolved_url).unique()) {
+  if (url::Origin::Create(resolved_url).unique()) {
     if (source_instance) {
       resolved_url = source_instance->GetSiteURL();
     } else if (dest_instance) {

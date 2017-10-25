@@ -51,6 +51,9 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service_helper.h"
+#include "components/signin/core/browser/account_reconcilor.h"
+#include "components/signin/core/browser/signin_metrics.h"
+#import "components/signin/ios/browser/account_consistency_service.h"
 #include "components/signin/ios/browser/active_state_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/toolbar/toolbar_model_impl.h"
@@ -88,6 +91,8 @@
 #include "ios/chrome/browser/sessions/session_util.h"
 #include "ios/chrome/browser/sessions/tab_restore_service_delegate_impl_ios.h"
 #include "ios/chrome/browser/sessions/tab_restore_service_delegate_impl_ios_factory.h"
+#import "ios/chrome/browser/signin/account_consistency_service_factory.h"
+#include "ios/chrome/browser/signin/account_reconcilor_factory.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
 #import "ios/chrome/browser/snapshots/snapshot_overlay.h"
 #import "ios/chrome/browser/snapshots/snapshot_overlay_provider.h"
@@ -127,6 +132,7 @@
 #import "ios/chrome/browser/ui/dialogs/java_script_dialog_presenter_impl.h"
 #import "ios/chrome/browser/ui/elements/activity_overlay_coordinator.h"
 #import "ios/chrome/browser/ui/external_file_controller.h"
+#import "ios/chrome/browser/ui/external_search/external_search_coordinator.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_controller_ios.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
 #import "ios/chrome/browser/ui/fullscreen_controller.h"
@@ -174,6 +180,7 @@
 #include "ios/chrome/browser/upgrade/upgrade_center.h"
 #import "ios/chrome/browser/web/blocked_popup_tab_helper.h"
 #import "ios/chrome/browser/web/error_page_content.h"
+#import "ios/chrome/browser/web/load_timing_tab_helper.h"
 #import "ios/chrome/browser/web/passkit_dialog_provider.h"
 #include "ios/chrome/browser/web/print_tab_helper.h"
 #import "ios/chrome/browser/web/repost_form_tab_helper.h"
@@ -207,7 +214,7 @@
 #import "ios/web/public/web_state/context_menu_params.h"
 #import "ios/web/public/web_state/ui/crw_native_content_provider.h"
 #import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_delegate_bridge.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
@@ -373,6 +380,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                                     IOSCaptivePortalBlockingPageDelegate,
                                     KeyCommandsPlumbing,
                                     NetExportTabHelperDelegate,
+                                    ManageAccountsDelegate,
                                     MFMailComposeViewControllerDelegate,
                                     NewTabPageControllerObserver,
                                     OverscrollActionsControllerDelegate,
@@ -559,12 +567,11 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // Coordinator for the toolbar.
   LegacyToolbarCoordinator* _toolbarCoordinator;
 
+  // Coordinator for the External Search UI.
+  ExternalSearchCoordinator* _externalSearchCoordinator;
+
   // Fake status bar view used to blend the toolbar into the status bar.
   UIView* _fakeStatusBarView;
-
-  // Constraint specifying the height of the toolbar. Used to update the height
-  // of the toolbar if the safe area changes.
-  __weak NSLayoutConstraint* toolbarHeightConstraint_;
 }
 
 // The browser's side swipe controller.  Lazily instantiated on the first call.
@@ -721,7 +728,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 // it is valid to show the promotion and |nil| otherwise. |feature| is the
 // base::Feature object associated with the given promotion. |direction| is the
 // direction the bubble's arrow is pointing. |alignment| is the alignment of the
-// arrow on the button. |text| is the text displayed by the bubble.
+// arrow on the button. |text| is the text displayed by the bubble. This method
+// requires that |self.browserState| is not NULL.
 - (BubbleViewControllerPresenter*)
 bubblePresenterForFeature:(const base::Feature&)feature
                 direction:(BubbleArrowDirection)direction
@@ -733,21 +741,29 @@ bubblePresenterForFeature:(const base::Feature&)feature
 // Does not present the bubble if |tabTipBubblePresenter.userEngaged| is |YES|
 // to prevent resetting |tabTipBubblePresenter| and affecting the value of
 // |userEngaged|. Does not present the bubble if the feature engagement tracker
-// determines it is not valid to present it.
+// determines it is not valid to present it. This method requires that
+// |self.browserState| is not NULL.
 - (void)presentNewTabTipBubbleOnInitialized;
 // Optionally presents a bubble associated with the new tab tip in-product help
 // promotion. If the feature engagement tracker determines it is valid to show
 // the new tab tip, then it initializes |tabTipBubblePresenter| and presents
 // the bubble. If it is not valid to show the new tab tip,
-// |tabTipBubblePresenter| is set to |nil| and no bubble is shown.
+// |tabTipBubblePresenter| is set to |nil| and no bubble is shown. This method
+// requires that |self.browserState| is not NULL.
 - (void)presentNewTabTipBubble;
 // Waits to present a bubble associated with the new incognito tab tip
 // in-product help promotion until the feature engagement tracker database is
-// fully initialized.
+// fully initialized. This method requires that |self.browserState| is
+// not NULL.
 - (void)presentNewIncognitoTabTipBubbleOnInitialized;
 // Presents a bubble associated with the new incognito tab tip in-product help
-// promotion.
+// promotion. This method requires that |self.browserState| is not NULL.
 - (void)presentNewIncognitoTabTipBubble;
+// Presents the New Tab Tip or New Incognito Tab Tip Bubble if one is
+// eligible. Only one can be eligible per session (as enforced by the
+// FeatureEngagementTracker). If neither is eligible, neither bubble is
+// presented. This method requires that |self.browserState| is not NULL.
+- (void)presentBubblesIfEligible;
 
 // Update find bar with model data. If |shouldFocus| is set to YES, the text
 // field will become first responder.
@@ -1171,7 +1187,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
 
 // Whether the sharing menu should be shown.
 - (BOOL)canShowShareMenu {
-  const GURL& URL = [_model currentTab].lastCommittedURL;
+  const GURL& URL = [_model currentTab].webState->GetLastCommittedURL();
   return URL.is_valid() && !web::GetWebClient()->IsAppSpecificURL(URL);
 }
 
@@ -1317,7 +1333,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   }
   if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
     [_toolbarCoordinator.webToolbarController safeAreaInsetsDidChange];
-    toolbarHeightConstraint_.constant =
+    _toolbarCoordinator.webToolbarController.heightConstraint.constant =
         [_toolbarCoordinator.webToolbarController
                 preferredToolbarHeightWhenAlignedToTopOfScreen];
   }
@@ -1327,7 +1343,13 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   [super viewDidAppear:animated];
   self.viewVisible = YES;
   [self updateDialogPresenterActiveState];
-  [self presentBubblesIfEligible];
+
+  // |viewDidAppear| can be called after |browserState| is destroyed. Since
+  // |presentBubblesIfEligible| requires that |self.browserState| is not NULL,
+  // check for |self.browserState| before calling the presenting the bubbles.
+  if (self.browserState) {
+    [self presentBubblesIfEligible];
+  }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -1682,8 +1704,8 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
     // Create the new page image, and load with the new tab page snapshot.
     CGFloat newPageOffset = 0;
     UIImageView* newPage;
-    if (tab.lastCommittedURL == GURL(kChromeUINewTabURL) && !_isOffTheRecord &&
-        !IsIPadIdiom()) {
+    if (tab.webState->GetLastCommittedURL() == kChromeUINewTabURL &&
+        !_isOffTheRecord && !IsIPadIdiom()) {
       animationParentView = self.view;
       newPage = [self pageFullScreenOpenCloseAnimationView];
     } else {
@@ -1817,6 +1839,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   [_qrScannerCoordinator disconnect];
   [_tabHistoryCoordinator disconnect];
   [_pageInfoCoordinator disconnect];
+  [_externalSearchCoordinator disconnect];
   [self.tabStripCoordinator stop];
   self.tabStripCoordinator = nil;
   self.tabStripView = nil;
@@ -1896,20 +1919,26 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
 }
 
 - (void)addConstraintsToToolbar {
-  toolbarHeightConstraint_ = [[_toolbarCoordinator view].heightAnchor
-      constraintEqualToConstant:
-          [_toolbarCoordinator.webToolbarController
+  NSLayoutYAxisAnchor* topAnchor;
+  // On iPad, the toolbar is underneath the tab strip.
+  // On iPhone, it is underneath the top of the screen.
+  if (IsIPadIdiom()) {
+    topAnchor = self.tabStripView.bottomAnchor;
+  } else {
+    topAnchor = [self view].topAnchor;
+  }
 
-                  preferredToolbarHeightWhenAlignedToTopOfScreen]];
+  [_toolbarCoordinator.webToolbarController heightConstraint].constant =
+      [_toolbarCoordinator.webToolbarController
+              preferredToolbarHeightWhenAlignedToTopOfScreen];
+  [_toolbarCoordinator.webToolbarController heightConstraint].active = YES;
 
   [NSLayoutConstraint activateConstraints:@[
     [[_toolbarCoordinator view].leadingAnchor
         constraintEqualToAnchor:[self view].leadingAnchor],
-    [[_toolbarCoordinator view].topAnchor
-        constraintEqualToAnchor:[self view].topAnchor],
+    [[_toolbarCoordinator view].topAnchor constraintEqualToAnchor:topAnchor],
     [[_toolbarCoordinator view].trailingAnchor
         constraintEqualToAnchor:[self view].trailingAnchor],
-    toolbarHeightConstraint_
   ]];
   [[self view] layoutIfNeeded];
 }
@@ -1968,6 +1997,9 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   _pageInfoCoordinator.loader = self;
   _pageInfoCoordinator.presentationProvider = self;
   _pageInfoCoordinator.tabModel = _model;
+
+  _externalSearchCoordinator = [[ExternalSearchCoordinator alloc] init];
+  _externalSearchCoordinator.dispatcher = _dispatcher;
 
   if (base::FeatureList::IsEnabled(payments::features::kWebPayments)) {
     _paymentRequestManager = [[PaymentRequestManager alloc]
@@ -2128,6 +2160,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
 - (void)dismissPopups {
   [_toolbarCoordinator dismissToolsMenuPopup];
   [self.dispatcher hidePageInfo];
+  [_tabHistoryCoordinator dismissHistoryPopup];
   [self.tabTipBubblePresenter dismissAnimated:YES];
 }
 
@@ -2136,7 +2169,8 @@ bubblePresenterForFeature:(const base::Feature&)feature
                 direction:(BubbleArrowDirection)direction
                 alignment:(BubbleAlignment)alignment
                      text:(NSString*)text {
-  if (!feature_engagement::TrackerFactory::GetForBrowserState(_browserState)
+  DCHECK(self.browserState);
+  if (!feature_engagement::TrackerFactory::GetForBrowserState(self.browserState)
            ->ShouldTriggerHelpUI(feature)) {
     return nil;
   }
@@ -2164,6 +2198,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
 }
 
 - (void)presentNewTabTipBubbleOnInitialized {
+  DCHECK(self.browserState);
   // If the tab tip bubble has already been presented and the user is still
   // considered engaged, it can't be overwritten or set to |nil| or else it will
   // reset the |userEngaged| property. Once the user is not engaged, the bubble
@@ -2184,6 +2219,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
 }
 
 - (void)presentNewTabTipBubble {
+  DCHECK(self.browserState);
   NSString* text =
       l10n_util::GetNSStringWithFixup(IDS_IOS_NEW_TAB_IPH_PROMOTION_TEXT);
   CGPoint tabSwitcherAnchor;
@@ -2212,6 +2248,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
 }
 
 - (void)presentNewIncognitoTabTipBubbleOnInitialized {
+  DCHECK(self.browserState);
   // Do not override |incognitoTabtipBubblePresenter| or set it to nil if the
   // user is still considered engaged.
   if (!self.incognitoTabTipBubblePresenter.isUserEngaged) {
@@ -2229,6 +2266,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
 }
 
 - (void)presentNewIncognitoTabTipBubble {
+  DCHECK(self.browserState);
   DCHECK([_toolbarCoordinator
       respondsToSelector:@selector(anchorPointForToolsMenuButton:)]);
   NSString* text = l10n_util::GetNSStringWithFixup(
@@ -2417,9 +2455,17 @@ bubblePresenterForFeature:(const base::Feature&)feature
 }
 
 - (void)installDelegatesForTab:(Tab*)tab {
+  DCHECK_NE(tab.webState->GetDelegate(), _webStateDelegate.get());
   // Unregistration happens when the Tab is removed from the TabModel.
   tab.iOSCaptivePortalBlockingPageDelegate = self;
-  tab.dispatcher = self.dispatcher;
+
+  // TODO(crbug.com/777557): do not pass the dispatcher to PasswordTabHelper.
+  if (PasswordTabHelper* passwordTabHelper =
+          PasswordTabHelper::FromWebState(tab.webState)) {
+    passwordTabHelper->SetDispatcher(self.dispatcher);
+    passwordTabHelper->SetPasswordControllerDelegate(self);
+  }
+
   tab.dialogDelegate = self;
   tab.snapshotOverlayProvider = self;
   tab.passKitDialogProvider = self;
@@ -2444,16 +2490,23 @@ bubblePresenterForFeature:(const base::Feature&)feature
   PrintTabHelper::CreateForWebState(tab.webState, self);
   RepostFormTabHelper::CreateForWebState(tab.webState, self);
   NetExportTabHelper::CreateForWebState(tab.webState, self);
-  PasswordTabHelper* passwordTabHelper =
-      PasswordTabHelper::FromWebState(tab.webState);
-  if (passwordTabHelper) {
-    passwordTabHelper->SetPasswordControllerDelegate(self);
+
+  if (AccountConsistencyService* accountConsistencyService =
+          ios::AccountConsistencyServiceFactory::GetForBrowserState(
+              self.browserState)) {
+    accountConsistencyService->SetWebStateHandler(tab.webState, self);
   }
 }
 
 - (void)uninstallDelegatesForTab:(Tab*)tab {
+  DCHECK_EQ(tab.webState->GetDelegate(), _webStateDelegate.get());
   tab.iOSCaptivePortalBlockingPageDelegate = nil;
-  tab.dispatcher = nil;
+
+  // TODO(crbug.com/777557): do not pass the dispatcher to PasswordTabHelper.
+  if (PasswordTabHelper* passwordTabHelper =
+          PasswordTabHelper::FromWebState(tab.webState))
+    passwordTabHelper->SetDispatcher(nil);
+
   tab.dialogDelegate = nil;
   tab.snapshotOverlayProvider = nil;
   tab.passKitDialogProvider = nil;
@@ -2469,6 +2522,11 @@ bubblePresenterForFeature:(const base::Feature&)feature
   if (tabHelper)
     tabHelper->SetLauncher(nil);
   tab.webState->SetDelegate(nullptr);
+  if (AccountConsistencyService* accountConsistencyService =
+          ios::AccountConsistencyServiceFactory::GetForBrowserState(
+              self.browserState)) {
+    accountConsistencyService->RemoveWebStateHandler(tab.webState);
+  }
 }
 
 // Called when a tab is selected in the model. Make any required view changes.
@@ -2831,7 +2889,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
   }
 
   DCHECK(_browserState);
-  DCHECK([_model currentTab]);
 
   _contextMenuCoordinator =
       [[ContextMenuCoordinator alloc] initWithBaseViewController:self
@@ -2845,7 +2902,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   bool isLink = link.is_valid();
   GURL imageUrl = params.src_url;
   bool isImage = imageUrl.is_valid();
-  const GURL& committedURL = [_model currentTab].lastCommittedURL;
+  const GURL& lastCommittedURL = webState->GetLastCommittedURL();
 
   if (isLink) {
     if (link.SchemeIs(url::kJavaScriptScheme)) {
@@ -2859,7 +2916,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
     }
 
     if (web::UrlHasWebScheme(link)) {
-      web::Referrer referrer(committedURL, params.referrer_policy);
+      web::Referrer referrer(lastCommittedURL, params.referrer_policy);
 
       // Open in New Tab.
       title = l10n_util::GetNSStringWithFixup(
@@ -2913,7 +2970,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
     [_contextMenuCoordinator addItemWithTitle:title action:action];
   }
   if (isImage) {
-    web::Referrer referrer(committedURL, params.referrer_policy);
+    web::Referrer referrer(lastCommittedURL, params.referrer_policy);
     // Save Image.
     title = l10n_util::GetNSStringWithFixup(IDS_IOS_CONTENT_CONTEXT_SAVEIMAGE);
     action = ^{
@@ -3431,7 +3488,8 @@ bubblePresenterForFeature:(const base::Feature&)feature
   // TODO(crbug.com/498568): To reduce complexity here, refactor the flow so
   // that native controllers vended here always correspond to the current tab.
   Tab* currentTab = [_model currentTab];
-  if (!currentTab || currentTab.lastCommittedURL != url ||
+  if (!currentTab.webState ||
+      currentTab.webState->GetLastCommittedURL() != url ||
       [currentTab.webController.nativeController
           isKindOfClass:[nativeController class]]) {
     _temporaryNativeController = nativeController;
@@ -3599,7 +3657,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
       {base::MayBlock(), base::TaskPriority::BACKGROUND,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindBlockArc(^{
-        base::ThreadRestrictions::AssertIOAllowed();
+        base::AssertBlockingAllowed();
 
         NSString* fileName = [[[NSProcessInfo processInfo] globallyUniqueString]
             stringByAppendingString:fileExtension];
@@ -3624,7 +3682,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
                   {base::MayBlock(), base::TaskPriority::BACKGROUND,
                    base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
                   base::BindBlockArc(^{
-                    base::ThreadRestrictions::AssertIOAllowed();
+                    base::AssertBlockingAllowed();
                     if (completion)
                       completion(success, error);
 
@@ -3830,6 +3888,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   }
   return [self.keyCommandsProvider
       keyCommandsForConsumer:self
+          baseViewController:self
                   dispatcher:self.dispatcher
                  editingText:![self isFirstResponder]];
 }
@@ -3869,6 +3928,10 @@ bubblePresenterForFeature:(const base::Feature&)feature
     return;
   }
 
+  bool typed_or_generated_transition =
+      PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED) ||
+      PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_GENERATED);
+
   PrerenderService* prerenderService =
       PrerenderServiceFactory::GetForBrowserState(self.browserState);
   if (prerenderService && prerenderService->HasPrerenderForUrl(url)) {
@@ -3895,6 +3958,10 @@ bubblePresenterForFeature:(const base::Feature&)feature
       // BrowserViewController to detect that a pre-rendered tab is switched in,
       // and show the prerendering animation.
       newTab.isPrerenderTab = NO;
+      if (typed_or_generated_transition) {
+        LoadTimingTabHelper::FromWebState(newTab.webState)
+            ->DidPromotePrerenderTab();
+      }
 
       [self tabLoadComplete:newTab withSuccess:newTab.loadFinished];
       return;
@@ -3915,6 +3982,11 @@ bubblePresenterForFeature:(const base::Feature&)feature
                 inBackground:NO
                     appendTo:kCurrentTab];
     return;
+  }
+
+  if (typed_or_generated_transition) {
+    LoadTimingTabHelper::FromWebState([_model currentTab].webState)
+        ->DidInitiatePageLoad();
   }
 
   // If this is a reload initiated from the omnibox.
@@ -4159,7 +4231,8 @@ bubblePresenterForFeature:(const base::Feature&)feature
   [self updateFindBar:NO shouldFocus:NO];
 
   ToolsMenuConfiguration* configuration =
-      [[ToolsMenuConfiguration alloc] initWithDisplayView:[self view]];
+      [[ToolsMenuConfiguration alloc] initWithDisplayView:[self view]
+                                       baseViewController:self];
   configuration.requestStartTime =
       showToolsMenuPopupRequestDate.timeIntervalSinceReferenceDate;
   if ([_model count] == 0)
@@ -4306,7 +4379,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
     std::string base64HTML;
     base::Base64Encode(base::SysNSStringToUTF8(result), &base64HTML);
     GURL URL(std::string("data:text/plain;charset=utf-8;base64,") + base64HTML);
-    web::Referrer referrer([strongTab lastCommittedURL],
+    web::Referrer referrer(strongTab.webState->GetLastCommittedURL(),
                            web::ReferrerPolicyDefault);
 
     [[weakSelf tabModel]
@@ -4668,7 +4741,8 @@ bubblePresenterForFeature:(const base::Feature&)feature
   ToolbarController* relinquishedToolbarController = nil;
   if ([_toolbarCoordinator view].hidden) {
     Tab* currentTab = [_model currentTab];
-    if (currentTab && UrlHasChromeScheme(currentTab.lastCommittedURL)) {
+    if (currentTab.webState &&
+        UrlHasChromeScheme(currentTab.webState->GetLastCommittedURL())) {
       // Use the native content controller's toolbar when the BVC's is hidden.
       id nativeController = [self nativeControllerForTab:currentTab];
       if ([nativeController conformsToProtocol:@protocol(ToolbarOwner)]) {
@@ -4745,8 +4819,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
   _sadTabCoordinator.webState = newTab.webState;
 
   [self tabSelected:newTab];
-  DCHECK_EQ(newTab, [model currentTab]);
-  [self installDelegatesForTab:newTab];
 }
 
 // Observer method, tab changed.
@@ -4975,8 +5047,8 @@ bubblePresenterForFeature:(const base::Feature&)feature
 // If an added or removed bookmark is the same as the current url, update the
 // toolbar so the star highlight is kept in sync.
 - (void)bookmarkNodeModified:(const BookmarkNode*)node {
-  if ([_model currentTab] &&
-      node->url() == [_model currentTab].lastCommittedURL) {
+  if ([_model currentTab].webState &&
+      node->url() == [_model currentTab].webState->GetLastCommittedURL()) {
     [self updateToolbar];
   }
 }
@@ -5222,6 +5294,44 @@ bubblePresenterForFeature:(const base::Feature&)feature
   tabStripFrame.size.width = CGRectGetWidth([self view].bounds);
   [self.tabStripView setFrame:tabStripFrame];
   [[self view] addSubview:tabStripView];
+}
+
+#pragma mark - ManageAccountsDelegate
+
+- (void)onManageAccounts {
+  signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
+      ios::AccountReconcilorFactory::GetForBrowserState(self.browserState)
+          ->GetState());
+  [self.dispatcher showAccountsSettings];
+}
+
+- (void)onAddAccount {
+  signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
+      ios::AccountReconcilorFactory::GetForBrowserState(self.browserState)
+          ->GetState());
+  [self.dispatcher showAddAccount];
+}
+
+- (void)onGoIncognito:(const GURL&)url {
+  // The user taps on go incognito from the mobile U-turn webpage (the web page
+  // that displays all users accounts available in the content area). As the
+  // user chooses to go to incognito, the mobile U-turn page is no longer
+  // neeeded. The current solution is to go back in history. This has the
+  // advantage of keeping the current browsing session and give a good user
+  // experience when the user comes back from incognito.
+  [self.tabModel.currentTab goBack];
+
+  if (url.is_valid()) {
+    OpenUrlCommand* command = [[OpenUrlCommand alloc]
+         initWithURL:url
+            referrer:web::Referrer()  // Strip referrer when switching modes.
+         inIncognito:YES
+        inBackground:NO
+            appendTo:kLastTab];
+    [self.dispatcher openURL:command];
+  } else {
+    [self.dispatcher openNewTab:[OpenNewTabCommand command]];
+  }
 }
 
 @end

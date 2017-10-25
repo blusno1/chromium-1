@@ -31,12 +31,10 @@ namespace net {
 
 QuicPacketCreator::QuicPacketCreator(QuicConnectionId connection_id,
                                      QuicFramer* framer,
-                                     QuicBufferAllocator* buffer_allocator,
                                      DelegateInterface* delegate)
     : delegate_(delegate),
       debug_delegate_(nullptr),
       framer_(framer),
-      buffer_allocator_(buffer_allocator),
       send_version_in_packet_(framer->perspective() == Perspective::IS_CLIENT),
       have_diversification_nonce_(false),
       max_packet_length_(0),
@@ -207,16 +205,7 @@ void QuicPacketCreator::CreateStreamFrame(QuicStreamId id,
       std::min<size_t>(BytesFree() - min_frame_size, data_size);
 
   bool set_fin = fin && bytes_consumed == data_size;  // Last frame.
-  if (framer_->HasDataProducer()) {
-    *frame =
-        QuicFrame(new QuicStreamFrame(id, set_fin, offset, bytes_consumed));
-    return;
-  }
-  UniqueStreamBuffer buffer =
-      NewStreamBuffer(buffer_allocator_, bytes_consumed);
-  QuicUtils::CopyToBuffer(iov, iov_offset, bytes_consumed, buffer.get());
-  *frame = QuicFrame(new QuicStreamFrame(id, set_fin, offset, bytes_consumed,
-                                         std::move(buffer)));
+  *frame = QuicFrame(new QuicStreamFrame(id, set_fin, offset, bytes_consumed));
 }
 
 void QuicPacketCreator::ReserializeAllFrames(
@@ -297,7 +286,6 @@ void QuicPacketCreator::ClearPacket() {
   packet_.encrypted_buffer = nullptr;
   packet_.encrypted_length = 0;
   DCHECK(packet_.retransmittable_frames.empty());
-  packet_.listeners.clear();
   packet_.largest_acked = 0;
   needs_full_padding_ = false;
 }
@@ -308,7 +296,6 @@ void QuicPacketCreator::CreateAndSerializeStreamFrame(
     QuicStreamOffset iov_offset,
     QuicStreamOffset stream_offset,
     bool fin,
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener,
     size_t* num_bytes_consumed) {
   DCHECK(queued_frames_.empty());
   // Write out the packet header
@@ -336,17 +323,8 @@ void QuicPacketCreator::CreateAndSerializeStreamFrame(
 
   const bool set_fin = fin && (bytes_consumed == remaining_data_size);
   std::unique_ptr<QuicStreamFrame> frame;
-  if (framer_->HasDataProducer()) {
-    frame = QuicMakeUnique<QuicStreamFrame>(id, set_fin, stream_offset,
-                                            bytes_consumed);
-  } else {
-    UniqueStreamBuffer stream_buffer =
-        NewStreamBuffer(buffer_allocator_, bytes_consumed);
-    QuicUtils::CopyToBuffer(iov, iov_offset, bytes_consumed,
-                            stream_buffer.get());
-    frame = QuicMakeUnique<QuicStreamFrame>(
-        id, set_fin, stream_offset, bytes_consumed, std::move(stream_buffer));
-  }
+  frame = QuicMakeUnique<QuicStreamFrame>(id, set_fin, stream_offset,
+                                          bytes_consumed);
   QUIC_DVLOG(1) << ENDPOINT << "Adding frame: " << *frame;
 
   // TODO(ianswett): AppendTypeByte and AppendStreamFrame could be optimized
@@ -376,9 +354,6 @@ void QuicPacketCreator::CreateAndSerializeStreamFrame(
   packet_size_ = 0;
   packet_.encrypted_buffer = encrypted_buffer;
   packet_.encrypted_length = encrypted_length;
-  if (ack_listener != nullptr) {
-    packet_.listeners.emplace_back(std::move(ack_listener), bytes_consumed);
-  }
   packet_.retransmittable_frames.push_back(QuicFrame(frame.release()));
   OnSerializedPacket();
 }
@@ -426,13 +401,6 @@ bool QuicPacketCreator::AddPaddedSavedFrame(const QuicFrame& frame) {
     return true;
   }
   return false;
-}
-
-void QuicPacketCreator::AddAckListener(
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener,
-    QuicPacketLength length) {
-  DCHECK(!queued_frames_.empty());
-  packet_.listeners.emplace_back(std::move(ack_listener), length);
 }
 
 void QuicPacketCreator::SerializePacket(char* encrypted_buffer,
@@ -622,13 +590,6 @@ bool QuicPacketCreator::StreamFrameStartsWithChlo(
     QuicIOVector iov,
     size_t iov_offset,
     const QuicStreamFrame& frame) const {
-  if (!framer_->HasDataProducer()) {
-    return frame.stream_id == kCryptoStreamId &&
-           frame.data_length >= sizeof(kCHLO) &&
-           strncmp(frame.data_buffer, reinterpret_cast<const char*>(&kCHLO),
-                   sizeof(kCHLO)) == 0;
-  }
-
   if (framer_->perspective() == Perspective::IS_SERVER ||
       frame.stream_id != kCryptoStreamId || frame.data_length < sizeof(kCHLO)) {
     return false;

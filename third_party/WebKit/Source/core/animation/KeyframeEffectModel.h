@@ -39,7 +39,6 @@
 #include "core/animation/PropertyHandle.h"
 #include "core/animation/StringKeyframe.h"
 #include "core/animation/TransitionKeyframe.h"
-#include "core/animation/animatable/AnimatableValueKeyframe.h"
 #include "platform/animation/TimingFunction.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/HashMap.h"
@@ -57,10 +56,10 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
   // FIXME: Implement accumulation.
 
   using PropertySpecificKeyframeVector =
-      Vector<RefPtr<Keyframe::PropertySpecificKeyframe>>;
+      Vector<scoped_refptr<Keyframe::PropertySpecificKeyframe>>;
   class PropertySpecificKeyframeGroup {
    public:
-    void AppendKeyframe(RefPtr<Keyframe::PropertySpecificKeyframe>);
+    void AppendKeyframe(scoped_refptr<Keyframe::PropertySpecificKeyframe>);
     const PropertySpecificKeyframeVector& Keyframes() const {
       return keyframes_;
     }
@@ -68,7 +67,7 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
    private:
     void RemoveRedundantKeyframes();
     bool AddSyntheticKeyframeIfRequired(
-        RefPtr<TimingFunction> zero_offset_easing);
+        scoped_refptr<TimingFunction> zero_offset_easing);
 
     PropertySpecificKeyframeVector keyframes_;
 
@@ -79,7 +78,7 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
 
   PropertyHandleSet Properties() const;
 
-  using KeyframeVector = Vector<RefPtr<Keyframe>>;
+  using KeyframeVector = Vector<scoped_refptr<Keyframe>>;
   const KeyframeVector& GetFrames() const { return keyframes_; }
   void SetFrames(KeyframeVector& keyframes);
 
@@ -100,11 +99,10 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
   bool Sample(int iteration,
               double fraction,
               double iteration_duration,
-              Vector<RefPtr<Interpolation>>&) const override;
+              Vector<scoped_refptr<Interpolation>>&) const override;
 
   bool IsKeyframeEffectModel() const override { return true; }
 
-  virtual bool IsAnimatableValueKeyframeEffectModel() const { return false; }
   virtual bool IsStringKeyframeEffectModel() const { return false; }
   virtual bool IsTransitionKeyframeEffectModel() const { return false; }
 
@@ -138,7 +136,7 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
   bool IsTransformRelatedEffect() const override;
 
  protected:
-  KeyframeEffectModelBase(RefPtr<TimingFunction> default_keyframe_easing)
+  KeyframeEffectModelBase(scoped_refptr<TimingFunction> default_keyframe_easing)
       : last_iteration_(0),
         last_fraction_(std::numeric_limits<double>::quiet_NaN()),
         last_iteration_duration_(0),
@@ -161,7 +159,7 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
   mutable int last_iteration_;
   mutable double last_fraction_;
   mutable double last_iteration_duration_;
-  RefPtr<TimingFunction> default_keyframe_easing_;
+  scoped_refptr<TimingFunction> default_keyframe_easing_;
 
   mutable bool has_synthetic_keyframes_;
   mutable bool needs_compositor_keyframes_snapshot_;
@@ -173,22 +171,21 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
 template <class Keyframe>
 class KeyframeEffectModel final : public KeyframeEffectModelBase {
  public:
-  using KeyframeVector = Vector<RefPtr<Keyframe>>;
+  using KeyframeVector = Vector<scoped_refptr<Keyframe>>;
   static KeyframeEffectModel<Keyframe>* Create(
       const KeyframeVector& keyframes,
-      RefPtr<TimingFunction> default_keyframe_easing = nullptr) {
+      scoped_refptr<TimingFunction> default_keyframe_easing = nullptr) {
     return new KeyframeEffectModel(keyframes,
                                    std::move(default_keyframe_easing));
   }
 
  private:
   KeyframeEffectModel(const KeyframeVector& keyframes,
-                      RefPtr<TimingFunction> default_keyframe_easing)
+                      scoped_refptr<TimingFunction> default_keyframe_easing)
       : KeyframeEffectModelBase(std::move(default_keyframe_easing)) {
     keyframes_.AppendVector(keyframes);
   }
 
-  virtual bool IsAnimatableValueKeyframeEffectModel() const { return false; }
   virtual bool IsStringKeyframeEffectModel() const { return false; }
   virtual bool IsTransitionKeyframeEffectModel() const { return false; }
 };
@@ -196,13 +193,6 @@ class KeyframeEffectModel final : public KeyframeEffectModelBase {
 using KeyframeVector = KeyframeEffectModelBase::KeyframeVector;
 using PropertySpecificKeyframeVector =
     KeyframeEffectModelBase::PropertySpecificKeyframeVector;
-
-using AnimatableValueKeyframeEffectModel =
-    KeyframeEffectModel<AnimatableValueKeyframe>;
-using AnimatableValueKeyframeVector =
-    AnimatableValueKeyframeEffectModel::KeyframeVector;
-using AnimatableValuePropertySpecificKeyframeVector =
-    AnimatableValueKeyframeEffectModel::PropertySpecificKeyframeVector;
 
 using StringKeyframeEffectModel = KeyframeEffectModel<StringKeyframe>;
 using StringKeyframeVector = StringKeyframeEffectModel::KeyframeVector;
@@ -219,11 +209,6 @@ DEFINE_TYPE_CASTS(KeyframeEffectModelBase,
                   value,
                   value->IsKeyframeEffectModel(),
                   value.IsKeyframeEffectModel());
-DEFINE_TYPE_CASTS(AnimatableValueKeyframeEffectModel,
-                  KeyframeEffectModelBase,
-                  value,
-                  value->IsAnimatableValueKeyframeEffectModel(),
-                  value.IsAnimatableValueKeyframeEffectModel());
 DEFINE_TYPE_CASTS(StringKeyframeEffectModel,
                   KeyframeEffectModelBase,
                   value,
@@ -234,16 +219,6 @@ DEFINE_TYPE_CASTS(TransitionKeyframeEffectModel,
                   value,
                   value->IsTransitionKeyframeEffectModel(),
                   value.IsTransitionKeyframeEffectModel());
-
-inline const AnimatableValueKeyframeEffectModel*
-ToAnimatableValueKeyframeEffectModel(const EffectModel* base) {
-  return ToAnimatableValueKeyframeEffectModel(ToKeyframeEffectModelBase(base));
-}
-
-inline AnimatableValueKeyframeEffectModel* ToAnimatableValueKeyframeEffectModel(
-    EffectModel* base) {
-  return ToAnimatableValueKeyframeEffectModel(ToKeyframeEffectModelBase(base));
-}
 
 inline const StringKeyframeEffectModel* ToStringKeyframeEffectModel(
     const EffectModel* base) {
@@ -258,12 +233,6 @@ inline StringKeyframeEffectModel* ToStringKeyframeEffectModel(
 inline TransitionKeyframeEffectModel* ToTransitionKeyframeEffectModel(
     EffectModel* base) {
   return ToTransitionKeyframeEffectModel(ToKeyframeEffectModelBase(base));
-}
-
-template <>
-inline bool KeyframeEffectModel<
-    AnimatableValueKeyframe>::IsAnimatableValueKeyframeEffectModel() const {
-  return true;
 }
 
 template <>

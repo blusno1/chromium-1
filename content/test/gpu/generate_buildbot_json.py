@@ -17,14 +17,11 @@ import sys
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(THIS_DIR)))
 
-# Current stable Windows 7 NVIDIA GT 610 device/driver identifier.
-WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER = '10de:104a-21.21.13.7254'
+# Current stable Windows NVIDIA GT 610 device/driver identifier.
+WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER = '10de:104a-23.21.13.8792'
 
 # Current experimental Windows NVIDIA GT 610 device/driver identifier.
 WIN_NVIDIA_GEFORCE_610_EXPERIMENTAL_DRIVER = '10de:104a-23.21.13.8792'
-
-# Current stable Windows 10 NVIDIA GT 610 device/driver identifier.
-WIN_10_NVIDIA_GEFORCE_610_STABLE_DRIVER = '10de:104a-21.21.13.7619'
 
 # Use this to match all drivers for the NVIDIA GT 610.
 NVIDIA_GEFORCE_610_ALL_DRIVERS = '10de:104a-*'
@@ -124,7 +121,7 @@ WATERFALL = {
     'Win7 Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -136,7 +133,7 @@ WATERFALL = {
     'Win7 Debug (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -240,7 +237,7 @@ FYI_WATERFALL = {
     'Win7 Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -252,7 +249,7 @@ FYI_WATERFALL = {
     'Win7 Debug (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -264,7 +261,7 @@ FYI_WATERFALL = {
     'Win7 dEQP Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -289,7 +286,7 @@ FYI_WATERFALL = {
     'Win10 Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_10_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-10',
           'pool': 'Chrome-GPU',
         },
@@ -301,7 +298,7 @@ FYI_WATERFALL = {
     'Win10 Debug (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_10_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-10',
           'pool': 'Chrome-GPU',
         },
@@ -389,7 +386,7 @@ FYI_WATERFALL = {
     'Win7 x64 Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -401,7 +398,7 @@ FYI_WATERFALL = {
     'Win7 x64 Debug (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -413,7 +410,7 @@ FYI_WATERFALL = {
     'Win7 x64 dEQP Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -819,7 +816,7 @@ FYI_WATERFALL = {
     'Optional Win7 Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -973,7 +970,7 @@ V8_FYI_WATERFALL = {
     'Win Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': WIN_7_NVIDIA_GEFORCE_610_STABLE_DRIVER,
+          'gpu': WIN_NVIDIA_GEFORCE_610_STABLE_DRIVER,
           'os': 'Windows-2008ServerR2-SP1',
           'pool': 'Chrome-GPU',
         },
@@ -1459,7 +1456,10 @@ COMMON_GTESTS = {
         ],
       },
     ],
-    'desktop_args': ['--use-gpu-in-tests']
+    'desktop_args': [
+      '--use-gpu-in-tests',
+      '--use-cmd-decoder=validating',
+    ]
   },
   'gl_tests_passthrough': {
     'tester_configs': [
@@ -1477,7 +1477,7 @@ COMMON_GTESTS = {
     'test': 'gl_tests',
     'desktop_args': [
       '--use-gpu-in-tests',
-      '--use-passthrough-cmd-decoder',
+      '--use-cmd-decoder=passthrough',
      ]
   },
   'gl_unittests': {
@@ -1927,6 +1927,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
         ],
       },
     ],
+    'extra_browser_args': [
+      '--use-cmd-decoder=validating',
+    ],
     'asan_args': ['--is-asan'],
     'android_swarming': {
       # On desktop platforms these don't take very long (~7 minutes),
@@ -1946,6 +1949,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       '--read-abbreviated-json-results-from=' + \
       '../../content/test/data/gpu/webgl_conformance_tests_output.json',
     ],
+    'swarming': {
+      'shards': 2,
+    },
   },
   'webgl_conformance_d3d9_tests': {
     'tester_configs': [
@@ -1966,18 +1972,73 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'target_name': 'webgl_conformance',
     'extra_browser_args': [
       '--use-angle=d3d9',
+      '--use-cmd-decoder=validating',
     ],
     'asan_args': ['--is-asan'],
     'swarming': {
       'shards': 2,
     },
   },
-  'webgl_conformance_gl_tests': {
+  'webgl_conformance_d3d9_passthrough': {
+    'tester_configs': [
+      {
+        # Run this on the FYI waterfall, optional tryservers, and Win
+        # ANGLE AMD tryserver.
+        'predicate': Predicates.FYI_AND_OPTIONAL_AND_WIN_ANGLE_AMD,
+        'os_types': ['win'],
+        'disabled_instrumentation_types': ['tsan'],
+      }
+    ],
+    'disabled_tester_configs': [
+      {
+        'names': [
+          'Linux Ozone (Intel)',
+        ],
+      },
+    ],
+    'target_name': 'webgl_conformance',
+    'extra_browser_args': [
+      '--use-angle=d3d9',
+      '--use-cmd-decoder=passthrough',
+    ],
+    'asan_args': ['--is-asan'],
+    'swarming': {
+      'shards': 2,
+    },
+  },
+  'webgl_conformance_d3d11_passthrough': {
+    'tester_configs': [
+      {
+        # Run this on the FYI waterfall, optional tryservers, and Win
+        # ANGLE AMD tryserver.
+        'predicate': Predicates.FYI_AND_OPTIONAL_AND_WIN_ANGLE_AMD,
+        'os_types': ['win'],
+        'disabled_instrumentation_types': ['tsan'],
+      }
+    ],
+    'disabled_tester_configs': [
+      {
+        'names': [
+          'Linux Ozone (Intel)',
+        ],
+      },
+    ],
+    'target_name': 'webgl_conformance',
+    'extra_browser_args': [
+      '--use-angle=d3d11',
+      '--use-cmd-decoder=passthrough',
+    ],
+    'asan_args': ['--is-asan'],
+    'swarming': {
+      'shards': 2,
+    },
+  },
+  'webgl_conformance_gl_passthrough': {
     'tester_configs': [
       {
         # Run this on the FYI waterfall and optional tryservers.
         'predicate': Predicates.FYI_AND_OPTIONAL,
-        'os_types': ['win'],
+        'os_types': ['linux', 'win'],
         'disabled_instrumentation_types': ['tsan'],
       }
     ],
@@ -2016,61 +2077,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     ],
     'target_name': 'webgl_conformance',
     'extra_browser_args': [
-      '--use-angle=gl',
-    ],
-    'asan_args': ['--is-asan'],
-    'swarming': {
-      'shards': 2,
-    },
-  },
-  'webgl_conformance_d3d11_passthrough': {
-    'tester_configs': [
-      {
-        # Run this on the FYI waterfall, optional tryservers, and Win
-        # ANGLE AMD tryserver.
-        'predicate': Predicates.FYI_AND_OPTIONAL_AND_WIN_ANGLE_AMD,
-        'os_types': ['win'],
-        'disabled_instrumentation_types': ['tsan'],
-      }
-    ],
-    'disabled_tester_configs': [
-      {
-        'names': [
-          'Linux Ozone (Intel)',
-        ],
-      },
-    ],
-    'target_name': 'webgl_conformance',
-    'extra_browser_args': [
-      '--use-angle=d3d11',
-      '--use-passthrough-cmd-decoder',
-    ],
-    'asan_args': ['--is-asan'],
-    'swarming': {
-      'shards': 2,
-    },
-  },
-  'webgl_conformance_gl_passthrough': {
-    'tester_configs': [
-      {
-        # Run this on the FYI waterfall and optional tryservers.
-        'predicate': Predicates.FYI_AND_OPTIONAL,
-        'os_types': ['linux'],
-        'disabled_instrumentation_types': ['tsan'],
-      }
-    ],
-    'disabled_tester_configs': [
-      {
-        'names': [
-          'Linux Ozone (Intel)',
-        ],
-      },
-    ],
-    'target_name': 'webgl_conformance',
-    'extra_browser_args': [
       '--use-gl=angle',
       '--use-angle=gl',
-      '--use-passthrough-cmd-decoder',
+      '--use-cmd-decoder=passthrough',
     ],
     'asan_args': ['--is-asan'],
     'swarming': {
@@ -2105,6 +2114,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       },
     ],
     'target_name': 'webgl_conformance',
+    'extra_browser_args': [
+      '--use-cmd-decoder=validating',
+    ],
     'args': [
       '--webgl-conformance-version=2.0.1',
       # The current working directory when run via isolate is
@@ -2117,7 +2129,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'swarming': {
       # These tests currently take about an hour and fifteen minutes
       # to run. Split them into roughly 5-minute shards.
-      'shards': 15,
+      'shards': 20,
     },
   },
   'webgl2_conformance_gl_passthrough_tests': {
@@ -2156,7 +2168,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'extra_browser_args': [
       '--use-gl=angle',
       '--use-angle=gl',
-      '--use-passthrough-cmd-decoder',
+      '--use-cmd-decoder=passthrough',
     ],
     'args': [
       '--webgl-conformance-version=2.0.1',
@@ -2200,6 +2212,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'target_name': 'webgl_conformance',
     'extra_browser_args': [
       '--use-angle=gl',
+      '--use-cmd-decoder=validating',
     ],
     'args': [
       '--webgl-conformance-version=2.0.1',
@@ -2236,7 +2249,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'target_name': 'webgl_conformance',
     'extra_browser_args': [
       '--use-angle=d3d11',
-      '--use-passthrough-cmd-decoder',
+      '--use-cmd-decoder=passthrough',
     ],
     'args': [
       '--webgl-conformance-version=2.0.1',
@@ -2258,7 +2271,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
 # These isolated tests don't use telemetry. They need to be placed in the
 # isolated_scripts section of the generated json.
 NON_TELEMETRY_ISOLATED_SCRIPT_TESTS = {
-  # We run angle_perftests on the ANGLE CQ to ensure the tests don't crash.
+  # We run perf tests on the CQ to ensure the tests don't crash.
   'angle_perftests': {
     'tester_configs': [
       {
@@ -2292,6 +2305,66 @@ NON_TELEMETRY_ISOLATED_SCRIPT_TESTS = {
     'args': [
       # Tell the tests to exit after one frame for faster iteration.
       '--one-frame-only',
+    ],
+  },
+
+  'validating_command_buffer_perftests': {
+    'tester_configs': [
+      {
+        'predicate': Predicates.FYI_AND_OPTIONAL,
+        # Run on the Win Release NVIDIA bots.
+        # TODO(jmadill): Run on Linux bots when possible.
+        'build_configs': ['Release'],
+        'swarming_dimension_sets': [
+          {
+            'gpu': NVIDIA_GEFORCE_610_ALL_DRIVERS,
+            'os': 'Windows-2008ServerR2-SP1'
+          },
+        ],
+      },
+    ],
+    'disabled_tester_configs': [
+      {
+        'names': [
+          'Linux Ozone (Intel)',
+        ],
+      },
+    ],
+    'compile_target': 'command_buffer_perftests',
+    'isolate_name': 'command_buffer_perftests',
+    'args': [
+      '--use-cmd-decoder=validating',
+      '--use-stub',
+    ],
+  },
+
+  'passthrough_command_buffer_perftests': {
+    'tester_configs': [
+      {
+        'predicate': Predicates.FYI_AND_OPTIONAL,
+        # Run on the Win Release NVIDIA bots.
+        # TODO(jmadill): Run on Linux bots when possible.
+        'build_configs': ['Release'],
+        'swarming_dimension_sets': [
+          {
+            'gpu': NVIDIA_GEFORCE_610_ALL_DRIVERS,
+            'os': 'Windows-2008ServerR2-SP1'
+          },
+        ],
+      },
+    ],
+    'disabled_tester_configs': [
+      {
+        'names': [
+          'Linux Ozone (Intel)',
+        ],
+      },
+    ],
+    'compile_target': 'command_buffer_perftests',
+    'isolate_name': 'command_buffer_perftests',
+    'args': [
+      '--use-cmd-decoder=passthrough',
+      '--use-angle=gl-null',
     ],
   },
 }
@@ -2574,9 +2647,15 @@ def generate_telemetry_tests(tester_name, tester_config,
 
 def generate_non_telemetry_isolated_test(tester_name, tester_config,
                                          test, test_config):
+  override_compile_targets = None
+  if 'compile_target' in test_config:
+    override_compile_targets = [test_config['compile_target']]
+  isolate_name = test
+  if 'isolate_name' in test_config:
+    isolate_name = test_config['isolate_name']
   return generate_isolated_test(tester_name, tester_config, test,
-                                test_config,
-                                None, test, None, [])
+                                test_config, None, isolate_name,
+                                override_compile_targets, [])
 
 def generate_non_telemetry_isolated_tests(tester_name, tester_config,
                                           test_dictionary):

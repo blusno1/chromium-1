@@ -109,13 +109,15 @@ void DataTransferItem::RunGetAsStringTask(ExecutionContext* context,
   callbacks_.EraseAt(index);
 }
 
-DEFINE_TRACE(DataTransferItem) {
+void DataTransferItem::Trace(blink::Visitor* visitor) {
   visitor->Trace(data_transfer_);
   visitor->Trace(item_);
   visitor->Trace(callbacks_);
+  ScriptWrappable::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(DataTransferItem) {
+void DataTransferItem::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   for (auto callback : callbacks_)
     visitor->TraceWrappers(callback);
 }

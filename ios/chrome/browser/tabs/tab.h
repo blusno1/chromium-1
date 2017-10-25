@@ -10,15 +10,12 @@
 #include <memory>
 #include <vector>
 
-#import "components/signin/ios/browser/manage_accounts_delegate.h"
 #import "ios/chrome/browser/web/page_placeholder_tab_helper_delegate.h"
 #include "ios/net/request_tracker.h"
 #include "ios/web/public/user_agent.h"
 #include "ui/base/page_transition_types.h"
 
-@protocol ApplicationCommands;
 @class AutofillController;
-@protocol BrowserCommands;
 @protocol IOSCaptivePortalBlockingPageDelegate;
 @class CastController;
 @class ExternalAppLauncher;
@@ -84,26 +81,16 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Chrome's WebContents in that it encapsulates rendering. Acts as the
 // delegate for the WebState in order to process info about pages having
 // loaded.
-@interface Tab
-    : NSObject<ManageAccountsDelegate, PagePlaceholderTabHelperDelegate>
+@interface Tab : NSObject<PagePlaceholderTabHelperDelegate>
 
 // Browser state associated with this Tab.
 @property(nonatomic, readonly) ios::ChromeBrowserState* browserState;
-
-// Returns the URL of the last committed NavigationItem for this Tab.
-@property(nonatomic, readonly) const GURL& lastCommittedURL;
-
-// Returns the URL of the visible NavigationItem for this Tab.
-@property(nonatomic, readonly) const GURL& visibleURL;
 
 // The Passkit Dialog provider used to show the UI to download a passkit object.
 @property(nonatomic, weak) id<PassKitDialogProvider> passKitDialogProvider;
 
 // The current title of the tab.
 @property(nonatomic, readonly) NSString* title;
-
-// Original page title or nil if the page did not provide one.
-@property(nonatomic, readonly) NSString* originalTitle;
 
 @property(nonatomic, readonly) NSString* urlDisplayString;
 
@@ -143,15 +130,10 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // TODO(crbug.com/661663): Should this property abstract away the concept of
 // prerendering?  Maybe this can move to the TabDelegate interface.
 @property(nonatomic, assign) BOOL isPrerenderTab;
-@property(nonatomic, assign) BOOL isLinkLoadingPrerenderTab;
 @property(nonatomic, assign) BOOL isVoiceSearchResultsTab;
 
 // |YES| if the tab has finished loading.
 @property(nonatomic, readonly) BOOL loadFinished;
-
-// Dispatcher that the tab can use to send commands. This should be set
-// when other delegates are set.
-@property(nonatomic, weak) id<ApplicationCommands, BrowserCommands> dispatcher;
 
 // Creates a new Tab with the given WebState.
 - (instancetype)initWithWebState:(web::WebState*)webState;
@@ -243,6 +225,9 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Called when the snapshot of the content will be taken.
 - (void)willUpdateSnapshot;
+
+// Requests deletion of the Tab snapshot.
+- (void)removeSnapshot;
 
 // Called when this tab is shown.
 - (void)wasShown;

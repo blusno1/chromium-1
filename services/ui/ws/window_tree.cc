@@ -257,7 +257,7 @@ void WindowTree::AddRootForWindowManager(const ServerWindow* root) {
 
   DCHECK(automatically_create_display_roots_);
   DCHECK(window_manager_internal_);
-  const ClientWindowId client_window_id = MakeClientWindowId(root->id());
+  const ClientWindowId client_window_id = root->frame_sink_id();
   DCHECK_EQ(0u, client_id_to_window_id_map_.count(client_window_id));
   client_id_to_window_id_map_[client_window_id] = root->id();
   window_id_to_client_id_map_[root->id()] = client_window_id;
@@ -308,7 +308,8 @@ ServerWindow* WindowTree::ProcessSetDisplayRoot(
     const display::Display& display_to_create,
     const display::ViewportMetrics& viewport_metrics,
     bool is_primary_display,
-    const ClientWindowId& client_window_id) {
+    const ClientWindowId& client_window_id,
+    const std::vector<display::Display>& mirrors) {
   DCHECK(window_manager_state_);  // Only called for window manager.
   DVLOG(3) << "SetDisplayRoot client=" << id_
            << " global window_id=" << client_window_id.ToString();
@@ -338,6 +339,11 @@ ServerWindow* WindowTree::ProcessSetDisplayRoot(
     return nullptr;
   }
 
+  if (!mirrors.empty()) {
+    NOTIMPLEMENTED() << "TODO(crbug.com/764472): Mus unified/mirroring modes.";
+    return nullptr;
+  }
+
   Display* display = display_manager()->AddDisplayForWindowManager(
       is_primary_display, display_to_create, viewport_metrics);
   DCHECK(display);
@@ -347,7 +353,7 @@ ServerWindow* WindowTree::ProcessSetDisplayRoot(
   DCHECK(display_root);
   DCHECK(display_root->root()->children().empty());
 
-  // NOTE: this doesn't resize the window in anyway. We assume the client takes
+  // NOTE: this doesn't resize the window in any way. We assume the client takes
   // care of any modifications it needs to do.
   roots_.insert(window);
   Operation op(this, window_server_, OperationType::ADD_WINDOW);
@@ -1239,14 +1245,7 @@ void WindowTree::GetUnknownWindowsFrom(
   if (IsWindowKnown(window))
     return;
 
-  // There are two cases where this gets hit:
-  // . During init, in which case using the window id as the client id is
-  //   fine.
-  // . When a window is moved to a parent of a window we know about. This is
-  //   only encountered for the WM or embed roots. We assume such clients want
-  //   to see the real id of the window and are only created ClientWindowIds
-  //   with the client_id.
-  const ClientWindowId client_window_id = MakeClientWindowId(window->id());
+  const ClientWindowId client_window_id = window->frame_sink_id();
   DCHECK_EQ(0u, client_id_to_window_id_map_.count(client_window_id));
   client_id_to_window_id_map_[client_window_id] = window->id();
   window_id_to_client_id_map_[window->id()] = client_window_id;
@@ -1490,10 +1489,6 @@ ClientWindowId WindowTree::MakeClientWindowId(Id transport_window_id) const {
     return ClientWindowId(id_, transport_window_id);
   return ClientWindowId(HiWord(transport_window_id),
                         LoWord(transport_window_id));
-}
-
-ClientWindowId WindowTree::MakeClientWindowId(const WindowId& id) const {
-  return MakeClientWindowId((id.client_id << 16) | id.window_id);
 }
 
 mojom::WindowTreeClientPtr
@@ -2196,6 +2191,29 @@ void WindowTree::StackAtTop(uint32_t change_id, Id window_id) {
       wm_change_id, wm_tree->TransportIdForWindow(window));
 }
 
+void WindowTree::PerformWmAction(Id window_id, const std::string& action) {
+  ServerWindow* window = GetWindowByClientId(MakeClientWindowId(window_id));
+  if (!window) {
+    DVLOG(1) << "PerformWmAction(" << action << ") failed (invalid id)";
+    return;
+  }
+
+  if (!access_policy_->CanPerformWmAction(window)) {
+    DVLOG(1) << "PerformWmAction(" << action << ") failed (access denied)";
+    return;
+  }
+
+  WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
+  if (!display_root) {
+    DVLOG(1) << "PerformWmAction(" << action << ") failed (no display root)";
+    return;
+  }
+
+  WindowTree* wm_tree = display_root->window_manager_state()->window_tree();
+  wm_tree->window_manager_internal_->WmPerformWmAction(
+      wm_tree->TransportIdForWindow(window), action);
+}
+
 void WindowTree::GetWindowManagerClient(
     mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal) {
   if (!access_policy_->CanSetWindowManager() || !window_manager_internal_ ||
@@ -2443,10 +2461,11 @@ void WindowTree::SetDisplayRoot(const display::Display& display,
                                 mojom::WmViewportMetricsPtr viewport_metrics,
                                 bool is_primary_display,
                                 Id window_id,
+                                const std::vector<display::Display>& mirrors,
                                 const SetDisplayRootCallback& callback) {
   ServerWindow* display_root = ProcessSetDisplayRoot(
       display, TransportMetricsToDisplayMetrics(*viewport_metrics),
-      is_primary_display, MakeClientWindowId(window_id));
+      is_primary_display, MakeClientWindowId(window_id), mirrors);
   if (!display_root) {
     callback.Run(false);
     return;
@@ -2460,12 +2479,13 @@ void WindowTree::SetDisplayConfiguration(
     std::vector<ui::mojom::WmViewportMetricsPtr> transport_metrics,
     int64_t primary_display_id,
     int64_t internal_display_id,
+    const std::vector<display::Display>& mirrors,
     const SetDisplayConfigurationCallback& callback) {
   std::vector<display::ViewportMetrics> metrics;
   for (auto& transport_ptr : transport_metrics)
     metrics.push_back(TransportMetricsToDisplayMetrics(*transport_ptr));
   callback.Run(display_manager()->SetDisplayConfiguration(
-      displays, metrics, primary_display_id, internal_display_id));
+      displays, metrics, primary_display_id, internal_display_id, mirrors));
 }
 
 void WindowTree::SwapDisplayRoots(int64_t display_id1,

@@ -56,8 +56,8 @@
 // allocated, WebView and LocalFrameView are currently not. In terms of
 // ownership and control, the relationships stays the same, but the references
 // from the off-heap WebView to the on-heap Page is handled by a Persistent<>,
-// not a RefPtr<>. Similarly, the mutual strong references between the on-heap
-// LocalFrame and the off-heap LocalFrameView is through a RefPtr (from
+// not a scoped_refptr<>. Similarly, the mutual strong references between the
+// on-heap LocalFrame and the off-heap LocalFrameView is through a RefPtr (from
 // LocalFrame to LocalFrameView), and a Persistent refers to the LocalFrame in
 // the other direction.
 //
@@ -112,14 +112,14 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/EphemeralRange.h"
-#include "core/editing/FindInPageCoordinates.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/PlainTextRange.h"
 #include "core/editing/SelectionTemplate.h"
 #include "core/editing/SetSelectionOptions.h"
 #include "core/editing/TextAffinity.h"
-#include "core/editing/TextFinder.h"
 #include "core/editing/VisiblePosition.h"
+#include "core/editing/finder/FindInPageCoordinates.h"
+#include "core/editing/finder/TextFinder.h"
 #include "core/editing/ime/ImeTextSpanVectorBuilder.h"
 #include "core/editing/ime/InputMethodController.h"
 #include "core/editing/iterators/TextIterator.h"
@@ -180,9 +180,9 @@
 #include "core/paint/TransformRecorder.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/bindings/V8PerIsolateData.h"
 #include "platform/clipboard/ClipboardUtilities.h"
 #include "platform/fonts/FontCache.h"
@@ -217,7 +217,7 @@
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebURLError.h"
-#include "public/platform/WebURLLoader.h"
+#include "public/platform/WebURLLoaderFactory.h"
 #include "public/platform/WebVector.h"
 #include "public/web/WebAssociatedURLLoaderOptions.h"
 #include "public/web/WebAutofillClient.h"
@@ -440,7 +440,7 @@ class ChromePluginPrintContext final : public ChromePrintContext {
 
   ~ChromePluginPrintContext() override {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(plugin_);
     ChromePrintContext::Trace(visitor);
   }
@@ -505,7 +505,7 @@ WebLocalFrame* WebLocalFrame::FrameForCurrentContext() {
   v8::Local<v8::Context> context =
       v8::Isolate::GetCurrent()->GetCurrentContext();
   if (context.IsEmpty())
-    return 0;
+    return nullptr;
   return FrameForContext(context);
 }
 
@@ -531,7 +531,7 @@ bool WebLocalFrameImpl::IsWebRemoteFrame() const {
 
 WebRemoteFrame* WebLocalFrameImpl::ToWebRemoteFrame() {
   NOTREACHED();
-  return 0;
+  return nullptr;
 }
 
 void WebLocalFrameImpl::Close() {
@@ -671,8 +671,8 @@ void WebLocalFrameImpl::ExecuteScriptInIsolatedWorld(
   HeapVector<ScriptSourceCode> sources =
       CreateSourcesVector(sources_in, num_sources);
   v8::HandleScope handle_scope(ToIsolate(GetFrame()));
-  GetFrame()->GetScriptController().ExecuteScriptInIsolatedWorld(world_id,
-                                                                 sources, 0);
+  GetFrame()->GetScriptController().ExecuteScriptInIsolatedWorld(
+      world_id, sources, nullptr);
 }
 
 void WebLocalFrameImpl::SetIsolatedWorldSecurityOrigin(
@@ -754,7 +754,7 @@ void WebLocalFrameImpl::RequestExecuteScriptAndReturnValue(
     WebScriptExecutionCallback* callback) {
   DCHECK(GetFrame());
 
-  RefPtr<DOMWrapperWorld> main_world = &DOMWrapperWorld::MainWorld();
+  scoped_refptr<DOMWrapperWorld> main_world = &DOMWrapperWorld::MainWorld();
   SuspendableScriptExecutor* executor = SuspendableScriptExecutor::Create(
       GetFrame(), std::move(main_world), CreateSourcesVector(&source, 1),
       user_gesture, callback);
@@ -798,8 +798,8 @@ void WebLocalFrameImpl::ExecuteScriptInIsolatedWorld(
     results->Swap(v8_results);
   } else {
     v8::HandleScope handle_scope(ToIsolate(GetFrame()));
-    GetFrame()->GetScriptController().ExecuteScriptInIsolatedWorld(world_id,
-                                                                   sources, 0);
+    GetFrame()->GetScriptController().ExecuteScriptInIsolatedWorld(
+        world_id, sources, nullptr);
   }
 }
 
@@ -814,7 +814,7 @@ void WebLocalFrameImpl::RequestExecuteScriptInIsolatedWorld(
   CHECK_GT(world_id, 0);
   CHECK_LT(world_id, DOMWrapperWorld::kEmbedderWorldIdLimit);
 
-  RefPtr<DOMWrapperWorld> isolated_world =
+  scoped_refptr<DOMWrapperWorld> isolated_world =
       DOMWrapperWorld::EnsureIsolatedWorld(ToIsolate(GetFrame()), world_id);
   SuspendableScriptExecutor* executor = SuspendableScriptExecutor::Create(
       GetFrame(), std::move(isolated_world),
@@ -1015,7 +1015,7 @@ size_t WebLocalFrameImpl::CharacterIndexForPoint(
   if (!GetFrame())
     return kNotFound;
 
-  IntPoint point = GetFrame()->View()->ViewportToContents(point_in_viewport);
+  LayoutPoint point = GetFrame()->View()->ViewportToContents(point_in_viewport);
   HitTestResult result = GetFrame()->GetEventHandler().HitTestResultAtPoint(
       point, HitTestRequest::kReadOnly | HitTestRequest::kActive);
   const EphemeralRange range =
@@ -1051,7 +1051,7 @@ bool WebLocalFrameImpl::ExecuteCommand(const WebString& name) {
           : nullptr;
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(GetFrame(), UserGestureToken::kNewGesture);
+      Frame::NotifyUserActivation(GetFrame(), UserGestureToken::kNewGesture);
 
   WebPluginContainerImpl* plugin_container =
       GetFrame()->GetWebPluginContainer(plugin_lookup_context_node);
@@ -1066,7 +1066,7 @@ bool WebLocalFrameImpl::ExecuteCommand(const WebString& name,
   DCHECK(GetFrame());
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(GetFrame(), UserGestureToken::kNewGesture);
+      Frame::NotifyUserActivation(GetFrame(), UserGestureToken::kNewGesture);
 
   WebPluginContainerImpl* plugin_container =
       GetFrame()->GetWebPluginContainer();
@@ -1376,7 +1376,7 @@ WebPlugin* WebLocalFrameImpl::FocusedPluginIfInputMethodSupported() {
   WebPluginContainerImpl* container = GetFrame()->GetWebPluginContainer();
   if (container && container->SupportsInputMethod())
     return container->Plugin();
-  return 0;
+  return nullptr;
 }
 
 void WebLocalFrameImpl::DispatchBeforePrintEvent() {
@@ -1659,10 +1659,10 @@ WebLocalFrameImpl::WebLocalFrameImpl(
     : WebLocalFrame(scope),
       local_frame_client_(LocalFrameClientImpl::Create(this)),
       client_(client),
-      autofill_client_(0),
+      autofill_client_(nullptr),
       input_events_scale_factor_for_emulation_(1),
       interface_registry_(interface_registry),
-      web_dev_tools_frontend_(0),
+      web_dev_tools_frontend_(nullptr),
       input_method_controller_(*this),
       text_checker_client_(new TextCheckerClientImpl(this)),
       spell_check_panel_host_client_(nullptr),
@@ -1688,7 +1688,7 @@ WebLocalFrameImpl::~WebLocalFrameImpl() {
   g_frame_count--;
 }
 
-DEFINE_TRACE(WebLocalFrameImpl) {
+void WebLocalFrameImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(local_frame_client_);
   visitor->Trace(frame_);
   visitor->Trace(dev_tools_agent_);
@@ -1896,7 +1896,7 @@ void WebLocalFrameImpl::LoadJavaScriptURL(const KURL& url) {
   String script = DecodeURLEscapeSequences(
       url.GetString().Substring(strlen("javascript:")));
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(GetFrame(), UserGestureToken::kNewGesture);
+      Frame::NotifyUserActivation(GetFrame(), UserGestureToken::kNewGesture);
   v8::HandleScope handle_scope(ToIsolate(GetFrame()));
   v8::Local<v8::Value> result =
       GetFrame()->GetScriptController().ExecuteScriptInMainWorldAndReturnValue(
@@ -1982,10 +1982,10 @@ bool WebLocalFrameImpl::DispatchBeforeUnloadEvent(bool is_reload) {
 
 WebURLRequest WebLocalFrameImpl::RequestFromHistoryItem(
     const WebHistoryItem& item,
-    WebCachePolicy cache_policy) const {
+    mojom::FetchCacheMode cache_mode) const {
   HistoryItem* history_item = item;
   return WrappedResourceRequest(
-      history_item->GenerateResourceRequest(cache_policy));
+      history_item->GenerateResourceRequest(cache_mode));
 }
 
 WebURLRequest WebLocalFrameImpl::RequestForReload(
@@ -2060,7 +2060,7 @@ void WebLocalFrameImpl::LoadData(const WebData& data,
   request.SetCheckForBrowserSideNavigation(false);
 
   FrameLoadRequest frame_request(
-      0, request,
+      nullptr, request,
       SubstituteData(data, mime_type, text_encoding, unreachable_url));
   DCHECK(frame_request.GetSubstituteData().IsValid());
   frame_request.SetReplacesCurrentItem(replace);
@@ -2391,10 +2391,9 @@ WebFrameWidgetBase* WebLocalFrameImpl::FrameWidget() const {
   return frame_widget_;
 }
 
-std::unique_ptr<WebURLLoader> WebLocalFrameImpl::CreateURLLoader(
-    const WebURLRequest& request,
-    SingleThreadTaskRunnerRefPtr task_runner) {
-  return client_->CreateURLLoader(request, std::move(task_runner));
+std::unique_ptr<WebURLLoaderFactory>
+WebLocalFrameImpl::CreateURLLoaderFactory() {
+  return client_->CreateURLLoaderFactory();
 }
 
 void WebLocalFrameImpl::CopyImageAt(const WebPoint& pos_in_viewport) {

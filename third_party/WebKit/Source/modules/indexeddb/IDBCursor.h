@@ -45,8 +45,7 @@ class IDBTransaction;
 class IDBValue;
 class ScriptState;
 
-class IDBCursor : public GarbageCollectedFinalized<IDBCursor>,
-                  public ScriptWrappable {
+class IDBCursor : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -58,7 +57,7 @@ class IDBCursor : public GarbageCollectedFinalized<IDBCursor>,
                            IDBAny* source,
                            IDBTransaction*);
   virtual ~IDBCursor();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
   void ContextWillBeDestroyed() { backend_.reset(); }
 
   WARN_UNUSED_RESULT v8::Local<v8::Object> AssociateWithWrapper(
@@ -93,7 +92,7 @@ class IDBCursor : public GarbageCollectedFinalized<IDBCursor>,
   void PostSuccessHandlerCallback();
   bool IsDeleted() const;
   void Close();
-  void SetValueReady(IDBKey*, IDBKey* primary_key, RefPtr<IDBValue>);
+  void SetValueReady(IDBKey*, IDBKey* primary_key, scoped_refptr<IDBValue>);
   IDBKey* IdbPrimaryKey() const { return primary_key_; }
   virtual bool IsKeyCursor() const { return true; }
   virtual bool IsCursorWithValue() const { return false; }
@@ -119,7 +118,7 @@ class IDBCursor : public GarbageCollectedFinalized<IDBCursor>,
   bool value_dirty_ = true;
   Member<IDBKey> key_;
   Member<IDBKey> primary_key_;
-  RefPtr<IDBValue> value_;
+  scoped_refptr<IDBValue> value_;
 };
 
 }  // namespace blink

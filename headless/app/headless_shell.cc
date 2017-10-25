@@ -249,12 +249,14 @@ void HeadlessShell::DevToolsTargetReady() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDeterministicFetch)) {
     devtools_client_->GetNetwork()->GetExperimental()->AddObserver(this);
-    devtools_client_->GetNetwork()
-        ->GetExperimental()
-        ->SetRequestInterceptionEnabled(
-            network::SetRequestInterceptionEnabledParams::Builder()
-                .SetEnabled(true)
-                .Build());
+    std::unique_ptr<headless::network::RequestPattern> match_all =
+        headless::network::RequestPattern::Builder().SetUrlPattern("*").Build();
+    std::vector<std::unique_ptr<headless::network::RequestPattern>> patterns;
+    patterns.push_back(std::move(match_all));
+    devtools_client_->GetNetwork()->GetExperimental()->SetRequestInterception(
+        network::SetRequestInterceptionParams::Builder()
+            .SetPatterns(std::move(patterns))
+            .Build());
   }
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDefaultBackgroundColor)) {
@@ -339,9 +341,8 @@ void HeadlessShell::PollReadyState() {
 
 void HeadlessShell::OnReadyState(
     std::unique_ptr<runtime::EvaluateResult> result) {
-  std::string ready_state_and_url;
-  if (result->GetResult()->GetValue()->GetAsString(&ready_state_and_url)) {
-    std::stringstream stream(ready_state_and_url);
+  if (result->GetResult()->GetValue()->is_string()) {
+    std::stringstream stream(result->GetResult()->GetValue()->GetString());
     std::string ready_state;
     std::string url;
     stream >> ready_state;
@@ -424,10 +425,7 @@ void HeadlessShell::OnDomFetched(
     LOG(ERROR) << "Failed to serialize document: "
                << result->GetExceptionDetails()->GetText();
   } else {
-    std::string dom;
-    if (result->GetResult()->GetValue()->GetAsString(&dom)) {
-      printf("%s\n", dom.c_str());
-    }
+    printf("%s\n", result->GetResult()->GetValue()->GetString().c_str());
   }
   Shutdown();
 }

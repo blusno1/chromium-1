@@ -46,8 +46,6 @@ class WebThreadBase;
 
 namespace content {
 
-class NotificationDispatcher;
-class ThreadSafeSender;
 class WebCryptoImpl;
 
 class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
@@ -78,8 +76,6 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
   size_t MaxDecodedImageBytes() override;
   bool IsLowEndDevice() override;
   uint32_t GetUniqueIdForProcess() override;
-  std::unique_ptr<blink::WebDataConsumerHandle> CreateDataConsumerHandle(
-      mojo::ScopedDataPipeConsumerHandle handle) override;
   blink::WebString UserAgent() override;
   std::unique_ptr<blink::WebThread> CreateThread(const char* name) override;
   std::unique_ptr<blink::WebThread> CreateWebAudioThread() override;
@@ -99,19 +95,14 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
       const blink::WebString& value1,
       const blink::WebString& value2) override;
   void SuddenTerminationChanged(bool enabled) override {}
-  blink::WebThread* CompositorThread() const override;
   std::unique_ptr<blink::WebGestureCurve> CreateFlingAnimationCurve(
       blink::WebGestureDevice device_source,
       const blink::WebFloatPoint& velocity,
       const blink::WebSize& cumulative_scroll) override;
-  void DidStartWorkerThread() override;
-  void WillStopWorkerThread() override;
   bool AllowScriptExtensionForServiceWorker(
       const blink::WebURL& script_url) override;
   blink::WebCrypto* Crypto() override;
   const char* GetBrowserServiceName() const override;
-  blink::WebNotificationManager* GetNotificationManager() override;
-  blink::WebPushProvider* PushProvider() override;
   blink::WebMediaCapabilitiesClient* MediaCapabilitiesClient() override;
 
   blink::WebString DomCodeStringFromEnum(int dom_code) override;
@@ -119,11 +110,6 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
   blink::WebString DomKeyStringFromEnum(int dom_key) override;
   int DomKeyEnumFromString(const blink::WebString& key_string) override;
   bool IsDomKeyForModifier(int dom_key) override;
-
-  // This class does *not* own the compositor thread. It is the responsibility
-  // of the caller to ensure that the compositor thread is cleared before it is
-  // destructed.
-  void SetCompositorThread(blink::scheduler::WebThreadBase* compositor_thread);
 
   std::unique_ptr<blink::WebFeaturePolicy> CreateFeaturePolicy(
       const blink::WebFeaturePolicy* parentPolicy,
@@ -134,9 +120,9 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
       const blink::WebFeaturePolicy& policy,
       const blink::WebSecurityOrigin& new_origin) override;
 
- private:
-  void InternalInit();
   void WaitUntilWebThreadTLSUpdate(blink::scheduler::WebThreadBase* thread);
+
+ private:
   void UpdateWebThreadTLS(blink::WebThread* thread, base::WaitableEvent* event);
 
   bool IsMainThread() const;
@@ -147,11 +133,6 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
   base::ThreadLocalStorage::Slot current_thread_slot_;
   webcrypto::WebCryptoImpl web_crypto_;
   media::WebMediaCapabilitiesClientImpl media_capabilities_client_;
-
-  scoped_refptr<ThreadSafeSender> thread_safe_sender_;
-  scoped_refptr<NotificationDispatcher> notification_dispatcher_;
-
-  blink::scheduler::WebThreadBase* compositor_thread_;
 };
 
 }  // namespace content

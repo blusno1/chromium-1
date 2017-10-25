@@ -45,9 +45,9 @@
 #include "platform/wtf/Noncopyable.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebApplicationCacheHost.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLLoader.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 
 namespace blink {
 
@@ -88,7 +88,7 @@ class PLATFORM_EXPORT FetchContext
 
   virtual ~FetchContext() {}
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   virtual bool IsFrameFetchContext() { return false; }
 
@@ -97,7 +97,7 @@ class PLATFORM_EXPORT FetchContext
   // Returns the cache policy for the resource. ResourceRequest is not passed as
   // a const reference as a header needs to be added for doc.write blocking
   // intervention.
-  virtual WebCachePolicy ResourceRequestCachePolicy(
+  virtual mojom::FetchCacheMode ResourceRequestCachePolicy(
       const ResourceRequest&,
       Resource::Type,
       FetchParameters::DeferOption) const;
@@ -151,8 +151,7 @@ class PLATFORM_EXPORT FetchContext
 
   // Called when a resource load is first requested, which may not be when the
   // load actually begins.
-  virtual void RecordLoadingActivity(unsigned long identifier,
-                                     const ResourceRequest&,
+  virtual void RecordLoadingActivity(const ResourceRequest&,
                                      Resource::Type,
                                      const AtomicString& fetch_initiator_name);
 
@@ -217,7 +216,7 @@ class PLATFORM_EXPORT FetchContext
   }
 
   virtual std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequest&,
-                                                        WebTaskRunner*) {
+                                                        RefPtr<WebTaskRunner>) {
     NOTREACHED();
     return nullptr;
   }

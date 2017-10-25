@@ -352,10 +352,11 @@ CompositorAnimations::CheckCanStartElementOnCompositor(
     // the DCHECK below.
     // DCHECK(document().lifecycle().state() >=
     // DocumentLifecycle::PrePaintClean);
-    if (FragmentData* fragment_data =
-            target_element.GetLayoutObject()->FirstFragment()) {
+    if (RarePaintData* rare_paint_data = target_element.GetLayoutObject()
+                                             ->FirstFragment()
+                                             .GetRarePaintData()) {
       const ObjectPaintProperties* paint_properties =
-          fragment_data->PaintProperties();
+          rare_paint_data->PaintProperties();
       const TransformPaintPropertyNode* transform_node =
           paint_properties->Transform();
       const EffectPaintPropertyNode* effect_node = paint_properties->Effect();
@@ -612,7 +613,7 @@ void AddKeyframesToCurve(PlatformAnimationCurveType& curve,
                          const PropertySpecificKeyframeVector& keyframes) {
   auto* last_keyframe = keyframes.back().get();
   for (const auto& keyframe : keyframes) {
-    const TimingFunction* keyframe_timing_function = 0;
+    const TimingFunction* keyframe_timing_function = nullptr;
     // Ignore timing function of last frame.
     if (keyframe == last_keyframe)
       keyframe_timing_function = LinearTimingFunction::Shared();

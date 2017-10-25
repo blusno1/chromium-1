@@ -30,7 +30,9 @@ class NullImageResourceInfo final
  public:
   NullImageResourceInfo() {}
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { ImageResourceInfo::Trace(visitor); }
+  void Trace(blink::Visitor* visitor) override {
+    ImageResourceInfo::Trace(visitor);
+  }
 
  private:
   const KURL& Url() const override { return url_; }
@@ -66,7 +68,7 @@ class NullImageResourceInfo final
 
 }  // namespace
 
-ImageResourceContent::ImageResourceContent(RefPtr<blink::Image> image)
+ImageResourceContent::ImageResourceContent(scoped_refptr<blink::Image> image)
     : is_refetchable_data_from_disk_cache_(true), image_(std::move(image)) {
   DEFINE_STATIC_LOCAL(NullImageResourceInfo, null_info,
                       (new NullImageResourceInfo()));
@@ -74,7 +76,7 @@ ImageResourceContent::ImageResourceContent(RefPtr<blink::Image> image)
 }
 
 ImageResourceContent* ImageResourceContent::CreateLoaded(
-    RefPtr<blink::Image> image) {
+    scoped_refptr<blink::Image> image) {
   DCHECK(image);
   ImageResourceContent* content = new ImageResourceContent(std::move(image));
   content->content_status_ = ResourceStatus::kCached;
@@ -95,7 +97,7 @@ void ImageResourceContent::SetImageResourceInfo(ImageResourceInfo* info) {
   info_ = info;
 }
 
-DEFINE_TRACE(ImageResourceContent) {
+void ImageResourceContent::Trace(blink::Visitor* visitor) {
   visitor->Trace(info_);
   ImageObserver::Trace(visitor);
 }
@@ -185,7 +187,7 @@ void ImageResourceContent::DoResetAnimation() {
     image_->ResetAnimation();
 }
 
-RefPtr<const SharedBuffer> ImageResourceContent::ResourceBuffer() const {
+scoped_refptr<const SharedBuffer> ImageResourceContent::ResourceBuffer() const {
   if (image_)
     return image_->Data();
   return nullptr;
@@ -200,32 +202,11 @@ bool ImageResourceContent::ShouldUpdateImageImmediately() const {
          (image_ && image_->MaybeAnimated());
 }
 
-std::pair<blink::Image*, float> ImageResourceContent::BrokenImage(
-    float device_scale_factor) {
-  if (device_scale_factor >= 2) {
-    DEFINE_STATIC_REF(blink::Image, broken_image_hi_res,
-                      (blink::Image::LoadPlatformResource("missingImage@2x")));
-    return std::make_pair(broken_image_hi_res, 2);
-  }
-
-  DEFINE_STATIC_REF(blink::Image, broken_image_lo_res,
-                    (blink::Image::LoadPlatformResource("missingImage")));
-  return std::make_pair(broken_image_lo_res, 1);
-}
-
 blink::Image* ImageResourceContent::GetImage() {
-  if (ErrorOccurred()) {
-    // Returning the 1x broken image is non-ideal, but we cannot reliably access
-    // the appropriate deviceScaleFactor from here. It is critical that callers
-    // use ImageResourceContent::brokenImage() when they need the real,
-    // deviceScaleFactor-appropriate broken image icon.
-    return BrokenImage(1).first;
-  }
+  if (!image_ || ErrorOccurred())
+    return Image::NullImage();
 
-  if (image_)
-    return image_.get();
-
-  return blink::Image::NullImage();
+  return image_.get();
 }
 
 bool ImageResourceContent::UsesImageContainerSize() const {
@@ -242,31 +223,14 @@ bool ImageResourceContent::ImageHasRelativeSize() const {
   return false;
 }
 
-LayoutSize ImageResourceContent::ImageSize(
-    RespectImageOrientationEnum should_respect_image_orientation,
-    float multiplier) {
+IntSize ImageResourceContent::IntrinsicSize(
+    RespectImageOrientationEnum should_respect_image_orientation) {
   if (!image_)
-    return LayoutSize();
-
-  LayoutSize size;
-
-  if (image_->IsBitmapImage() &&
-      should_respect_image_orientation == kRespectImageOrientation) {
-    size = LayoutSize(ToBitmapImage(image_.get())->SizeRespectingOrientation());
-  } else {
-    size = LayoutSize(image_->Size());
-  }
-
-  if (multiplier == 1 || image_->HasRelativeSize())
-    return size;
-
-  // Don't let images that have a width/height >= 1 shrink below 1 when zoomed.
-  LayoutSize minimum_size(
-      size.Width() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit(),
-      LayoutUnit(size.Height() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit()));
-  size.Scale(multiplier);
-  size.ClampToMinimumSize(minimum_size);
-  return size;
+    return IntSize();
+  if (should_respect_image_orientation == kRespectImageOrientation &&
+      image_->IsBitmapImage())
+    return ToBitmapImage(image_.get())->SizeRespectingOrientation();
+  return image_->Size();
 }
 
 void ImageResourceContent::NotifyObservers(
@@ -307,7 +271,7 @@ void ImageResourceContent::NotifyObservers(
   }
 }
 
-RefPtr<Image> ImageResourceContent::CreateImage(bool is_multipart) {
+scoped_refptr<Image> ImageResourceContent::CreateImage(bool is_multipart) {
   if (info_->GetResponse().MimeType() == "image/svg+xml")
     return SVGImage::Create(this, is_multipart);
   return BitmapImage::Create(this, is_multipart);
@@ -408,7 +372,7 @@ void ImageResourceContent::AsyncLoadCompleted(const blink::Image* image) {
 }
 
 ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
-    RefPtr<SharedBuffer> data,
+    scoped_refptr<SharedBuffer> data,
     ResourceStatus status,
     UpdateImageOption update_image_option,
     bool all_data_received,
@@ -615,6 +579,10 @@ const ResourceResponse& ImageResourceContent::GetResponse() const {
 
 const ResourceError& ImageResourceContent::GetResourceError() const {
   return info_->GetResourceError();
+}
+
+bool ImageResourceContent::IsCacheValidator() const {
+  return info_->IsCacheValidator();
 }
 
 }  // namespace blink

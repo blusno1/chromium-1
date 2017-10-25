@@ -603,6 +603,14 @@ Network.NetworkLogView = class extends UI.VBox {
       hintText.createChild('br');
       hintText.appendChild(
           UI.formatLocalized('Perform a request or hit %s to record the reload.', [reloadShortcutNode]));
+
+      // TODO(lukasza): https://crbug.com/750901: Remove the hint below once
+      // the --site-per-process trial is over (i.e. on or after 2017-10-23).
+      hintText.createChild('br');
+      hintText.appendChild(UI.formatLocalized(
+          'Note: some network activity from out-of-process iframes might be missing. ' +
+              'See http://crbug.com/750901#c4 for more details.',
+          []));
     } else {
       var recordNode = hintText.createChild('b');
       recordNode.textContent = UI.shortcutRegistry.shortcutTitleForAction('network.toggle-recording');
@@ -1172,12 +1180,11 @@ Network.NetworkLogView = class extends UI.VBox {
     }
     copyMenu.appendItem(Common.UIString('Copy all as HAR'), this._copyAll.bind(this));
 
-    contextMenu.appendSeparator();
-    contextMenu.appendItem(Common.UIString('Save as HAR with content'), this._exportAll.bind(this));
+    contextMenu.saveSection().appendItem(Common.UIString('Save as HAR with content'), this._exportAll.bind(this));
 
-    contextMenu.appendSeparator();
-    contextMenu.appendItem(Common.UIString('Clear browser cache'), this._clearBrowserCache.bind(this));
-    contextMenu.appendItem(Common.UIString('Clear browser cookies'), this._clearBrowserCookies.bind(this));
+    contextMenu.editSection().appendItem(Common.UIString('Clear browser cache'), this._clearBrowserCache.bind(this));
+    contextMenu.editSection().appendItem(
+        Common.UIString('Clear browser cookies'), this._clearBrowserCookies.bind(this));
 
     if (request) {
       contextMenu.appendSeparator();

@@ -106,8 +106,8 @@
 #include "platform/Histogram.h"
 #include "platform/Language.h"
 #include "platform/PlatformChromeClient.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/geometry/DoubleRect.h"
 #include "platform/geometry/FloatRect.h"
@@ -127,13 +127,13 @@
 #include "platform/runtime_enabled_features.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/ScrollbarTheme.h"
-#include "platform/scroll/ScrollerSizeMetrics.h"
 #include "platform/text/TextStream.h"
-#include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "public/platform/WebDisplayItemList.h"
+#include "public/platform/WebRect.h"
+#include "public/platform/WebRemoteScrollProperties.h"
 
 // Used to check for dirty layouts violating document lifecycle rules.
 // If arg evaluates to true, the program will continue. If arg evaluates to
@@ -158,6 +158,27 @@ constexpr int kLetterPortraitPageHeight = 792;
 }  // namespace
 
 namespace blink {
+namespace {
+using WebRemoteScrollAlignment = WebRemoteScrollProperties::Alignment;
+WebRemoteScrollAlignment ToWebRemoteScrollAlignment(
+    const ScrollAlignment& alignment) {
+  if (alignment == ScrollAlignment::kAlignCenterIfNeeded)
+    return WebRemoteScrollAlignment::kCenterIfNeeded;
+  if (alignment == ScrollAlignment::kAlignToEdgeIfNeeded)
+    return WebRemoteScrollAlignment::kToEdgeIfNeeded;
+  if (alignment == ScrollAlignment::kAlignTopAlways)
+    return WebRemoteScrollAlignment::kTopAlways;
+  if (alignment == ScrollAlignment::kAlignBottomAlways)
+    return WebRemoteScrollAlignment::kBottomAlways;
+  if (alignment == ScrollAlignment::kAlignLeftAlways)
+    return WebRemoteScrollAlignment::kLeftAlways;
+  if (alignment == ScrollAlignment::kAlignRightAlways)
+    return WebRemoteScrollAlignment::kRightAlways;
+  NOTREACHED();
+  return WebRemoteScrollAlignment::kCenterIfNeeded;
+}
+
+}  // namespace
 
 using namespace HTMLNames;
 
@@ -245,7 +266,7 @@ LocalFrameView::~LocalFrameView() {
 #endif
 }
 
-DEFINE_TRACE(LocalFrameView) {
+void LocalFrameView::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(parent_);
   visitor->Trace(fragment_anchor_);
@@ -606,7 +627,7 @@ LayoutViewItem LocalFrameView::GetLayoutViewItem() const {
 
 ScrollingCoordinator* LocalFrameView::GetScrollingCoordinator() const {
   Page* p = GetPage();
-  return p ? p->GetScrollingCoordinator() : 0;
+  return p ? p->GetScrollingCoordinator() : nullptr;
 }
 
 CompositorAnimationHost* LocalFrameView::GetCompositorAnimationHost() const {
@@ -657,7 +678,7 @@ FloatQuad LocalFrameView::LocalToVisibleContentQuad(
   return result;
 }
 
-RefPtr<WebTaskRunner> LocalFrameView::GetTimerTaskRunner() const {
+scoped_refptr<WebTaskRunner> LocalFrameView::GetTimerTaskRunner() const {
   return TaskRunnerHelper::Get(TaskType::kUnspecedTimer, frame_.Get());
 }
 
@@ -691,7 +712,7 @@ bool LocalFrameView::ShouldUseCustomScrollbars(
   Document* doc = frame_->GetDocument();
 
   // Try the <body> element first as a scrollbar source.
-  Element* body = doc ? doc->body() : 0;
+  Element* body = doc ? doc->body() : nullptr;
   if (body && body->GetLayoutObject() &&
       body->GetLayoutObject()->Style()->HasPseudoStyle(kPseudoIdScrollbar)) {
     custom_scrollbar_element = body;
@@ -699,7 +720,7 @@ bool LocalFrameView::ShouldUseCustomScrollbars(
   }
 
   // If the <body> didn't have a custom style, then the root element might.
-  Element* doc_element = doc ? doc->documentElement() : 0;
+  Element* doc_element = doc ? doc->documentElement() : nullptr;
   if (doc_element && doc_element->GetLayoutObject() &&
       doc_element->GetLayoutObject()->Style()->HasPseudoStyle(
           kPseudoIdScrollbar)) {
@@ -1255,10 +1276,10 @@ void LocalFrameView::UpdateLayout() {
         LayoutBox* root_layout_object =
             document->documentElement()
                 ? document->documentElement()->GetLayoutBox()
-                : 0;
+                : nullptr;
         LayoutBox* body_layout_object = root_layout_object && document->body()
                                             ? document->body()->GetLayoutBox()
-                                            : 0;
+                                            : nullptr;
         if (body_layout_object && body_layout_object->StretchesToViewport())
           body_layout_object->SetChildNeedsLayout();
         else if (root_layout_object &&
@@ -2198,7 +2219,7 @@ void LocalFrameView::ScrollbarExistenceMaybeChanged() {
   Element* custom_scrollbar_element = nullptr;
 
   bool uses_overlay_scrollbars =
-      ScrollbarTheme::GetTheme().UsesOverlayScrollbars() &&
+      GetPageScrollbarTheme().UsesOverlayScrollbars() &&
       !ShouldUseCustomScrollbars(custom_scrollbar_element);
 
   if (!uses_overlay_scrollbars && NeedsLayout())
@@ -2222,26 +2243,6 @@ void LocalFrameView::HandleLoadCompleted() {
   // finishes.
   if (!NeedsLayout())
     ClearFragmentAnchor();
-
-  if (!scrollable_areas_)
-    return;
-  for (const auto& scrollable_area : *scrollable_areas_) {
-    if (!scrollable_area->IsPaintLayerScrollableArea())
-      continue;
-    PaintLayerScrollableArea* paint_layer_scrollable_area =
-        ToPaintLayerScrollableArea(scrollable_area);
-    if (paint_layer_scrollable_area->ScrollsOverflow() &&
-        !paint_layer_scrollable_area->Layer()->IsRootLayer() &&
-        paint_layer_scrollable_area->VisibleContentRect().Size().Area() > 0) {
-      CheckedNumeric<int> size =
-          paint_layer_scrollable_area->VisibleContentRect().Width();
-      size *= paint_layer_scrollable_area->VisibleContentRect().Height();
-      UMA_HISTOGRAM_CUSTOM_COUNTS(
-          "Event.Scroll.ScrollerSize.OnLoad",
-          size.ValueOrDefault(std::numeric_limits<int>::max()), 1,
-          kScrollerSizeLargestBucket, kScrollerSizeBucketCount);
-    }
-  }
 }
 
 void LocalFrameView::ClearLayoutSubtreeRoot(const LayoutObject& root) {
@@ -2882,7 +2883,7 @@ void LocalFrameView::DidAttachDocument() {
 }
 
 void LocalFrameView::UpdateScrollCorner() {
-  RefPtr<ComputedStyle> corner_style;
+  scoped_refptr<ComputedStyle> corner_style;
   IntRect corner_rect = ScrollCornerRect();
   Document* doc = frame_->GetDocument();
 
@@ -3343,7 +3344,6 @@ void LocalFrameView::PaintTree() {
 
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     if (GetLayoutView()->Layer()->NeedsRepaint()) {
-      paint_controller_->SetupRasterUnderInvalidationChecking();
       GraphicsContext graphics_context(*paint_controller_);
       if (RuntimeEnabledFeatures::PrintBrowserEnabled())
         graphics_context.SetPrinting(true);
@@ -3675,23 +3675,38 @@ IntRect LocalFrameView::ConvertToLayoutItem(const LayoutItem& layout_item,
 IntPoint LocalFrameView::ConvertFromLayoutItem(
     const LayoutItem& layout_item,
     const IntPoint& layout_object_point) const {
-  IntPoint point = RoundedIntPoint(
-      layout_item.LocalToAbsolute(layout_object_point, kUseTransforms));
-
-  // Convert from page ("absolute") to LocalFrameView coordinates.
-  point.Move(-ScrollOffsetInt());
-  return point;
+  return RoundedIntPoint(
+      ConvertFromLayoutItem(layout_item, LayoutPoint(layout_object_point)));
 }
 
 IntPoint LocalFrameView::ConvertToLayoutItem(
     const LayoutItem& layout_item,
     const IntPoint& frame_point) const {
-  IntPoint point = frame_point;
+  return RoundedIntPoint(
+      ConvertToLayoutItem(layout_item, LayoutPoint(frame_point)));
+}
+
+LayoutPoint LocalFrameView::ConvertFromLayoutItem(
+    const LayoutItem& layout_item,
+    const LayoutPoint& layout_object_point) const {
+  LayoutPoint point(layout_item.LocalToAbsolute(FloatPoint(layout_object_point),
+                                                kUseTransforms));
+
+  // Convert from page ("absolute") to LocalFrameView coordinates.
+  point.Move(-LayoutSize(GetScrollOffset()));
+  return point;
+}
+
+LayoutPoint LocalFrameView::ConvertToLayoutItem(
+    const LayoutItem& layout_item,
+    const LayoutPoint& frame_point) const {
+  LayoutPoint point = frame_point;
 
   // Convert from LocalFrameView coords into page ("absolute") coordinates.
-  point += IntSize(ScrollX(), ScrollY());
+  point += LayoutSize(ScrollX(), ScrollY());
 
-  return RoundedIntPoint(layout_item.AbsoluteToLocal(point, kUseTransforms));
+  return LayoutPoint(
+      layout_item.AbsoluteToLocal(FloatPoint(point), kUseTransforms));
 }
 
 IntPoint LocalFrameView::ConvertSelfToChild(const EmbeddedContentView& child,
@@ -3732,41 +3747,53 @@ IntRect LocalFrameView::ConvertFromContainingEmbeddedContentView(
   return parent_rect;
 }
 
-IntPoint LocalFrameView::ConvertToContainingEmbeddedContentView(
-    const IntPoint& local_point) const {
+LayoutPoint LocalFrameView::ConvertToContainingEmbeddedContentView(
+    const LayoutPoint& local_point) const {
   if (LocalFrameView* parent = ParentFrameView()) {
     // Get our layoutObject in the parent view
     LayoutEmbeddedContentItem layout_item = frame_->OwnerLayoutItem();
     if (layout_item.IsNull())
       return local_point;
 
-    IntPoint point(local_point);
+    LayoutPoint point(local_point);
 
     // Add borders and padding
-    point.Move((layout_item.BorderLeft() + layout_item.PaddingLeft()).ToInt(),
-               (layout_item.BorderTop() + layout_item.PaddingTop()).ToInt());
+    point.Move((layout_item.BorderLeft() + layout_item.PaddingLeft()),
+               (layout_item.BorderTop() + layout_item.PaddingTop()));
     return parent->ConvertFromLayoutItem(layout_item, point);
   }
 
   return local_point;
 }
 
-IntPoint LocalFrameView::ConvertFromContainingEmbeddedContentView(
-    const IntPoint& parent_point) const {
+LayoutPoint LocalFrameView::ConvertFromContainingEmbeddedContentView(
+    const LayoutPoint& parent_point) const {
   if (LocalFrameView* parent = ParentFrameView()) {
     // Get our layoutObject in the parent view
     LayoutEmbeddedContentItem layout_item = frame_->OwnerLayoutItem();
     if (layout_item.IsNull())
       return parent_point;
 
-    IntPoint point = parent->ConvertToLayoutItem(layout_item, parent_point);
+    LayoutPoint point = parent->ConvertToLayoutItem(layout_item, parent_point);
     // Subtract borders and padding
-    point.Move((-layout_item.BorderLeft() - layout_item.PaddingLeft()).ToInt(),
-               (-layout_item.BorderTop() - layout_item.PaddingTop()).ToInt());
+    point.Move((-layout_item.BorderLeft() - layout_item.PaddingLeft()),
+               (-layout_item.BorderTop() - layout_item.PaddingTop()));
     return point;
   }
 
   return parent_point;
+}
+
+IntPoint LocalFrameView::ConvertToContainingEmbeddedContentView(
+    const IntPoint& local_point) const {
+  return RoundedIntPoint(
+      ConvertToContainingEmbeddedContentView(LayoutPoint(local_point)));
+}
+
+IntPoint LocalFrameView::ConvertFromContainingEmbeddedContentView(
+    const IntPoint& parent_point) const {
+  return RoundedIntPoint(
+      ConvertFromContainingEmbeddedContentView(LayoutPoint(parent_point)));
 }
 
 void LocalFrameView::SetInitialTracksPaintInvalidationsForTesting(
@@ -4282,7 +4309,7 @@ void LocalFrameView::ComputeScrollbarExistence(
 
 void LocalFrameView::UpdateScrollbarEnabledState() {
   bool force_disabled =
-      ScrollbarTheme::GetTheme().ShouldDisableInvisibleScrollbars() &&
+      GetPageScrollbarTheme().ShouldDisableInvisibleScrollbars() &&
       ScrollbarsHidden();
 
   if (HorizontalScrollbar()) {
@@ -4365,7 +4392,7 @@ bool LocalFrameView::AdjustScrollbarExistence(
 
   Element* custom_scrollbar_element = nullptr;
   bool uses_overlay_scrollbars =
-      ScrollbarTheme::GetTheme().UsesOverlayScrollbars() &&
+      GetPageScrollbarTheme().UsesOverlayScrollbars() &&
       !ShouldUseCustomScrollbars(custom_scrollbar_element);
 
   if (!uses_overlay_scrollbars)
@@ -4495,6 +4522,36 @@ ScrollableArea* LocalFrameView::ScrollableAreaWithElementId(
   return nullptr;
 }
 
+void LocalFrameView::ScrollRectToVisibleInRemoteParent(
+    const LayoutRect& rect_to_scroll,
+    const ScrollAlignment& align_x,
+    const ScrollAlignment& align_y,
+    ScrollType scroll_type,
+    bool make_visible_in_visual_viewport,
+    ScrollBehavior scroll_behavior,
+    bool is_for_scroll_sequence) {
+  DCHECK(GetFrame().IsLocalRoot() && !GetFrame().IsMainFrame() &&
+         safe_to_propagate_scroll_to_parent_);
+  // Find the coordinates of the |rect_to_scroll| after removing all transforms
+  // on this LayoutObject. |new_rect| will be in the coordinate space of this
+  // frame; which is a local root. In the parent frame process, a similar
+  // transformation will convert the absolute coordinates in here to the space
+  // of the parent frame. The combination of the two transforms should act as a
+  // call to LocalToAncestorQuad when frame and its parent are in the same
+  // process (which is done in LayoutBox::ScrollRectIntoVisibleRecusive).
+  LayoutRect new_rect = EnclosingLayoutRect(
+      GetLayoutView()
+          ->LocalToAbsoluteQuad(FloatRect(rect_to_scroll), 0)
+          .BoundingBox());
+  GetFrame().Client()->ScrollRectToVisibleInParentFrame(
+      WebRect(new_rect.X().ToInt(), new_rect.Y().ToInt(),
+              new_rect.Width().ToInt(), new_rect.Height().ToInt()),
+      WebRemoteScrollProperties(ToWebRemoteScrollAlignment(align_x),
+                                ToWebRemoteScrollAlignment(align_y),
+                                scroll_type, make_visible_in_visual_viewport,
+                                scroll_behavior, is_for_scroll_sequence));
+}
+
 void LocalFrameView::ScrollContentsIfNeeded() {
   if (pending_scroll_delta_.IsZero())
     return;
@@ -4524,6 +4581,16 @@ void LocalFrameView::ScrollContents(const IntSize& scroll_delta) {
   FrameRectsChanged();
 }
 
+FloatPoint LocalFrameView::ContentsToFrame(
+    const FloatPoint& point_in_content_space) const {
+  return point_in_content_space - GetScrollOffset();
+}
+
+LayoutPoint LocalFrameView::ContentsToFrame(
+    const LayoutPoint& point_in_content_space) const {
+  return point_in_content_space - LayoutSize(GetScrollOffset());
+}
+
 IntPoint LocalFrameView::ContentsToFrame(
     const IntPoint& point_in_content_space) const {
   return point_in_content_space - ScrollOffsetInt();
@@ -4540,6 +4607,11 @@ FloatPoint LocalFrameView::FrameToContents(
   return point_in_frame + GetScrollOffset();
 }
 
+LayoutPoint LocalFrameView::FrameToContents(
+    const LayoutPoint& point_in_frame) const {
+  return point_in_frame + LayoutSize(GetScrollOffset());
+}
+
 IntPoint LocalFrameView::FrameToContents(const IntPoint& point_in_frame) const {
   return point_in_frame + ScrollOffsetInt();
 }
@@ -4547,6 +4619,18 @@ IntPoint LocalFrameView::FrameToContents(const IntPoint& point_in_frame) const {
 IntRect LocalFrameView::FrameToContents(const IntRect& rect_in_frame) const {
   return IntRect(FrameToContents(rect_in_frame.Location()),
                  rect_in_frame.Size());
+}
+
+LayoutPoint LocalFrameView::RootFrameToContents(
+    const LayoutPoint& point_in_root_frame) const {
+  LayoutPoint frame_point = ConvertFromRootFrame(point_in_root_frame);
+  return FrameToContents(frame_point);
+}
+
+FloatPoint LocalFrameView::RootFrameToContents(
+    const FloatPoint& point_in_root_frame) const {
+  FloatPoint frame_point = ConvertFromRootFrame(point_in_root_frame);
+  return FrameToContents(frame_point);
 }
 
 IntPoint LocalFrameView::RootFrameToContents(
@@ -4561,6 +4645,12 @@ IntRect LocalFrameView::RootFrameToContents(
                  root_frame_rect.Size());
 }
 
+LayoutPoint LocalFrameView::ContentsToRootFrame(
+    const LayoutPoint& contents_point) const {
+  LayoutPoint frame_point = ContentsToFrame(contents_point);
+  return ConvertToRootFrame(frame_point);
+}
+
 IntPoint LocalFrameView::ContentsToRootFrame(
     const IntPoint& contents_point) const {
   IntPoint frame_point = ContentsToFrame(contents_point);
@@ -4573,10 +4663,13 @@ IntRect LocalFrameView::ContentsToRootFrame(
   return ConvertToRootFrame(rect_in_frame);
 }
 
-FloatPoint LocalFrameView::RootFrameToContents(
-    const FloatPoint& point_in_root_frame) const {
-  FloatPoint frame_point = ConvertFromRootFrame(point_in_root_frame);
-  return FrameToContents(frame_point);
+LayoutPoint LocalFrameView::ViewportToContents(
+    const LayoutPoint& point_in_viewport) const {
+  LayoutPoint point_in_root_frame(
+      frame_->GetPage()->GetVisualViewport().ViewportToRootFrame(
+          FloatPoint(point_in_viewport)));
+  LayoutPoint point_in_frame = ConvertFromRootFrame(point_in_root_frame);
+  return FrameToContents(point_in_frame);
 }
 
 IntRect LocalFrameView::ViewportToContents(
@@ -4590,11 +4683,7 @@ IntRect LocalFrameView::ViewportToContents(
 
 IntPoint LocalFrameView::ViewportToContents(
     const IntPoint& point_in_viewport) const {
-  IntPoint point_in_root_frame =
-      frame_->GetPage()->GetVisualViewport().ViewportToRootFrame(
-          point_in_viewport);
-  IntPoint point_in_frame = ConvertFromRootFrame(point_in_root_frame);
-  return FrameToContents(point_in_frame);
+  return RoundedIntPoint(ViewportToContents(LayoutPoint(point_in_viewport)));
 }
 
 IntRect LocalFrameView::ContentsToViewport(
@@ -4721,6 +4810,8 @@ LayoutRect LocalFrameView::ScrollIntoView(const LayoutRect& rect_in_content,
                                           bool is_smooth,
                                           ScrollType scroll_type,
                                           bool is_for_scroll_sequence) {
+  GetLayoutBox()->SetPendingOffsetToScroll(LayoutSize());
+
   LayoutRect view_rect(VisibleContentRect());
   LayoutRect expose_rect = ScrollAlignment::GetRectToExpose(
       view_rect, rect_in_content, align_x, align_y);
@@ -4882,8 +4973,14 @@ IntRect LocalFrameView::ConvertToRootFrame(const IntRect& local_rect) const {
 }
 
 IntPoint LocalFrameView::ConvertToRootFrame(const IntPoint& local_point) const {
+  return RoundedIntPoint(ConvertToRootFrame(LayoutPoint(local_point)));
+}
+
+LayoutPoint LocalFrameView::ConvertToRootFrame(
+    const LayoutPoint& local_point) const {
   if (LocalFrameView* parent = ParentFrameView()) {
-    IntPoint parent_point = ConvertToContainingEmbeddedContentView(local_point);
+    LayoutPoint parent_point =
+        ConvertToContainingEmbeddedContentView(local_point);
     return parent->ConvertToRootFrame(parent_point);
   }
   return local_point;
@@ -4900,8 +4997,15 @@ IntRect LocalFrameView::ConvertFromRootFrame(
 
 IntPoint LocalFrameView::ConvertFromRootFrame(
     const IntPoint& point_in_root_frame) const {
+  return RoundedIntPoint(
+      ConvertFromRootFrame(LayoutPoint(point_in_root_frame)));
+}
+
+LayoutPoint LocalFrameView::ConvertFromRootFrame(
+    const LayoutPoint& point_in_root_frame) const {
   if (LocalFrameView* parent = ParentFrameView()) {
-    IntPoint parent_point = parent->ConvertFromRootFrame(point_in_root_frame);
+    LayoutPoint parent_point =
+        parent->ConvertFromRootFrame(point_in_root_frame);
     return ConvertFromContainingEmbeddedContentView(parent_point);
   }
   return point_in_root_frame;
@@ -5558,6 +5662,13 @@ void LocalFrameView::SetAnimationHost(
 
 LayoutUnit LocalFrameView::CaretWidth() const {
   return LayoutUnit(GetChromeClient()->WindowToViewportScalar(1));
+}
+
+ScrollbarTheme& LocalFrameView::GetPageScrollbarTheme() const {
+  Page* page = frame_->GetPage();
+  DCHECK(page);
+
+  return page->GetScrollbarTheme();
 }
 
 }  // namespace blink

@@ -131,7 +131,6 @@ MEDIA_EXPORT extern const base::Feature kUseAndroidOverlayAggressively;
 MEDIA_EXPORT extern const base::Feature kUseNewMediaCache;
 MEDIA_EXPORT extern const base::Feature kUseR16Texture;
 MEDIA_EXPORT extern const base::Feature kVideoBlitColorAccuracy;
-MEDIA_EXPORT extern const base::Feature kVideoColorManagement;
 MEDIA_EXPORT extern const base::Feature kUseSurfaceLayerForVideo;
 MEDIA_EXPORT extern const base::Feature kUseModernMediaControls;
 
@@ -158,6 +157,12 @@ MEDIA_EXPORT extern const base::Feature kSerializeCoreAudioPauseResume;
 // switches::autoplay namespace.
 MEDIA_EXPORT std::string GetEffectiveAutoplayPolicy(
     const base::CommandLine& command_line);
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+// Based on the command line of the current process, determine if
+// audio focus duck flash should be enabled.
+MEDIA_EXPORT bool IsAudioFocusDuckFlashEnabled();
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 }  // namespace media
 

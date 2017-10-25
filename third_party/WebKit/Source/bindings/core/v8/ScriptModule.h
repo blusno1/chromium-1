@@ -60,6 +60,8 @@ class CORE_EXPORT ScriptModule final {
   ScriptModule();
   ~ScriptModule();
 
+  ScriptModule(v8::Isolate*, v8::Local<v8::Module>);
+
   // Returns exception, if any.
   ScriptValue Instantiate(ScriptState*);
 
@@ -90,8 +92,6 @@ class CORE_EXPORT ScriptModule final {
   // TraceWrapperV8Reference<v8::Module>, and reconstructs ScriptModule from it.
   friend class ModuleScript;
 
-  ScriptModule(v8::Isolate*, v8::Local<v8::Module>);
-
   v8::Local<v8::Module> NewLocal(v8::Isolate* isolate) {
     return module_->NewLocal(isolate);
   }
@@ -101,7 +101,7 @@ class CORE_EXPORT ScriptModule final {
       v8::Local<v8::String> specifier,
       v8::Local<v8::Module> referrer);
 
-  RefPtr<SharedPersistent<v8::Module>> module_;
+  scoped_refptr<SharedPersistent<v8::Module>> module_;
   unsigned identity_hash_ = 0;
 
   friend struct ScriptModuleHash;
@@ -137,13 +137,13 @@ template <>
 struct HashTraits<blink::ScriptModule>
     : public SimpleClassHashTraits<blink::ScriptModule> {
   static bool IsDeletedValue(const blink::ScriptModule& value) {
-    return HashTraits<RefPtr<blink::SharedPersistent<v8::Module>>>::
+    return HashTraits<scoped_refptr<blink::SharedPersistent<v8::Module>>>::
         IsDeletedValue(value.module_);
   }
 
   static void ConstructDeletedValue(blink::ScriptModule& slot,
                                     bool zero_value) {
-    HashTraits<RefPtr<blink::SharedPersistent<v8::Module>>>::
+    HashTraits<scoped_refptr<blink::SharedPersistent<v8::Module>>>::
         ConstructDeletedValue(slot.module_, zero_value);
   }
 };

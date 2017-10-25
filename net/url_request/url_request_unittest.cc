@@ -8,9 +8,10 @@
 #include "build/build_config.h"
 
 #if defined(OS_WIN)
-#include <windows.h>
 #include <objbase.h>
 #include <shlobj.h>
+#include <windows.h>
+#include <wrl/client.h>
 #endif
 
 #include <stdint.h>
@@ -141,7 +142,6 @@
 
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
-#include "base/win/scoped_comptr.h"
 #endif
 
 #if BUILDFLAG(ENABLE_REPORTING)
@@ -1445,10 +1445,10 @@ TEST_F(URLRequestTest, ResolveShortcutTest) {
 
   // Temporarily create a shortcut for test
   {
-    base::win::ScopedComPtr<IShellLink> shell;
+    Microsoft::WRL::ComPtr<IShellLink> shell;
     ASSERT_TRUE(SUCCEEDED(::CoCreateInstance(
         CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&shell))));
-    base::win::ScopedComPtr<IPersistFile> persist;
+    Microsoft::WRL::ComPtr<IPersistFile> persist;
     ASSERT_TRUE(SUCCEEDED(shell.CopyTo(persist.GetAddressOf())));
     EXPECT_TRUE(SUCCEEDED(shell->SetPath(app_path.value().c_str())));
     EXPECT_TRUE(SUCCEEDED(shell->SetDescription(L"ResolveShortcutTest")));
@@ -2980,7 +2980,7 @@ TEST_F(URLRequestTest, SameSiteCookies) {
         test_server.GetURL(kHost, "/echoheader?Cookie"), DEFAULT_PRIORITY, &d,
         TRAFFIC_ANNOTATION_FOR_TESTS));
     req->set_site_for_cookies(test_server.GetURL(kHost, "/"));
-    req->set_initiator(url::Origin(test_server.GetURL(kHost, "/")));
+    req->set_initiator(url::Origin::Create(test_server.GetURL(kHost, "/")));
     req->Start();
     base::RunLoop().Run();
 
@@ -3016,7 +3016,7 @@ TEST_F(URLRequestTest, SameSiteCookies) {
         test_server.GetURL(kHost, "/echoheader?Cookie"), DEFAULT_PRIORITY, &d,
         TRAFFIC_ANNOTATION_FOR_TESTS));
     req->set_site_for_cookies(test_server.GetURL(kSubHost, "/"));
-    req->set_initiator(url::Origin(test_server.GetURL(kSubHost, "/")));
+    req->set_initiator(url::Origin::Create(test_server.GetURL(kSubHost, "/")));
     req->Start();
     base::RunLoop().Run();
 
@@ -3034,7 +3034,8 @@ TEST_F(URLRequestTest, SameSiteCookies) {
         test_server.GetURL(kHost, "/echoheader?Cookie"), DEFAULT_PRIORITY, &d,
         TRAFFIC_ANNOTATION_FOR_TESTS));
     req->set_site_for_cookies(test_server.GetURL(kCrossHost, "/"));
-    req->set_initiator(url::Origin(test_server.GetURL(kCrossHost, "/")));
+    req->set_initiator(
+        url::Origin::Create(test_server.GetURL(kCrossHost, "/")));
     req->Start();
     base::RunLoop().Run();
 
@@ -3053,7 +3054,8 @@ TEST_F(URLRequestTest, SameSiteCookies) {
         test_server.GetURL(kHost, "/echoheader?Cookie"), DEFAULT_PRIORITY, &d,
         TRAFFIC_ANNOTATION_FOR_TESTS));
     req->set_site_for_cookies(test_server.GetURL(kHost, "/"));
-    req->set_initiator(url::Origin(test_server.GetURL(kCrossHost, "/")));
+    req->set_initiator(
+        url::Origin::Create(test_server.GetURL(kCrossHost, "/")));
     req->set_method("GET");
     req->Start();
     base::RunLoop().Run();
@@ -3073,7 +3075,8 @@ TEST_F(URLRequestTest, SameSiteCookies) {
         test_server.GetURL(kHost, "/echoheader?Cookie"), DEFAULT_PRIORITY, &d,
         TRAFFIC_ANNOTATION_FOR_TESTS));
     req->set_site_for_cookies(test_server.GetURL(kHost, "/"));
-    req->set_initiator(url::Origin(test_server.GetURL(kCrossHost, "/")));
+    req->set_initiator(
+        url::Origin::Create(test_server.GetURL(kCrossHost, "/")));
     req->set_method("POST");
     req->Start();
     base::RunLoop().Run();
@@ -3337,7 +3340,7 @@ TEST_F(URLRequestTest, CookieAgeMetrics) {
         http_server.GetURL(kHost, "/echoheader?Cookie"), DEFAULT_PRIORITY, &d,
         TRAFFIC_ANNOTATION_FOR_TESTS));
     req->set_site_for_cookies(http_server.GetURL(kHost, "/"));
-    req->set_initiator(url::Origin(http_server.GetURL(kHost, "/")));
+    req->set_initiator(url::Origin::Create(http_server.GetURL(kHost, "/")));
     req->Start();
     base::RunLoop().Run();
     histograms.ExpectTotalCount("Cookie.AgeForNonSecureCrossSiteRequest", 0);
@@ -3351,7 +3354,8 @@ TEST_F(URLRequestTest, CookieAgeMetrics) {
         http_server.GetURL(kHost, "/echoheader?Cookie"), DEFAULT_PRIORITY, &d,
         TRAFFIC_ANNOTATION_FOR_TESTS));
     req->set_site_for_cookies(http_server.GetURL(kCrossHost, "/"));
-    req->set_initiator(url::Origin(http_server.GetURL(kCrossHost, "/")));
+    req->set_initiator(
+        url::Origin::Create(http_server.GetURL(kCrossHost, "/")));
     req->Start();
     base::RunLoop().Run();
     histograms.ExpectTotalCount("Cookie.AgeForNonSecureCrossSiteRequest", 1);
@@ -7256,7 +7260,7 @@ TEST_F(URLRequestTestHTTP, ProcessNelHeaderHttps) {
   base::RunLoop().Run();
 
   ASSERT_EQ(1u, nel_delegate.headers().size());
-  EXPECT_EQ(url::Origin(request_url), nel_delegate.headers()[0].origin);
+  EXPECT_EQ(url::Origin::Create(request_url), nel_delegate.headers()[0].origin);
   EXPECT_EQ("foo", nel_delegate.headers()[0].value);
 }
 
@@ -7784,6 +7788,9 @@ TEST_F(URLRequestTestHTTP, DeferredRedirect) {
     base::RunLoop().Run();
 
     EXPECT_EQ(1, d.received_redirect_count());
+    EXPECT_TRUE(d.have_full_request_headers());
+    CheckFullRequestHeaders(d.full_request_headers(), test_url);
+    d.ClearFullRequestHeaders();
 
     req->FollowDeferredRedirect();
     base::RunLoop().Run();
@@ -7819,9 +7826,6 @@ TEST_F(URLRequestTestHTTP, DeferredRedirect_GetFullRequestHeaders) {
     base::RunLoop().Run();
 
     EXPECT_EQ(1, d.received_redirect_count());
-    EXPECT_TRUE(d.have_full_request_headers());
-    CheckFullRequestHeaders(d.full_request_headers(), test_url);
-    d.ClearFullRequestHeaders();
 
     req->FollowDeferredRedirect();
     base::RunLoop().Run();
@@ -10436,6 +10440,8 @@ static CertStatus ExpectedCertStatusForFailedOnlineRevocationCheck() {
 #if defined(OS_WIN) || defined(OS_MACOSX)
   // Windows can return CERT_STATUS_UNABLE_TO_CHECK_REVOCATION but we don't
   // have that ability on other platforms.
+  // TODO(eroman): Should this also be the return value for
+  //               CertVerifyProcBuiltin?
   return CERT_STATUS_UNABLE_TO_CHECK_REVOCATION;
 #else
   return 0;
@@ -10450,8 +10456,8 @@ static CertStatus ExpectedCertStatusForFailedOnlineRevocationCheck() {
 // If it does not, then tests which rely on 'hard fail' behaviour should be
 // skipped.
 static bool SystemSupportsHardFailRevocationChecking() {
-#if defined(OS_WIN) || defined(USE_NSS_CERTS)
-  // TODO(crbug.com/762380): Enable on Fuchsia once it's implemented.
+#if defined(OS_WIN) || defined(USE_NSS_CERTS) || \
+    defined(USE_BUILTIN_CERT_VERIFIER)
   return true;
 #else
   return false;
@@ -10463,12 +10469,10 @@ static bool SystemSupportsHardFailRevocationChecking() {
 // several tests are effected because our testing EV certificate won't be
 // recognised as EV.
 static bool SystemUsesChromiumEVMetadata() {
-#if defined(OS_ANDROID)
-  // On Android, we use the system to tell us whether a certificate is EV or not
-  // and the system won't recognise our testing root.
-  return false;
-#else
+#if defined(PLATFORM_USES_CHROMIUM_EV_METADATA)
   return true;
+#else
+  return false;
 #endif
 }
 
@@ -10486,9 +10490,9 @@ static CertStatus ExpectedCertStatusForFailedOnlineEVRevocationCheck() {
 }
 
 static bool SystemSupportsOCSP() {
-#if defined(OS_ANDROID) || defined(USE_BUILTIN_CERT_VERIFIER)
+#if defined(OS_ANDROID) || defined(OS_FUCHSIA)
   // TODO(jnd): http://crbug.com/117478 - EV verification is not yet supported.
-  // TODO(crbug.com/762380): Enable on Fuchsia once it's implemented.
+  // TODO(crbug.com/776575): OCSP tests currently fail on Fuchsia.
   return false;
 #else
   return true;
@@ -10496,8 +10500,8 @@ static bool SystemSupportsOCSP() {
 }
 
 static bool SystemSupportsOCSPStapling() {
-#if defined(USE_NSS_CERTS) || defined(OS_WIN)
-  // TODO(crbug.com/762380): Enable on Fuchsia once it's implemented.
+#if defined(USE_NSS_CERTS) || defined(OS_WIN) || \
+    defined(USE_BUILTIN_CERT_VERIFIER)
   return true;
 #else
   return false;
@@ -10557,8 +10561,17 @@ TEST_F(HTTPSOCSPTest, Invalid) {
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
 
+#if defined(USE_BUILTIN_CERT_VERIFIER)
+  // TODO(649017): This test uses soft-fail revocation checking, but returns an
+  // invalid OCSP response (can't parse). CertVerifyProcBuiltin currently
+  // doesn't consider this a candidate for soft-fail (only considers
+  // network-level failures as skippable).
+  EXPECT_EQ(CERT_STATUS_UNABLE_TO_CHECK_REVOCATION,
+            cert_status & CERT_STATUS_UNABLE_TO_CHECK_REVOCATION);
+#else
   EXPECT_EQ(ExpectedCertStatusForFailedOnlineRevocationCheck(),
             cert_status & CERT_STATUS_ALL_ERRORS);
+#endif
 
   // Without a positive OCSP response, we shouldn't show the EV status.
   EXPECT_FALSE(cert_status & CERT_STATUS_IS_EV);
@@ -11218,10 +11231,17 @@ TEST_F(HTTPSHardFailTest, FailsOnOCSPInvalid) {
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
 
-  EXPECT_EQ(CERT_STATUS_REVOKED,
-            cert_status & CERT_STATUS_REVOKED);
+#if defined(USE_BUILTIN_CERT_VERIFIER)
+  // TODO(crbug.com/649017): Should we consider invalid response as
+  //                         affirmatively revoked?
+  EXPECT_EQ(CERT_STATUS_UNABLE_TO_CHECK_REVOCATION,
+            cert_status & CERT_STATUS_UNABLE_TO_CHECK_REVOCATION);
+#else
+  EXPECT_EQ(CERT_STATUS_REVOKED, cert_status & CERT_STATUS_REVOKED);
+#endif
 
   // Without a positive OCSP response, we shouldn't show the EV status.
+  EXPECT_FALSE(cert_status & CERT_STATUS_IS_EV);
   EXPECT_TRUE(cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
@@ -11236,6 +11256,23 @@ class HTTPSEVCRLSetTest : public HTTPSOCSPTest {
   }
 };
 
+// Helper class to set the global CRLSet, and on destruction restore the
+// previously set one.
+class ScopedSetCRLSet {
+ public:
+  ScopedSetCRLSet(scoped_refptr<CRLSet> crl_set) {
+    prev_crl_set_ = SSLConfigService::GetCRLSet();
+    SSLConfigService::SetCRLSetForTesting(std::move(crl_set));
+  }
+
+  ~ScopedSetCRLSet() {
+    SSLConfigService::SetCRLSetForTesting(std::move(prev_crl_set_));
+  }
+
+ private:
+  scoped_refptr<CRLSet> prev_crl_set_;
+};
+
 TEST_F(HTTPSEVCRLSetTest, MissingCRLSetAndInvalidOCSP) {
   if (!SystemSupportsOCSP()) {
     LOG(WARNING) << "Skipping test because system doesn't support OCSP";
@@ -11246,7 +11283,7 @@ TEST_F(HTTPSEVCRLSetTest, MissingCRLSetAndInvalidOCSP) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  SSLConfigService::SetCRLSet(scoped_refptr<CRLSet>());
+  ScopedSetCRLSet set_crlset(nullptr);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11268,7 +11305,7 @@ TEST_F(HTTPSEVCRLSetTest, MissingCRLSetAndRevokedOCSP) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_REVOKED;
-  SSLConfigService::SetCRLSet(scoped_refptr<CRLSet>());
+  ScopedSetCRLSet set_crlset(nullptr);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11296,7 +11333,7 @@ TEST_F(HTTPSEVCRLSetTest, MissingCRLSetAndGoodOCSP) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_OK;
-  SSLConfigService::SetCRLSet(scoped_refptr<CRLSet>());
+  ScopedSetCRLSet set_crlset(nullptr);
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11319,8 +11356,7 @@ TEST_F(HTTPSEVCRLSetTest, ExpiredCRLSet) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  SSLConfigService::SetCRLSet(
-      scoped_refptr<CRLSet>(CRLSet::ExpiredCRLSetForTesting()));
+  ScopedSetCRLSet set_crlset(CRLSet::ExpiredCRLSetForTesting());
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11343,9 +11379,7 @@ TEST_F(HTTPSEVCRLSetTest, FreshCRLSetCovered) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  SSLConfigService::SetCRLSet(
-      scoped_refptr<CRLSet>(CRLSet::ForTesting(
-          false, &kOCSPTestCertSPKI, "")));
+  ScopedSetCRLSet set_crlset(CRLSet::ForTesting(false, &kOCSPTestCertSPKI, ""));
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11369,8 +11403,7 @@ TEST_F(HTTPSEVCRLSetTest, FreshCRLSetNotCovered) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  SSLConfigService::SetCRLSet(
-      scoped_refptr<CRLSet>(CRLSet::EmptyCRLSetForTesting()));
+  ScopedSetCRLSet set_crlset(CRLSet::EmptyCRLSetForTesting());
 
   CertStatus cert_status = 0;
   DoConnection(ssl_options, &cert_status);
@@ -11402,8 +11435,7 @@ TEST_F(HTTPSEVCRLSetTest, ExpiredCRLSetAndRevokedNonEVCert) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_REVOKED;
-  SSLConfigService::SetCRLSet(
-      scoped_refptr<CRLSet>(CRLSet::ExpiredCRLSetForTesting()));
+  ScopedSetCRLSet set_crlset(CRLSet::ExpiredCRLSetForTesting());
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11430,8 +11462,7 @@ TEST_F(HTTPSCRLSetTest, ExpiredCRLSet) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  SSLConfigService::SetCRLSet(
-      scoped_refptr<CRLSet>(CRLSet::ExpiredCRLSetForTesting()));
+  ScopedSetCRLSet set_crlset(CRLSet::ExpiredCRLSetForTesting());
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11453,9 +11484,8 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevoked) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_OK;
   ssl_options.cert_serial = 10;
-  SSLConfigService::SetCRLSet(
-      scoped_refptr<CRLSet>(CRLSet::ForTesting(
-          false, &kOCSPTestCertSPKI, "\x0a")));
+  ScopedSetCRLSet set_crlset(
+      CRLSet::ForTesting(false, &kOCSPTestCertSPKI, "\x0a"));
 
   CertStatus cert_status = 0;
   DoConnection(ssl_options, &cert_status);

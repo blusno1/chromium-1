@@ -246,8 +246,9 @@ void GLES2DecoderTestBase::InitDecoderWithWorkarounds(
   mock_decoder_.reset(
       new MockGLES2Decoder(command_buffer_service_.get(), &outputter_));
 
-  EXPECT_TRUE(group_->Initialize(mock_decoder_.get(), init.context_type,
-                                 DisallowedFeatures()));
+  EXPECT_EQ(group_->Initialize(mock_decoder_.get(), init.context_type,
+                               DisallowedFeatures()),
+            gpu::ContextResult::kSuccess);
 
   if (init.context_type == CONTEXT_TYPE_WEBGL2 ||
       init.context_type == CONTEXT_TYPE_OPENGLES3) {
@@ -490,8 +491,9 @@ void GLES2DecoderTestBase::InitDecoderWithWorkarounds(
                                       &outputter_, group_.get()));
   decoder_->SetIgnoreCachedStateForTest(ignore_cached_state_for_test_);
   decoder_->GetLogger()->set_log_synthesized_gl_errors(false);
-  ASSERT_TRUE(decoder_->Initialize(surface_, context_, false,
-                                   DisallowedFeatures(), attribs));
+  ASSERT_EQ(decoder_->Initialize(surface_, context_, false,
+                                 DisallowedFeatures(), attribs),
+            gpu::ContextResult::kSuccess);
 
   EXPECT_CALL(*context_, MakeCurrent(surface_.get())).WillOnce(Return(true));
   if (context_->WasAllocatedUsingRobustnessExtension()) {
@@ -2236,7 +2238,6 @@ void GLES2DecoderPassthroughTestBase::OnRescheduleAfterFinished() {}
 void GLES2DecoderPassthroughTestBase::SetUp() {
   base::CommandLine::Init(0, NULL);
   auto* command_line = base::CommandLine::ForCurrentProcess();
-  command_line->AppendSwitch(switches::kUsePassthroughCmdDecoder);
   command_line->AppendSwitchASCII(switches::kUseGL,
                                   gl::kGLImplementationANGLEName);
   command_line->AppendSwitchASCII(switches::kUseANGLE,
@@ -2273,12 +2274,19 @@ void GLES2DecoderPassthroughTestBase::SetUp() {
 
   decoder_.reset(new GLES2DecoderPassthroughImpl(
       this, command_buffer_service_.get(), &outputter_, group_.get()));
-  ASSERT_TRUE(group_->Initialize(decoder_.get(),
-                                 context_creation_attribs_.context_type,
-                                 DisallowedFeatures()));
-  ASSERT_TRUE(decoder_->Initialize(surface_, context_, false,
-                                   DisallowedFeatures(),
-                                   context_creation_attribs_));
+
+  // Don't request any optional extensions at startup, individual tests will
+  // request what they need.
+  decoder_->SetOptionalExtensionsRequestedForTesting(false);
+
+  ASSERT_EQ(
+      group_->Initialize(decoder_.get(), context_creation_attribs_.context_type,
+                         DisallowedFeatures()),
+      gpu::ContextResult::kSuccess);
+  ASSERT_EQ(
+      decoder_->Initialize(surface_, context_, false, DisallowedFeatures(),
+                           context_creation_attribs_),
+      gpu::ContextResult::kSuccess);
 
   scoped_refptr<gpu::Buffer> buffer =
       command_buffer_service_->CreateTransferBufferHelper(kSharedBufferSize,

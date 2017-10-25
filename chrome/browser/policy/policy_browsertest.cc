@@ -32,6 +32,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_file_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
@@ -894,7 +895,7 @@ IN_PROC_BROWSER_TEST_F(LocalePolicyTest, ApplicationLocaleValue) {
   EXPECT_EQ(french_title, title);
 
   // Make sure this is really French and differs from the English title.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   std::string loaded =
       ui::ResourceBundle::GetSharedInstance().ReloadLocaleResources("en-US");
   EXPECT_EQ("en-US", loaded);
@@ -1448,7 +1449,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DownloadDirectory) {
   // Verifies that the download directory can be forced by policy.
 
   // Set the initial download directory.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir initial_dir;
   ASSERT_TRUE(initial_dir.CreateUniqueTempDir());
   browser()->profile()->GetPrefs()->SetFilePath(
@@ -1850,7 +1851,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_ExtensionInstallSources) {
       URLRequestMockHTTPJob::GetMockUrl("extensions/*"));
   const GURL referrer_url(URLRequestMockHTTPJob::GetMockUrl("policy/*"));
 
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir download_directory;
   ASSERT_TRUE(download_directory.CreateUniqueTempDir());
   DownloadPrefs* download_prefs =
@@ -3173,14 +3174,17 @@ class MediaStreamDevicesControllerBrowserTest
       public testing::WithParamInterface<bool> {
  public:
   MediaStreamDevicesControllerBrowserTest()
-      : request_url_allowed_via_whitelist_(false),
-        request_url_("https://www.example.com/foo") {
+      : request_url_allowed_via_whitelist_(false) {
     policy_value_ = GetParam();
   }
   virtual ~MediaStreamDevicesControllerBrowserTest() {}
 
   void SetUpOnMainThread() override {
     PolicyTest::SetUpOnMainThread();
+
+    ASSERT_TRUE(embedded_test_server()->Start());
+    request_url_ = embedded_test_server()->GetURL("/simple.html");
+    request_pattern_ = request_url_.GetOrigin().spec();
     ui_test_utils::NavigateToURL(browser(), request_url_);
 
     // Testing both the new (PermissionManager) and old code-paths is not simple
@@ -3281,12 +3285,8 @@ class MediaStreamDevicesControllerBrowserTest
   bool policy_value_;
   bool request_url_allowed_via_whitelist_;
   GURL request_url_;
-  static const char kExampleRequestPattern[];
+  std::string request_pattern_;
 };
-
-// static
-const char MediaStreamDevicesControllerBrowserTest::kExampleRequestPattern[] =
-    "https://[*.]example.com/";
 
 IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
                        AudioCaptureAllowed) {
@@ -3319,11 +3319,11 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
   audio_devices.push_back(fake_audio_device);
 
   const char* allow_pattern[] = {
-    kExampleRequestPattern,
-    // This will set an allow-all policy whitelist.  Since we do not allow
-    // setting an allow-all entry in the whitelist, this entry should be ignored
-    // and therefore the request should be denied.
-    NULL,
+      request_pattern_.c_str(),
+      // This will set an allow-all policy whitelist.  Since we do not allow
+      // setting an allow-all entry in the whitelist, this entry should be
+      // ignored and therefore the request should be denied.
+      nullptr,
   };
 
   for (size_t i = 0; i < arraysize(allow_pattern); ++i) {
@@ -3377,11 +3377,11 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
   video_devices.push_back(fake_video_device);
 
   const char* allow_pattern[] = {
-    kExampleRequestPattern,
-    // This will set an allow-all policy whitelist.  Since we do not allow
-    // setting an allow-all entry in the whitelist, this entry should be ignored
-    // and therefore the request should be denied.
-    NULL,
+      request_pattern_.c_str(),
+      // This will set an allow-all policy whitelist.  Since we do not allow
+      // setting an allow-all entry in the whitelist, this entry should be
+      // ignored and therefore the request should be denied.
+      nullptr,
   };
 
   for (size_t i = 0; i < arraysize(allow_pattern); ++i) {
@@ -4380,10 +4380,15 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
 
 class NetworkTimePolicyTest : public PolicyTest {
  public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    content::EnableFeatureWithParam(network_time::kNetworkTimeServiceQuerying,
-                                    "FetchBehavior", "on-demand-only",
-                                    command_line);
+  NetworkTimePolicyTest() : PolicyTest() {}
+  ~NetworkTimePolicyTest() override {}
+
+  void SetUpOnMainThread() override {
+    std::map<std::string, std::string> parameters;
+    parameters["FetchBehavior"] = "on-demand-only";
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        network_time::kNetworkTimeServiceQuerying, parameters);
+    PolicyTest::SetUpOnMainThread();
   }
 
   // A request handler that returns a dummy response and counts the number of
@@ -4405,7 +4410,10 @@ class NetworkTimePolicyTest : public PolicyTest {
   uint32_t num_requests() { return num_requests_; }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   uint32_t num_requests_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(NetworkTimePolicyTest);
 };
 
 IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest, NetworkTimeQueriesDisabled) {

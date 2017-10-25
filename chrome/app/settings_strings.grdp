@@ -332,8 +332,11 @@
       <ph name="LINE_BREAKS2">&lt;br&gt;&lt;br&gt;</ph>
       This doesn’t affect apps or content on other devices.
     </message>
-    <message name="IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_REMOVE" desc="Lable for confirmation button in the disable android apps dialog.">
+    <message name="IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_REMOVE" desc="Label for confirmation button in the disable android apps dialog.">
       Remove Android apps
+    </message>
+    <message name="IDS_SETTINGS_ANDROID_APPS_MANAGE_APP_LINKS" desc="Label for accessing app preferrences on ARC side.">
+      Manage Play app links
     </message>
   </if>
 
@@ -1345,6 +1348,18 @@
     <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS" desc="Settings > Network: Name servers label.">
       Name servers
     </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_AUTOMATIC" desc="Settings > Internet > Network details: Label for setting automatic name servers.">
+      Automatic name servers
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_CUSTOM" desc="Settings > Internet > Network details: Label for setting custom name servers.">
+      Custom name servers
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_GOOGLE" desc="Settings > Internet > Network details: Label for setting Google name servers.">
+      Google name servers
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_NAMESERVERS_LEARN_MORE" desc="Settings > Internet > Network details: Text for the learn more link for the Google name servers option.">
+      Learn more
+    </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_WPAD" desc="Settings > Internet > Network details: Web Proxy Auto Discovery (WPAD) label.">
       Web Proxy Auto Discovery URL:
     </message>
@@ -1380,6 +1395,9 @@
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN_COMPLETED" desc="Settings > Internet > Network details: Status text when a scan has completed.">
       Scan completed
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCAN_CONNECTED_HELP" desc="Settings > Internet > Network details: Help message for scan button when network is connected.">
+      Disconnect to enable scanning
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_SCANNING" desc="Settings > Internet > Network details: Status text when a scan is in progress.">
       Scanning...
@@ -2199,6 +2217,9 @@
   <message name="IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_DISABLED" desc="Sub label for the Google Assistant button when Assistant is disabled.">
     Disabled
   </message>
+  <message name="IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_TURN_ON" desc="Label for the Google Assistant button when ARC is disabled or value prop is not accepted.">
+    Enable
+  </message>
 </if>
 
   <!-- Search Engines Page -->
@@ -2532,6 +2553,9 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_DRM_DISABLED" desc="A label shown when the protected content / protected media identifier permission on the Site Details page is disabled because the user has turned off using unique identifiers to access protected content.">
     To change this setting, first <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>turn on identifiers<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_SINGULAR" desc="A label shown when the Ads permission on the Site Details page is blocked by the user, but the site is not blacklisted for having bad ads.">
+    Block if site tends to show intrusive ads
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_KILL_SWITCH" desc="A label shown when a permission on the Site Details page is temporarily blocked for the user's safety.">
     Temporarily blocked to protect your security
   </message>
@@ -2567,6 +2591,9 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_RESET_DIALOG_TITLE" desc="Title of the dialog that warns about resetting all permissions for a site.">
     Reset settings for this site?
+  </message>
+  <message name="IDS_SETTINGS_LOADING_LOCAL_DATA_LIST" desc="Explanation shown while transferring cookies and local data.">
+    Loading, please wait...
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_RESET_CONFIRMATION" desc="Text for the dialog that warns about resetting all permissions for a site.">
     Chrome will reset permissions to their defaults

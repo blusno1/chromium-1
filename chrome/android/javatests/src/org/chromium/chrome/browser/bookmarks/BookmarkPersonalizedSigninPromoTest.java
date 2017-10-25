@@ -31,6 +31,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -43,6 +45,7 @@ import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ProfileDataSource;
 import org.chromium.components.signin.test.util.AccountHolder;
 import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
+import org.chromium.ui.test.util.UiDisableIf;
 
 import java.io.Closeable;
 import java.util.ArrayList;
@@ -73,6 +76,7 @@ public class BookmarkPersonalizedSigninPromoTest {
 
     @Test
     @MediumTest
+    @RetryOnFailure(message = "crbug.com/778283")
     public void testManualDismissPromo() throws Exception {
         openBookmarkManager();
         onView(withId(R.id.signin_promo_view_container)).check(matches(isDisplayed()));
@@ -82,6 +86,7 @@ public class BookmarkPersonalizedSigninPromoTest {
 
     @Test
     @LargeTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/776405.
     public void testAutoDismissPromo() throws Exception {
         int impressionCap = SigninPromoController.getMaxImpressionsBookmarksForTests();
         for (int impression = 0; impression < impressionCap; impression++) {
@@ -136,6 +141,7 @@ public class BookmarkPersonalizedSigninPromoTest {
 
     @Test
     @MediumTest
+    @RetryOnFailure(message = "crbug.com/778283")
     public void testSigninButtonNewAccount() throws Exception {
         openBookmarkManager();
         onView(withId(R.id.signin_promo_view_container)).check(matches(isDisplayed()));

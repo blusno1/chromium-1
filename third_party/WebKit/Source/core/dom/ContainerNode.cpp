@@ -54,8 +54,8 @@
 #include "core/layout/line/RootInlineBox.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/EventDispatchForbiddenScope.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/bindings/RuntimeCallStats.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/bindings/V8PerIsolateData.h"
 
 namespace blink {
@@ -635,13 +635,13 @@ void ContainerNode::WillRemoveChildren() {
       ChildFrameDisconnector::kDescendantsOnly);
 }
 
-DEFINE_TRACE(ContainerNode) {
+void ContainerNode::Trace(blink::Visitor* visitor) {
   visitor->Trace(first_child_);
   visitor->Trace(last_child_);
   Node::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ContainerNode) {
+void ContainerNode::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(first_child_);
   visitor->TraceWrappers(last_child_);
   Node::TraceWrappers(visitor);
@@ -793,7 +793,7 @@ void ContainerNode::RemoveChildren(SubtreeModificationAction action) {
       ScriptForbiddenScope forbid_script;
 
       while (Node* child = first_child_) {
-        RemoveBetween(0, child->nextSibling(), *child);
+        RemoveBetween(nullptr, child->nextSibling(), *child);
         NotifyNodeRemoved(*child);
       }
     }

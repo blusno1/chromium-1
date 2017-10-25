@@ -49,7 +49,7 @@ class StyleSheetCSSRuleList final : public CSSRuleList {
     return new StyleSheetCSSRuleList(sheet);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(style_sheet_);
     CSSRuleList::Trace(visitor);
   }
@@ -203,7 +203,8 @@ void CSSStyleSheet::setDisabled(bool disabled) {
   DidMutate();
 }
 
-void CSSStyleSheet::SetMediaQueries(RefPtr<MediaQuerySet> media_queries) {
+void CSSStyleSheet::SetMediaQueries(
+    scoped_refptr<MediaQuerySet> media_queries) {
   media_queries_ = std::move(media_queries);
   if (media_cssom_wrapper_ && media_queries_)
     media_cssom_wrapper_->Reattach(media_queries_.get());
@@ -333,7 +334,7 @@ void CSSStyleSheet::deleteRule(unsigned index,
 
   if (!child_rule_cssom_wrappers_.IsEmpty()) {
     if (child_rule_cssom_wrappers_[index])
-      child_rule_cssom_wrappers_[index]->SetParentStyleSheet(0);
+      child_rule_cssom_wrappers_[index]->SetParentStyleSheet(nullptr);
     child_rule_cssom_wrappers_.EraseAt(index);
   }
 }
@@ -403,7 +404,7 @@ Document* CSSStyleSheet::OwnerDocument() const {
 }
 
 void CSSStyleSheet::SetAllowRuleAccessFromOrigin(
-    RefPtr<SecurityOrigin> allowed_origin) {
+    scoped_refptr<SecurityOrigin> allowed_origin) {
   allow_rule_access_from_origin_ = std::move(allowed_origin);
 }
 
@@ -438,7 +439,7 @@ void CSSStyleSheet::SetText(const String& text) {
   contents_->ParseString(text);
 }
 
-DEFINE_TRACE(CSSStyleSheet) {
+void CSSStyleSheet::Trace(blink::Visitor* visitor) {
   visitor->Trace(contents_);
   visitor->Trace(owner_node_);
   visitor->Trace(owner_rule_);

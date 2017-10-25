@@ -116,7 +116,7 @@ class StyleAttributeMutationScope {
     // We have to clear internal state before calling Inspector's code.
     AbstractPropertySetCSSStyleDeclaration* local_copy_style_decl =
         current_decl_;
-    current_decl_ = 0;
+    current_decl_ = nullptr;
 
     if (!should_notify_inspector_)
       return;
@@ -143,13 +143,13 @@ class StyleAttributeMutationScope {
 
 unsigned StyleAttributeMutationScope::scope_count_ = 0;
 AbstractPropertySetCSSStyleDeclaration*
-    StyleAttributeMutationScope::current_decl_ = 0;
+    StyleAttributeMutationScope::current_decl_ = nullptr;
 bool StyleAttributeMutationScope::should_notify_inspector_ = false;
 bool StyleAttributeMutationScope::should_deliver_ = false;
 
 }  // namespace
 
-DEFINE_TRACE(PropertySetCSSStyleDeclaration) {
+void PropertySetCSSStyleDeclaration::Trace(blink::Visitor* visitor) {
   visitor->Trace(property_set_);
   AbstractPropertySetCSSStyleDeclaration::Trace(visitor);
 }
@@ -345,7 +345,7 @@ bool AbstractPropertySetCSSStyleDeclaration::CssPropertyMatches(
   return PropertySet().PropertyMatches(property_id, *property_value);
 }
 
-DEFINE_TRACE(AbstractPropertySetCSSStyleDeclaration) {
+void AbstractPropertySetCSSStyleDeclaration::Trace(blink::Visitor* visitor) {
   CSSStyleDeclaration::Trace(visitor);
 }
 
@@ -388,12 +388,13 @@ PropertyRegistry* StyleRuleCSSStyleDeclaration::GetPropertyRegistry() const {
   return node->GetDocument().GetPropertyRegistry();
 }
 
-DEFINE_TRACE(StyleRuleCSSStyleDeclaration) {
+void StyleRuleCSSStyleDeclaration::Trace(blink::Visitor* visitor) {
   visitor->Trace(parent_rule_);
   PropertySetCSSStyleDeclaration::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(StyleRuleCSSStyleDeclaration) {
+void StyleRuleCSSStyleDeclaration::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(parent_rule_);
   PropertySetCSSStyleDeclaration::TraceWrappers(visitor);
 }
@@ -427,7 +428,7 @@ PropertyRegistry* InlineCSSStyleDeclaration::GetPropertyRegistry() const {
                          : nullptr;
 }
 
-DEFINE_TRACE(InlineCSSStyleDeclaration) {
+void InlineCSSStyleDeclaration::Trace(blink::Visitor* visitor) {
   visitor->Trace(parent_element_);
   AbstractPropertySetCSSStyleDeclaration::Trace(visitor);
 }

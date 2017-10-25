@@ -14,7 +14,6 @@
 #include "build/build_config.h"
 #include "components/infobars/core/infobar.h"
 #include "components/language/core/browser/language_model.h"
-#include "components/metrics/proto/translate_event.pb.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/translate/core/browser/mock_translate_client.h"
@@ -29,6 +28,7 @@
 #include "net/base/network_change_notifier.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/translate_event.pb.h"
 
 using testing::_;
 using testing::Return;
@@ -174,7 +174,7 @@ class TranslateManagerTest : public ::testing::Test {
 
   void TurnOnTranslateByULP() {
     scoped_refptr<base::FieldTrial> trial(
-        CreateFieldTrial(kTrialName, 100, "Enabled", NULL));
+        CreateFieldTrial(kTrialName, 100, "Enabled", nullptr));
     std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
     feature_list->RegisterFieldTrialOverride(
         translate::kTranslateLanguageByULP.name,

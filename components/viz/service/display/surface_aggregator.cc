@@ -963,11 +963,10 @@ gfx::Rect SurfaceAggregator::PrewalkTree(Surface* surface,
   }
 
   CHECK(debug_weak_this.get());
-  // TODO(staraz): It shouldn't need to call the callback when the damage is
-  // from |surface| and not from |child_surfaces|.
+
   if (!damage_rect.IsEmpty()) {
-    surface->RunWillDrawCallback(damage_rect);
-    manager_->SurfaceWillDraw(surface->surface_id());
+    surface->NotifyAggregatedDamage(damage_rect);
+    manager_->SurfaceSubtreeDamaged(surface->surface_id());
   }
 
   CHECK(debug_weak_this.get());
@@ -1106,7 +1105,7 @@ CompositorFrame SurfaceAggregator::Aggregate(const SurfaceId& surface_id) {
   if (dest_pass_list_->empty())
     return {};
 
-  dest_pass_list_ = NULL;
+  dest_pass_list_ = nullptr;
   ProcessAddedAndRemovedSurfaces();
   contained_surfaces_.swap(previous_contained_surfaces_);
   contained_surfaces_.clear();

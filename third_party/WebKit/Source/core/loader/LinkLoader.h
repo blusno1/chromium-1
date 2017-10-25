@@ -99,11 +99,11 @@ class CORE_EXPORT LinkLoader final
 
   Resource* GetResourceForTesting();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   class FinishObserver;
-  LinkLoader(LinkLoaderClient*, RefPtr<WebTaskRunner>);
+  LinkLoader(LinkLoaderClient*, scoped_refptr<WebTaskRunner>);
 
   void NotifyFinished();
 

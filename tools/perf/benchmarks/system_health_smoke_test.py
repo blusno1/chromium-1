@@ -67,8 +67,11 @@ _DISABLED_TESTS = frozenset({
   # crbug.com/725386
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:social:twitter', # pylint: disable=line-too-long
 
-  # crbug.com/755969
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:search:google', # pylint: disable=line-too-long
+  # crbug.com/778095
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.multitab:misc:typical24',  # pylint: disable=line-too-long
+
+  # https://crbug.com/778169
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:news:flipboard',  # pylint: disable=line-too-long
 })
 
 
@@ -113,9 +116,6 @@ def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
     possible_browser = browser_finder.FindBrowser(options)
     if possible_browser is None:
       self.skipTest('Cannot find the browser to run the test.')
-    if (SinglePageBenchmark.ShouldDisable(possible_browser) or
-        not decorators.IsEnabled(benchmark_class, possible_browser)[0]):
-      self.skipTest('Benchmark %s is disabled' % SinglePageBenchmark.Name())
 
     if self.id() in _DISABLED_TESTS:
       self.skipTest('Test is explicitly disabled')

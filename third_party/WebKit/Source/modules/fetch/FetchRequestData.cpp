@@ -12,9 +12,9 @@
 #include "modules/fetch/BytesConsumer.h"
 #include "modules/fetch/FetchHeaderList.h"
 #include "platform/bindings/ScriptState.h"
-#include "platform/http_names.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/network/http_names.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
 
@@ -68,6 +68,7 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->response_tainting_ = response_tainting_;
   request->mime_type_ = mime_type_;
   request->integrity_ = integrity_;
+  request->keepalive_ = keepalive_;
   request->attached_credential_ = attached_credential_;
   return request;
 }
@@ -104,9 +105,10 @@ FetchRequestData::FetchRequestData()
       referrer_(Referrer(ClientReferrerString(), kReferrerPolicyDefault)),
       mode_(WebURLRequest::kFetchRequestModeNoCORS),
       credentials_(WebURLRequest::kFetchCredentialsModeOmit),
-      cache_mode_(WebURLRequest::kFetchRequestCacheModeDefault),
+      cache_mode_(mojom::FetchCacheMode::kDefault),
       redirect_(WebURLRequest::kFetchRedirectModeFollow),
-      response_tainting_(kBasicTainting) {}
+      response_tainting_(kBasicTainting),
+      keepalive_(false) {}
 
 void FetchRequestData::SetCredentials(
     WebURLRequest::FetchCredentialsMode credentials) {
@@ -115,7 +117,7 @@ void FetchRequestData::SetCredentials(
     attached_credential_ = nullptr;
 }
 
-DEFINE_TRACE(FetchRequestData) {
+void FetchRequestData::Trace(blink::Visitor* visitor) {
   visitor->Trace(buffer_);
   visitor->Trace(header_list_);
 }

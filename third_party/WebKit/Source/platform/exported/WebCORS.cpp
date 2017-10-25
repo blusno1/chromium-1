@@ -29,9 +29,9 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/http/http_util.h"
-#include "platform/http_names.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/network/http_names.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -267,7 +267,8 @@ bool HandleRedirect(WebSecurityOrigin& current_security_origin,
       return false;
     }
 
-    RefPtr<SecurityOrigin> last_origin = SecurityOrigin::Create(last_url);
+    scoped_refptr<SecurityOrigin> last_origin =
+        SecurityOrigin::Create(last_url);
     // Set request's origin to a globally unique identifier as specified in
     // the step 10 in https://fetch.spec.whatwg.org/#http-redirect-fetch.
     if (!last_origin->CanRequest(new_url)) {
@@ -392,7 +393,7 @@ WebString AccessControlErrorString(
   switch (status) {
     case AccessStatus::kAccessAllowed:
       NOTREACHED();
-      return "";
+      return WebString();
     case AccessStatus::kInvalidResponse:
       return String::Format("Invalid response. %s",
                             origin_denied.Utf8().data());
@@ -469,7 +470,7 @@ WebString AccessControlErrorString(
                : ""));
   }
   NOTREACHED();
-  return "";
+  return WebString();
 }
 
 WebString PreflightErrorString(const PreflightStatus status,
@@ -478,7 +479,7 @@ WebString PreflightErrorString(const PreflightStatus status,
   switch (status) {
     case PreflightStatus::kPreflightSuccess:
       NOTREACHED();
-      return "";
+      return WebString();
     case PreflightStatus::kPreflightInvalidStatus:
       return String::Format(
           "Response for preflight has invalid HTTP status code %d",
@@ -500,7 +501,7 @@ WebString PreflightErrorString(const PreflightStatus status,
               .data());
   }
   NOTREACHED();
-  return "";
+  return WebString();
 }
 
 WebString RedirectErrorString(const RedirectStatus status,
@@ -508,7 +509,7 @@ WebString RedirectErrorString(const RedirectStatus status,
   switch (status) {
     case RedirectStatus::kRedirectSuccess:
       NOTREACHED();
-      return "";
+      return WebString();
     case RedirectStatus::kRedirectDisallowedScheme:
       return String::Format(
           "Redirect location '%s' has a disallowed scheme for cross-origin "
@@ -521,7 +522,7 @@ WebString RedirectErrorString(const RedirectStatus status,
           redirect_url.GetString().Utf8().data());
   }
   NOTREACHED();
-  return "";
+  return WebString();
 }
 
 void ExtractCorsExposedHeaderNamesList(const WebURLResponse& response,

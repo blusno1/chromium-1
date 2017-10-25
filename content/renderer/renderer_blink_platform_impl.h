@@ -37,6 +37,7 @@ class SyncMessageFilter;
 namespace blink {
 namespace scheduler {
 class RendererScheduler;
+class WebThreadBase;
 }
 class TrialPolicy;
 class WebCanvasCaptureHandler;
@@ -62,6 +63,7 @@ namespace content {
 class BlinkInterfaceProviderImpl;
 class ChildURLLoaderFactoryGetter;
 class LocalStorageCachedAreas;
+class NotificationDispatcher;
 class PlatformEventObserverBase;
 class QuotaMessageFilter;
 class RendererClipboardDelegate;
@@ -107,6 +109,9 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       const blink::WebString& cacheStorageCacheName) override;
   blink::WebString DefaultLocale() override;
   void SuddenTerminationChanged(bool enabled) override;
+  void AddRefProcess() override;
+  void ReleaseRefProcess() override;
+  blink::WebThread* CompositorThread() const override;
   std::unique_ptr<blink::WebStorageNamespace> CreateLocalStorageNamespace()
       override;
   blink::Platform::FileHandle DatabaseOpenFile(
@@ -211,9 +216,12 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   void RecordRappor(const char* metric,
                     const blink::WebString& sample) override;
   void RecordRapporURL(const char* metric, const blink::WebURL& url) override;
-
+  blink::WebPushProvider* PushProvider() override;
   std::unique_ptr<blink::WebTrialTokenValidator> TrialTokenValidator() override;
   std::unique_ptr<blink::TrialPolicy> OriginTrialPolicy() override;
+  blink::WebNotificationManager* GetNotificationManager() override;
+  void DidStartWorkerThread() override;
+  void WillStopWorkerThread() override;
   void WorkerContextCreated(const v8::Local<v8::Context>& worker) override;
 
   // Set the PlatformEventObserverBase in |platform_event_observers_| associated
@@ -244,14 +252,11 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
     return web_database_observer_impl_.get();
   }
 
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
-      const blink::WebURLRequest& request,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
-
+  std::unique_ptr<blink::WebURLLoaderFactory> CreateDefaultURLLoaderFactory()
+      override;
+  std::unique_ptr<blink::WebDataConsumerHandle> CreateDataConsumerHandle(
+      mojo::ScopedDataPipeConsumerHandle handle) override;
   void RequestPurgeMemory() override;
-
-  PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
-  CreateNetworkURLLoaderFactory();
 
   // Returns non-null.
   // It is invalid to call this in an incomplete env where
@@ -259,7 +264,15 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   scoped_refptr<ChildURLLoaderFactoryGetter>
   CreateDefaultURLLoaderFactoryGetter();
 
+  // This class does *not* own the compositor thread. It is the responsibility
+  // of the caller to ensure that the compositor thread is cleared before it is
+  // destructed.
+  void SetCompositorThread(blink::scheduler::WebThreadBase* compositor_thread);
+
  private:
+  PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
+  CreateNetworkURLLoaderFactory();
+
   bool CheckPreparsedJsCachingEnabled() const;
 
   // Factory that takes a type and return PlatformEventObserverBase that matches
@@ -276,6 +289,8 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   // Return the mojo interface for making WebDatabaseHost calls.
   mojom::WebDatabaseHost& GetWebDatabaseHost();
+
+  blink::scheduler::WebThreadBase* compositor_thread_;
 
   std::unique_ptr<blink::WebThread> main_thread_;
   std::unique_ptr<service_manager::Connector> connector_;
@@ -328,15 +343,12 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   std::unique_ptr<BlinkInterfaceProviderImpl> blink_interface_provider_;
 
-  // Platform's default factory getter. TODO(kinuko): Migrate all
-  // URLLoader{Factory} callsites to per-frame / per-context ones and
-  // deprecate this.
-  scoped_refptr<ChildURLLoaderFactoryGetter> url_loader_factory_getter_;
-
   mojom::WebDatabaseHostPtrInfo web_database_host_info_;
   scoped_refptr<mojom::ThreadSafeWebDatabaseHostPtr> web_database_host_;
 
   mojom::FileUtilitiesHostPtrInfo file_utilities_host_info_;
+
+  scoped_refptr<NotificationDispatcher> notification_dispatcher_;
 
   DISALLOW_COPY_AND_ASSIGN(RendererBlinkPlatformImpl);
 };

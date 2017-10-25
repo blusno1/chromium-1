@@ -31,7 +31,7 @@ class CORE_EXPORT SuspendableScriptExecutor final
 
   static SuspendableScriptExecutor* Create(
       LocalFrame*,
-      RefPtr<DOMWrapperWorld>,
+      scoped_refptr<DOMWrapperWorld>,
       const HeapVector<ScriptSourceCode>& sources,
       bool user_gesture,
       WebScriptExecutionCallback*);
@@ -49,7 +49,7 @@ class CORE_EXPORT SuspendableScriptExecutor final
   void RunAsync(BlockingOption);
   void ContextDestroyed(ExecutionContext*) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   class Executor : public GarbageCollectedFinalized<Executor> {
    public:
@@ -57,7 +57,7 @@ class CORE_EXPORT SuspendableScriptExecutor final
 
     virtual Vector<v8::Local<v8::Value>> Execute(LocalFrame*) = 0;
 
-    DEFINE_INLINE_VIRTUAL_TRACE(){};
+    virtual void Trace(blink::Visitor* visitor){};
   };
 
  private:
@@ -71,7 +71,7 @@ class CORE_EXPORT SuspendableScriptExecutor final
   void ExecuteAndDestroySelf();
   void Dispose();
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   WebScriptExecutionCallback* callback_;
   BlockingOption blocking_option_;
 

@@ -29,7 +29,7 @@ class BytesConsumerForDataConsumerHandleTest : public ::testing::Test {
 
  protected:
   BytesConsumerForDataConsumerHandleTest() : page_(DummyPageHolder::Create()) {}
-  ~BytesConsumerForDataConsumerHandleTest() {
+  ~BytesConsumerForDataConsumerHandleTest() override {
     ThreadState::Current()->CollectAllGarbage();
   }
   std::unique_ptr<DummyPageHolder> page_;
@@ -61,12 +61,12 @@ class MockDataConsumerHandle final : public WebDataConsumerHandle {
                                                size_t*));
     MOCK_METHOD1(EndRead, WebDataConsumerHandle::Result(size_t));
 
-    DEFINE_INLINE_TRACE() {}
+    void Trace(blink::Visitor* visitor) {}
   };
 
   MockDataConsumerHandle() : proxy_(new MockReaderProxy) {}
   MockReaderProxy* Proxy() { return proxy_; }
-  const char* DebugName() const { return "MockDataConsumerHandle"; }
+  const char* DebugName() const override { return "MockDataConsumerHandle"; }
 
  private:
   class Reader final : public WebDataConsumerHandle::Reader {

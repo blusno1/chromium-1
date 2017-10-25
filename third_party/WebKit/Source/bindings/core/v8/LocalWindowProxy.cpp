@@ -48,9 +48,9 @@
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/FrameLoader.h"
 #include "platform/Histogram.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/bindings/ConditionalFeatures.h"
 #include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/bindings/V8DOMActivityLogger.h"
 #include "platform/bindings/V8DOMWrapper.h"
 #include "platform/bindings/V8PrivateProperty.h"
@@ -148,7 +148,7 @@ void LocalWindowProxy::Initialize() {
   V8ContextSnapshot::InstallRuntimeEnabledFeatures(context,
                                                    GetFrame()->GetDocument());
 
-  SecurityOrigin* origin = 0;
+  SecurityOrigin* origin = nullptr;
   if (world_->IsMainWorld()) {
     // ActivityLogger for main world is updated within updateDocumentInternal().
     UpdateDocumentInternal();
@@ -157,7 +157,7 @@ void LocalWindowProxy::Initialize() {
     ContentSecurityPolicy* csp =
         GetFrame()->GetDocument()->GetContentSecurityPolicy();
     context->AllowCodeGenerationFromStrings(csp->AllowEval(
-        0, SecurityViolationReportingPolicy::kSuppressReporting,
+        nullptr, SecurityViolationReportingPolicy::kSuppressReporting,
         ContentSecurityPolicy::kWillNotThrowException, g_empty_string));
     context->SetErrorMessageForCodeGenerationFromStrings(
         V8String(GetIsolate(), csp->EvalDisabledErrorMessage()));
@@ -525,7 +525,7 @@ void LocalWindowProxy::UpdateSecurityOrigin(SecurityOrigin* origin) {
 
 LocalWindowProxy::LocalWindowProxy(v8::Isolate* isolate,
                                    LocalFrame& frame,
-                                   RefPtr<DOMWrapperWorld> world)
+                                   scoped_refptr<DOMWrapperWorld> world)
     : WindowProxy(isolate, frame, std::move(world)) {}
 
 }  // namespace blink

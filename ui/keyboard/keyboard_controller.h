@@ -13,6 +13,8 @@
 #include "ui/base/ime/input_method_observer.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/vector2d.h"
+#include "ui/keyboard/container_behavior.h"
 #include "ui/keyboard/keyboard_event_filter.h"
 #include "ui/keyboard/keyboard_export.h"
 #include "ui/keyboard/keyboard_layout_delegate.h"
@@ -31,10 +33,6 @@ namespace keyboard {
 class CallbackAnimationObserver;
 class KeyboardControllerObserver;
 class KeyboardUI;
-
-// Relative distance from the parent window, from which show animation starts
-// or hide animation finishes.
-constexpr int kAnimationDistance = 30;
 
 // Represents the current state of the keyboard managed by the controller.
 // Don't change the numeric value of the members because they are used in UMA
@@ -142,6 +140,22 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
 
   KeyboardControllerState GetStateForTest() const { return state_; }
 
+  const gfx::Rect AdjustSetBoundsRequest(
+      const gfx::Rect& display_bounds,
+      const gfx::Rect& requested_bounds) const;
+
+  // Returns true if overscroll is currently allowed by the active keyboard
+  // container behavior.
+  bool IsOverscrollAllowed() const;
+
+  // Handle mouse and touch events on the keyboard. The effects of this method
+  // will not stop propagation to the keyboard extension.
+  void HandlePointerEvent(bool isMouseButtonPressed,
+                          const gfx::Vector2d& kb_scoped_location);
+
+  // Moves an already loaded keyboard.
+  void MoveKeyboard(const gfx::Rect new_bounds);
+
  private:
   // For access to Observer methods for simulation.
   friend class KeyboardControllerTest;
@@ -213,6 +227,9 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // CallbackAnimationObserver should destructed before container_ because it
   // uses container_'s animator.
   std::unique_ptr<CallbackAnimationObserver> animation_observer_;
+
+  // Current active visual behavior for the keyboard container.
+  std::unique_ptr<ContainerBehavior> container_behavior_;
 
   // If true, show the keyboard window when keyboard UI content updates.
   bool show_on_content_update_;

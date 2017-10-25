@@ -49,13 +49,13 @@ WindowProxy::~WindowProxy() {
   DCHECK(lifecycle_ != Lifecycle::kContextIsInitialized);
 }
 
-DEFINE_TRACE(WindowProxy) {
+void WindowProxy::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
 }
 
 WindowProxy::WindowProxy(v8::Isolate* isolate,
                          Frame& frame,
-                         RefPtr<DOMWrapperWorld> world)
+                         scoped_refptr<DOMWrapperWorld> world)
     : isolate_(isolate),
       frame_(frame),
 

@@ -90,7 +90,8 @@ LayoutSize StyleFetchedImage::ImageSize(
   // border-image, etc.)
   //
   // https://drafts.csswg.org/css-images-3/#the-image-orientation
-  return image_->ImageSize(kDoNotRespectImageOrientation, multiplier);
+  LayoutSize size(image_->IntrinsicSize(kDoNotRespectImageOrientation));
+  return ApplyZoom(size, multiplier);
 }
 
 bool StyleFetchedImage::ImageHasRelativeSize() const {
@@ -123,7 +124,7 @@ void StyleFetchedImage::ImageNotifyFinished(ImageResourceContent*) {
   document_.Clear();
 }
 
-RefPtr<Image> StyleFetchedImage::GetImage(
+scoped_refptr<Image> StyleFetchedImage::GetImage(
     const ImageResourceObserver&,
     const Document&,
     const ComputedStyle& style,
@@ -143,7 +144,7 @@ bool StyleFetchedImage::KnownToBeOpaque(const Document&,
       Image::kPreCacheMetadata);
 }
 
-DEFINE_TRACE(StyleFetchedImage) {
+void StyleFetchedImage::Trace(blink::Visitor* visitor) {
   visitor->Trace(image_);
   visitor->Trace(document_);
   StyleImage::Trace(visitor);

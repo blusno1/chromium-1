@@ -428,17 +428,17 @@ class WindowTree : public mojom::WindowTree,
       const display::Display& display_to_create,
       const display::ViewportMetrics& transport_viewport_metrics,
       bool is_primary_display,
-      const ClientWindowId& client_window_id);
+      const ClientWindowId& client_window_id,
+      const std::vector<display::Display>& mirrors);
 
   bool ProcessSwapDisplayRoots(int64_t display_id1, int64_t display_id2);
   bool ProcessSetBlockingContainers(std::vector<mojom::BlockingContainersPtr>
                                         transport_all_blocking_containers);
 
-  // Returns the ClientWindowId from a transport id or WindowId. Uses id_ as the
-  // ClientWindowId::client_id part if it was invalid. These functions do a
-  // straight mapping, there may not be a window with the returned id.
+  // Returns the ClientWindowId from a transport id. Uses id_ as the
+  // ClientWindowId::client_id part if it was invalid. This function
+  // do a straight mapping, there may not be a window with the returned id.
   ClientWindowId MakeClientWindowId(Id transport_window_id) const;
-  ClientWindowId MakeClientWindowId(const WindowId& id) const;
 
   // Returns the WindowTreeClient previously scheduled for an embed with the
   // given |token| from ScheduleEmbed(). If this client is the result of an
@@ -540,6 +540,7 @@ class WindowTree : public mojom::WindowTree,
                       const base::Optional<gfx::Rect>& mask) override;
   void StackAbove(uint32_t change_id, Id above_id, Id below_id) override;
   void StackAtTop(uint32_t change_id, Id window_id) override;
+  void PerformWmAction(Id window_id, const std::string& action) override;
   void GetWindowManagerClient(
       mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal)
       override;
@@ -577,12 +578,14 @@ class WindowTree : public mojom::WindowTree,
                       mojom::WmViewportMetricsPtr viewport_metrics,
                       bool is_primary_display,
                       Id window_id,
+                      const std::vector<display::Display>& mirrors,
                       const SetDisplayRootCallback& callback) override;
   void SetDisplayConfiguration(
       const std::vector<display::Display>& displays,
       std::vector<ui::mojom::WmViewportMetricsPtr> transport_metrics,
       int64_t primary_display_id,
       int64_t internal_display_id,
+      const std::vector<display::Display>& mirrors,
       const SetDisplayConfigurationCallback& callback) override;
   void SwapDisplayRoots(int64_t display_id1,
                         int64_t display_id2,

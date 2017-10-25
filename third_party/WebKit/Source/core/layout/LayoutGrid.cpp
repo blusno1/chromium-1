@@ -236,12 +236,8 @@ LayoutUnit LayoutGrid::ComputeTrackBasedLogicalHeight() const {
 void LayoutGrid::ComputeTrackSizesForDefiniteSize(
     GridTrackSizingDirection direction,
     LayoutUnit available_space) {
-  LayoutUnit free_space =
-      available_space - GuttersSize(grid_, direction, 0,
-                                    grid_.NumTracks(direction),
-                                    available_space);
   track_sizing_algorithm_.Setup(direction, NumTracks(direction, grid_),
-                                available_space, free_space);
+                                available_space);
   track_sizing_algorithm_.Run();
 
 #if DCHECK_IS_ON()
@@ -341,22 +337,6 @@ void LayoutGrid::UpdateBlockLayout(bool relayout_children) {
     // updateLogicalHeight() require a previous call to setLogicalHeight() to
     // resolve heights properly (like for positioned items for example).
     ComputeTrackSizesForDefiniteSize(kForColumns, available_space_for_columns);
-
-    // We take the chance to store the intrinsic sizes as they are just an
-    // intermediate result of the track sizing algorithm. Apart from eventually
-    // saving an algorithm execution (if {min|max}PreferredLogicalWidth() are
-    // called later), it fixes the use case of computing the preferred logical
-    // widths *after* the layout process. Although not very common, this happens
-    // in the Mac (content::RenderViewImpl::didUpdateLayout()) or under some
-    // circumstances when grids are also flex items (crbug.com/708159).
-    if (PreferredLogicalWidthsDirty()) {
-      LayoutUnit scrollbar_width = LayoutUnit(ScrollbarLogicalWidth());
-      min_preferred_logical_width_ =
-          track_sizing_algorithm_.MinContentSize() + scrollbar_width;
-      max_preferred_logical_width_ =
-          track_sizing_algorithm_.MaxContentSize() + scrollbar_width;
-      ClearPreferredLogicalWidthsDirty();
-    }
 
     // 2- Next, the track sizing algorithm resolves the sizes of the grid rows,
     // using the grid column sizes calculated in the previous step.
@@ -533,7 +513,7 @@ void LayoutGrid::ComputeTrackSizesForIndefiniteSize(
     Grid& grid,
     LayoutUnit& min_intrinsic_size,
     LayoutUnit& max_intrinsic_size) const {
-  algo.Setup(direction, NumTracks(direction, grid), WTF::nullopt, WTF::nullopt);
+  algo.Setup(direction, NumTracks(direction, grid), WTF::nullopt);
   algo.Run();
 
   min_intrinsic_size = algo.MinContentSize();
@@ -953,7 +933,7 @@ void LayoutGrid::PlaceSpecifiedMajorAxisItemsOnGrid(
           WTF::UnsignedWithZeroKeyHashTraits<unsigned>>
       minor_axis_cursors;
 
-  for (const auto& auto_grid_item : auto_grid_items) {
+  for (auto* const auto_grid_item : auto_grid_items) {
     GridSpan major_axis_positions =
         grid.GridItemSpan(*auto_grid_item, AutoPlacementMajorAxisDirection());
     DCHECK(major_axis_positions.IsTranslatedDefinite());
@@ -995,7 +975,7 @@ void LayoutGrid::PlaceAutoMajorAxisItemsOnGrid(
   std::pair<size_t, size_t> auto_placement_cursor = std::make_pair(0, 0);
   bool is_grid_auto_flow_dense = Style()->IsGridAutoFlowAlgorithmDense();
 
-  for (const auto& auto_grid_item : auto_grid_items) {
+  for (auto* const auto_grid_item : auto_grid_items) {
     PlaceAutoMajorAxisItemOnGrid(grid, *auto_grid_item, auto_placement_cursor);
 
     // If grid-auto-flow is dense, reset auto-placement cursor.

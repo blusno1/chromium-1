@@ -102,7 +102,7 @@ static KURL UrlForCSSValue(const CSSValue* value) {
   if (!value->IsImageValue())
     return KURL();
 
-  return KURL(kParsedURLString, ToCSSImageValue(*value).Url());
+  return KURL(ToCSSImageValue(*value).Url());
 }
 
 CSSCrossfadeValue::CSSCrossfadeValue(CSSValue* from_value,
@@ -220,10 +220,11 @@ void CSSCrossfadeValue::LoadSubimages(const Document& document) {
   crossfade_subimage_observer_.SetReady(true);
 }
 
-RefPtr<Image> CSSCrossfadeValue::GetImage(const ImageResourceObserver& client,
-                                          const Document& document,
-                                          const ComputedStyle&,
-                                          const IntSize& size) {
+scoped_refptr<Image> CSSCrossfadeValue::GetImage(
+    const ImageResourceObserver& client,
+    const Document& document,
+    const ComputedStyle&,
+    const IntSize& size) {
   if (size.IsEmpty())
     return nullptr;
 
@@ -233,8 +234,8 @@ RefPtr<Image> CSSCrossfadeValue::GetImage(const ImageResourceObserver& client,
   if (!from_image || !to_image)
     return Image::NullImage();
 
-  RefPtr<Image> from_image_ref(from_image);
-  RefPtr<Image> to_image_ref(to_image);
+  scoped_refptr<Image> from_image_ref(from_image);
+  scoped_refptr<Image> to_image_ref(to_image);
 
   if (from_image->IsSVGImage())
     from_image_ref = SVGImageForContainer::Create(
@@ -292,7 +293,7 @@ bool CSSCrossfadeValue::Equals(const CSSCrossfadeValue& other) const {
          DataEquivalent(percentage_value_, other.percentage_value_);
 }
 
-DEFINE_TRACE_AFTER_DISPATCH(CSSCrossfadeValue) {
+void CSSCrossfadeValue::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(from_value_);
   visitor->Trace(to_value_);
   visitor->Trace(percentage_value_);

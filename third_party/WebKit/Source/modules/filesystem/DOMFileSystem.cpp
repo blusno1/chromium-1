@@ -80,7 +80,7 @@ DOMFileSystem* DOMFileSystem::CreateIsolatedFileSystem(
     ExecutionContext* context,
     const String& filesystem_id) {
   if (filesystem_id.IsEmpty())
-    return 0;
+    return nullptr;
 
   StringBuilder filesystem_name;
   filesystem_name.Append(Platform::Current()->FileSystemCreateOriginIdentifier(
@@ -101,7 +101,7 @@ DOMFileSystem* DOMFileSystem::CreateIsolatedFileSystem(
 
   return DOMFileSystem::Create(context, filesystem_name.ToString(),
                                kFileSystemTypeIsolated,
-                               KURL(kParsedURLString, root_url.ToString()));
+                               KURL(root_url.ToString()));
 }
 
 DOMFileSystem::DOMFileSystem(ExecutionContext* context,
@@ -154,12 +154,12 @@ class ConvertToFileWriterCallback : public FileWriterBaseCallback {
     return new ConvertToFileWriterCallback(callback);
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(callback_);
     FileWriterBaseCallback::Trace(visitor);
   }
 
-  void handleEvent(FileWriterBase* file_writer_base) {
+  void handleEvent(FileWriterBase* file_writer_base) override {
     callback_->handleEvent(static_cast<FileWriter*>(file_writer_base));
   }
 
@@ -220,7 +220,7 @@ void DOMFileSystem::ScheduleCallback(ExecutionContext* execution_context,
                            WTF::Passed(std::move(identifier))));
 }
 
-DEFINE_TRACE(DOMFileSystem) {
+void DOMFileSystem::Trace(blink::Visitor* visitor) {
   visitor->Trace(root_entry_);
   DOMFileSystemBase::Trace(visitor);
   ContextClient::Trace(visitor);

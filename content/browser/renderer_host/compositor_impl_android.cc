@@ -55,6 +55,7 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/public/browser/android/compositor.h"
@@ -242,8 +243,8 @@ void CreateContextProviderAfterGpuChannelEstablished(
   constexpr bool automatic_flushes = false;
   constexpr bool support_locking = false;
 
-  scoped_refptr<ui::ContextProviderCommandBuffer> context_provider =
-      new ui::ContextProviderCommandBuffer(
+  auto context_provider =
+      base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
           std::move(gpu_channel_host), stream_id, stream_priority, handle,
           GURL(std::string("chrome://gpu/Compositor::CreateContextProvider")),
           automatic_flushes, support_locking, shared_memory_limits, attributes,
@@ -471,7 +472,6 @@ CompositorImpl::CompositorImpl(CompositorClient* client,
       root_window_(root_window),
       needs_animate_(false),
       pending_frames_(0U),
-      num_successive_context_creation_failures_(0),
       layer_tree_frame_sink_request_pending_(false),
       weak_factory_(this) {
   GetHostFrameSinkManager()->RegisterFrameSinkId(frame_sink_id_, this);
@@ -553,6 +553,11 @@ void CompositorImpl::SetSurface(jobject surface) {
     SetVisible(true);
     ANativeWindow_release(window);
   }
+}
+
+void CompositorImpl::SetBackgroundColor(int color) {
+  DCHECK(host_);
+  host_->set_background_color(color);
 }
 
 void CompositorImpl::CreateLayerTreeHost() {
@@ -662,6 +667,8 @@ void CompositorImpl::DidInitializeLayerTreeFrameSink() {
     AddChildFrameSink(frame_sink_id);
 
   pending_child_frame_sink_ids_.clear();
+
+  DidSuccessfullyInitializeContext();
 }
 
 void CompositorImpl::DidFailToInitializeLayerTreeFrameSink() {
@@ -767,8 +774,8 @@ void CompositorImpl::OnGpuChannelEstablished(
                              .color_space();
 
   ui::ContextProviderCommandBuffer* shared_context = nullptr;
-  scoped_refptr<ui::ContextProviderCommandBuffer> context_provider =
-      new ui::ContextProviderCommandBuffer(
+  auto context_provider =
+      base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
           std::move(gpu_channel_host), stream_id, stream_priority,
           surface_handle_,
           GURL(std::string("chrome://gpu/CompositorImpl::") +
@@ -779,13 +786,15 @@ void CompositorImpl::OnGpuChannelEstablished(
                                          requires_alpha_channel_),
           shared_context,
           ui::command_buffer_metrics::DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT);
-  if (!context_provider->BindToCurrentThread()) {
-    LOG(ERROR) << "Failed to init viz::ContextProvider for compositor.";
-    LOG_IF(FATAL, ++num_successive_context_creation_failures_ >= 2)
-        << "Too many context creation failures. Giving up... ";
+  auto result = context_provider->BindToCurrentThread();
+  LOG_IF(FATAL, result == gpu::ContextResult::kFatalFailure)
+      << "Fatal error making Gpu context";
+  if (result != gpu::ContextResult::kSuccess) {
     HandlePendingLayerTreeFrameSinkRequest();
     return;
   }
+
+  DidSuccessfullyInitializeContext();
 
   // Unretained is safe this owns viz::Display which owns OutputSurface.
   auto display_output_surface = base::MakeUnique<AndroidOutputSurface>(
@@ -802,7 +811,6 @@ void CompositorImpl::InitializeDisplay(
   DCHECK(layer_tree_frame_sink_request_pending_);
 
   pending_frames_ = 0;
-  num_successive_context_creation_failures_ = 0;
 
   if (context_provider) {
     gpu_capabilities_ = context_provider->ContextCapabilities();
@@ -850,6 +858,16 @@ void CompositorImpl::InitializeDisplay(
 
 void CompositorImpl::DidSwapBuffers() {
   client_->DidSwapBuffers();
+}
+
+void CompositorImpl::DidSuccessfullyInitializeContext() {
+  auto on_io_thread = [] {
+    GpuProcessHost* host = GpuProcessHost::Get();
+    if (host)
+      host->DidSuccessfullyInitializeContext();
+  };
+  BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)
+      ->PostTask(FROM_HERE, base::BindOnce(on_io_thread));
 }
 
 cc::UIResourceId CompositorImpl::CreateUIResource(

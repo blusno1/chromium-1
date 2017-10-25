@@ -42,11 +42,11 @@ namespace {
 // Limits on the cache size and number of areas in memory, over which the areas
 // are purged.
 #if defined(OS_ANDROID)
-const unsigned kMaxStorageAreaCount = 20;
-const size_t kMaxCacheSize = 2 * 1024 * 1024;
+const unsigned kMaxDomStorageAreaCount = 20;
+const size_t kMaxDomStorageCacheSize = 2 * 1024 * 1024;
 #else
-const unsigned kMaxStorageAreaCount = 100;
-const size_t kMaxCacheSize = 20 * 1024 * 1024;
+const unsigned kMaxDomStorageAreaCount = 100;
+const size_t kMaxDomStorageCacheSize = 20 * 1024 * 1024;
 #endif
 
 const int kSessionStoraceScavengingSeconds = 60;
@@ -206,7 +206,7 @@ void DOMStorageContextImpl::GetSessionStorageUsage(
 void DOMStorageContextImpl::DeleteLocalStorageForPhysicalOrigin(
     const GURL& origin_url) {
   DCHECK(!is_shutdown_);
-  url::Origin origin(origin_url);
+  url::Origin origin = url::Origin::Create(origin_url);
   DOMStorageNamespace* local = GetStorageNamespace(kLocalStorageNamespaceId);
   std::vector<GURL> origins;
   local->GetOriginsWithAreas(&origins);
@@ -214,7 +214,7 @@ void DOMStorageContextImpl::DeleteLocalStorageForPhysicalOrigin(
   // deleted as well.
   // https://w3c.github.io/webappsec-suborigins/
   for (const auto& origin_candidate_url : origins) {
-    url::Origin origin_candidate(origin_candidate_url);
+    url::Origin origin_candidate = url::Origin::Create(origin_candidate_url);
     // |origin| is guaranteed to be deleted below, so don't delete it until
     // then. That is, only suborigins at the same physical origin as |origin|
     // should be deleted at this point.
@@ -493,9 +493,9 @@ void DOMStorageContextImpl::PurgeMemory(PurgeOption purge_option) {
     // Purging is done based on the cache sizes without including the database
     // size since it can be expensive trying to estimate the sqlite usage for
     // all databases. For low end devices purge all inactive areas.
-    if (initial_stats.total_cache_size > kMaxCacheSize)
+    if (initial_stats.total_cache_size > kMaxDomStorageCacheSize)
       purge_reason = "SizeLimitExceeded";
-    else if (initial_stats.total_area_count > kMaxStorageAreaCount)
+    else if (initial_stats.total_area_count > kMaxDomStorageAreaCount)
       purge_reason = "AreaCountLimitExceeded";
     else if (is_low_end_device_)
       purge_reason = "InactiveOnLowEndDevice";

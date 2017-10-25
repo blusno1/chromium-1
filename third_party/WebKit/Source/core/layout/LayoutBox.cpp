@@ -31,6 +31,7 @@
 #include "core/dom/Document.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLElement.h"
@@ -73,6 +74,8 @@
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/FloatRoundedRect.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/WebRect.h"
+#include "public/platform/WebRemoteScrollProperties.h"
 
 namespace blink {
 
@@ -742,6 +745,14 @@ void LayoutBox::ScrollRectToVisibleRecursive(
         new_rect, align_x, align_y, scroll_type,
         make_visible_in_visual_viewport, scroll_behavior,
         is_for_scroll_sequence);
+  } else if (GetFrame()->IsLocalRoot() && !GetFrame()->IsMainFrame()) {
+    LocalFrameView* frame_view = GetFrameView();
+    if (frame_view && frame_view->SafeToPropagateScrollToParent()) {
+      frame_view->ScrollRectToVisibleInRemoteParent(
+          new_rect, align_x, align_y, scroll_type,
+          make_visible_in_visual_viewport, scroll_behavior,
+          is_for_scroll_sequence);
+    }
   }
 }
 
@@ -1205,13 +1216,13 @@ IntSize LayoutBox::ScrolledContentOffset() const {
   return result;
 }
 
-LayoutRect LayoutBox::ClippingRect() const {
+LayoutRect LayoutBox::ClippingRect(const LayoutPoint& location) const {
   LayoutRect result = LayoutRect(LayoutRect::InfiniteIntRect());
   if (ShouldClipOverflow())
-    result = OverflowClipRect(LayoutPoint());
+    result = OverflowClipRect(location);
 
   if (HasClip())
-    result.Intersect(ClipRect(LayoutPoint()));
+    result.Intersect(ClipRect(location));
 
   return result;
 }
@@ -1332,7 +1343,7 @@ bool LayoutBox::ApplyBoxClips(
   // This won't work fully correctly for fixed-position elements, who should
   // receive CSS clip but for whom the current object is not in the containing
   // block chain.
-  LayoutRect clip_rect = ClippingRect();
+  LayoutRect clip_rect = ClippingRect(LayoutPoint());
 
   transform_state.Flatten();
   LayoutRect rect(transform_state.LastPlanarQuad().EnclosingBoundingBox());
@@ -2428,9 +2439,9 @@ bool LayoutBox::PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
     return false;
 
   // If the box has any kind of clip, we need issue paint invalidation to cover
-  // the changed part of children when the box got resized. In SPv2 this is
+  // the changed part of children when the box got resized. In SPv175 this is
   // handled by detecting paint property changes.
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     if (HasClipRelatedProperty())
       return false;
   }
@@ -3767,10 +3778,8 @@ LayoutUnit LayoutBox::AvailableLogicalHeightUsing(
     LogicalExtentComputedValues computed_values;
     block->ComputeLogicalHeight(block->LogicalHeight(), LayoutUnit(),
                                 computed_values);
-    LayoutUnit new_content_height = computed_values.extent_ -
-                                    block->BorderAndPaddingLogicalHeight() -
-                                    block->ScrollbarLogicalHeight();
-    return AdjustContentBoxLogicalHeightForBoxSizing(new_content_height);
+    return computed_values.extent_ - block->BorderAndPaddingLogicalHeight() -
+           block->ScrollbarLogicalHeight();
   }
 
   // FIXME: This is wrong if the containingBlock has a perpendicular writing
@@ -5338,8 +5347,9 @@ LayoutUnit LayoutBox::BaselinePosition(
 PaintLayer* LayoutBox::EnclosingFloatPaintingLayer() const {
   const LayoutObject* curr = this;
   while (curr) {
-    PaintLayer* layer =
-        curr->HasLayer() && curr->IsBox() ? ToLayoutBox(curr)->Layer() : 0;
+    PaintLayer* layer = curr->HasLayer() && curr->IsBox()
+                            ? ToLayoutBox(curr)->Layer()
+                            : nullptr;
     if (layer && layer->IsSelfPaintingLayer())
       return layer;
     curr = curr->Parent();
@@ -5575,7 +5585,7 @@ LayoutObject* LayoutBox::SplitAnonymousBoxesAroundChild(
       MarkBoxForRelayoutAfterSplit(parent_box);
       parent_box->VirtualChildren()->InsertChildNode(
           parent_box, post_box, box_to_split->NextSibling());
-      box_to_split->MoveChildrenTo(post_box, before_child, 0, true);
+      box_to_split->MoveChildrenTo(post_box, before_child, nullptr, true);
 
       LayoutObject* child = post_box->SlowFirstChild();
       DCHECK(child);
@@ -5937,7 +5947,7 @@ void LayoutBox::SetSnapContainer(LayoutBox* new_container) {
 
 void LayoutBox::ClearSnapAreas() {
   if (SnapAreaSet* areas = SnapAreas()) {
-    for (auto& snap_area : *areas)
+    for (auto* const snap_area : *areas)
       snap_area->rare_data_->snap_container_ = nullptr;
     areas->clear();
   }
@@ -5979,7 +5989,7 @@ void LayoutBox::MutableForPainting::
     SavePreviousContentBoxSizeAndLayoutOverflowRect() {
   auto& rare_data = GetLayoutBox().EnsureRareData();
   rare_data.has_previous_content_box_size_and_layout_overflow_rect_ = true;
-  rare_data.previous_content_box_size_ = GetLayoutBox().ContentBoxRect().Size();
+  rare_data.previous_content_box_size_ = GetLayoutBox().ContentSize();
   rare_data.previous_layout_overflow_rect_ =
       GetLayoutBox().LayoutOverflowRect();
 }

@@ -208,7 +208,7 @@ LayerTreeHostImpl::LayerTreeHostImpl(
       use_gpu_rasterization_(false),
       use_msaa_(false),
       gpu_rasterization_status_(GpuRasterizationStatus::OFF_DEVICE),
-      input_handler_client_(NULL),
+      input_handler_client_(nullptr),
       did_lock_scrolling_layer_(false),
       wheel_scrolling_(false),
       scroll_affects_scroll_handler_(false),
@@ -243,7 +243,7 @@ LayerTreeHostImpl::LayerTreeHostImpl(
       requires_high_res_to_draw_(false),
       is_likely_to_require_a_draw_(false),
       has_valid_layer_tree_frame_sink_(false),
-      scroll_animating_latched_node_id_(ScrollTree::kInvalidNodeId),
+      scroll_animating_latched_element_id_(kInvalidElementId),
       has_scrolled_by_wheel_(false),
       has_scrolled_by_touch_(false),
       touchpad_and_wheel_scroll_latching_enabled_(false),
@@ -300,7 +300,7 @@ LayerTreeHostImpl::~LayerTreeHostImpl() {
 
   if (input_handler_client_) {
     input_handler_client_->WillShutdown();
-    input_handler_client_ = NULL;
+    input_handler_client_ = nullptr;
   }
   if (scroll_elasticity_helper_)
     scroll_elasticity_helper_.reset();
@@ -680,7 +680,7 @@ std::unique_ptr<SwapPromiseMonitor>
 LayerTreeHostImpl::CreateLatencyInfoSwapPromiseMonitor(
     ui::LatencyInfo* latency) {
   return base::WrapUnique(
-      new LatencyInfoSwapPromiseMonitor(latency, NULL, this));
+      new LatencyInfoSwapPromiseMonitor(latency, nullptr, this));
 }
 
 ScrollElasticityHelper* LayerTreeHostImpl::CreateScrollElasticityHelper() {
@@ -1428,10 +1428,11 @@ void LayerTreeHostImpl::RequestImplSideInvalidationForCheckerImagedTiles() {
 
 size_t LayerTreeHostImpl::GetFrameIndexForImage(const PaintImage& paint_image,
                                                 WhichTree tree) const {
-  if (!paint_image.ShouldAnimate() || !image_animation_controller_.has_value())
+  DCHECK(image_animation_controller_.has_value());
+  if (!paint_image.ShouldAnimate())
     return paint_image.frame_index();
 
-  return image_animation_controller_.value().GetFrameIndexForImage(
+  return image_animation_controller_->GetFrameIndexForImage(
       paint_image.stable_id(), tree);
 }
 
@@ -2389,8 +2390,7 @@ void LayerTreeHostImpl::CreateTileManagerResources() {
         layer_tree_frame_sink_->worker_context_provider(),
         viz::ResourceFormatToClosestSkColorType(
             settings_.preferred_tile_format),
-        settings_.decoded_image_working_set_budget_bytes,
-        settings_.decoded_image_cache_budget_bytes);
+        settings_.decoded_image_working_set_budget_bytes);
   } else {
     image_decode_cache_ = std::make_unique<SoftwareImageDecodeCache>(
         viz::ResourceFormatToClosestSkColorType(
@@ -2514,15 +2514,23 @@ LayerImpl* LayerTreeHostImpl::ViewportMainScrollLayer() {
 void LayerTreeHostImpl::QueueImageDecode(
     const PaintImage& image,
     const base::Callback<void(bool)>& embedder_callback) {
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
+               "LayerTreeHostImpl::QueueImageDecode", "frame_key",
+               image.GetKeyForFrame(image.frame_index()).ToString());
+  // Optimistically specify the current raster color space, since we assume that
+  // it won't change.
   decoded_image_tracker_.QueueImageDecode(
-      image, base::Bind(&LayerTreeHostImpl::ImageDecodeFinished,
-                        base::Unretained(this), embedder_callback));
+      image, GetRasterColorSpace(),
+      base::Bind(&LayerTreeHostImpl::ImageDecodeFinished,
+                 base::Unretained(this), embedder_callback));
   tile_manager_.checker_image_tracker().DisallowCheckeringForImage(image);
 }
 
 void LayerTreeHostImpl::ImageDecodeFinished(
     const base::Callback<void(bool)>& embedder_callback,
     bool decode_succeeded) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
+               "LayerTreeHostImpl::ImageDecodeFinished");
   completed_image_decode_callbacks_.emplace_back(
       base::Bind(embedder_callback, decode_succeeded));
   client_->NotifyImageDecodeRequestFinished();
@@ -2729,7 +2737,7 @@ float LayerTreeHostImpl::CurrentBrowserControlsShownRatio() const {
 
 void LayerTreeHostImpl::BindToClient(InputHandlerClient* client,
                                      bool wheel_scroll_latching_enabled) {
-  DCHECK(input_handler_client_ == NULL);
+  DCHECK(input_handler_client_ == nullptr);
   input_handler_client_ = client;
   touchpad_and_wheel_scroll_latching_enabled_ = wheel_scroll_latching_enabled;
 }
@@ -2989,24 +2997,6 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBegin(
     scrolling_node = FindScrollNodeForDeviceViewportPoint(
         device_viewport_point, type, layer_impl, &scroll_on_main_thread,
         &scroll_status.main_thread_scrolling_reasons);
-    if (!scroll_on_main_thread && scrolling_node &&
-        (settings_.is_layer_tree_for_subframe ||
-         (!scrolling_node->scrolls_outer_viewport &&
-          !scrolling_node->scrolls_inner_viewport))) {
-      const auto& container_bounds = scrolling_node->container_bounds;
-      int size = container_bounds.GetCheckedArea().ValueOrDefault(
-          std::numeric_limits<int>::max());
-      DCHECK_GT(size, 0);
-      if (IsWheelBasedScroll(type)) {
-        UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Scroll.ScrollerSize.OnScroll_Wheel",
-                                    size, 1, kScrollerSizeLargestBucket,
-                                    kScrollerSizeBucketCount);
-      } else {
-        UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Scroll.ScrollerSize.OnScroll_Touch",
-                                    size, 1, kScrollerSizeLargestBucket,
-                                    kScrollerSizeBucketCount);
-      }
-    }
   }
 
   if (scroll_on_main_thread) {
@@ -3087,7 +3077,7 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimatedBegin(
   // that ScrollBy uses for non-animated wheel scrolls.
   scroll_status = ScrollBegin(scroll_state, WHEEL);
   if (scroll_status.thread == SCROLL_ON_IMPL_THREAD) {
-    scroll_animating_latched_node_id_ = ScrollTree::kInvalidNodeId;
+    scroll_animating_latched_element_id_ = ElementId();
     ScrollStateData scroll_state_end_data;
     scroll_state_end_data.is_ending = true;
     ScrollState scroll_state_end(scroll_state_end_data);
@@ -3216,9 +3206,12 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
       if (!scroll_node->scrollable)
         continue;
 
+      // For the rest of the current scroll sequence, latch to the first node
+      // that scrolled while it still exists.
       if (touchpad_and_wheel_scroll_latching_enabled_ &&
-          scroll_animating_latched_node_id_ != ScrollTree::kInvalidNodeId &&
-          scroll_node->id != scroll_animating_latched_node_id_) {
+          scroll_tree.FindNodeFromElementId(
+              scroll_animating_latched_element_id_) &&
+          scroll_node->element_id != scroll_animating_latched_element_id_) {
         continue;
       }
 
@@ -3241,7 +3234,7 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
         // Viewport::ScrollAnimated returns pending_delta as long as it starts
         // an animation.
         if (scrolled == pending_delta) {
-          scroll_animating_latched_node_id_ = scroll_node->id;
+          scroll_animating_latched_element_id_ = scroll_node->element_id;
           return scroll_status;
         }
         break;
@@ -3250,7 +3243,7 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
       gfx::Vector2dF scroll_delta =
           ComputeScrollDelta(*scroll_node, pending_delta);
       if (ScrollAnimationCreate(scroll_node, scroll_delta, delayed_by)) {
-        scroll_animating_latched_node_id_ = scroll_node->id;
+        scroll_animating_latched_element_id_ = scroll_node->element_id;
         return scroll_status;
       }
 
@@ -3565,6 +3558,13 @@ bool LayerTreeHostImpl::CanConsumeDelta(const ScrollNode& scroll_node,
     return true;
 
   return false;
+}
+
+void LayerTreeHostImpl::UpdateImageDecodingHints(
+    base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
+        decoding_mode_map) {
+  tile_manager_.checker_image_tracker().UpdateImageDecodingHints(
+      std::move(decoding_mode_map));
 }
 
 InputHandlerScrollResult LayerTreeHostImpl::ScrollBy(

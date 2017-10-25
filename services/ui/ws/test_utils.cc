@@ -32,7 +32,6 @@ namespace test {
 namespace {
 
 ClientWindowId NextUnusedClientWindowId(WindowTree* tree) {
-  ClientWindowId client_id;
   for (ClientSpecificId id = 1;; ++id) {
     // Used the id of the client in the upper bits to simplify things.
     const ClientWindowId client_id = ClientWindowId(tree->id(), id);
@@ -275,6 +274,11 @@ void TestWindowManager::WmStackAbove(uint32_t change_id,
                                      uint32_t below_id) {}
 
 void TestWindowManager::WmStackAtTop(uint32_t change_id, uint32_t window_id) {}
+
+void TestWindowManager::WmPerformWmAction(uint32_t window_id,
+                                          const std::string& action) {
+  last_wm_action_ = action;
+}
 
 void TestWindowManager::OnAccelerator(uint32_t ack_id,
                                       uint32_t accelerator_id,

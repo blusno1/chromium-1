@@ -9,7 +9,6 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/Referrer.h"
 #include "platform/wtf/text/AtomicString.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -17,13 +16,12 @@ namespace blink {
 
 TEST(ResourceRequestTest, CrossThreadResourceRequestData) {
   ResourceRequest original;
-  original.SetURL(KURL(kParsedURLString, "http://www.example.com/test.htm"));
-  original.SetCachePolicy(WebCachePolicy::kUseProtocolCachePolicy);
+  original.SetURL(KURL("http://www.example.com/test.htm"));
+  original.SetCacheMode(mojom::FetchCacheMode::kDefault);
   original.SetTimeoutInterval(10);
-  original.SetSiteForCookies(
-      KURL(kParsedURLString, "http://www.example.com/first_party.htm"));
-  original.SetRequestorOrigin(SecurityOrigin::Create(
-      KURL(kParsedURLString, "http://www.example.com/first_party.htm")));
+  original.SetSiteForCookies(KURL("http://www.example.com/first_party.htm"));
+  original.SetRequestorOrigin(
+      SecurityOrigin::Create(KURL("http://www.example.com/first_party.htm")));
   original.SetHTTPMethod(HTTPNames::GET);
   original.SetHTTPHeaderField(AtomicString("Foo"), AtomicString("Bar"));
   original.SetHTTPHeaderField(AtomicString("Piyo"), AtomicString("Fuga"));
@@ -49,7 +47,7 @@ TEST(ResourceRequestTest, CrossThreadResourceRequestData) {
 
   EXPECT_STREQ("http://www.example.com/test.htm",
                original.Url().GetString().Utf8().data());
-  EXPECT_EQ(WebCachePolicy::kUseProtocolCachePolicy, original.GetCachePolicy());
+  EXPECT_EQ(mojom::FetchCacheMode::kDefault, original.GetCacheMode());
   EXPECT_EQ(10, original.TimeoutInterval());
   EXPECT_STREQ("http://www.example.com/first_party.htm",
                original.SiteForCookies().GetString().Utf8().data());
@@ -85,7 +83,7 @@ TEST(ResourceRequestTest, CrossThreadResourceRequestData) {
 
   EXPECT_STREQ("http://www.example.com/test.htm",
                copy1.Url().GetString().Utf8().data());
-  EXPECT_EQ(WebCachePolicy::kUseProtocolCachePolicy, copy1.GetCachePolicy());
+  EXPECT_EQ(mojom::FetchCacheMode::kDefault, copy1.GetCacheMode());
   EXPECT_EQ(10, copy1.TimeoutInterval());
   EXPECT_STREQ("http://www.example.com/first_party.htm",
                copy1.SiteForCookies().GetString().Utf8().data());

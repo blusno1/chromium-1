@@ -139,7 +139,7 @@ WebFrameWidgetImpl::WebFrameWidgetImpl(WebWidgetClient* client,
 
 WebFrameWidgetImpl::~WebFrameWidgetImpl() {}
 
-DEFINE_TRACE(WebFrameWidgetImpl) {
+void WebFrameWidgetImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(local_root_);
   visitor->Trace(mouse_capture_node_);
   WebFrameWidgetBase::Trace(visitor);
@@ -252,6 +252,10 @@ void WebFrameWidgetImpl::BeginFrame(double last_frame_time_monotonic) {
   TRACE_EVENT1("blink", "WebFrameWidgetImpl::beginFrame", "frameTime",
                last_frame_time_monotonic);
   DCHECK(last_frame_time_monotonic);
+
+  if (!local_root_)
+    return;
+
   UpdateGestureAnimation(last_frame_time_monotonic);
   PageWidgetDelegate::Animate(*GetPage(), last_frame_time_monotonic);
   GetPage()->GetValidationMessageClient().LayoutOverlay();
@@ -416,7 +420,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
         break;
       case WebInputEvent::kMouseDown:
         event_type = EventTypeNames::mousedown;
-        gesture_indicator = LocalFrame::CreateUserGesture(
+        gesture_indicator = Frame::NotifyUserActivation(
             node->GetDocument().GetFrame(), UserGestureToken::kNewGesture);
         mouse_capture_gesture_token_ = gesture_indicator->CurrentToken();
         break;
@@ -787,7 +791,7 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
   // If there is a popup open, close it as the user is clicking on the page
   // (outside of the popup). We also save it so we can prevent a click on an
   // element from immediately reopening the same popup.
-  RefPtr<WebPagePopupImpl> page_popup;
+  scoped_refptr<WebPagePopupImpl> page_popup;
   if (event.button == WebMouseEvent::Button::kLeft) {
     page_popup = view_impl->GetPagePopup();
     view_impl->HidePopups();
@@ -796,7 +800,7 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
   // Take capture on a mouse down on a plugin so we can send it mouse events.
   // If the hit node is a plugin but a scrollbar is over it don't start mouse
   // capture because it will interfere with the scrollbar receiving events.
-  IntPoint point(event.PositionInWidget().x, event.PositionInWidget().y);
+  LayoutPoint point(event.PositionInWidget().x, event.PositionInWidget().y);
   if (event.button == WebMouseEvent::Button::kLeft) {
     point = local_root_->GetFrameView()->RootFrameToContents(point);
     HitTestResult result(
@@ -1191,8 +1195,8 @@ void WebFrameWidgetImpl::SetVisibilityState(
 }
 
 HitTestResult WebFrameWidgetImpl::HitTestResultForRootFramePos(
-    const IntPoint& pos_in_root_frame) {
-  IntPoint doc_point(
+    const LayoutPoint& pos_in_root_frame) {
+  LayoutPoint doc_point(
       local_root_->GetFrame()->View()->RootFrameToContents(pos_in_root_frame));
   HitTestResult result =
       local_root_->GetFrame()->GetEventHandler().HitTestResultAtPoint(

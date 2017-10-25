@@ -51,6 +51,7 @@ class PaymentRequestDialog;
 namespace safe_browsing {
 class ChromeCleanerController;
 class ChromeCleanerDialogController;
+class ChromeCleanerRebootDialogController;
 class SettingsResetPromptController;
 }
 
@@ -256,6 +257,7 @@ enum class DialogIdentifier {
   VALIDATION_MESSAGE = 77,
   WEB_SHARE_TARGET_PICKER = 78,
   ZOOM = 79,
+  LOCK_SCREEN_NOTE_APP_TOAST = 80,
   MAX_VALUE
 };
 
@@ -277,6 +279,13 @@ void ShowChromeCleanerPrompt(
     Browser* browser,
     safe_browsing::ChromeCleanerDialogController* dialog_controller,
     safe_browsing::ChromeCleanerController* cleaner_controller);
+
+// Shows the Chrome Cleanup reboot dialog asking the user if they want to
+// restart their computer once a cleanup has finished. This is called when the
+// Chrome Cleanup ends in a reboot required state.
+void ShowChromeCleanerRebootPrompt(
+    Browser* browser,
+    safe_browsing::ChromeCleanerRebootDialogController* dialog_controller);
 
 #endif  // OS_WIN
 

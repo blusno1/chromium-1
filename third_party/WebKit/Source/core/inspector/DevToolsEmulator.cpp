@@ -106,7 +106,7 @@ DevToolsEmulator* DevToolsEmulator::Create(WebViewImpl* web_view_base) {
   return new DevToolsEmulator(web_view_base);
 }
 
-DEFINE_TRACE(DevToolsEmulator) {}
+void DevToolsEmulator::Trace(blink::Visitor* visitor) {}
 
 void DevToolsEmulator::SetTextAutosizingEnabled(bool enabled) {
   embedder_text_autosizing_enabled_ = enabled;
@@ -208,7 +208,8 @@ void DevToolsEmulator::EnableDeviceEmulation(
       emulation_params_.screen_position == params.screen_position &&
       emulation_params_.device_scale_factor == params.device_scale_factor &&
       emulation_params_.scale == params.scale &&
-      emulation_params_.viewport_offset == params.viewport_offset) {
+      emulation_params_.viewport_offset == params.viewport_offset &&
+      emulation_params_.viewport_scale == params.viewport_scale) {
     return;
   }
   if (emulation_params_.device_scale_factor != params.device_scale_factor ||

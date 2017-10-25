@@ -19,11 +19,13 @@
 #include "base/scoped_observer.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
+#include "ui/views/controls/styled_label_listener.h"
 #include "ui/views/view.h"
 
 namespace views {
 class BoxLayout;
 class ScrollView;
+class StyledLabel;
 }  // namespace views
 
 namespace ash {
@@ -45,7 +47,8 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
                                     public LockScreenAppsFocusObserver,
                                     public LoginDataDispatcher::Observer,
                                     public SystemTrayFocusObserver,
-                                    public display::DisplayObserver {
+                                    public display::DisplayObserver,
+                                    public views::StyledLabelListener {
  public:
   // TestApi is used for tests to get internal implementation details.
   class ASH_EXPORT TestApi {
@@ -57,6 +60,7 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
     LoginAuthUserView* opt_secondary_auth() const;
     const std::vector<LoginUserView*>& user_views() const;
     views::View* note_action() const;
+    LoginBubble* tooltip_bubble() const;
 
    private:
     LockContentsView* const view_;
@@ -80,6 +84,11 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
       const std::vector<mojom::LoginUserInfoPtr>& users) override;
   void OnPinEnabledForUserChanged(const AccountId& user, bool enabled) override;
   void OnLockScreenNoteStateChanged(mojom::TrayActionState state) override;
+  void OnClickToUnlockEnabledForUserChanged(const AccountId& user,
+                                            bool enabled) override;
+  void OnShowEasyUnlockIcon(
+      const AccountId& user,
+      const mojom::EasyUnlockIconOptionsPtr& icon) override;
 
   // SystemTrayFocusObserver:
   void OnFocusLeavingSystemTray(bool reverse) override;
@@ -88,12 +97,25 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
 
+  // views::StyledLabelListener:
+  void StyledLabelLinkClicked(views::StyledLabel* label,
+                              const gfx::Range& range,
+                              int event_flags) override{};
+
  private:
-  struct UserState {
+  class UserState {
+   public:
     explicit UserState(AccountId account_id);
+    UserState(UserState&&);
+    ~UserState();
 
     AccountId account_id;
     bool show_pin = false;
+    bool enable_tap_auth = false;
+    mojom::EasyUnlockIconOptionsPtr easy_unlock_state;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(UserState);
   };
 
   using OnRotate = base::RepeatingCallback<void(bool landscape)>;
@@ -126,7 +148,12 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   // the current rotation.
   void AddRotationAction(const OnRotate& on_rotate);
 
-  void SwapPrimaryAndSecondaryAuth(bool is_primary);
+  // Change the active |auth_user_|. If |is_primary| is true, the active auth
+  // switches to |opt_secondary_auth_|. If |is_primary| is false, the active
+  // auth switches to |primary_auth_|.
+  void SwapActiveAuthBetweenPrimaryAndSecondary(bool is_primary);
+
+  // Called when an authentication check is complete.
   void OnAuthenticate(bool auth_success);
 
   // Tries to lookup the stored state for |user|. Returns an unowned pointer
@@ -147,11 +174,30 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   // Called after the auth user change has taken place.
   void OnAuthUserChanged();
 
+  // Shows the correct (cached) easy unlock icon for the given auth user.
+  void UpdateEasyUnlockIconForUser(const AccountId& user);
+
   // Get the LoginAuthUserView of the current auth user.
   LoginAuthUserView* CurrentAuthUserView();
 
   // Opens an error bubble to indicate authentication failure.
   void ShowErrorMessage();
+
+  // Called when the easy unlock icon is hovered.
+  void OnEasyUnlockIconHovered();
+  // Called when the easy unlock icon is tapped.
+  void OnEasyUnlockIconTapped();
+
+  // Helper method to allocate a LoginAuthUserView instance.
+  LoginAuthUserView* AllocateLoginAuthUserView(
+      const mojom::LoginUserInfoPtr& user,
+      bool is_primary);
+
+  // Returns the authentication view for |user| if |user| is one of the active
+  // authentication views. If |require_auth_active| is true then the view must
+  // also be actively displaying auth.
+  LoginAuthUserView* TryToFindAuthUser(const AccountId& user,
+                                       bool require_auth_active);
 
   std::vector<UserState> users_;
 
@@ -182,6 +228,8 @@ class ASH_EXPORT LockContentsView : public NonAccessibleView,
   ScopedObserver<display::Screen, display::DisplayObserver> display_observer_;
 
   std::unique_ptr<LoginBubble> error_bubble_;
+  std::unique_ptr<LoginBubble> tooltip_bubble_;
+
   int unlock_attempt_ = 0;
 
   // Whether a lock screen app is currently active (i.e. lock screen note action

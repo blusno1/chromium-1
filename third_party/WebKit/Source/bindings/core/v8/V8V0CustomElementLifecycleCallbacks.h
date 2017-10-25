@@ -60,7 +60,7 @@ class V8V0CustomElementLifecycleCallbacks final
 
   bool SetBinding(std::unique_ptr<V0CustomElementBinding>);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   V8V0CustomElementLifecycleCallbacks(
@@ -83,7 +83,7 @@ class V8V0CustomElementLifecycleCallbacks final
 
   V8PerContextData* CreationContextData();
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   ScopedPersistent<v8::Object> prototype_;
   ScopedPersistent<v8::Function> created_;
   ScopedPersistent<v8::Function> attached_;

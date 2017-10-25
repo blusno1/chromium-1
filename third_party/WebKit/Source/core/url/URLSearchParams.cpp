@@ -106,8 +106,9 @@ URLSearchParams* URLSearchParams::Create(
 
 URLSearchParams::~URLSearchParams() {}
 
-DEFINE_TRACE(URLSearchParams) {
+void URLSearchParams::Trace(blink::Visitor* visitor) {
   visitor->Trace(url_object_);
+  ScriptWrappable::Trace(visitor);
 }
 
 #if DCHECK_IS_ON()
@@ -246,7 +247,7 @@ void URLSearchParams::EncodeAsFormData(Vector<char>& encoded_data) const {
         EncodedFormData::kFormURLEncoded, FormDataEncoder::kDoNotNormalizeCRLF);
 }
 
-RefPtr<EncodedFormData> URLSearchParams::ToEncodedFormData() const {
+scoped_refptr<EncodedFormData> URLSearchParams::ToEncodedFormData() const {
   Vector<char> encoded_data;
   EncodeAsFormData(encoded_data);
   return EncodedFormData::Create(encoded_data.data(), encoded_data.size());

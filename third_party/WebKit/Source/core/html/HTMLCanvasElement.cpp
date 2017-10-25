@@ -122,7 +122,7 @@ const int kMaxGlobalGPUMemoryUsage =
 // misinterpreted as a user-input value
 const int kUndefinedQualityValue = -1.0;
 
-RefPtr<Image> CreateTransparentImage(const IntSize& size) {
+scoped_refptr<Image> CreateTransparentImage(const IntSize& size) {
   if (!ImageBuffer::CanCreateImageBuffer(size))
     return nullptr;
   sk_sp<SkSurface> surface =
@@ -414,18 +414,20 @@ void HTMLCanvasElement::SetNeedsCompositingUpdate() {
 
 void HTMLCanvasElement::DoDeferredPaintInvalidation() {
   DCHECK(!dirty_rect_.IsEmpty());
+  LayoutBox* layout_box = GetLayoutBox();
   if (Is2d()) {
     FloatRect src_rect(0, 0, Size().Width(), Size().Height());
     dirty_rect_.Intersect(src_rect);
-    LayoutBox* lb = GetLayoutBox();
+
     FloatRect invalidation_rect;
-    if (lb) {
+    if (layout_box) {
+      FloatRect content_rect(layout_box->ContentBoxRect());
       FloatRect mapped_dirty_rect =
-          MapRect(dirty_rect_, src_rect, FloatRect(lb->ContentBoxRect()));
+          MapRect(dirty_rect_, src_rect, content_rect);
       if (context_->IsComposited()) {
         // Accelerated 2D canvases need the dirty rect to be expressed relative
         // to the content box, as opposed to the layout box.
-        mapped_dirty_rect.Move(-lb->ContentBoxOffset());
+        mapped_dirty_rect.MoveBy(-content_rect.Location());
       }
       invalidation_rect = mapped_dirty_rect;
     } else {
@@ -450,30 +452,29 @@ void HTMLCanvasElement::DoDeferredPaintInvalidation() {
   NotifyListenersCanvasChanged();
   did_notify_listeners_for_current_frame_ = true;
 
-  // Propagate the m_dirtyRect accumulated so far to the compositor
+  // Propagate the |dirty_rect_| accumulated so far to the compositor
   // before restarting with a blank dirty rect.
-  FloatRect src_rect(0, 0, Size().Width(), Size().Height());
-
-  LayoutBox* ro = GetLayoutBox();
   // Canvas content updates do not need to be propagated as
   // paint invalidations if the canvas is composited separately, since
   // the canvas contents are sent separately through a texture layer.
-  if (ro && (!context_ || !context_->IsComposited())) {
-    // If ro->contentBoxRect() is larger than srcRect the canvas's image is
+  if (layout_box && (!context_ || !context_->IsComposited())) {
+    // If the content box is larger than |src_rect|, the canvas's image is
     // being stretched, so we need to account for color bleeding caused by the
-    // interpollation filter.
-    if (ro->ContentBoxRect().Width() > src_rect.Width() ||
-        ro->ContentBoxRect().Height() > src_rect.Height()) {
+    // interpolation filter.
+    FloatRect src_rect(0, 0, Size().Width(), Size().Height());
+    FloatRect content_rect(layout_box->ContentBoxRect());
+    if (content_rect.Width() > src_rect.Width() ||
+        content_rect.Height() > src_rect.Height()) {
       dirty_rect_.Inflate(0.5);
     }
 
     dirty_rect_.Intersect(src_rect);
-    LayoutRect mapped_dirty_rect(EnclosingIntRect(
-        MapRect(dirty_rect_, src_rect, FloatRect(ro->ContentBoxRect()))));
-    // For querying PaintLayer::compositingState()
+    LayoutRect mapped_dirty_rect(
+        EnclosingIntRect(MapRect(dirty_rect_, src_rect, content_rect)));
+    // For querying PaintLayer::GetCompositingState()
     // FIXME: is this invalidation using the correct compositing state?
     DisableCompositingQueryAsserts disabler;
-    ro->InvalidatePaintRectangle(mapped_dirty_rect);
+    layout_box->InvalidatePaintRectangle(mapped_dirty_rect);
   }
   dirty_rect_ = FloatRect();
 
@@ -573,7 +574,7 @@ void HTMLCanvasElement::NotifyListenersCanvasChanged() {
 
   if (listener_needs_new_frame_capture) {
     SourceImageStatus status;
-    RefPtr<Image> source_image = GetSourceImageForCanvas(
+    scoped_refptr<Image> source_image = GetSourceImageForCanvas(
         &status, kPreferNoAcceleration, kSnapshotReasonCanvasListenerCapture,
         FloatSize());
     if (status != kNormalSourceImageStatus)
@@ -632,7 +633,7 @@ void HTMLCanvasElement::Paint(GraphicsContext& context, const LayoutRect& r) {
           !context_ || context_->CreationAttributes().alpha()
               ? SkBlendMode::kSrcOver
               : SkBlendMode::kSrc;
-      GetImageBuffer()->Draw(context, PixelSnappedIntRect(r), 0,
+      GetImageBuffer()->Draw(context, PixelSnappedIntRect(r), nullptr,
                              composite_operator);
     }
   } else {
@@ -692,7 +693,7 @@ ImageData* HTMLCanvasElement::ToImageData(SourceDrawingBuffer source_buffer,
     context_->PaintRenderingResultsToCanvas(source_buffer);
     image_data = ImageData::Create(size_);
     if (image_data && GetImageBuffer()) {
-      RefPtr<StaticBitmapImage> snapshot =
+      scoped_refptr<StaticBitmapImage> snapshot =
           GetImageBuffer()->NewImageSnapshot(kPreferNoAcceleration, reason);
       if (snapshot) {
         SkImageInfo image_info = SkImageInfo::Make(
@@ -711,7 +712,7 @@ ImageData* HTMLCanvasElement::ToImageData(SourceDrawingBuffer source_buffer,
     return image_data;
 
   DCHECK(Is2d() || PlaceholderFrame());
-  RefPtr<StaticBitmapImage> snapshot;
+  scoped_refptr<StaticBitmapImage> snapshot;
   if (GetImageBuffer()) {
     snapshot =
         GetImageBuffer()->NewImageSnapshot(kPreferNoAcceleration, reason);
@@ -942,7 +943,7 @@ bool HTMLCanvasElement::ShouldUseDisplayList() {
   // Rasterization of web contents will blend in the output space. Only embed
   // the canvas as a display list if it intended to do output space blending as
   // well.
-  if (ColorParams().LinearPixelMath())
+  if (!ColorParams().NeedsSkColorSpaceXformCanvas())
     return false;
 
   if (RuntimeEnabledFeatures::ForceDisplayList2dCanvasEnabled())
@@ -1093,7 +1094,7 @@ void HTMLCanvasElement::NotifySurfaceInvalid() {
     context_->LoseContext(CanvasRenderingContext::kRealLostContext);
 }
 
-DEFINE_TRACE(HTMLCanvasElement) {
+void HTMLCanvasElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(listeners_);
   visitor->Trace(context_);
   ContextLifecycleObserver::Trace(visitor);
@@ -1101,7 +1102,8 @@ DEFINE_TRACE(HTMLCanvasElement) {
   HTMLElement::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(HTMLCanvasElement) {
+void HTMLCanvasElement::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(context_);
   HTMLElement::TraceWrappers(visitor);
 }
@@ -1186,9 +1188,10 @@ void HTMLCanvasElement::EnsureUnacceleratedImageBuffer() {
   did_fail_to_create_image_buffer_ = !image_buffer_;
 }
 
-RefPtr<Image> HTMLCanvasElement::CopiedImage(SourceDrawingBuffer source_buffer,
-                                             AccelerationHint hint,
-                                             SnapshotReason snapshot_reason) {
+scoped_refptr<Image> HTMLCanvasElement::CopiedImage(
+    SourceDrawingBuffer source_buffer,
+    AccelerationHint hint,
+    SnapshotReason snapshot_reason) {
   if (!IsPaintable())
     return nullptr;
   if (!context_)
@@ -1196,7 +1199,7 @@ RefPtr<Image> HTMLCanvasElement::CopiedImage(SourceDrawingBuffer source_buffer,
 
   if (context_->GetContextType() ==
       CanvasRenderingContext::kContextImageBitmap) {
-    RefPtr<Image> image = context_->GetImage(hint, snapshot_reason);
+    scoped_refptr<Image> image = context_->GetImage(hint, snapshot_reason);
     // TODO(fserb): return image?
     if (image)
       return context_->GetImage(hint, snapshot_reason);
@@ -1284,7 +1287,7 @@ void HTMLCanvasElement::WillDrawImageTo2DContext(CanvasImageSource* source) {
   }
 }
 
-RefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
+scoped_refptr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint hint,
     SnapshotReason reason,
@@ -1305,7 +1308,7 @@ RefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
   }
 
   if (!context_) {
-    RefPtr<Image> result = CreateTransparentImage(Size());
+    scoped_refptr<Image> result = CreateTransparentImage(Size());
     *status = result ? kNormalSourceImageStatus : kInvalidSourceImageStatus;
     return result;
   }
@@ -1313,14 +1316,14 @@ RefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
   if (context_->GetContextType() ==
       CanvasRenderingContext::kContextImageBitmap) {
     *status = kNormalSourceImageStatus;
-    RefPtr<Image> result = context_->GetImage(hint, reason);
+    scoped_refptr<Image> result = context_->GetImage(hint, reason);
     if (!result)
       result = CreateTransparentImage(Size());
     *status = result ? kNormalSourceImageStatus : kInvalidSourceImageStatus;
     return result;
   }
 
-  RefPtr<Image> image;
+  scoped_refptr<Image> image;
   // TODO(ccameron): Canvas should produce sRGB images.
   // https://crbug.com/672299
   if (Is3d()) {
@@ -1361,7 +1364,7 @@ bool HTMLCanvasElement::WouldTaintOrigin(SecurityOrigin*) const {
 FloatSize HTMLCanvasElement::ElementSize(const FloatSize&) const {
   if (context_ && context_->GetContextType() ==
                       CanvasRenderingContext::kContextImageBitmap) {
-    RefPtr<Image> image =
+    scoped_refptr<Image> image =
         context_->GetImage(kPreferNoAcceleration, kSnapshotReasonDrawImage);
     if (image)
       return FloatSize(image->width(), image->height());
@@ -1388,9 +1391,9 @@ ScriptPromise HTMLCanvasElement::CreateImageBitmap(
 }
 
 void HTMLCanvasElement::SetPlaceholderFrame(
-    RefPtr<StaticBitmapImage> image,
+    scoped_refptr<StaticBitmapImage> image,
     WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
-    RefPtr<WebTaskRunner> task_runner,
+    scoped_refptr<WebTaskRunner> task_runner,
     unsigned resource_id) {
   OffscreenCanvasPlaceholder::SetPlaceholderFrame(
       std::move(image), std::move(dispatcher), std::move(task_runner),

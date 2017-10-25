@@ -58,6 +58,7 @@ void EmbeddedWorkerInstanceClientImpl::WorkerContextDestroyed() {
 void EmbeddedWorkerInstanceClientImpl::StartWorker(
     const EmbeddedWorkerStartParams& params,
     mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+    mojom::ControllerServiceWorkerRequest controller_request,
     mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
     mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
     mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
@@ -71,8 +72,9 @@ void EmbeddedWorkerInstanceClientImpl::StartWorker(
       params.embedded_worker_id, params.service_worker_version_id, params.scope,
       params.script_url,
       ServiceWorkerUtils::IsScriptStreamingEnabled() && installed_scripts_info,
-      std::move(dispatcher_request), std::move(instance_host),
-      std::move(provider_info), std::move(temporal_self_));
+      std::move(dispatcher_request), std::move(controller_request),
+      std::move(instance_host), std::move(provider_info),
+      std::move(temporal_self_));
   client->set_blink_initialized_time(blink_initialized_time_);
   client->set_start_worker_received_time(base::TimeTicks::Now());
   wrapper_ = StartWorkerContext(
@@ -154,6 +156,8 @@ EmbeddedWorkerInstanceClientImpl::StartWorkerContext(
       params.wait_for_debugger
           ? blink::WebEmbeddedWorkerStartData::kWaitForDebugger
           : blink::WebEmbeddedWorkerStartData::kDontWaitForDebugger;
+  start_data.instrumentation_token =
+      blink::WebString::FromUTF8(params.devtools_worker_token.ToString());
   start_data.v8_cache_options = static_cast<blink::WebSettings::V8CacheOptions>(
       params.settings.v8_cache_options);
   start_data.data_saver_enabled = params.settings.data_saver_enabled;

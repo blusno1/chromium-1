@@ -24,15 +24,20 @@ import java.util.concurrent.TimeUnit;
 @JNINamespace("download::android")
 public class DownloadTaskScheduler {
     public static final String EXTRA_TASK_TYPE = "extra_task_type";
+    public static final String EXTRA_BATTERY_REQUIRES_CHARGING = "extra_battery_requires_charging";
     static final long TWELVE_HOURS_IN_SECONDS = TimeUnit.HOURS.toSeconds(12);
     static final long FIVE_MINUTES_IN_SECONDS = TimeUnit.MINUTES.toSeconds(5);
 
     @CalledByNative
-    private static void scheduleTask(@DownloadTaskType int taskType, boolean requiresCharging,
-            boolean requiresUnmeteredNetwork, long windowStartTimeSeconds,
+    private static void scheduleTask(@DownloadTaskType int taskType,
+            boolean requiresUnmeteredNetwork, boolean requiresCharging, long windowStartTimeSeconds,
             long windowEndTimeSeconds) {
         Bundle bundle = new Bundle();
         bundle.putInt(EXTRA_TASK_TYPE, taskType);
+        // TODO(xingliu): Fix the native side battery criteria.
+        if (taskType == DownloadTaskType.DOWNLOAD_TASK) requiresCharging = false;
+        bundle.putBoolean(EXTRA_BATTERY_REQUIRES_CHARGING, requiresCharging);
+
         BackgroundTaskScheduler scheduler = BackgroundTaskSchedulerFactory.getScheduler();
         TaskInfo taskInfo =
                 TaskInfo.createOneOffTask(getTaskId(taskType), DownloadBackgroundTask.class,

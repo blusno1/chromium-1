@@ -95,7 +95,7 @@ void Worklet::ContextDestroyed(ExecutionContext* execution_context) {
     proxy->TerminateWorkletGlobalScope();
 }
 
-WorkletGlobalScopeProxy* Worklet::FindAvailableGlobalScope() const {
+WorkletGlobalScopeProxy* Worklet::FindAvailableGlobalScope() {
   DCHECK(IsMainThread());
   return proxies_.at(SelectGlobalScope());
 }
@@ -120,7 +120,7 @@ void Worklet::FetchAndInvokeScript(const KURL& module_url_record,
   // document's responsible event loop. In our implementation, we use the
   // document's UnspecedLoading task runner as that is what we commonly use for
   // module loading.
-  RefPtr<WebTaskRunner> outside_settings_task_runner =
+  scoped_refptr<WebTaskRunner> outside_settings_task_runner =
       TaskRunnerHelper::Get(TaskType::kUnspecedLoading, GetExecutionContext());
 
   // Step 8: "Let moduleResponsesMap be worklet's module responses map."
@@ -159,14 +159,15 @@ void Worklet::FetchAndInvokeScript(const KURL& module_url_record,
   }
 }
 
-size_t Worklet::SelectGlobalScope() const {
+size_t Worklet::SelectGlobalScope() {
   DCHECK_EQ(GetNumberOfGlobalScopes(), 1u);
   return 0u;
 }
 
-DEFINE_TRACE(Worklet) {
+void Worklet::Trace(blink::Visitor* visitor) {
   visitor->Trace(proxies_);
   visitor->Trace(module_responses_map_);
+  ScriptWrappable::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);
 }
 

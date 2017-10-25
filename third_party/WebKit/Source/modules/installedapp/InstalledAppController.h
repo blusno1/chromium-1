@@ -39,7 +39,7 @@ class MODULES_EXPORT InstalledAppController final
   static InstalledAppController* From(LocalFrame&);
   static const char* SupplementName();
 
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  private:
   class GetRelatedAppsCallbacks;

@@ -4,6 +4,7 @@
 
 #include "ash/wm/splitview/split_view_controller.h"
 
+#include <cmath>
 #include <memory>
 
 #include "ash/display/screen_orientation_controller_chromeos.h"
@@ -12,6 +13,7 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/splitview/split_view_divider.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
@@ -19,6 +21,7 @@
 #include "ash/wm/wm_event.h"
 #include "base/command_line.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_delegate.h"
 #include "ui/compositor/layer.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -64,9 +67,14 @@ bool IsLeftWindowOnTopOrLeftOfScreen(
 
 }  // namespace
 
-SplitViewController::SplitViewController() {}
+SplitViewController::SplitViewController() {
+  screen_orientation_ =
+      Shell::Get()->screen_orientation_controller()->GetCurrentOrientation();
+  display::Screen::GetScreen()->AddObserver(this);
+}
 
 SplitViewController::~SplitViewController() {
+  display::Screen::GetScreen()->RemoveObserver(this);
   EndSplitView();
 }
 
@@ -84,10 +92,23 @@ bool SplitViewController::ShouldAllowSplitView() {
   return true;
 }
 
-// static
 bool SplitViewController::CanSnap(aura::Window* window) {
-  return wm::CanActivateWindow(window) ? wm::GetWindowState(window)->CanSnap()
-                                       : false;
+  if (!wm::CanActivateWindow(window))
+    return false;
+  if (!wm::GetWindowState(window)->CanSnap())
+    return false;
+  if (window->delegate()) {
+    // If the window's minimum size is larger than half of the display's work
+    // area size, the window can't be snapped in this case.
+    const gfx::Size min_size = window->delegate()->GetMinimumSize();
+    const gfx::Rect display_area = GetDisplayWorkAreaBoundsInScreen(window);
+    bool is_landscape = (display_area.width() > display_area.height());
+    if ((is_landscape && min_size.width() > display_area.width() / 2) ||
+        (!is_landscape && min_size.height() > display_area.height() / 2)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool SplitViewController::IsSplitViewModeActive() const {
@@ -116,12 +137,9 @@ void SplitViewController::SnapWindow(aura::Window* window,
     // Add observers when the split view mode starts.
     Shell::Get()->AddShellObserver(this);
     Shell::Get()->activation_client()->AddObserver(this);
-    display::Screen::GetScreen()->AddObserver(this);
     Shell::Get()->tablet_mode_controller()->AddObserver(this);
     Shell::Get()->NotifySplitViewModeStarting();
 
-    screen_orientation_ =
-        Shell::Get()->screen_orientation_controller()->GetCurrentOrientation();
     divider_position_ = GetDefaultDividerPosition(window);
     default_snap_position_ = snap_position;
     split_view_divider_ =
@@ -203,12 +221,7 @@ gfx::Rect SplitViewController::GetSnappedWindowBoundsInScreen(
   if (snap_position == NONE)
     return work_area_bounds_in_screen;
 
-  // |screen_orientation_| and |divide_position_| might not be properly
-  // initialized yet.
-  if (screen_orientation_ == blink::kWebScreenOrientationLockDefault) {
-    screen_orientation_ =
-        Shell::Get()->screen_orientation_controller()->GetCurrentOrientation();
-  }
+  // |divide_position_| might not be properly initialized yet.
   divider_position_ = (divider_position_ < 0)
                           ? GetDefaultDividerPosition(window)
                           : divider_position_;
@@ -288,7 +301,7 @@ void SplitViewController::EndResize(const gfx::Point& location_in_screen) {
   gfx::Point modified_location_in_screen =
       GetBoundedPosition(location_in_screen, work_area_bounds);
   UpdateDividerPosition(modified_location_in_screen);
-  MoveDividerToClosestFixedPostion();
+  MoveDividerToClosestFixedPosition();
   NotifyDividerPositionChanged();
 
   // Check if one of the snapped windows needs to be closed.
@@ -309,7 +322,6 @@ void SplitViewController::EndSplitView() {
   // Remove observers when the split view mode ends.
   Shell::Get()->RemoveShellObserver(this);
   Shell::Get()->activation_client()->RemoveObserver(this);
-  display::Screen::GetScreen()->RemoveObserver(this);
   Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
 
   StopObserving(left_window_);
@@ -319,7 +331,6 @@ void SplitViewController::EndSplitView() {
   split_view_divider_.reset();
   black_scrim_layer_.reset();
   default_snap_position_ = NONE;
-  screen_orientation_ = blink::kWebScreenOrientationLockDefault;
   divider_position_ = -1;
 
   State previous_state = state_;
@@ -338,11 +349,9 @@ void SplitViewController::RemoveObserver(Observer* observer) {
 }
 
 void SplitViewController::OnWindowDestroying(aura::Window* window) {
-  // If one of the snapped window gets closed, end the split view mode. The
-  // behavior might change in the future.
   DCHECK(IsSplitViewModeActive());
   DCHECK(window == left_window_ || window == right_window_);
-  EndSplitView();
+  OnSnappedWindowMinimizedOrDestroyed(window);
 }
 
 void SplitViewController::OnPostWindowStateTypeChange(
@@ -350,12 +359,15 @@ void SplitViewController::OnPostWindowStateTypeChange(
     ash::mojom::WindowStateType old_type) {
   DCHECK(IsSplitViewModeActive());
 
-  if (window_state->IsFullscreen() || window_state->IsMinimized() ||
-      window_state->IsMaximized()) {
-    // TODO(xdai): Decide what to do if one of the snapped windows gets
-    // minimized /maximized / full-screened. For now we end the split view mode
-    // for simplicity.
+  if (window_state->IsFullscreen() || window_state->IsMaximized()) {
+    // End split view mode if one of the snapped windows gets maximized /
+    // full-screened. Also end overview mode if overview mode is active at the
+    // moment.
     EndSplitView();
+    if (Shell::Get()->window_selector_controller()->IsSelecting())
+      Shell::Get()->window_selector_controller()->ToggleOverview();
+  } else if (window_state->IsMinimized()) {
+    OnSnappedWindowMinimizedOrDestroyed(window_state->window());
   }
 }
 
@@ -432,7 +444,18 @@ void SplitViewController::OnOverviewModeEnded() {
 void SplitViewController::OnDisplayMetricsChanged(
     const display::Display& display,
     uint32_t metrics) {
-  DCHECK(IsSplitViewModeActive());
+  if (!display.IsInternal())
+    return;
+
+  // We need update |screen_orientation_| even though split view mode is not
+  // active at the moment.
+  blink::WebScreenOrientationLockType previous_screen_orientation =
+      screen_orientation_;
+  screen_orientation_ =
+      Shell::Get()->screen_orientation_controller()->GetCurrentOrientation();
+
+  if (!IsSplitViewModeActive())
+    return;
 
   display::Display current_display =
       display::Screen::GetScreen()->GetDisplayNearestWindow(
@@ -440,10 +463,13 @@ void SplitViewController::OnDisplayMetricsChanged(
   if (display.id() != current_display.id())
     return;
 
-  blink::WebScreenOrientationLockType previous_screen_orientation =
-      screen_orientation_;
-  screen_orientation_ =
-      Shell::Get()->screen_orientation_controller()->GetCurrentOrientation();
+  // If one of the snapped windows becomes unsnappable, end the split view mode
+  // directly.
+  if ((left_window_ && !CanSnap(left_window_)) ||
+      (right_window_ && !CanSnap(right_window_))) {
+    EndSplitView();
+    return;
+  }
 
   // Update |divider_position_| if the top/left window changes.
   if ((metrics & (display::DisplayObserver::DISPLAY_METRIC_ROTATION)) &&
@@ -461,7 +487,7 @@ void SplitViewController::OnDisplayMetricsChanged(
   // For other display configuration changes, we only move the divider to the
   // closest fixed position.
   if (!is_resizing_)
-    MoveDividerToClosestFixedPostion();
+    MoveDividerToClosestFixedPosition();
 
   NotifyDividerPositionChanged();
   UpdateSnappedWindowsAndDividerBounds();
@@ -671,12 +697,28 @@ void SplitViewController::SplitRect(const gfx::Rect& work_area_rect,
   }
 }
 
-void SplitViewController::MoveDividerToClosestFixedPostion() {
+void SplitViewController::MoveDividerToClosestFixedPosition() {
   DCHECK(IsSplitViewModeActive());
 
-  float ratio =
-      FindClosestFixedPositionRatio(divider_position_, GetDividerEndPosition());
-  divider_position_ = GetDividerEndPosition() * ratio;
+  const gfx::Rect work_area_bounds_in_screen =
+      GetDisplayWorkAreaBoundsInScreen(GetDefaultSnappedWindow());
+  const gfx::Size divider_size = SplitViewDivider::GetDividerSize(
+      work_area_bounds_in_screen, screen_orientation_, false /* is_dragging */);
+  const int divider_thickness =
+      std::min(divider_size.width(), divider_size.height());
+
+  // The values in |kFixedPositionRatios| represent the fixed position of the
+  // center of the divider while |divider_position_| represent the origin of the
+  // divider rectangle. So, before calling FindClosestFixedPositionRatio,
+  // extract the center from |divider_position_|. The result will also be the
+  // center of the divider, so extract the origin, unless the result is on of
+  // the endpoints.
+  float ratio = FindClosestFixedPositionRatio(
+      divider_position_ + std::floor(divider_thickness / 2.f),
+      GetDividerEndPosition());
+  divider_position_ = std::floor(GetDividerEndPosition() * ratio);
+  if (ratio > 0.f && ratio < 1.f)
+    divider_position_ -= std::floor(divider_thickness / 2.f);
 }
 
 bool SplitViewController::ShouldEndSplitViewAfterResizing() {
@@ -704,6 +746,34 @@ int SplitViewController::GetDividerEndPosition() {
   const gfx::Rect work_area_bounds =
       GetDisplayWorkAreaBoundsInScreen(GetDefaultSnappedWindow());
   return std::max(work_area_bounds.width(), work_area_bounds.height());
+}
+
+void SplitViewController::OnSnappedWindowMinimizedOrDestroyed(
+    aura::Window* window) {
+  DCHECK(window);
+  DCHECK(window == left_window_ || window == right_window_);
+  if (left_window_ == window) {
+    StopObserving(left_window_);
+    left_window_ = nullptr;
+  } else {
+    StopObserving(right_window_);
+    right_window_ = nullptr;
+  }
+
+  if (!left_window_ && !right_window_) {
+    // If there is no snapped window at this moment, ends split view mode. Note
+    // this will update overview window grid bounds if the overview mode is
+    // active at the moment.
+    EndSplitView();
+  } else {
+    // If there is still one snapped window after minimizing/closing one snapped
+    // window, update its snap state and open overview window grid.
+    State previous_state = state_;
+    state_ = left_window_ ? LEFT_SNAPPED : RIGHT_SNAPPED;
+    default_snap_position_ = left_window_ ? LEFT : RIGHT;
+    NotifySplitViewStateChanged(previous_state, state_);
+    Shell::Get()->window_selector_controller()->ToggleOverview();
+  }
 }
 
 }  // namespace ash

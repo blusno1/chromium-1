@@ -55,11 +55,12 @@ class WorkerInspectorController final
  public:
   static WorkerInspectorController* Create(WorkerThread*);
   ~WorkerInspectorController() override;
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   CoreProbeSink* GetProbeSink() const { return probe_sink_.Get(); }
 
-  void ConnectFrontend(int session_id, const String& host_id);
+  void ConnectFrontend(int session_id,
+                       const String& parent_instrumentation_token);
   void DisconnectFrontend(int session_id);
   void DispatchMessageFromFrontend(int session_id, const String& message);
   void Dispose();

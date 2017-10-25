@@ -7,6 +7,8 @@ import("//third_party/WebKit/Source/core/core.gni")
 blink_core_sources("paint") {
   split_count = 2
   sources = [
+    "AdjustPaintOffsetScope.cpp",
+    "AdjustPaintOffsetScope.h",
     "AppliedDecorationPainter.cpp",
     "AppliedDecorationPainter.h",
     "BackgroundImageGeometry.cpp",
@@ -91,7 +93,6 @@ blink_core_sources("paint") {
     "LayerClipRecorder.cpp",
     "LayerClipRecorder.h",
     "LayerHitTestRects.h",
-    "LayoutObjectDrawingRecorder.h",
     "LineBoxListPainter.cpp",
     "LineBoxListPainter.h",
     "LinkHighlightImpl.cpp",
@@ -111,6 +112,8 @@ blink_core_sources("paint") {
     "ObjectPaintProperties.h",
     "ObjectPainter.cpp",
     "ObjectPainter.h",
+    "ObjectPainterBase.cpp",
+    "ObjectPainterBase.h",
     "PaintEvent.h",
     "PaintInfo.h",
     "PaintInvalidationCapableScrollableArea.cpp",
@@ -227,6 +230,8 @@ blink_core_sources("paint") {
     "compositing/CompositingInputsUpdater.h",
     "compositing/CompositingLayerAssigner.cpp",
     "compositing/CompositingLayerAssigner.h",
+    "compositing/CompositingLayerPropertyUpdater.cpp",
+    "compositing/CompositingLayerPropertyUpdater.h",
     "compositing/CompositingReasonFinder.cpp",
     "compositing/CompositingReasonFinder.h",
     "compositing/CompositingRequirementsUpdater.cpp",

@@ -146,6 +146,13 @@ void VrGLThread::OnContentScreenBoundsChanged(const gfx::SizeF& bounds) {
                             weak_vr_shell_, bounds));
 }
 
+void VrGLThread::SetVoiceSearchActive(bool active) {
+  DCHECK(OnGlThread());
+  main_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&VrShell::SetVoiceSearchActive, weak_vr_shell_, active));
+}
+
 void VrGLThread::SetFullscreen(bool enabled) {
   DCHECK(OnMainThread());
   task_runner()->PostTask(

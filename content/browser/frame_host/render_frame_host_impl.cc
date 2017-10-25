@@ -26,6 +26,7 @@
 #include "content/browser/bluetooth/web_bluetooth_service_impl.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/browser/dedicated_worker/dedicated_worker_host.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/download/mhtml_generation_manager.h"
@@ -47,6 +48,7 @@
 #include "content/browser/geolocation/geolocation_service_impl.h"
 #include "content/browser/image_capture/image_capture_impl.h"
 #include "content/browser/installedapp/installed_app_provider_impl_default.h"
+#include "content/browser/interface_provider_filtering.h"
 #include "content/browser/keyboard_lock/keyboard_lock_service_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_scheduler_filter.h"
@@ -408,12 +410,13 @@ bool RenderFrameHost::IsDataUrlNavigationAllowedForAndroidWebView() {
   return g_allow_data_url_navigation;
 }
 
-void CreateMediaPlayerRenderer(
-    int process_id,
-    int routing_id,
-    media::mojom::RendererRequest request) {
+void CreateMediaPlayerRenderer(int process_id,
+                               int routing_id,
+                               RenderFrameHostDelegate* delegate,
+                               media::mojom::RendererRequest request) {
   std::unique_ptr<MediaPlayerRenderer> renderer =
-      base::MakeUnique<MediaPlayerRenderer>(process_id, routing_id);
+      base::MakeUnique<MediaPlayerRenderer>(process_id, routing_id,
+                                            delegate->GetAsWebContents());
 
   // base::Unretained is safe here because the lifetime of the MediaPlayerRender
   // is tied to the lifetime of the MojoRendererService.
@@ -566,6 +569,9 @@ RenderFrameHostImpl::RenderFrameHostImpl(SiteInstance* site_instance,
         frame_tree_node_->frame_tree_node_id());
   }
   ResetFeaturePolicy();
+
+  ax_tree_id_ = ui::AXTreeIDRegistry::GetInstance()->GetOrCreateAXTreeID(
+      GetProcess()->GetID(), routing_id_);
 }
 
 RenderFrameHostImpl::~RenderFrameHostImpl() {
@@ -624,6 +630,8 @@ RenderFrameHostImpl::~RenderFrameHostImpl() {
   // Notify the FrameTree that this RFH is going away, allowing it to shut down
   // the corresponding RenderViewHost if it is no longer needed.
   frame_tree_->ReleaseRenderViewHostRef(render_view_host_);
+
+  ui::AXTreeIDRegistry::GetInstance()->RemoveAXTreeID(ax_tree_id_);
 }
 
 int RenderFrameHostImpl::GetRoutingID() {
@@ -631,8 +639,7 @@ int RenderFrameHostImpl::GetRoutingID() {
 }
 
 ui::AXTreeIDRegistry::AXTreeID RenderFrameHostImpl::GetAXTreeID() {
-  return ui::AXTreeIDRegistry::GetInstance()->GetOrCreateAXTreeID(
-      GetProcess()->GetID(), routing_id_);
+  return ax_tree_id_;
 }
 
 const base::UnguessableToken& RenderFrameHostImpl::GetOverlayRoutingToken() {
@@ -937,6 +944,8 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
     IPC_MESSAGE_HANDLER(FrameHostMsg_FocusedNodeChanged, OnFocusedNodeChanged)
     IPC_MESSAGE_HANDLER(FrameHostMsg_SetHasReceivedUserGesture,
                         OnSetHasReceivedUserGesture)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_ScrollRectToVisibleInParentFrame,
+                        OnScrollRectToVisibleInParentFrame)
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
     IPC_MESSAGE_HANDLER(FrameHostMsg_ShowPopup, OnShowPopup)
     IPC_MESSAGE_HANDLER(FrameHostMsg_HidePopup, OnHidePopup)
@@ -1087,9 +1096,11 @@ void RenderFrameHostImpl::SanitizeDataForUseInCspViolation(
 
   // There is no need to sanitize data when it is same-origin with the current
   // url of the renderer.
-  if (url::Origin(*blocked_url).IsSameOriginWith(last_committed_origin_))
+  if (url::Origin::Create(*blocked_url)
+          .IsSameOriginWith(last_committed_origin_))
     sanitize_blocked_url = false;
-  if (url::Origin(source_location_url).IsSameOriginWith(last_committed_origin_))
+  if (url::Origin::Create(source_location_url)
+          .IsSameOriginWith(last_committed_origin_))
     sanitize_source_location = false;
 
   // When a renderer tries to do a form submission, it already knows the url of
@@ -2691,6 +2702,16 @@ void RenderFrameHostImpl::OnSetHasReceivedUserGesture() {
   frame_tree_node_->OnSetHasReceivedUserGesture();
 }
 
+void RenderFrameHostImpl::OnScrollRectToVisibleInParentFrame(
+    const gfx::Rect& rect_to_scroll,
+    const blink::WebRemoteScrollProperties& properties) {
+  RenderFrameProxyHost* proxy =
+      frame_tree_node_->render_manager()->GetProxyToParent();
+  if (!proxy)
+    return;
+  proxy->ScrollRectToVisible(rect_to_scroll, properties);
+}
+
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
 void RenderFrameHostImpl::OnShowPopup(
     const FrameHostMsg_ShowPopup_Params& params) {
@@ -2758,11 +2779,8 @@ void RenderFrameHostImpl::CreateNewWindow(
           params->disposition, *params->features, params->user_gesture,
           params->opener_suppressed, &no_javascript_access);
 
-  mojom::CreateNewWindowReplyPtr reply = mojom::CreateNewWindowReply::New();
   if (!can_create_window) {
-    RunCreateWindowCompleteCallback(std::move(callback), std::move(reply),
-                                    MSG_ROUTING_NONE, MSG_ROUTING_NONE,
-                                    MSG_ROUTING_NONE, 0);
+    std::move(callback).Run(mojom::CreateNewWindowStatus::kIgnore, nullptr);
     return;
   }
 
@@ -2771,14 +2789,11 @@ void RenderFrameHostImpl::CreateNewWindow(
   // window.open() will return "window" and navigate it to whatever URL was
   // passed.
   if (!render_view_host_->GetWebkitPreferences().supports_multiple_windows) {
-    RunCreateWindowCompleteCallback(std::move(callback), std::move(reply),
-                                    render_view_host_->GetRoutingID(),
-                                    MSG_ROUTING_NONE, MSG_ROUTING_NONE, 0);
+    std::move(callback).Run(mojom::CreateNewWindowStatus::kReuse, nullptr);
     return;
   }
 
   // This will clone the sessionStorage for namespace_id_to_clone.
-
   StoragePartition* storage_partition = BrowserContext::GetStoragePartition(
       GetSiteInstance()->GetBrowserContext(), GetSiteInstance());
   DOMStorageContextWrapper* dom_storage_context =
@@ -2786,7 +2801,6 @@ void RenderFrameHostImpl::CreateNewWindow(
           storage_partition->GetDOMStorageContext());
   auto cloned_namespace = base::MakeRefCounted<SessionStorageNamespaceImpl>(
       dom_storage_context, params->session_storage_namespace_id);
-  reply->cloned_session_storage_namespace_id = cloned_namespace->id();
 
   // If the opener is suppressed or script access is disallowed, we should
   // open the window in a new BrowsingInstance, and thus a new process. That
@@ -2827,28 +2841,36 @@ void RenderFrameHostImpl::CreateNewWindow(
                              main_frame_widget_route_id, *params,
                              cloned_namespace.get());
 
-  // If we did not create a WebContents to host the renderer-created
-  // RenderFrame/RenderView/RenderWidget objects, make sure to send invalid
-  // routing ids back to the renderer.
-  if (main_frame_route_id != MSG_ROUTING_NONE) {
-    bool succeeded =
-        RenderWidgetHost::FromID(render_process_id,
-                                 main_frame_widget_route_id) != nullptr;
-    if (!succeeded) {
-      DCHECK(!RenderFrameHost::FromID(render_process_id, main_frame_route_id));
-      DCHECK(!RenderViewHost::FromID(render_process_id, render_view_route_id));
-      RunCreateWindowCompleteCallback(std::move(callback), std::move(reply),
-                                      MSG_ROUTING_NONE, MSG_ROUTING_NONE,
-                                      MSG_ROUTING_NONE, 0);
-      return;
-    }
-    DCHECK(RenderFrameHost::FromID(render_process_id, main_frame_route_id));
-    DCHECK(RenderViewHost::FromID(render_process_id, render_view_route_id));
+  if (main_frame_route_id == MSG_ROUTING_NONE) {
+    // Opener suppressed or Javascript access disabled. Never tell the renderer
+    // about the new window.
+    std::move(callback).Run(mojom::CreateNewWindowStatus::kIgnore, nullptr);
+    return;
   }
 
-  RunCreateWindowCompleteCallback(
-      std::move(callback), std::move(reply), render_view_route_id,
-      main_frame_route_id, main_frame_widget_route_id, cloned_namespace->id());
+  bool succeeded =
+      RenderWidgetHost::FromID(render_process_id, main_frame_widget_route_id) !=
+      nullptr;
+  if (!succeeded) {
+    // If we did not create a WebContents to host the renderer-created
+    // RenderFrame/RenderView/RenderWidget objects, signal failure to the
+    // renderer.
+    DCHECK(!RenderFrameHost::FromID(render_process_id, main_frame_route_id));
+    DCHECK(!RenderViewHost::FromID(render_process_id, render_view_route_id));
+    std::move(callback).Run(mojom::CreateNewWindowStatus::kIgnore, nullptr);
+    return;
+  }
+
+  // The view, widget, and frame should all be routable now.
+  DCHECK(RenderViewHost::FromID(render_process_id, render_view_route_id));
+  RenderFrameHost* rfh =
+      RenderFrameHost::FromID(GetProcess()->GetID(), main_frame_route_id);
+  DCHECK(rfh);
+  mojom::CreateNewWindowReplyPtr reply = mojom::CreateNewWindowReply::New(
+      render_view_route_id, main_frame_route_id, main_frame_widget_route_id,
+      cloned_namespace->id(), rfh->GetDevToolsFrameToken());
+  std::move(callback).Run(mojom::CreateNewWindowStatus::kSuccess,
+                          std::move(reply));
 }
 
 void RenderFrameHostImpl::IssueKeepAliveHandle(
@@ -2893,21 +2915,6 @@ void GetRestrictedCookieManager(
 }
 
 }  // anonymous namespace
-
-void RenderFrameHostImpl::RunCreateWindowCompleteCallback(
-    CreateNewWindowCallback callback,
-    mojom::CreateNewWindowReplyPtr reply,
-    int render_view_route_id,
-    int main_frame_route_id,
-    int main_frame_widget_route_id,
-    int cloned_session_storage_namespace_id) {
-  reply->route_id = render_view_route_id;
-  reply->main_frame_route_id = main_frame_route_id;
-  reply->main_frame_widget_route_id = main_frame_widget_route_id;
-  reply->cloned_session_storage_namespace_id =
-      cloned_session_storage_namespace_id;
-  std::move(callback).Run(std::move(reply));
-}
 
 void RenderFrameHostImpl::RegisterMojoInterfaces() {
 #if !defined(OS_ANDROID)
@@ -2963,7 +2970,7 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
   // Creates a MojoRendererService, passing it a MediaPlayerRender.
   registry_->AddInterface<media::mojom::Renderer>(
       base::Bind(&content::CreateMediaPlayerRenderer, GetProcess()->GetID(),
-                 GetRoutingID()));
+                 GetRoutingID(), delegate_));
 #endif  // defined(OS_ANDROID)
 
   registry_->AddInterface(base::Bind(
@@ -2982,6 +2989,10 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
 
   registry_->AddInterface(base::Bind(&SharedWorkerConnectorImpl::Create,
                                      process_->GetID(), routing_id_));
+
+  registry_->AddInterface(base::Bind(&CreateDedicatedWorkerHostFactory,
+                                     GetProcess()->GetID(),
+                                     base::Unretained(this)));
 
   registry_->AddInterface<device::mojom::VRService>(base::Bind(
       &WebvrServiceProvider::BindWebvrService, base::Unretained(this)));
@@ -3107,7 +3118,8 @@ bool RenderFrameHostImpl::CanCommitOrigin(
     return true;
 
   // Standard URLs must match the reported origin.
-  if (url.IsStandard() && !origin.IsSamePhysicalOriginWith(url::Origin(url)))
+  if (url.IsStandard() &&
+      !origin.IsSamePhysicalOriginWith(url::Origin::Create(url)))
     return false;
 
   // A non-unique origin must be a valid URL, which allows us to safely do a
@@ -3171,7 +3183,8 @@ void RenderFrameHostImpl::NavigateToInterstitialURL(const GURL& data_url) {
       base::TimeTicks::Now(), FrameMsg_UILoadMetricsReportType::NO_REPORT,
       GURL(), GURL(), PREVIEWS_OFF, base::TimeTicks::Now(), "GET", nullptr,
       base::Optional<SourceLocation>(),
-      CSPDisposition::CHECK /* should_check_main_world_csp */);
+      CSPDisposition::CHECK /* should_check_main_world_csp */,
+      false /* started_from_context_menu */);
   if (IsBrowserSideNavigationEnabled()) {
     CommitNavigation(nullptr, nullptr, mojo::ScopedDataPipeConsumerHandle(),
                      common_params, RequestNavigationParams(), false,
@@ -3342,10 +3355,10 @@ void RenderFrameHostImpl::CommitNavigation(
   // prevent us from doing inappropriate things with javascript-url.
   // See https://crbug.com/766149.
   if (common_params.url.SchemeIs(url::kJavaScriptScheme)) {
-    Send(new FrameMsg_CommitNavigation(
-        routing_id_, ResourceResponseHead(), GURL(),
-        FrameMsg_CommitDataNetworkService_Params(), common_params,
-        request_params));
+    GetNavigationControl()->CommitNavigation(
+        ResourceResponseHead(), GURL(), common_params, request_params,
+        mojo::ScopedDataPipeConsumerHandle(),
+        /*default_subresource_url_loader_factory=*/nullptr);
     return;
   }
 
@@ -3365,26 +3378,24 @@ void RenderFrameHostImpl::CommitNavigation(
   const GURL body_url = body.get() ? body->GetURL() : GURL();
   const ResourceResponseHead head = response ?
       response->head : ResourceResponseHead();
-  FrameMsg_CommitDataNetworkService_Params commit_data;
-  commit_data.handle = handle.release();
+  mojom::URLLoaderFactoryPtr default_subresource_url_loader_factory;
   // TODO(scottmg): Pass a factory for SW, etc. once we have one.
   if (base::FeatureList::IsEnabled(features::kNetworkService)) {
     if (!subresource_url_loader_factory_info.is_valid()) {
       const auto& schemes = URLDataManagerBackend::GetWebUISchemes();
       if (std::find(schemes.begin(), schemes.end(),
                     common_params.url.scheme()) != schemes.end()) {
-        commit_data.url_loader_factory = CreateWebUIURLLoader(frame_tree_node_)
-                                             .PassInterface()
-                                             .PassHandle()
-                                             .release();
+        default_subresource_url_loader_factory =
+            CreateWebUIURLLoader(frame_tree_node_);
       }
     } else {
-      commit_data.url_loader_factory =
-          subresource_url_loader_factory_info.PassHandle().release();
+      default_subresource_url_loader_factory.Bind(
+          std::move(subresource_url_loader_factory_info));
     }
   }
-  Send(new FrameMsg_CommitNavigation(routing_id_, head, body_url, commit_data,
-                                     common_params, request_params));
+  GetNavigationControl()->CommitNavigation(
+      head, body_url, common_params, request_params, std::move(handle),
+      std::move(default_subresource_url_loader_factory));
 
   // If a network request was made, update the Previews state.
   if (IsURLHandledByNetworkStack(common_params.url) &&
@@ -3485,6 +3496,7 @@ void RenderFrameHostImpl::InvalidateMojoConnection() {
   frame_.reset();
   frame_host_interface_broker_binding_.Close();
   frame_bindings_control_.reset();
+  navigation_control_.reset();
 
   // Disconnect with ImageDownloader Mojo service in RenderFrame.
   mojo_image_downloader_.reset();
@@ -3796,13 +3808,10 @@ bool RenderFrameHostImpl::HasSelection() {
 
 void RenderFrameHostImpl::GetInterfaceProvider(
     service_manager::mojom::InterfaceProviderRequest interfaces) {
-  service_manager::Identity child_identity = GetProcess()->GetChildIdentity();
-  service_manager::Connector* connector =
-      BrowserContext::GetConnectorFor(GetProcess()->GetBrowserContext());
-  service_manager::mojom::InterfaceProviderPtr provider;
-  interface_provider_bindings_.AddBinding(this, mojo::MakeRequest(&provider));
-  connector->FilterInterfaces(mojom::kNavigation_FrameSpec, child_identity,
-                              std::move(interfaces), std::move(provider));
+  interface_provider_bindings_.AddBinding(
+      this, FilterRendererExposedInterfaces(mojom::kNavigation_FrameSpec,
+                                            GetProcess()->GetID(),
+                                            std::move(interfaces)));
 }
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
@@ -4376,6 +4385,12 @@ void RenderFrameHostImpl::SetVisibilityForChildViews(bool visible) {
           return is_visible ? view->Show() : view->Hide();
       },
       visible));
+}
+
+mojom::FrameNavigationControl* RenderFrameHostImpl::GetNavigationControl() {
+  if (!navigation_control_)
+    GetRemoteAssociatedInterfaces()->GetInterface(&navigation_control_);
+  return navigation_control_.get();
 }
 
 }  // namespace content

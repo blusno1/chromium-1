@@ -243,7 +243,7 @@ class DevToolsProtocolTest : public ContentBrowserTest,
       return result_.get();
     }
     in_dispatch_ = false;
-    return nullptr;
+    return result_.get();
   }
 
   void WaitForResponse() {
@@ -560,25 +560,25 @@ IN_PROC_BROWSER_TEST_F(SyntheticKeyEventTest, KeyboardEventAck) {
   Attach();
   ASSERT_TRUE(content::ExecuteScript(
       shell()->web_contents()->GetRenderViewHost(),
-      "document.body.addEventListener('keydown', () => console.log('x'));"));
+      "document.body.addEventListener('keydown', () => {debugger;});"));
 
-  scoped_refptr<InputMsgWatcher> filter = new InputMsgWatcher(
+  auto filter = std::make_unique<InputMsgWatcher>(
       RenderWidgetHostImpl::From(
           shell()->web_contents()->GetRenderViewHost()->GetWidget()),
-      blink::WebInputEvent::kMouseMove);
+      blink::WebInputEvent::kRawKeyDown);
 
-  SendCommand("Runtime.enable", nullptr);
+  SendCommand("Debugger.enable", nullptr);
   SendKeyEvent("rawKeyDown", 0, 13, 13, "Enter", false);
 
-  // We expect that the console log message event arrives *before* the input
+  // We expect that the debugger message event arrives *before* the input
   // event ack, and the subsequent command response for Input.dispatchKeyEvent.
-  WaitForNotification("Runtime.consoleAPICalled");
-  EXPECT_THAT(console_messages_, ElementsAre("x"));
+  WaitForNotification("Debugger.paused");
   EXPECT_FALSE(filter->HasReceivedAck());
   EXPECT_EQ(1u, result_ids_.size());
 
-  WaitForResponse();
-  EXPECT_EQ(2u, result_ids_.size());
+  SendCommand("Debugger.resume", nullptr);
+  filter->WaitForAck();
+  EXPECT_EQ(3u, result_ids_.size());
 }
 
 IN_PROC_BROWSER_TEST_F(SyntheticMouseEventTest, MouseEventAck) {
@@ -586,26 +586,26 @@ IN_PROC_BROWSER_TEST_F(SyntheticMouseEventTest, MouseEventAck) {
   Attach();
   ASSERT_TRUE(content::ExecuteScript(
       shell()->web_contents()->GetRenderViewHost(),
-      "document.body.addEventListener('mousemove', () => console.log('x'));"));
+      "document.body.addEventListener('mousemove', () => {debugger;});"));
 
-  scoped_refptr<InputMsgWatcher> filter = new InputMsgWatcher(
+  auto filter = std::make_unique<InputMsgWatcher>(
       RenderWidgetHostImpl::From(
           shell()->web_contents()->GetRenderViewHost()->GetWidget()),
       blink::WebInputEvent::kMouseMove);
 
-  SendCommand("Runtime.enable", nullptr);
+  SendCommand("Debugger.enable", nullptr);
   SendMouseEvent("mouseMoved", 15, 15, false);
 
-  // We expect that the console log message event arrives *before* the input
+  // We expect that the debugger message event arrives *before* the input
   // event ack, and the subsequent command response for
   // Input.dispatchMouseEvent.
-  WaitForNotification("Runtime.consoleAPICalled");
-  EXPECT_THAT(console_messages_, ElementsAre("x"));
+  WaitForNotification("Debugger.paused");
   EXPECT_FALSE(filter->HasReceivedAck());
   EXPECT_EQ(1u, result_ids_.size());
 
-  WaitForResponse();
-  EXPECT_EQ(2u, result_ids_.size());
+  SendCommand("Debugger.resume", nullptr);
+  filter->WaitForAck();
+  EXPECT_EQ(3u, result_ids_.size());
 }
 
 namespace {
@@ -1031,8 +1031,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, NavigationPreservesMessages) {
   bool enough_results = result_ids_.size() >= 2u;
   EXPECT_TRUE(enough_results);
   if (enough_results) {
-    EXPECT_EQ(1, result_ids_[0]);  // Page.enable
-    EXPECT_EQ(2, result_ids_[1]);  // Page.navigate
+    EXPECT_EQ(2, result_ids_[0]);  // Page.navigate
+    EXPECT_EQ(1, result_ids_[1]);  // Page.enable
   }
 
   enough_results = notifications_.size() >= 1u;
@@ -1500,19 +1500,21 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, PageStopLoading) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Navigate to about:blank first so we can make sure there is a target page we
-  // can attach to, and have Network.setRequestInterceptionEnabled complete
+  // can attach to, and have Network.setRequestInterception complete
   // before we start the navigations we're interested in.
   NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
   Attach();
 
   std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
-  params->SetBoolean("enabled", true);
-  SendCommand("Network.setRequestInterceptionEnabled", std::move(params), true);
+  std::unique_ptr<base::ListValue> patterns(new base::ListValue());
+  patterns->Append(std::make_unique<base::DictionaryValue>());
+  params->Set("patterns", std::move(patterns));
+  SendCommand("Network.setRequestInterception", std::move(params), true);
 
   LoadFinishedObserver load_finished_observer(shell()->web_contents());
 
   // The page will try to navigate twice, however since
-  // Network.setRequestInterceptionEnabled is true,
+  // Network.setRequestInterception is true,
   // it'll wait for confirmation before committing to the navigation.
   GURL test_url = embedded_test_server()->GetURL(
       "/devtools/control_navigations/meta_tag.html");
@@ -1529,14 +1531,16 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, ControlNavigationsMainFrame) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Navigate to about:blank first so we can make sure there is a target page we
-  // can attach to, and have Network.setRequestInterceptionEnabled complete
+  // can attach to, and have Network.setRequestInterception complete
   // before we start the navigations we're interested in.
   NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
   Attach();
 
   std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
-  params->SetBoolean("enabled", true);
-  SendCommand("Network.setRequestInterceptionEnabled", std::move(params), true);
+  std::unique_ptr<base::ListValue> patterns(new base::ListValue());
+  patterns->Append(std::make_unique<base::DictionaryValue>());
+  params->Set("patterns", std::move(patterns));
+  SendCommand("Network.setRequestInterception", std::move(params), true);
 
   NavigationFinishedObserver navigation_finished_observer(
       shell()->web_contents());
@@ -1579,14 +1583,16 @@ IN_PROC_BROWSER_TEST_F(IsolatedDevToolsProtocolTest,
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Navigate to about:blank first so we can make sure there is a target page we
-  // can attach to, and have Network.setRequestInterceptionEnabled complete
+  // can attach to, and have Network.setRequestInterception complete
   // before we start the navigations we're interested in.
   NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
   Attach();
 
   std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
-  params->SetBoolean("enabled", true);
-  SendCommand("Network.setRequestInterceptionEnabled", std::move(params), true);
+  std::unique_ptr<base::ListValue> patterns(new base::ListValue());
+  patterns->Append(std::make_unique<base::DictionaryValue>());
+  params->Set("patterns", std::move(patterns));
+  SendCommand("Network.setRequestInterception", std::move(params), true);
 
   NavigationFinishedObserver navigation_finished_observer(
       shell()->web_contents());

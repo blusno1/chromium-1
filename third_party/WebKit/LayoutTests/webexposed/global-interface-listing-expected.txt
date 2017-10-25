@@ -1,4 +1,4 @@
-CONSOLE WARNING: line 70: 'webkitURL' is deprecated. Please use 'URL' instead.
+CONSOLE WARNING: line 74: 'webkitURL' is deprecated. Please use 'URL' instead.
 This test documents all interface attributes and methods on the global window object and element instances.
 
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
@@ -529,77 +529,6 @@ interface BlobEvent : Event
     attribute @@toStringTag
     getter data
     getter timecode
-    method constructor
-interface Bluetooth
-    attribute @@toStringTag
-    method constructor
-    method requestDevice
-interface BluetoothCharacteristicProperties
-    attribute @@toStringTag
-    getter authenticatedSignedWrites
-    getter broadcast
-    getter indicate
-    getter notify
-    getter read
-    getter reliableWrite
-    getter writableAuxiliaries
-    getter write
-    getter writeWithoutResponse
-    method constructor
-interface BluetoothDevice : EventTarget
-    attribute @@toStringTag
-    getter gatt
-    getter id
-    getter name
-    getter ongattserverdisconnected
-    method constructor
-    setter ongattserverdisconnected
-interface BluetoothRemoteGATTCharacteristic : EventTarget
-    attribute @@toStringTag
-    getter oncharacteristicvaluechanged
-    getter properties
-    getter service
-    getter uuid
-    getter value
-    method constructor
-    method getDescriptor
-    method getDescriptors
-    method readValue
-    method startNotifications
-    method stopNotifications
-    method writeValue
-    setter oncharacteristicvaluechanged
-interface BluetoothRemoteGATTDescriptor
-    attribute @@toStringTag
-    getter characteristic
-    getter uuid
-    getter value
-    method constructor
-    method readValue
-    method writeValue
-interface BluetoothRemoteGATTServer
-    attribute @@toStringTag
-    getter connected
-    getter device
-    method connect
-    method constructor
-    method disconnect
-    method getPrimaryService
-    method getPrimaryServices
-interface BluetoothRemoteGATTService
-    attribute @@toStringTag
-    getter device
-    getter isPrimary
-    getter uuid
-    method constructor
-    method getCharacteristic
-    method getCharacteristics
-interface BluetoothUUID
-    static method canonicalUUID
-    static method getCharacteristic
-    static method getDescriptor
-    static method getService
-    attribute @@toStringTag
     method constructor
 interface BroadcastChannel : EventTarget
     attribute @@toStringTag
@@ -1457,8 +1386,11 @@ interface Document : Node
     attribute @@unscopables
     getter URL
     getter activeElement
+    getter alinkColor
+    getter all
     getter anchors
     getter applets
+    getter bgColor
     getter body
     getter characterSet
     getter charset
@@ -1476,6 +1408,7 @@ interface Document : Node
     getter documentURI
     getter domain
     getter embeds
+    getter fgColor
     getter firstElementChild
     getter fonts
     getter forms
@@ -1488,6 +1421,7 @@ interface Document : Node
     getter inputEncoding
     getter lastElementChild
     getter lastModified
+    getter linkColor
     getter links
     getter onabort
     getter onauxclick
@@ -1597,6 +1531,7 @@ interface Document : Node
     getter timeline
     getter title
     getter visibilityState
+    getter vlinkColor
     getter webkitCurrentFullScreenElement
     getter webkitFullscreenElement
     getter webkitFullscreenEnabled
@@ -1608,7 +1543,9 @@ interface Document : Node
     getter xmlVersion
     method adoptNode
     method append
+    method captureEvents
     method caretRangeFromPoint
+    method clear
     method close
     method constructor
     method createAttribute
@@ -1653,15 +1590,21 @@ interface Document : Node
     method querySelector
     method querySelectorAll
     method registerElement
+    method releaseEvents
     method webkitCancelFullScreen
     method webkitExitFullscreen
     method write
     method writeln
+    setter alinkColor
+    setter all
+    setter bgColor
     setter body
     setter cookie
     setter designMode
     setter dir
     setter domain
+    setter fgColor
+    setter linkColor
     setter onabort
     setter onauxclick
     setter onbeforecopy
@@ -1757,6 +1700,7 @@ interface Document : Node
     setter rootScroller
     setter selectedStylesheetSet
     setter title
+    setter vlinkColor
     setter xmlStandalone
     setter xmlVersion
 interface DocumentFragment : Node
@@ -2384,22 +2328,7 @@ interface HTMLDivElement : HTMLElement
     setter align
 interface HTMLDocument : Document
     attribute @@toStringTag
-    getter alinkColor
-    getter all
-    getter bgColor
-    getter fgColor
-    getter linkColor
-    getter vlinkColor
-    method captureEvents
-    method clear
     method constructor
-    method releaseEvents
-    setter alinkColor
-    setter all
-    setter bgColor
-    setter fgColor
-    setter linkColor
-    setter vlinkColor
 interface HTMLElement : Element
     attribute @@toStringTag
     getter accessKey
@@ -4463,7 +4392,6 @@ interface Navigator
     getter appCodeName
     getter appName
     getter appVersion
-    getter bluetooth
     getter budget
     getter clipboard
     getter connection
@@ -4611,7 +4539,6 @@ interface Notification : EventTarget
     getter data
     getter dir
     getter icon
-    getter image
     getter lang
     getter onclick
     getter onclose
@@ -5391,6 +5318,7 @@ interface Request
     getter credentials
     getter headers
     getter integrity
+    getter keepalive
     getter method
     getter mode
     getter redirect
@@ -7202,7 +7130,7 @@ interface VR : EventTarget
     getter ondeviceconnect
     getter ondevicedisconnect
     method constructor
-    method getDevices
+    method requestDevice
     setter ondeviceconnect
     setter ondevicedisconnect
 interface VRCoordinateSystem
@@ -7290,8 +7218,10 @@ interface VRSession : EventTarget
     getter onend
     getter onfocus
     getter onresetpose
+    method cancelFrame
     method constructor
     method end
+    method requestFrame
     method requestFrameOfReference
     setter depthFar
     setter depthNear
@@ -9120,7 +9050,6 @@ interface webkitURL
     attribute eventSender
     attribute frames
     attribute gamepadController
-    attribute gin
     attribute internals
     attribute layoutTestController
     attribute length
@@ -9305,6 +9234,7 @@ interface webkitURL
     method gc
     method getComputedStyle
     method getComputedStyleMap
+    method getMatchedCSSRules
     method getSelection
     method matchMedia
     method moveBy

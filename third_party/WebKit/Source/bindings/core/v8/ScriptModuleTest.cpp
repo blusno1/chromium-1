@@ -36,6 +36,10 @@ class TestScriptModuleResolver final : public ScriptModuleResolver {
 
   void RegisterModuleScript(ModuleScript*) override { NOTREACHED(); }
   void UnregisterModuleScript(ModuleScript*) override { NOTREACHED(); }
+  ModuleScript* GetHostDefined(const ScriptModule&) const override {
+    NOTREACHED();
+    return nullptr;
+  }
 
   ScriptModule Resolve(const String& specifier,
                        const ScriptModule&,
@@ -53,7 +57,7 @@ class ScriptModuleTestModulator final : public DummyModulator {
   ScriptModuleTestModulator();
   virtual ~ScriptModuleTestModulator() {}
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   TestScriptModuleResolver* GetTestScriptModuleResolver() {
     return resolver_.Get();
@@ -72,7 +76,7 @@ class ScriptModuleTestModulator final : public DummyModulator {
 ScriptModuleTestModulator::ScriptModuleTestModulator()
     : resolver_(new TestScriptModuleResolver) {}
 
-DEFINE_TRACE(ScriptModuleTestModulator) {
+void ScriptModuleTestModulator::Trace(blink::Visitor* visitor) {
   visitor->Trace(resolver_);
   DummyModulator::Trace(visitor);
 }

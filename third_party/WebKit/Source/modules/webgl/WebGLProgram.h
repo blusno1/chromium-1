@@ -62,8 +62,8 @@ class WebGLProgram final : public WebGLSharedPlatform3DObject {
   bool AttachShader(WebGLShader*);
   bool DetachShader(WebGLShader*);
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  protected:
   explicit WebGLProgram(WebGLRenderingContextBase*);

@@ -66,7 +66,7 @@ class HTMLParserScriptRunner final
                                         HTMLParserScriptRunnerHost* host) {
     return new HTMLParserScriptRunner(reentry_permit, document, host);
   }
-  ~HTMLParserScriptRunner();
+  ~HTMLParserScriptRunner() override;
 
   // Invoked when the parser is detached.
   //
@@ -97,8 +97,8 @@ class HTMLParserScriptRunner final
     return !!reentry_permit_->ScriptNestingLevel();
   }
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*) override;
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  private:
   HTMLParserScriptRunner(HTMLParserReentryPermit*,
@@ -128,7 +128,7 @@ class HTMLParserScriptRunner final
 
   void PossiblyFetchBlockedDocWriteScript(PendingScript*);
 
-  RefPtr<HTMLParserReentryPermit> reentry_permit_;
+  scoped_refptr<HTMLParserReentryPermit> reentry_permit_;
   Member<Document> document_;
   Member<HTMLParserScriptRunnerHost> host_;
 

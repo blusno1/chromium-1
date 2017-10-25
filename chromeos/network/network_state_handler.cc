@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/format_macros.h"
@@ -118,7 +120,7 @@ void NetworkStateHandler::Shutdown() {
 
 void NetworkStateHandler::InitShillPropertyHandler() {
   shill_property_handler_ =
-      base::MakeUnique<internal::ShillPropertyHandler>(this);
+      std::make_unique<internal::ShillPropertyHandler>(this);
   shill_property_handler_->Init();
 }
 
@@ -590,7 +592,7 @@ void NetworkStateHandler::AddTetherNetworkState(const std::string& guid,
 
   // Use the GUID as the network's service path.
   std::unique_ptr<NetworkState> tether_network_state =
-      base::MakeUnique<NetworkState>(guid /* path */);
+      std::make_unique<NetworkState>(guid /* path */);
 
   tether_network_state->set_name(name);
   tether_network_state->set_type(kTypeTether);
@@ -1476,10 +1478,7 @@ void NetworkStateHandler::EnsureCellularNetwork(
     // will be provided to the UI.
     std::unique_ptr<NetworkState> network =
         NetworkState::CreateDefaultCellular(device->path());
-    std::string name = device->home_provider_id();
-    if (name.empty())
-      name = shill::kTypeCellular;
-    network->set_name(name);
+    network->set_name(device->GetName());
     UpdateGuid(network.get());
     cellular_networks->push_back(std::move(network));
     return;

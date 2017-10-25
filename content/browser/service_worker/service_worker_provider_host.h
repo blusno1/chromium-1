@@ -47,7 +47,6 @@ class ServiceWorkerContextCore;
 class ServiceWorkerDispatcherHost;
 class ServiceWorkerRequestHandler;
 class ServiceWorkerVersion;
-class BrowserSideControllerServiceWorker;
 class WebContents;
 
 // This class is the browser-process representation of a service worker
@@ -235,9 +234,9 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // Used to get a ServiceWorkerObjectInfo to send to the renderer. Finds an
   // existing ServiceWorkerHandle, and increments its reference count, or else
   // creates a new one (initialized to ref count 1). Returns the
-  // ServiceWorkerInfo from the handle. The renderer is expected to use
+  // ServiceWorkerObjectInfo from the handle. The renderer is expected to use
   // ServiceWorkerHandleReference::Adopt to balance out the ref count.
-  ServiceWorkerObjectInfo GetOrCreateServiceWorkerHandle(
+  blink::mojom::ServiceWorkerObjectInfo GetOrCreateServiceWorkerHandle(
       ServiceWorkerVersion* version);
 
   // Returns true if |registration| can be associated with this provider.
@@ -438,6 +437,18 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   void GetInterface(const std::string& interface_name,
                     mojo::ScopedMessagePipeHandle interface_pipe) override;
 
+  // Perform common checks that need to run before ContainerHost methods that
+  // come from a child process are handled.
+  // |scope| is checked if it is allowed to run a service worker.
+  // Returns true if all checks have passed.
+  // If anything looks wrong |callback| will run with an error
+  // message prefixed by |error_prefix| and |args|, and false is returned.
+  template <typename CallbackType, typename... Args>
+  bool CanServeContainerHostMethods(CallbackType* callback,
+                                    const GURL& scope,
+                                    const char* error_prefix,
+                                    Args... args);
+
   const std::string client_uuid_;
   const base::TimeTicks create_time_;
   int render_process_id_;
@@ -478,21 +489,19 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // 3. |*get_ready_callback_| is a null OnceCallback after the callback has
   //    been run.
   std::unique_ptr<GetRegistrationForReadyCallback> get_ready_callback_;
-  scoped_refptr<ServiceWorkerVersion> controller_;
-  std::unique_ptr<BrowserSideControllerServiceWorker>
-      controller_service_worker_;
 
+  scoped_refptr<ServiceWorkerVersion> controller_;
   scoped_refptr<ServiceWorkerVersion> running_hosted_version_;
   base::WeakPtr<ServiceWorkerContextCore> context_;
 
-  // |dispatcher_host_| can be null in several cases:
+  // |dispatcher_host_| is expected to outlive |this| because it destroys
+  // |this| upon destruction. However, it may be null in several cases:
   // 1) In some tests.
   // 2) PlzNavigate and service worker startup pre-create a
   // ServiceWorkerProviderHost instance before there is a renderer assigned to
   // it. The dispatcher host is set once the instance starts hosting a
   // renderer.
   // 3) During cross-site transfer.
-  // 4) The dispatcher host can be destructed/removed before the provider host.
   base::WeakPtr<ServiceWorkerDispatcherHost> dispatcher_host_;
 
   bool allow_association_;

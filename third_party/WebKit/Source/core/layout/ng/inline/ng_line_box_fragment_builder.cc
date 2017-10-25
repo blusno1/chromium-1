@@ -8,51 +8,101 @@
 #include "core/layout/ng/inline/ng_inline_break_token.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
 #include "core/layout/ng/inline/ng_physical_line_box_fragment.h"
+#include "core/layout/ng/ng_exclusion_space.h"
 #include "core/layout/ng/ng_layout_result.h"
+#include "core/layout/ng/ng_positioned_float.h"
 
 namespace blink {
 
 NGLineBoxFragmentBuilder::NGLineBoxFragmentBuilder(
     NGInlineNode node,
-    RefPtr<const ComputedStyle> style,
-    NGWritingMode writing_mode)
+    scoped_refptr<const ComputedStyle> style,
+    NGWritingMode writing_mode,
+    TextDirection)
     : NGContainerFragmentBuilder(style, writing_mode, TextDirection::kLtr),
       node_(node) {}
 
+NGLineBoxFragmentBuilder::~NGLineBoxFragmentBuilder() {}
+
 NGLogicalSize NGLineBoxFragmentBuilder::Size() const {
-  return {inline_size_, metrics_.LineHeight()};
+  return {inline_size_, metrics_.LineHeight().ClampNegativeToZero()};
 }
 
-void NGLineBoxFragmentBuilder::MoveChildrenInBlockDirection(LayoutUnit delta) {
-  for (auto& offset : offsets_)
-    offset.block_offset += delta;
+const NGPhysicalFragment* NGLineBoxFragmentBuilder::Child::PhysicalFragment()
+    const {
+  return layout_result ? layout_result->PhysicalFragment().get()
+                       : fragment.get();
 }
 
-void NGLineBoxFragmentBuilder::MoveChildrenInBlockDirection(LayoutUnit delta,
-                                                            unsigned start,
-                                                            unsigned end) {
+void NGLineBoxFragmentBuilder::ChildList::AddChild(
+    scoped_refptr<NGLayoutResult> layout_result,
+    const NGLogicalOffset& child_offset) {
+  children_.push_back(Child{std::move(layout_result), nullptr, child_offset});
+}
+
+void NGLineBoxFragmentBuilder::ChildList::AddChild(
+    scoped_refptr<NGPhysicalFragment> fragment,
+    const NGLogicalOffset& child_offset) {
+  children_.push_back(Child{nullptr, std::move(fragment), child_offset});
+}
+
+void NGLineBoxFragmentBuilder::ChildList::AddChild(
+    std::nullptr_t,
+    const NGLogicalOffset& child_offset) {
+  children_.push_back(Child{nullptr, nullptr, child_offset});
+}
+
+void NGLineBoxFragmentBuilder::ChildList::MoveInBlockDirection(
+    LayoutUnit delta) {
+  for (auto& child : children_)
+    child.offset.block_offset += delta;
+}
+
+void NGLineBoxFragmentBuilder::ChildList::MoveInBlockDirection(LayoutUnit delta,
+                                                               unsigned start,
+                                                               unsigned end) {
   for (unsigned index = start; index < end; index++)
-    offsets_[index].block_offset += delta;
+    children_[index].offset.block_offset += delta;
 }
 
 void NGLineBoxFragmentBuilder::SetMetrics(const NGLineHeightMetrics& metrics) {
   metrics_ = metrics;
 }
 
+void NGLineBoxFragmentBuilder::AddPositionedFloat(
+    const NGPositionedFloat& positioned_float) {
+  positioned_floats_.push_back(positioned_float);
+}
+
 void NGLineBoxFragmentBuilder::SetBreakToken(
-    RefPtr<NGInlineBreakToken> break_token) {
+    scoped_refptr<NGInlineBreakToken> break_token) {
   break_token_ = std::move(break_token);
 }
 
-RefPtr<NGPhysicalLineBoxFragment>
-NGLineBoxFragmentBuilder::ToLineBoxFragment() {
+void NGLineBoxFragmentBuilder::AddChildren(ChildList& children) {
+  offsets_.ReserveCapacity(children.size());
+  children_.ReserveCapacity(children.size());
+
+  for (auto& child : children) {
+    if (child.layout_result) {
+      DCHECK(!child.fragment);
+      AddChild(std::move(child.layout_result), child.offset);
+      DCHECK(!child.layout_result);
+    } else {
+      DCHECK(child.fragment);
+      AddChild(std::move(child.fragment), child.offset);
+      DCHECK(!child.fragment);
+    }
+  }
+}
+
+scoped_refptr<NGLayoutResult> NGLineBoxFragmentBuilder::ToLineBoxFragment() {
   DCHECK_EQ(offsets_.size(), children_.size());
 
   NGWritingMode writing_mode(
       FromPlatformWritingMode(node_.Style().GetWritingMode()));
   NGPhysicalSize physical_size =
-      NGLogicalSize(inline_size_, Metrics().LineHeight())
-          .ConvertToPhysical(writing_mode);
+      NGLogicalSize(inline_size_, block_size_).ConvertToPhysical(writing_mode);
 
   for (size_t i = 0; i < children_.size(); ++i) {
     NGPhysicalFragment* child = children_[i].get();
@@ -60,12 +110,17 @@ NGLineBoxFragmentBuilder::ToLineBoxFragment() {
         writing_mode, Direction(), physical_size, child->Size()));
   }
 
-  RefPtr<NGPhysicalLineBoxFragment> fragment =
+  scoped_refptr<NGPhysicalLineBoxFragment> fragment =
       WTF::AdoptRef(new NGPhysicalLineBoxFragment(
           Style(), physical_size, children_, metrics_,
           break_token_ ? std::move(break_token_)
                        : NGInlineBreakToken::Create(node_)));
-  return fragment;
+
+  return WTF::AdoptRef(new NGLayoutResult(
+      std::move(fragment), oof_positioned_descendants_, positioned_floats_,
+      unpositioned_floats_, std::move(exclusion_space_), bfc_offset_,
+      end_margin_strut_,
+      /* intrinsic_block_size */ LayoutUnit(), NGLayoutResult::kSuccess));
 }
 
 }  // namespace blink

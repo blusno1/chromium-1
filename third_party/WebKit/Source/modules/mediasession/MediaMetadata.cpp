@@ -121,9 +121,10 @@ void MediaMetadata::SetArtworkInternal(ScriptState* script_state,
   artwork_.swap(processed_artwork);
 }
 
-DEFINE_TRACE(MediaMetadata) {
+void MediaMetadata::Trace(blink::Visitor* visitor) {
   visitor->Trace(artwork_);
   visitor->Trace(session_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

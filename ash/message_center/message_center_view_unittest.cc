@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "ash/message_center/message_center_button_bar.h"
+#include "ash/message_center/message_center_style.h"
 #include "ash/message_center/message_list_view.h"
 #include "ash/test/ash_test_base.h"
 #include "base/logging.h"
@@ -29,7 +30,6 @@
 namespace ash {
 
 using message_center::FakeMessageCenter;
-using message_center::kMarginBetweenItems;
 using message_center::MessageCenter;
 using message_center::MessageCenterController;
 using message_center::MessageCenterTray;
@@ -199,7 +199,6 @@ class MessageCenterViewTest : public AshTestBase,
                           bool by_user) override;
   std::unique_ptr<ui::MenuModel> CreateMenuModel(
       const Notification& notification) override;
-  bool HasClickedListener(const std::string& notification_id) override;
   void ClickOnNotificationButton(const std::string& notification_id,
                                  int button_index) override;
   void ClickOnSettingsButton(const std::string& notification_id) override;
@@ -387,11 +386,6 @@ std::unique_ptr<ui::MenuModel> MessageCenterViewTest::CreateMenuModel(
   return nullptr;
 }
 
-bool MessageCenterViewTest::HasClickedListener(
-    const std::string& notification_id) {
-  return true;
-}
-
 void MessageCenterViewTest::ClickOnNotificationButton(
     const std::string& notification_id,
     int button_index) {
@@ -480,7 +474,7 @@ TEST_F(MessageCenterViewTest, Size) {
   EXPECT_EQ(
       GetMessageListView()->height(),
       GetNotificationView(kNotificationId1)->GetHeightForWidth(width) +
-          (kMarginBetweenItems - MessageView::GetShadowInsets().bottom()) +
+          message_center::kMarginBetweenItemsInList +
           GetNotificationView(kNotificationId2)->GetHeightForWidth(width) +
           GetMessageListView()->GetInsets().height());
 }
@@ -504,7 +498,7 @@ TEST_F(MessageCenterViewTest, DISABLED_SizeAfterUpdate) {
   EXPECT_EQ(
       GetMessageListView()->height(),
       GetNotificationView(kNotificationId1)->GetHeightForWidth(width) +
-          (kMarginBetweenItems - MessageView::GetShadowInsets().bottom()) +
+          message_center::kMarginBetweenItemsInList +
           GetNotificationView(kNotificationId2)->GetHeightForWidth(width) +
           GetMessageListView()->GetInsets().height());
 
@@ -524,7 +518,7 @@ TEST_F(MessageCenterViewTest, DISABLED_SizeAfterUpdate) {
   EXPECT_EQ(
       GetMessageListView()->height(),
       GetNotificationView(kNotificationId1)->GetHeightForWidth(width) +
-          (kMarginBetweenItems - MessageView::GetShadowInsets().bottom()) +
+          message_center::kMarginBetweenItemsInList +
           GetNotificationView(kNotificationId2)->GetHeightForWidth(width) +
           GetMessageListView()->GetInsets().height());
 }
@@ -554,7 +548,7 @@ TEST_F(MessageCenterViewTest, SizeAfterUpdateBelowWithRepositionTarget) {
   EXPECT_EQ(
       GetMessageListView()->height(),
       GetNotificationView(kNotificationId1)->GetHeightForWidth(width) +
-          (kMarginBetweenItems - MessageView::GetShadowInsets().bottom()) +
+          message_center::kMarginBetweenItemsInList +
           GetNotificationView(kNotificationId2)->GetHeightForWidth(width) +
           GetMessageListView()->GetInsets().height());
 }
@@ -584,7 +578,7 @@ TEST_F(MessageCenterViewTest, SizeAfterUpdateOfRepositionTarget) {
   EXPECT_EQ(
       GetMessageListView()->height(),
       GetNotificationView(kNotificationId1)->GetHeightForWidth(width) +
-          (kMarginBetweenItems - MessageView::GetShadowInsets().bottom()) +
+          message_center::kMarginBetweenItemsInList +
           GetNotificationView(kNotificationId2)->GetHeightForWidth(width) +
           GetMessageListView()->GetInsets().height());
 }
@@ -909,8 +903,8 @@ TEST_F(MessageCenterViewTest, CheckModeWithRemovingNotificationDuringLock) {
 }
 
 TEST_F(MessageCenterViewTest, LockScreen) {
-  // Plain button bar height (56) + border (2)
-  const int kLockedMessageCenterViewHeight = 58;
+  // Plain button bar height (56)
+  const int kLockedMessageCenterViewHeight = 56;
 
   EXPECT_TRUE(GetNotificationView(kNotificationId1)->IsDrawn());
   EXPECT_TRUE(GetNotificationView(kNotificationId2)->IsDrawn());
@@ -987,8 +981,8 @@ TEST_F(MessageCenterViewTest, LockScreen) {
 }
 
 TEST_F(MessageCenterViewTest, NoNotification) {
-  // Plain button bar height (56) + border (2) + Empty view (96)
-  const int kEmptyMessageCenterViewHeight = 154;
+  // Plain button bar height (56) + Empty view (96)
+  const int kEmptyMessageCenterViewHeight = 152;
 
   GetMessageCenterView()->SizeToPreferredSize();
   EXPECT_NE(kEmptyMessageCenterViewHeight, GetMessageCenterView()->height());

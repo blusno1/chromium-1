@@ -37,9 +37,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/signin/core/browser/account_reconcilor.h"
-#include "components/signin/core/browser/signin_metrics.h"
-#import "components/signin/ios/browser/account_consistency_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_formatter.h"
 #include "ios/chrome/browser/application_context.h"
@@ -56,19 +53,15 @@
 #include "ios/chrome/browser/history/top_sites_factory.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/metrics/tab_usage_recorder.h"
-#import "ios/chrome/browser/passwords/password_tab_helper.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
-#include "ios/chrome/browser/signin/account_consistency_service_factory.h"
-#include "ios/chrome/browser/signin/account_reconcilor_factory.h"
 #include "ios/chrome/browser/signin/signin_capability.h"
 #import "ios/chrome/browser/snapshots/snapshot_manager.h"
 #import "ios/chrome/browser/snapshots/snapshot_overlay_provider.h"
 #import "ios/chrome/browser/snapshots/web_controller_snapshot_helper.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
-#include "ios/chrome/browser/tabs/tab_constants.h"
 #import "ios/chrome/browser/tabs/tab_delegate.h"
 #import "ios/chrome/browser/tabs/tab_dialog_delegate.h"
 #import "ios/chrome/browser/tabs/tab_headers_delegate.h"
@@ -78,8 +71,6 @@
 #import "ios/chrome/browser/tabs/tab_snapshotting_delegate.h"
 #include "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/u2f/u2f_controller.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
@@ -89,7 +80,6 @@
 #import "ios/chrome/browser/ui/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/open_in_controller.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
-#import "ios/chrome/browser/ui/prerender_delegate.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/web/external_app_launcher.h"
 #import "ios/chrome/browser/web/navigation_manager_util.h"
@@ -145,7 +135,6 @@ NSString* const kTabClosingCurrentDocumentNotificationForCrashReporting =
 NSString* const kTabUrlKey = @"url";
 
 namespace {
-class TabHistoryContext;
 class TabInfoBarObserver;
 
 // Returns true if |item| is the result of a HTTP redirect.
@@ -157,17 +146,6 @@ bool IsItemRedirectItem(web::NavigationItem* item) {
   return (ui::PageTransition::PAGE_TRANSITION_IS_REDIRECT_MASK &
           item->GetTransitionType()) == 0;
 }
-
-// TabHistoryContext is used by history to scope the lifetime of navigation
-// entry references to Tab.
-class TabHistoryContext : public history::Context {
- public:
-  TabHistoryContext() {}
-  ~TabHistoryContext() {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TabHistoryContext);
-};
 }  // namespace
 
 @interface Tab ()<CRWWebStateObserver,
@@ -178,11 +156,6 @@ class TabHistoryContext : public history::Context {
 
   OpenInController* _openInController;
 
-  // Holds entries that need to be added to the history DB.  Prerender tabs do
-  // not write navigation data to the history DB.  Instead, they cache history
-  // data in this vector and add it to the DB when the prerender status is
-  // removed (when the Tab is swapped in as a real Tab).
-  std::vector<history::HistoryAddPageArgs> _addPageVector;
 
   // YES if this Tab is being prerendered.
   BOOL _isPrerenderTab;
@@ -214,10 +187,6 @@ class TabHistoryContext : public history::Context {
   // Allows Tab to conform CRWWebStateDelegate protocol.
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
 
-  // Context used by history to scope the lifetime of navigation entry
-  // references to Tab.
-  TabHistoryContext _tabHistoryContext;
-
   // Universal Second Factor (U2F) call controller.
   U2FController* _secondFactorController;
 
@@ -231,20 +200,16 @@ class TabHistoryContext : public history::Context {
 // Handles caching and retrieving of snapshots.
 @property(nonatomic, strong) SnapshotManager* snapshotManager;
 
-// Saves the current title to the history database.
-- (void)saveTitleToHistoryDB;
-
-// Adds the current session entry to this history database.
-- (void)addCurrentEntryToHistoryDB;
-
-// Adds any cached entries from |_addPageVector| to the history DB.
-- (void)commitCachedEntriesToHistoryDB;
-
 // Returns the OpenInController for this tab.
 - (OpenInController*)openInController;
 
 // Handles exportable files if possible.
 - (void)handleExportableFile:(net::HttpResponseHeaders*)headers;
+
+// Returns YES if TabUsageRecorder::RecordPageLoadStart should be called for the
+// given navigation.
+- (BOOL)shouldRecordPageLoadStartForNavigation:
+    (web::NavigationContext*)navigation;
 
 @end
 
@@ -301,7 +266,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
     _iOSCaptivePortalBlockingPageDelegate;
 @synthesize useGreyImageCache = useGreyImageCache_;
 @synthesize isPrerenderTab = _isPrerenderTab;
-@synthesize isLinkLoadingPrerenderTab = isLinkLoadingPrerenderTab_;
 @synthesize isVoiceSearchResultsTab = _isVoiceSearchResultsTab;
 @synthesize overscrollActionsController = _overscrollActionsController;
 @synthesize overscrollActionsControllerDelegate =
@@ -313,7 +277,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 @synthesize tabSnapshottingDelegate = tabSnapshottingDelegate_;
 @synthesize tabHeadersDelegate = tabHeadersDelegate_;
 @synthesize fullScreenControllerDelegate = fullScreenControllerDelegate_;
-@synthesize dispatcher = _dispatcher;
 @synthesize snapshotManager = _snapshotManager;
 
 - (instancetype)initWithWebState:(web::WebState*)webState {
@@ -360,8 +323,9 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 }
 
 - (NSString*)description {
-  return [NSString stringWithFormat:@"%p ... %@ - %s", self, self.title,
-                                    self.visibleURL.spec().c_str()];
+  return
+      [NSString stringWithFormat:@"%p ... %@ - %s", self, self.title,
+                                 self.webState->GetVisibleURL().spec().c_str()];
 }
 
 - (id<TabDialogDelegate>)dialogDelegate {
@@ -387,16 +351,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
                               callback:callback];
 }
 
-- (const GURL&)lastCommittedURL {
-  web::NavigationItem* item = self.navigationManager->GetLastCommittedItem();
-  return item ? item->GetVirtualURL() : GURL::EmptyGURL();
-}
-
-- (const GURL&)visibleURL {
-  web::NavigationItem* item = self.navigationManager->GetVisibleItem();
-  return item ? item->GetVirtualURL() : GURL::EmptyGURL();
-}
-
 - (NSString*)title {
   base::string16 title = self.webState->GetTitle();
   if (title.empty())
@@ -404,20 +358,9 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   return base::SysUTF16ToNSString(title);
 }
 
-- (NSString*)originalTitle {
-  // Do not use self.webState->GetTitle() as it returns the display title,
-  // not the original page title.
-  DCHECK([self navigationManager]);
-  web::NavigationItem* item = [self navigationManager]->GetLastCommittedItem();
-  if (!item)
-    return nil;
-  base::string16 pageTitle = item->GetTitle();
-  return pageTitle.empty() ? nil : base::SysUTF16ToNSString(pageTitle);
-}
-
 - (NSString*)urlDisplayString {
   base::string16 urlText = url_formatter::FormatUrl(
-      self.visibleURL, url_formatter::kFormatUrlOmitNothing,
+      self.webState->GetVisibleURL(), url_formatter::kFormatUrlOmitNothing,
       net::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
   return base::SysUTF16ToNSString(urlText);
 }
@@ -444,6 +387,12 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   // Record reload of previously-evicted tab.
   if (self.webState->IsEvicted() && [_parentTabModel tabUsageRecorder])
     [_parentTabModel tabUsageRecorder]->RecordPageLoadStart(self.webState);
+
+  // Do not trigger the load if the tab has crashed. SadTabTabHelper is
+  // responsible for handing reload logic for crashed tabs.
+  if (!self.webState->IsCrashed()) {
+    self.webState->GetNavigationManager()->LoadIfNecessary();
+  }
   return self.webState->GetView();
 }
 
@@ -455,26 +404,18 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   return self.webState ? self.webState->GetNavigationManager() : nullptr;
 }
 
-- (void)setIsLinkLoadingPrerenderTab:(BOOL)isLinkLoadingPrerenderTab {
-  isLinkLoadingPrerenderTab_ = isLinkLoadingPrerenderTab;
-  [self setIsPrerenderTab:isLinkLoadingPrerenderTab];
-}
-
 - (void)setIsPrerenderTab:(BOOL)isPrerender {
   if (_isPrerenderTab == isPrerender)
     return;
 
   _isPrerenderTab = isPrerender;
 
-  self.webState->SetShouldSuppressDialogs(isPrerender &&
-                                          !isLinkLoadingPrerenderTab_);
+  self.webState->SetShouldSuppressDialogs(isPrerender);
 
   if (_isPrerenderTab)
     return;
 
   [_fullScreenController moveContentBelowHeader];
-  [self commitCachedEntriesToHistoryDB];
-  [self saveTitleToHistoryDB];
 
   // If the page has finished loading, take a snapshot.  If the page is still
   // loading, do nothing, as CRWWebController will automatically take a
@@ -534,113 +475,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   overscrollActionsControllerDelegate_ = overscrollActionsControllerDelegate;
 }
 
-- (void)setDispatcher:(id<ApplicationCommands, BrowserCommands>)dispatcher {
-  if (_dispatcher == dispatcher)
-    return;
-  // The dispatcher shouldn't change once set, so at this stage the dispatcher
-  // should be nil, or the new value should be nil.
-  DCHECK(!_dispatcher || !dispatcher);
-  _dispatcher = dispatcher;
-
-  // Forward the new dispatcher to tab helpers.
-  PasswordTabHelper::FromWebState(self.webState)->SetDispatcher(_dispatcher);
-}
-
-- (void)saveTitleToHistoryDB {
-  web::WebState* webState = self.webState;
-  HistoryTabHelper* helper = HistoryTabHelper::FromWebState(webState);
-
-  web::NavigationItem* item =
-      webState->GetNavigationManager()->GetLastCommittedItem();
-  if (item) {
-    helper->UpdateHistoryPageTitle(*item);
-  }
-}
-
-- (void)addCurrentEntryToHistoryDB {
-  DCHECK([self navigationManager]->GetVisibleItem());
-  // If incognito, don't update history.
-  if (_browserState->IsOffTheRecord())
-    return;
-
-  web::NavigationItem* item = [self navigationManager]->GetVisibleItem();
-
-  // Do not update the history db for back/forward navigations.
-  // TODO(crbug.com/661667): We do not currently tag the entry with a
-  // FORWARD_BACK transition. Fix.
-  if (item->GetTransitionType() & ui::PAGE_TRANSITION_FORWARD_BACK)
-    return;
-
-  history::HistoryService* historyService =
-      ios::HistoryServiceFactory::GetForBrowserState(
-          _browserState, ServiceAccessType::IMPLICIT_ACCESS);
-  DCHECK(historyService);
-
-  const GURL url(item->GetURL());
-  const web::Referrer& referrer = item->GetReferrer();
-
-// Do not update the history db for data: urls.  This diverges from upstream,
-// but prevents us from dumping huge view-source urls into the history
-// database.  Since view-source is only activated in Debug builds, this check
-// can be Debug-only as well.
-#ifndef NDEBUG
-  if (url.scheme() == url::kDataScheme)
-    return;
-#endif
-
-  history::RedirectList redirects;
-  GURL originalURL = item->GetOriginalRequestURL();
-  if (item->GetURL() != originalURL) {
-    // Simulate a valid redirect chain in case of URL that have been modified
-    // in |CRWWebController finishHistoryNavigationFromEntry:|.
-    const std::string& urlSpec = item->GetURL().spec();
-    size_t urlSpecLength = urlSpec.size();
-    if (item->GetTransitionType() & ui::PAGE_TRANSITION_CLIENT_REDIRECT ||
-        (urlSpecLength && (urlSpec.at(urlSpecLength - 1) == '#') &&
-         !urlSpec.compare(0, urlSpecLength - 1, originalURL.spec()))) {
-      redirects.push_back(referrer.url);
-    }
-    // TODO(crbug.com/703872): the redirect chain is not constructed the same
-    // way as upstream so this part needs to be revised.
-    redirects.push_back(originalURL);
-    redirects.push_back(url);
-  }
-
-  DCHECK(item->GetTimestamp().ToInternalValue() > 0);
-
-  // Clicks on content suggestions on the NTP should not contribute to the
-  // Most Visited tiles in the NTP.
-  const bool considerForNTPMostVisited =
-      referrer.url != GURL(tab_constants::kDoNotConsiderForMostVisited);
-  history::HistoryAddPageArgs args(
-      url, item->GetTimestamp(), &_tabHistoryContext, item->GetUniqueID(),
-      referrer.url, redirects, item->GetTransitionType(),
-      history::SOURCE_BROWSED, false, considerForNTPMostVisited);
-  if ([self isPrerenderTab]) {
-    _addPageVector.push_back(args);
-  } else {
-    historyService->AddPage(args);
-    [self saveTitleToHistoryDB];
-  }
-}
-
-- (void)commitCachedEntriesToHistoryDB {
-  // If OTR, don't update history.
-  if (_browserState->IsOffTheRecord()) {
-    DCHECK_EQ(0U, _addPageVector.size());
-    return;
-  }
-
-  history::HistoryService* historyService =
-      ios::HistoryServiceFactory::GetForBrowserState(
-          _browserState, ServiceAccessType::IMPLICIT_ACCESS);
-  DCHECK(historyService);
-
-  for (size_t i = 0; i < _addPageVector.size(); ++i)
-    historyService->AddPage(_addPageVector[i]);
-  _addPageVector.clear();
-}
-
 - (void)webDidUpdateSessionForLoadWithURL:(const GURL&)URL {
   // After a crash the NTP is loaded by default.
   if (URL.host() != kChromeUINewTabHost) {
@@ -654,9 +488,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
       hasLoadedPage = YES;
     }
   }
-
-  if ([_parentTabModel tabUsageRecorder])
-    [_parentTabModel tabUsageRecorder]->RecordPageLoadStart(self.webState);
 
   web::NavigationItem* navigationItem =
       [self navigationManager]->GetPendingItem();
@@ -696,12 +527,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
     [self.webController removeObserver:_overscrollActionsController];
   [_overscrollActionsController invalidate];
   _overscrollActionsController = nil;
-
-  if (!GetApplicationContext()->IsShuttingDown()) {
-    // Invalidate any snapshot stored for this session.
-    DCHECK(self.tabId);
-    [self.snapshotManager removeImageWithSessionID:self.tabId];
-  }
 
   // Cancel any queued dialogs.
   [self.dialogDelegate cancelDialogForTab:self];
@@ -776,17 +601,19 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
         [self navigationManager]->GetLastCommittedItem()->GetURL().GetOrigin();
 
     // Compose u2f-x-callback URL and update urlToOpen.
-    finalURL =
-        [_secondFactorController XCallbackFromRequestURL:finalURL
-                                               originURL:origin
-                                                  tabURL:self.lastCommittedURL
-                                                   tabID:self.tabId];
+    finalURL = [_secondFactorController
+        XCallbackFromRequestURL:finalURL
+                      originURL:origin
+                         tabURL:self.webState->GetLastCommittedURL()
+                          tabID:self.tabId];
 
     if (!finalURL.is_valid())
       return NO;
   }
 
-  if ([_externalAppLauncher openURL:finalURL linkClicked:linkClicked]) {
+  if ([_externalAppLauncher requestToOpenURL:finalURL
+                               sourcePageURL:sourceURL
+                                 linkClicked:linkClicked]) {
     // Clears pending navigation history after successfully launching the
     // external app.
     DCHECK([self navigationManager]);
@@ -810,7 +637,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 - (void)webState:(web::WebState*)webState
     didFinishNavigation:(web::NavigationContext*)navigation {
   if (!navigation->GetError()) {
-    [self addCurrentEntryToHistoryDB];
     [self countMainFrameLoad];
   }
 
@@ -862,31 +688,76 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
       postNotificationName:kTabIsShowingExportableNotificationForCrashReporting
                     object:self];
   // Try to generate a filename by first looking at |content_disposition_|, then
-  // at the last component of |lastCommittedURL| and if both of these fail use
-  // the default filename "document".
+  // at the last component of WebState's last committed URL and if both of these
+  // fail use the default filename "document".
   std::string contentDisposition;
   if (headers)
     headers->GetNormalizedHeader("content-disposition", &contentDisposition);
   std::string defaultFilename =
       l10n_util::GetStringUTF8(IDS_IOS_OPEN_IN_FILE_DEFAULT_TITLE);
-  const GURL& committedURL = self.lastCommittedURL;
+  const GURL& lastCommittedURL = self.webState->GetLastCommittedURL();
   base::string16 filename =
-      net::GetSuggestedFilename(committedURL, contentDisposition,
+      net::GetSuggestedFilename(lastCommittedURL, contentDisposition,
                                 "",                 // referrer-charset
                                 "",                 // suggested-name
                                 "application/pdf",  // mime-type
                                 defaultFilename);
   [[self openInController]
-      enableWithDocumentURL:committedURL
+      enableWithDocumentURL:lastCommittedURL
           suggestedFilename:base::SysUTF16ToNSString(filename)];
 }
 
 - (void)countMainFrameLoad {
   if ([self isPrerenderTab] ||
-      self.lastCommittedURL.SchemeIs(kChromeUIScheme)) {
+      self.webState->GetLastCommittedURL().SchemeIs(kChromeUIScheme)) {
     return;
   }
   base::RecordAction(base::UserMetricsAction("MobilePageLoaded"));
+}
+
+- (BOOL)shouldRecordPageLoadStartForNavigation:
+    (web::NavigationContext*)navigation {
+  web::NavigationItem* lastCommittedItem =
+      [self navigationManager]->GetLastCommittedItem();
+  if (!lastCommittedItem) {
+    // Opening a child window and loading URL there (crbug.com/773160).
+    return NO;
+  }
+
+  web::NavigationItem* pendingItem = [self navigationManager]->GetPendingItem();
+  if (pendingItem) {
+    using web::UserAgentType;
+    UserAgentType committedUserAgent = lastCommittedItem->GetUserAgentType();
+    UserAgentType pendingUserAgent = pendingItem->GetUserAgentType();
+    if (committedUserAgent != web::UserAgentType::NONE &&
+        pendingUserAgent != web::UserAgentType::NONE &&
+        committedUserAgent != pendingUserAgent) {
+      // Switching to Desktop or Mobile User Agent.
+      return YES;
+    }
+  }
+
+  ui::PageTransition transition = navigation->GetPageTransition();
+  if (!ui::PageTransitionIsNewNavigation(transition)) {
+    // Back forward navigation or reload.
+    return NO;
+  }
+
+  if ((ui::PageTransition::PAGE_TRANSITION_CLIENT_REDIRECT & transition) != 0) {
+    // Client redirect.
+    return NO;
+  }
+
+  using ui::PageTransitionCoreTypeIs;
+  return (
+      PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED) ||
+      PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_LINK) ||
+      PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_GENERATED) ||
+      PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_AUTO_BOOKMARK) ||
+      PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_FORM_SUBMIT) ||
+      PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_KEYWORD) ||
+      PageTransitionCoreTypeIs(transition,
+                               ui::PAGE_TRANSITION_KEYWORD_GENERATED));
 }
 
 #pragma mark -
@@ -988,21 +859,7 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 // confusion in that event (e.g. progress bar starting unexpectedly).
 - (void)webWillAddPendingURL:(const GURL&)url
                   transition:(ui::PageTransition)transition {
-  DCHECK(self.webController.loadPhase == web::LOAD_REQUESTED);
-  DCHECK([self navigationManager]);
-
-  BOOL isUserNavigationEvent =
-      (transition & ui::PAGE_TRANSITION_IS_REDIRECT_MASK) == 0;
-  // Record start of page load when a user taps a link. A user initiated link
-  // tap is indicated when the page transition is not a redirect, there is no
-  // pending entry (since that means the change wasn't caused by this class),
-  // and when the URL changes (to avoid counting page resurrection).
-  if (isUserNavigationEvent && !_isPrerenderTab &&
-      ![self navigationManager]->GetPendingItem() &&
-      url != self.lastCommittedURL) {
-    if ([_parentTabModel tabUsageRecorder])
-      [_parentTabModel tabUsageRecorder]->RecordPageLoadStart(self.webState);
-  }
+  // TODO(crbug.com/674991): Remove this method.
 }
 
 - (void)webState:(web::WebState*)webState
@@ -1010,12 +867,14 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   if (!navigation->IsSameDocument()) {
     // Reset |isVoiceSearchResultsTab| since a new page is being navigated to.
     self.isVoiceSearchResultsTab = NO;
+    // Move the toolbar to visible during page load.
+    [_fullScreenController disableFullScreen];
   }
 
-  // Move the toolbar to visible during page load.
-  // TODO(crbug.com/707305): Do not disable fullscreen for same-document
-  // navigations.
-  [_fullScreenController disableFullScreen];
+  if ([self shouldRecordPageLoadStartForNavigation:navigation] &&
+      [_parentTabModel tabUsageRecorder] && !_isPrerenderTab) {
+    [_parentTabModel tabUsageRecorder]->RecordPageLoadStart(webState);
+  }
 
   [self.dialogDelegate cancelDialogForTab:self];
   [_parentTabModel notifyTabChanged:self];
@@ -1131,7 +990,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 }
 
 - (void)webStateDidChangeTitle:(web::WebState*)webState {
-  [self saveTitleToHistoryDB];
   [_parentTabModel notifyTabChanged:self];
 }
 
@@ -1148,7 +1006,7 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 
 - (BOOL)webController:(CRWWebController*)webController
     shouldOpenExternalURL:(const GURL&)URL {
-  if (_isPrerenderTab && !isLinkLoadingPrerenderTab_) {
+  if (_isPrerenderTab) {
     [delegate_ discardPrerender];
     return NO;
   }
@@ -1173,8 +1031,7 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 
 - (BOOL)webController:(CRWWebController*)webController
         shouldOpenURL:(const GURL&)url
-      mainDocumentURL:(const GURL&)mainDocumentURL
-          linkClicked:(BOOL)linkClicked {
+      mainDocumentURL:(const GURL&)mainDocumentURL {
   // chrome:// URLs are only allowed if the mainDocumentURL is also a chrome://
   // URL.
   if (url.SchemeIs(kChromeUIScheme) &&
@@ -1194,8 +1051,7 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
     [[NSNotificationCenter defaultCenter]
         postNotificationName:kTabUrlMayStartLoadingNotificationForCrashReporting
                       object:self
-                    userInfo:[NSDictionary dictionaryWithObject:urlString
-                                                         forKey:kTabUrlKey]];
+                    userInfo:@{kTabUrlKey : urlString}];
   }
 
   return YES;
@@ -1277,6 +1133,11 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   [_overscrollActionsController clear];
 }
 
+- (void)removeSnapshot {
+  DCHECK(self.tabId);
+  [self.snapshotManager removeImageWithSessionID:self.tabId];
+}
+
 #pragma mark - CRWWebDelegate and CRWWebStateObserver protocol methods
 
 - (void)webStateDidSuppressDialog:(web::WebState*)webState {
@@ -1316,8 +1177,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
   [self.passKitDialogProvider presentPassKitDialog:data];
 }
 
-#pragma mark - PrerenderDelegate
-
 - (void)discardPrerender {
   DCHECK(_isPrerenderTab);
   [delegate_ discardPrerender];
@@ -1325,65 +1184,6 @@ void TabInfoBarObserver::OnInfoBarReplaced(infobars::InfoBar* old_infobar,
 
 - (BOOL)isPrerenderTab {
   return _isPrerenderTab;
-}
-
-#pragma mark - ManageAccountsDelegate
-
-- (void)onManageAccounts {
-  if (_isPrerenderTab) {
-    [delegate_ discardPrerender];
-    return;
-  }
-  if (self != [_parentTabModel currentTab])
-    return;
-
-  signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
-      ios::AccountReconcilorFactory::GetForBrowserState(_browserState)
-          ->GetState());
-  [self.dispatcher showAccountsSettings];
-}
-
-- (void)onAddAccount {
-  if (_isPrerenderTab) {
-    [delegate_ discardPrerender];
-    return;
-  }
-  if (self != [_parentTabModel currentTab])
-    return;
-
-  signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
-      ios::AccountReconcilorFactory::GetForBrowserState(_browserState)
-          ->GetState());
-  [self.dispatcher showAddAccount];
-}
-
-- (void)onGoIncognito:(const GURL&)url {
-  if (_isPrerenderTab) {
-    [delegate_ discardPrerender];
-    return;
-  }
-  if (self != [_parentTabModel currentTab])
-    return;
-
-  // The user taps on go incognito from the mobile U-turn webpage (the web page
-  // that displays all users accounts available in the content area). As the
-  // user chooses to go to incognito, the mobile U-turn page is no longer
-  // neeeded. The current solution is to go back in history. This has the
-  // advantage of keeping the current browsing session and give a good user
-  // experience when the user comes back from incognito.
-  [self goBack];
-
-  if (url.is_valid()) {
-    OpenUrlCommand* command = [[OpenUrlCommand alloc]
-         initWithURL:url
-            referrer:web::Referrer()  // Strip referrer when switching modes.
-         inIncognito:YES
-        inBackground:NO
-            appendTo:kLastTab];
-    [self.dispatcher openURL:command];
-  } else {
-    [self.dispatcher openNewTab:[OpenNewTabCommand command]];
-  }
 }
 
 - (void)wasShown {

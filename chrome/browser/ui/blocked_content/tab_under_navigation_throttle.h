@@ -17,6 +17,10 @@ namespace content {
 class NavigationHandle;
 }
 
+constexpr char kBlockTabUnderFormatMessage[] =
+    "Chrome stopped this site from navigating to %s, see "
+    "https://www.chromestatus.com/feature/5675755719622656 for more details.";
+
 // This class blocks navigations that we've classified as tab-unders. It does so
 // by communicating with the popup opener tab helper.
 //
@@ -83,6 +87,9 @@ class TabUnderNavigationThrottle : public content::NavigationThrottle {
   // True if the experiment is turned on and the class should actually attempt
   // to block tab-unders.
   bool block_ = false;
+
+  // True if the throttle has seen a tab under.
+  bool seen_tab_under_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TabUnderNavigationThrottle);
 };

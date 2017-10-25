@@ -111,9 +111,9 @@ class MODULES_EXPORT BaseAudioContext
 
   ~BaseAudioContext() override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   // Is the destination node initialized and ready to handle audio?
   bool IsDestinationInitialized() const {
@@ -476,7 +476,7 @@ class MODULES_EXPORT BaseAudioContext
   unsigned connection_count_;
 
   // Graph locking.
-  RefPtr<DeferredTaskHandler> deferred_task_handler_;
+  scoped_refptr<DeferredTaskHandler> deferred_task_handler_;
 
   // The state of the BaseAudioContext.
   AudioContextState context_state_;

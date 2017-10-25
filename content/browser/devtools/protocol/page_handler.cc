@@ -29,6 +29,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
+#include "content/common/content_switches_internal.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -49,6 +50,7 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_util.h"
+#include "ui/gfx/skbitmap_operations.h"
 #include "ui/snapshot/snapshot.h"
 
 namespace content {
@@ -346,7 +348,8 @@ Response PageHandler::Navigate(const std::string& url,
       gurl,
       Referrer(GURL(referrer.fromMaybe("")), blink::kWebReferrerPolicyDefault),
       type, std::string());
-  return Response::FallThrough();
+  *frame_id = web_contents->GetMainFrame()->GetDevToolsFrameToken().ToString();
+  return Response::OK();
 }
 
 static const char* TransitionTypeName(ui::PageTransition type) {
@@ -439,7 +442,7 @@ void PageHandler::CaptureScreenshot(
     widget_host->GetSnapshotFromBrowser(
         base::Bind(&PageHandler::ScreenshotCaptured, weak_factory_.GetWeakPtr(),
                    base::Passed(std::move(callback)), screenshot_format,
-                   screenshot_quality, gfx::Size(),
+                   screenshot_quality, gfx::Size(), gfx::Size(),
                    blink::WebDeviceEmulationParams()),
         false);
     return;
@@ -461,9 +464,9 @@ void PageHandler::CaptureScreenshot(
   gfx::Size emulated_view_size = modified_params.view_size;
 
   double dpfactor = 1;
+  ScreenInfo screen_info;
+  widget_host->GetScreenInfo(&screen_info);
   if (emulation_enabled) {
-    ScreenInfo screen_info;
-    widget_host->GetScreenInfo(&screen_info);
     // When emulating, emulate again and scale to make resulting image match
     // physical DP resolution. If view_size is not overriden, use actual view
     // size.
@@ -517,11 +520,26 @@ void PageHandler::CaptureScreenshot(
     widget_host->GetView()->SetSize(
         gfx::ScaleToFlooredSize(emulated_view_size, dpfactor));
   }
+  gfx::Size requested_image_size = gfx::Size();
+  if (emulation_enabled || clip.isJust()) {
+    if (clip.isJust()) {
+      requested_image_size =
+          gfx::Size(clip.fromJust()->GetWidth(), clip.fromJust()->GetHeight());
+    } else {
+      requested_image_size = emulated_view_size;
+    }
+    double scale = emulation_enabled ? original_params.device_scale_factor
+                                     : screen_info.device_scale_factor;
+    if (clip.isJust())
+      scale *= clip.fromJust()->GetScale();
+    requested_image_size = gfx::ScaleToRoundedSize(requested_image_size, scale);
+  }
 
   widget_host->GetSnapshotFromBrowser(
       base::Bind(&PageHandler::ScreenshotCaptured, weak_factory_.GetWeakPtr(),
                  base::Passed(std::move(callback)), screenshot_format,
-                 screenshot_quality, original_view_size, original_params),
+                 screenshot_quality, original_view_size, requested_image_size,
+                 original_params),
       true);
 }
 
@@ -703,8 +721,11 @@ void PageHandler::InnerSwapCompositorFrame() {
   // http://crbug.com/73362
   viz::CompositorFrameMetadata& metadata = last_compositor_frame_metadata_;
 
-  gfx::SizeF viewport_size_dip = gfx::ScaleSize(
-      metadata.scrollable_viewport_size, metadata.page_scale_factor);
+  float css_to_dip = metadata.page_scale_factor;
+  if (IsUseZoomForDSFEnabled())
+    css_to_dip /= metadata.device_scale_factor;
+  gfx::SizeF viewport_size_dip =
+      gfx::ScaleSize(metadata.scrollable_viewport_size, css_to_dip);
   gfx::SizeF screen_size_dip =
       gfx::ScaleSize(gfx::SizeF(view->GetPhysicalBackingSize()),
                      1 / metadata.device_scale_factor);
@@ -783,11 +804,17 @@ void PageHandler::ScreencastFrameEncoded(viz::CompositorFrameMetadata metadata,
   gfx::SizeF screen_size_dip =
       gfx::ScaleSize(gfx::SizeF(view->GetPhysicalBackingSize()),
                      1 / metadata.device_scale_factor);
+  float css_to_dip = metadata.page_scale_factor;
+  float top_offset_dip =
+      metadata.top_controls_height * metadata.top_controls_shown_ratio;
+  if (IsUseZoomForDSFEnabled()) {
+    css_to_dip /= metadata.device_scale_factor;
+    top_offset_dip /= metadata.device_scale_factor;
+  }
   std::unique_ptr<Page::ScreencastFrameMetadata> param_metadata =
       Page::ScreencastFrameMetadata::Create()
-          .SetPageScaleFactor(metadata.page_scale_factor)
-          .SetOffsetTop(metadata.top_controls_height *
-                        metadata.top_controls_shown_ratio)
+          .SetPageScaleFactor(css_to_dip)
+          .SetOffsetTop(top_offset_dip)
           .SetDeviceWidth(screen_size_dip.width())
           .SetDeviceHeight(screen_size_dip.height())
           .SetScrollOffsetX(metadata.root_scroll_offset.x())
@@ -802,6 +829,7 @@ void PageHandler::ScreenshotCaptured(
     const std::string& format,
     int quality,
     const gfx::Size& original_view_size,
+    const gfx::Size& requested_image_size,
     const blink::WebDeviceEmulationParams& original_emulation_params,
     const gfx::Image& image) {
   if (original_view_size.width()) {
@@ -815,7 +843,18 @@ void PageHandler::ScreenshotCaptured(
     return;
   }
 
-  callback->sendSuccess(EncodeImage(image, format, quality));
+  if (!requested_image_size.IsEmpty() &&
+      (image.Width() != requested_image_size.width() ||
+       image.Height() != requested_image_size.height())) {
+    const SkBitmap* bitmap = image.ToSkBitmap();
+    SkBitmap cropped = SkBitmapOperations::CreateTiledBitmap(
+        *bitmap, 0, 0, requested_image_size.width(),
+        requested_image_size.height());
+    gfx::Image croppedImage = gfx::Image::CreateFrom1xBitmap(cropped);
+    callback->sendSuccess(EncodeImage(croppedImage, format, quality));
+  } else {
+    callback->sendSuccess(EncodeImage(image, format, quality));
+  }
 }
 
 Response PageHandler::StopLoading() {

@@ -27,7 +27,7 @@ class CORE_EXPORT InspectorDOMSnapshotAgent final
   }
 
   ~InspectorDOMSnapshotAgent() override;
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
   protocol::Response getSnapshot(
       std::unique_ptr<protocol::Array<String>> style_whitelist,

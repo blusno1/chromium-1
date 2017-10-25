@@ -71,13 +71,15 @@ class MutationObserver::V8DelegateImpl final
     callback_->call(&observer, records, &observer);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(callback_);
     MutationObserver::Delegate::Trace(visitor);
     ContextClient::Trace(visitor);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() { visitor->TraceWrappers(callback_); }
+  virtual void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
+    visitor->TraceWrappers(callback_);
+  }
 
  private:
   V8DelegateImpl(V8MutationCallback* callback,
@@ -365,14 +367,16 @@ void MutationObserver::DeliverMutations() {
     slot->DispatchSlotChangeEvent();
 }
 
-DEFINE_TRACE(MutationObserver) {
+void MutationObserver::Trace(blink::Visitor* visitor) {
   visitor->Trace(delegate_);
   visitor->Trace(records_);
   visitor->Trace(registrations_);
+  ScriptWrappable::Trace(visitor);
   ContextClient::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(MutationObserver) {
+void MutationObserver::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(delegate_);
   for (auto record : records_)
     visitor->TraceWrappers(record);

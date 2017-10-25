@@ -75,6 +75,8 @@ namespace {
 // 7. At this point, all parsing, resource loads, and layout should be finished.
 
 void RunServeAsyncRequestsTask() {
+  // TODO(kinuko,toyoshim): Create a mock factory and use it instead of
+  // getting the platform's one. (crbug.com/751425)
   Platform::Current()->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
   if (TestWebFrameClient::IsLoading()) {
     Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
@@ -113,8 +115,8 @@ void LoadHTMLString(WebLocalFrame* frame,
 void LoadHistoryItem(WebLocalFrame* frame,
                      const WebHistoryItem& item,
                      WebHistoryLoadType load_type,
-                     WebCachePolicy cache_policy) {
-  WebURLRequest request = frame->RequestFromHistoryItem(item, cache_policy);
+                     mojom::FetchCacheMode cache_mode) {
+  WebURLRequest request = frame->RequestFromHistoryItem(item, cache_mode);
   frame->Load(request, WebFrameLoadType::kBackForward, item);
   PumpPendingRequestsForFrameToLoad(frame);
 }
@@ -220,10 +222,11 @@ WebLocalFrameImpl* CreateLocalChild(WebRemoteFrame& parent,
   return frame;
 }
 
-WebRemoteFrameImpl* CreateRemoteChild(WebRemoteFrame& parent,
-                                      const WebString& name,
-                                      RefPtr<SecurityOrigin> security_origin,
-                                      TestWebRemoteFrameClient* client) {
+WebRemoteFrameImpl* CreateRemoteChild(
+    WebRemoteFrame& parent,
+    const WebString& name,
+    scoped_refptr<SecurityOrigin> security_origin,
+    TestWebRemoteFrameClient* client) {
   auto owned_client = CreateDefaultClientIfNeeded(client);
   auto* frame = ToWebRemoteFrameImpl(parent.CreateRemoteChild(
       WebTreeScopeType::kDocument, name, WebSandboxFlags::kNone,
@@ -298,7 +301,7 @@ WebViewImpl* WebViewHelper::InitializeAndLoad(
 
 WebViewImpl* WebViewHelper::InitializeRemote(
     TestWebRemoteFrameClient* web_remote_frame_client,
-    RefPtr<SecurityOrigin> security_origin,
+    scoped_refptr<SecurityOrigin> security_origin,
     TestWebViewClient* web_view_client) {
   Reset();
 

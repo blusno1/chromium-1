@@ -720,10 +720,10 @@ void AXObject::UpdateCachedAttributeValuesIfNeeded() const {
   last_modification_count_ = cache.ModificationCount();
   cached_background_color_ = ComputeBackgroundColor();
   cached_is_inert_or_aria_hidden_ = ComputeIsInertOrAriaHidden();
-  cached_is_descendant_of_leaf_node_ = (LeafNodeAncestor() != 0);
-  cached_is_descendant_of_disabled_node_ = (DisabledAncestor() != 0);
+  cached_is_descendant_of_leaf_node_ = !!LeafNodeAncestor();
+  cached_is_descendant_of_disabled_node_ = !!DisabledAncestor();
   cached_has_inherited_presentational_role_ =
-      (InheritsPresentationalRoleFrom() != 0);
+      !!InheritsPresentationalRoleFrom();
   cached_is_ignored_ = ComputeAccessibilityIsIgnored();
   cached_is_editable_root_ =
       GetNode() ? IsNativeTextControl() || IsRootEditableElement(*GetNode())
@@ -829,7 +829,7 @@ AXObject* AXObject::LeafNodeAncestor() const {
     return parent->LeafNodeAncestor();
   }
 
-  return 0;
+  return nullptr;
 }
 
 const AXObject* AXObject::AriaHiddenRoot() const {
@@ -838,13 +838,13 @@ const AXObject* AXObject::AriaHiddenRoot() const {
       return object;
   }
 
-  return 0;
+  return nullptr;
 }
 
 const AXObject* AXObject::InertRoot() const {
   const AXObject* object = this;
   if (!RuntimeEnabledFeatures::InertAttributeEnabled())
-    return 0;
+    return nullptr;
 
   while (object && !object->IsAXNodeObject())
     object = object->ParentObject();
@@ -858,7 +858,7 @@ const AXObject* AXObject::InertRoot() const {
     element = FlatTreeTraversal::ParentElement(*element);
   }
 
-  return 0;
+  return nullptr;
 }
 
 bool AXObject::DispatchEventToAOMEventListeners(Event& event,
@@ -1193,7 +1193,7 @@ bool AXObject::IsHiddenForTextAlternativeCalculation() const {
     return false;
   if (Node* node = GetNode()) {
     if (node->isConnected() && node->IsElementNode()) {
-      RefPtr<ComputedStyle> style =
+      scoped_refptr<ComputedStyle> style =
           document->EnsureStyleResolver().StyleForElement(ToElement(node));
       return style->Display() == EDisplay::kNone ||
              style->Visibility() != EVisibility::kVisible;
@@ -1687,7 +1687,7 @@ const AXObject::AXObjectVector& AXObject::Children() {
 
 AXObject* AXObject::ParentObject() const {
   if (IsDetached())
-    return 0;
+    return nullptr;
 
   if (parent_)
     return parent_;
@@ -1700,7 +1700,7 @@ AXObject* AXObject::ParentObject() const {
 
 AXObject* AXObject::ParentObjectIfExists() const {
   if (IsDetached())
-    return 0;
+    return nullptr;
 
   if (parent_)
     return parent_;
@@ -1781,7 +1781,7 @@ Element* AXObject::GetElement() const {
 Document* AXObject::GetDocument() const {
   LocalFrameView* frame_view = DocumentFrameView();
   if (!frame_view)
-    return 0;
+    return nullptr;
 
   return frame_view->GetFrame().GetDocument();
 }
@@ -1792,7 +1792,7 @@ LocalFrameView* AXObject::DocumentFrameView() const {
     object = object->ParentObject();
 
   if (!object)
-    return 0;
+    return nullptr;
 
   return object->DocumentFrameView();
 }
@@ -2004,8 +2004,8 @@ bool AXObject::OnNativeClickAction() {
     return false;
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(document->GetFrame(),
-                                    UserGestureToken::kNewGesture);
+      Frame::NotifyUserActivation(document->GetFrame(),
+                                  UserGestureToken::kNewGesture);
 
   Element* element = GetElement();
   if (!element && GetNode())
@@ -2101,8 +2101,7 @@ bool AXObject::OnNativeScrollToMakeVisibleAction() const {
   LayoutRect target_rect(layout_object->AbsoluteBoundingBoxRect());
   layout_object->ScrollRectToVisible(
       target_rect, ScrollAlignment::kAlignCenterIfNeeded,
-      ScrollAlignment::kAlignCenterIfNeeded, kProgrammaticScroll,
-      !GetDocument()->GetPage()->GetSettings().GetInertVisualViewport(),
+      ScrollAlignment::kAlignCenterIfNeeded, kProgrammaticScroll, false,
       kScrollBehaviorAuto);
   AxObjectCache().PostNotification(
       AxObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
@@ -2126,10 +2125,9 @@ bool AXObject::OnNativeScrollToMakeVisibleWithSubFocusAction(
   // is the default behavior of element.scrollIntoView.
   ScrollAlignment scroll_alignment = {
       kScrollAlignmentNoScroll, kScrollAlignmentCenter, kScrollAlignmentCenter};
-  layout_object->ScrollRectToVisible(
-      target_rect, scroll_alignment, scroll_alignment, kProgrammaticScroll,
-      !GetDocument()->GetPage()->GetSettings().GetInertVisualViewport(),
-      kScrollBehaviorAuto);
+  layout_object->ScrollRectToVisible(target_rect, scroll_alignment,
+                                     scroll_alignment, kProgrammaticScroll,
+                                     false, kScrollBehaviorAuto);
   AxObjectCache().PostNotification(
       AxObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
       AXObjectCacheImpl::kAXLocationChanged);
@@ -2146,8 +2144,7 @@ bool AXObject::OnNativeScrollToGlobalPointAction(
   target_rect.MoveBy(-global_point);
   layout_object->ScrollRectToVisible(
       target_rect, ScrollAlignment::kAlignLeftAlways,
-      ScrollAlignment::kAlignTopAlways, kProgrammaticScroll,
-      !GetDocument()->GetPage()->GetSettings().GetInertVisualViewport(),
+      ScrollAlignment::kAlignTopAlways, kProgrammaticScroll, false,
       kScrollBehaviorAuto);
   AxObjectCache().PostNotification(
       AxObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
@@ -2203,14 +2200,6 @@ bool AXObject::OnNativeShowContextMenuAction() {
   ContextMenuAllowedScope scope;
   document->GetFrame()->GetEventHandler().ShowNonLocatedContextMenu(element);
   return true;
-}
-
-void AXObject::NotifyIfIgnoredValueChanged() {
-  bool is_ignored = AccessibilityIsIgnored();
-  if (LastKnownIsIgnoredValue() != is_ignored) {
-    AxObjectCache().ChildrenChanged(ParentObject());
-    SetLastKnownIsIgnoredValue(is_ignored);
-  }
 }
 
 void AXObject::SelectionChanged() {
@@ -2492,7 +2481,7 @@ std::ostream& operator<<(std::ostream& stream, const AXObject& obj) {
                 << obj.ComputedName();
 }
 
-DEFINE_TRACE(AXObject) {
+void AXObject::Trace(blink::Visitor* visitor) {
   visitor->Trace(children_);
   visitor->Trace(parent_);
   visitor->Trace(cached_live_region_root_);

@@ -38,7 +38,7 @@
 #include "core/plugins/PluginView.h"
 #include "platform/heap/HeapAllocator.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "public/platform/WebCachePolicy.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 
 namespace blink {
 
@@ -130,11 +130,11 @@ HTMLFrameOwnerElement::~HTMLFrameOwnerElement() {
 Document* HTMLFrameOwnerElement::contentDocument() const {
   return (content_frame_ && content_frame_->IsLocalFrame())
              ? ToLocalFrame(content_frame_)->GetDocument()
-             : 0;
+             : nullptr;
 }
 
 DOMWindow* HTMLFrameOwnerElement::contentWindow() const {
-  return content_frame_ ? content_frame_->DomWindow() : 0;
+  return content_frame_ ? content_frame_->DomWindow() : nullptr;
 }
 
 void HTMLFrameOwnerElement::SetSandboxFlags(SandboxFlags flags) {
@@ -302,7 +302,7 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
       GetDocument().Loader()->LoadType() ==
           kFrameLoadTypeReloadBypassingCache) {
     child_load_type = kFrameLoadTypeReloadBypassingCache;
-    request.SetCachePolicy(WebCachePolicy::kBypassingCache);
+    request.SetCacheMode(mojom::FetchCacheMode::kBypassCache);
   }
 
   child_frame->Loader().Load(FrameLoadRequest(&GetDocument(), request),
@@ -310,7 +310,7 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
   return true;
 }
 
-DEFINE_TRACE(HTMLFrameOwnerElement) {
+void HTMLFrameOwnerElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(content_frame_);
   visitor->Trace(embedded_content_view_);
   HTMLElement::Trace(visitor);

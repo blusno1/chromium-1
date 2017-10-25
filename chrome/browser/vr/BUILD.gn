@@ -13,7 +13,7 @@ if (is_android) {
 
 assert(enable_vr)
 
-source_set("vr_common_source") {
+static_library("vr_common") {
   sources = [
     "animation_player.cc",
     "animation_player.h",
@@ -59,6 +59,8 @@ source_set("vr_common_source") {
     "elements/render_text_wrapper.cc",
     "elements/render_text_wrapper.h",
     "elements/simple_textured_element.h",
+    "elements/spinner.cc",
+    "elements/spinner.h",
     "elements/system_indicator.cc",
     "elements/system_indicator.h",
     "elements/system_indicator_texture.cc",
@@ -105,6 +107,9 @@ source_set("vr_common_source") {
     "service/vr_display_host.h",
     "service/vr_service_impl.cc",
     "service/vr_service_impl.h",
+    "speech_recognizer.cc",
+    "speech_recognizer.h",
+    "target_property.cc",
     "target_property.h",
     "toolbar_helper.cc",
     "toolbar_helper.h",
@@ -142,49 +147,23 @@ source_set("vr_common_source") {
     "//cc/paint",
     "//chrome/app:generated_resources",
     "//chrome/browser/resources:vr_shell_resources",
+    "//chrome/browser/vr/vector_icons",
+    "//chrome/common:constants",
     "//components/security_state/core",
     "//components/strings",
     "//components/toolbar",
     "//components/url_formatter",
     "//components/vector_icons",
-    "//components/vector_icons",
     "//content/public/browser",
     "//content/public/common",
+    "//device/vr:mojo_bindings",
+    "//device/vr:vr",
     "//skia",
     "//ui/base",
     "//ui/display",
     "//ui/gl",
     "//ui/gl/init",
   ]
-}
-
-# TODO(773882) - Temporary workaround since this static library isn't consumed
-# on Windows, and it is causing build errors on the bots.
-if (!is_win) {
-  static_library("vr_common") {
-    public_deps = [
-      ":vr_common_source",
-    ]
-
-    deps = [
-      "//base",
-      "//cc/animation",
-      "//cc/paint",
-      "//chrome/app:generated_resources",
-      "//chrome/browser/resources:vr_shell_resources",
-      "//components/security_state/core",
-      "//components/strings",
-      "//components/toolbar",
-      "//components/url_formatter",
-      "//components/vector_icons",
-      "//components/vector_icons",
-      "//skia",
-      "//ui/base",
-      "//ui/display",
-      "//ui/gl",
-      "//ui/gl/init",
-    ]
-  }
 }
 
 test("vr_common_unittests") {
@@ -195,21 +174,21 @@ test("vr_common_unittests") {
     "elements/close_button_texture_unittest.cc",
     "elements/exit_prompt_unittest.cc",
     "elements/linear_layout_unittest.cc",
+    "elements/spinner_unittest.cc",
     "elements/transient_element_unittest.cc",
     "elements/ui_element_iterator_unittest.cc",
     "elements/ui_element_unittest.cc",
     "elements/url_bar_texture_unittest.cc",
+    "elements/vector_icon_unittest.cc",
     "elements/viewport_aware_root_unittest.cc",
     "fps_meter_unittest.cc",
     "gltf_parser_unittest.cc",
     "service/vr_device_manager_unittest.cc",
+    "speech_recognizer_unittest.cc",
     "test/animation_utils.cc",
     "test/animation_utils.h",
-    "test/constants.h",
     "test/fake_ui_element_renderer.cc",
     "test/fake_ui_element_renderer.h",
-    "test/gl_test_environment.cc",
-    "test/gl_test_environment.h",
     "test/gl_test_environment_unittest.cc",
     "test/mock_browser_interface.cc",
     "test/mock_browser_interface.h",
@@ -224,6 +203,7 @@ test("vr_common_unittests") {
     "test/ui_scene_manager_test.h",
     "ui_input_manager_unittest.cc",
     "ui_pixeltest.cc",
+    "ui_renderer_unittest.cc",
     "ui_scene_manager_unittest.cc",
     "ui_scene_unittest.cc",
     "vr_gl_util_unittest.cc",
@@ -235,40 +215,71 @@ test("vr_common_unittests") {
   defines = [ "DEVICE_VR_IMPLEMENTATION" ]
 
   deps = [
+    ":vr_test_support",
+    "//cc:test_support",
+    "//mojo/common",
+    "//mojo/public/cpp/bindings",
+    "//testing/gmock",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+  ]
+
+  if (is_android) {
+    deps += [ "//ui/android:ui_java" ]
+  }
+}
+
+test("vr_common_perftests") {
+  sources = [
+    "test/run_all_perftests.cc",
+    "text_perftest.cc",
+  ]
+  deps = [
+    ":vr_test_support",
+    "//testing/perf",
+  ]
+
+  if (is_android) {
+    deps += [ "//ui/android:ui_java" ]
+  }
+
+  # Needed for isolate script to execute
+  data = [
+    "//testing/scripts/common.py",
+    "//testing/xvfb.py",
+    "//testing/scripts/run_gtest_perf_test.py",
+    "//tools/perf/generate_legacy_perf_dashboard_json.py",
+  ]
+}
+
+source_set("vr_test_support") {
+  testonly = true
+
+  sources = [
+    "test/constants.h",
+    "test/gl_test_environment.cc",
+    "test/gl_test_environment.h",
+    "test/vr_common_test_suite.cc",
+    "test/vr_common_test_suite.h",
+  ]
+
+  public_deps = [
     ":vr_common",
     ":vr_test_pak",
     "//base/test:test_support",
     "//components/security_state/core",
     "//components/toolbar:vector_icons",
+    "//content/test:test_support",
+    "//mojo/edk/system",
+    "//skia",
+    "//testing/gtest",
+    "//ui/accessibility:ax_gen",
+    "//ui/gl:test_support",
 
     # TODO(mthiesse, crbug.com/769373): Remove dependency on device/vr:fakes.
     "//device/vr:fakes",
-    "//mojo/common",
-    "//mojo/edk/system",
-    "//mojo/public/cpp/bindings",
-    "//skia",
-    "//testing/gmock",
-    "//testing/gtest",
-
-    # TODO(mthiesse): Figure out why these webrtc deps are necessary for compiling these tests.
-    # Is a dependency missing from some other target?
-    "//third_party/webrtc/api:video_frame_api",
-    "//third_party/webrtc/system_wrappers:metrics_default",
-    "//ui/accessibility:ax_gen",
-    "//ui/gfx:test_support",
-    "//ui/gfx/geometry",
-    "//ui/gl",
-    "//ui/gl:test_support",
   ]
-
-  if (is_win) {
-    deps -= [ ":vr_common" ]
-    deps += [ ":vr_common_source" ]
-  }
-
-  if (is_android) {
-    deps += [ "//ui/android:ui_java" ]
-  }
 
   data = [
     "test/data/",

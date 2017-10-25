@@ -135,6 +135,10 @@ class TestDataReductionProxyConfigServiceClient
   void TriggerApplicationStatusToForeground();
 #endif
 
+  void SetRemoteConfigApplied(bool remote_config_applied);
+
+  bool RemoteConfigApplied() const override;
+
  protected:
   // Overrides of DataReductionProxyConfigServiceClient
   base::Time Now() override;
@@ -165,6 +169,10 @@ class TestDataReductionProxyConfigServiceClient
 
   TestTickClock tick_clock_;
   net::BackoffEntry test_backoff_entry_;
+
+  base::Optional<bool> remote_config_applied_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestDataReductionProxyConfigServiceClient);
 };
 
 // Test version of |DataReductionProxyService|, which permits mocking of various
@@ -458,6 +466,8 @@ class DataReductionProxyTestContext {
     return params_;
   }
 
+  void InitSettingsWithoutCheck();
+
   // Returns the proxies that are currently configured for "http://" requests,
   // excluding any that are invalid or direct.
   std::vector<net::ProxyServer> GetConfiguredProxiesForHttp() const;
@@ -489,8 +499,6 @@ class DataReductionProxyTestContext {
       std::unique_ptr<TestConfigStorer> config_storer,
       TestDataReductionProxyParams* params,
       unsigned int test_context_flags);
-
-  void InitSettingsWithoutCheck();
 
   std::unique_ptr<DataReductionProxyService>
   CreateDataReductionProxyServiceInternal(DataReductionProxySettings* settings);

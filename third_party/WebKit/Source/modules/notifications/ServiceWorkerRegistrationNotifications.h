@@ -49,7 +49,7 @@ class ServiceWorkerRegistrationNotifications final
   // ContextLifecycleObserver interface.
   void ContextDestroyed(ExecutionContext*) override;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   ServiceWorkerRegistrationNotifications(ExecutionContext*,
@@ -62,7 +62,7 @@ class ServiceWorkerRegistrationNotifications final
 
   void PrepareShow(const WebNotificationData&,
                    std::unique_ptr<WebNotificationShowCallbacks>);
-  void DidLoadResources(RefPtr<SecurityOrigin>,
+  void DidLoadResources(scoped_refptr<SecurityOrigin>,
                         const WebNotificationData&,
                         std::unique_ptr<WebNotificationShowCallbacks>,
                         NotificationResourcesLoader*);

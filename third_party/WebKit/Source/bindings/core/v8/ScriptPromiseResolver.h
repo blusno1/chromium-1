@@ -10,9 +10,9 @@
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SuspendableObject.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/Timer.h"
 #include "platform/bindings/ScopedPersistent.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/SelfKeepAlive.h"
@@ -101,7 +101,7 @@ class CORE_EXPORT ScriptPromiseResolver
   // promise is pending and the associated ExecutionContext isn't stopped.
   void KeepAliveWhilePending();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   // You need to call suspendIfNeeded after the construction because
@@ -162,7 +162,7 @@ class CORE_EXPORT ScriptPromiseResolver
   void OnTimerFired(TimerBase*);
 
   ResolutionState state_;
-  const RefPtr<ScriptState> script_state_;
+  const scoped_refptr<ScriptState> script_state_;
   TaskRunnerTimer<ScriptPromiseResolver> timer_;
   Resolver resolver_;
   ScopedPersistent<v8::Value> value_;

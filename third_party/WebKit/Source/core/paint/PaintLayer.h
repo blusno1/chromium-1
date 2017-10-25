@@ -583,9 +583,7 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
       LayoutRect&);
 
   bool PaintsWithTransparency(GlobalPaintFlags global_paint_flags) const {
-    return IsTransparent() &&
-           ((global_paint_flags & kGlobalPaintFlattenCompositingLayers) ||
-            GetCompositingState() != kPaintsIntoOwnBacking);
+    return IsTransparent() && !PaintsIntoOwnBacking(global_paint_flags);
   }
 
   // Returns the ScrollingCoordinator associated with this layer, if
@@ -599,6 +597,8 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   bool CompositesWithOpacity() const;
 
   bool PaintsWithTransform(GlobalPaintFlags) const;
+  bool PaintsIntoOwnBacking(GlobalPaintFlags) const;
+  bool PaintsIntoOwnOrGroupedBacking(GlobalPaintFlags) const;
 
   bool SupportsSubsequenceCaching() const;
 
@@ -1102,7 +1102,7 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
       const HitTestingTransformState* unflattened_transform_state,
       bool depth_sort_descendants);
 
-  RefPtr<HitTestingTransformState> CreateLocalTransformState(
+  scoped_refptr<HitTestingTransformState> CreateLocalTransformState(
       PaintLayer* root_layer,
       PaintLayer* container_layer,
       const LayoutRect& hit_test_rect,

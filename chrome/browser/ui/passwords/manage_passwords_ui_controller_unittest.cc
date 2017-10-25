@@ -229,7 +229,7 @@ void ManagePasswordsUIControllerTest::SetUp() {
   test_federated_form_.origin = GURL("http://example.com/login");
   test_federated_form_.username_value = base::ASCIIToUTF16("username");
   test_federated_form_.federation_origin =
-      url::Origin(GURL("https://federation.test/"));
+      url::Origin::Create(GURL("https://federation.test/"));
 
   // We need to be on a "webby" URL for most tests.
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
@@ -1132,4 +1132,30 @@ TEST_F(ManagePasswordsUIControllerTest,
     ExpectIconAndControllerStateIs(password_manager::ui::MANAGE_STATE);
     testing::Mock::VerifyAndClearExpectations(controller());
   }
+}
+
+TEST_F(ManagePasswordsUIControllerTest, AutofillDuringSignInPromo) {
+  std::unique_ptr<password_manager::PasswordFormManager> test_form_manager(
+      CreateFormManager());
+  test_form_manager->ProvisionallySave(
+      test_local_form(),
+      password_manager::PasswordFormManager::IGNORE_OTHER_POSSIBLE_USERNAMES);
+  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
+  controller()->OnPasswordSubmitted(std::move(test_form_manager));
+
+  controller()->SavePassword(test_local_form().username_value,
+                             test_local_form().password_value);
+  // The state is 'Managed' but the bubble may still be on the screen showing
+  // the sign-in promo.
+  ExpectIconStateIs(password_manager::ui::MANAGE_STATE);
+  // The controller shouldn't force close the bubble if an autofill happened.
+  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility()).Times(0);
+  std::map<base::string16, const autofill::PasswordForm*> map;
+  base::string16 test_username = test_local_form().username_value;
+  map.insert(std::make_pair(test_username, &test_local_form()));
+  controller()->OnPasswordAutofilled(map, map.begin()->second->origin, nullptr);
+
+  // Once the bubble is closed the controller is reacting again.
+  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
+  controller()->OnBubbleHidden();
 }

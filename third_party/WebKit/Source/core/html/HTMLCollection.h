@@ -65,10 +65,8 @@ class HTMLCollectionIterator {
 };
 
 // blink::HTMLCollection implements HTMLCollection IDL interface.
-class CORE_EXPORT HTMLCollection
-    : public GarbageCollectedFinalized<HTMLCollection>,
-      public ScriptWrappable,
-      public LiveNodeListBase {
+class CORE_EXPORT HTMLCollection : public ScriptWrappable,
+                                   public LiveNodeListBase {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(HTMLCollection);
 
@@ -113,7 +111,7 @@ class CORE_EXPORT HTMLCollection
   Iterator begin() const { return Iterator(this); }
   Iterator end() const { return Iterator::CreateEnd(this); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   HTMLCollection(ContainerNode& base, CollectionType, ItemAfterOverrideType);
@@ -143,7 +141,7 @@ class CORE_EXPORT HTMLCollection
       AddElementToMap(name_cache_, name, element);
     }
 
-    DEFINE_INLINE_TRACE() {
+    void Trace(blink::Visitor* visitor) {
       visitor->Trace(id_cache_);
       visitor->Trace(name_cache_);
     }

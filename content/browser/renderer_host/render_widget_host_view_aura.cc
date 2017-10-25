@@ -24,6 +24,7 @@
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/gl_helper.h"
 #include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/switches.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/bad_message.h"
@@ -155,6 +156,11 @@ class WinScreenKeyboardObserver : public ui::OnScreenKeyboardObserver {
         device_scale_factor_(scale_factor),
         window_(window) {
     host_view_->SetInsets(gfx::Insets());
+  }
+
+  ~WinScreenKeyboardObserver() override {
+    if (auto* instance = ui::OnScreenKeyboardDisplayManager::GetInstance())
+      instance->RemoveObserver(this);
   }
 
   // base::win::OnScreenKeyboardObserver overrides.
@@ -1529,10 +1535,9 @@ void RenderWidgetHostViewAura::OnDeviceScaleFactorChanged(
   if (!window_->GetRootWindow())
     return;
 
-  RenderWidgetHostImpl* host =
-      RenderWidgetHostImpl::From(GetRenderWidgetHost());
-  if (host && host->delegate())
-    host->delegate()->UpdateDeviceScaleFactor(new_device_scale_factor);
+  host_->WasResized();
+  if (delegated_frame_host_)
+    delegated_frame_host_->WasResized();
 
   device_scale_factor_ = new_device_scale_factor;
   const display::Display display =
@@ -1607,8 +1612,8 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
 
 viz::FrameSinkId RenderWidgetHostViewAura::FrameSinkIdAtPoint(
     viz::SurfaceHittestDelegate* delegate,
-    const gfx::Point& point,
-    gfx::Point* transformed_point) {
+    const gfx::PointF& point,
+    gfx::PointF* transformed_point) {
   DCHECK(device_scale_factor_ != 0.0f);
 
   // TODO: this shouldn't be used with aura-mus, so that the null check so
@@ -1620,7 +1625,7 @@ viz::FrameSinkId RenderWidgetHostViewAura::FrameSinkIdAtPoint(
 
   // The surface hittest happens in device pixels, so we need to convert the
   // |point| from DIPs to pixels before hittesting.
-  gfx::Point point_in_pixels =
+  gfx::PointF point_in_pixels =
       gfx::ConvertPointToPixel(device_scale_factor_, point);
   viz::SurfaceId id = delegated_frame_host_->SurfaceIdAtPoint(
       delegate, point_in_pixels, transformed_point);
@@ -1659,12 +1664,12 @@ void RenderWidgetHostViewAura::ProcessGestureEvent(
 }
 
 bool RenderWidgetHostViewAura::TransformPointToLocalCoordSpace(
-    const gfx::Point& point,
+    const gfx::PointF& point,
     const viz::SurfaceId& original_surface,
-    gfx::Point* transformed_point) {
+    gfx::PointF* transformed_point) {
   // Transformations use physical pixels rather than DIP, so conversion
   // is necessary.
-  gfx::Point point_in_pixels =
+  gfx::PointF point_in_pixels =
       gfx::ConvertPointToPixel(device_scale_factor_, point);
   // TODO: this shouldn't be used with aura-mus, so that the null check so
   // go away and become a DCHECK.
@@ -1678,9 +1683,9 @@ bool RenderWidgetHostViewAura::TransformPointToLocalCoordSpace(
 }
 
 bool RenderWidgetHostViewAura::TransformPointToCoordSpaceForView(
-    const gfx::Point& point,
+    const gfx::PointF& point,
     RenderWidgetHostViewBase* target_view,
-    gfx::Point* transformed_point) {
+    gfx::PointF* transformed_point) {
   if (target_view == this || !delegated_frame_host_) {
     *transformed_point = point;
     return true;
@@ -1710,8 +1715,8 @@ void RenderWidgetHostViewAura::ScheduleEmbed(
     ui::mojom::WindowTreeClientPtr client,
     base::OnceCallback<void(const base::UnguessableToken&)> callback) {
   DCHECK(IsMus());
-  aura::WindowPortMus::Get(window_)->ScheduleEmbed(std::move(client),
-                                                   std::move(callback));
+  aura::Env::GetInstance()->ScheduleEmbed(std::move(client),
+                                          std::move(callback));
 }
 
 void RenderWidgetHostViewAura::OnScrollEvent(ui::ScrollEvent* event) {
@@ -1881,14 +1886,6 @@ RenderWidgetHostViewAura::~RenderWidgetHostViewAura() {
   // RenderWidgetHostViewAura::OnWindowDestroying and the pointer should
   // be set to NULL.
   DCHECK(!legacy_render_widget_host_HWND_);
-  if (virtual_keyboard_requested_) {
-    DCHECK(keyboard_observer_.get());
-    ui::OnScreenKeyboardDisplayManager* osk_display_manager =
-        ui::OnScreenKeyboardDisplayManager::GetInstance();
-    DCHECK(osk_display_manager);
-    osk_display_manager->RemoveObserver(keyboard_observer_.get());
-  }
-
 #endif
 
   if (text_input_manager_)
@@ -1935,9 +1932,13 @@ void RenderWidgetHostViewAura::CreateDelegatedFrameHostClient() {
     delegated_frame_host_client_ =
         base::MakeUnique<DelegatedFrameHostClientAura>(this);
   }
+
+  const bool enable_viz =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableViz);
   delegated_frame_host_ = base::MakeUnique<DelegatedFrameHost>(
       frame_sink_id_, delegated_frame_host_client_.get(),
-      enable_surface_synchronization_);
+      enable_surface_synchronization_, enable_viz);
+
   if (renderer_compositor_frame_sink_) {
     delegated_frame_host_->DidCreateNewRendererCompositorFrameSink(
         renderer_compositor_frame_sink_);

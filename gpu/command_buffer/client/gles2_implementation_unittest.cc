@@ -499,7 +499,7 @@ class GLES2ImplementationTest : public testing::Test {
       // The client should be set to something non-null.
       EXPECT_CALL(*gpu_control_, SetGpuControlClient(gl_.get())).Times(1);
 
-      if (!gl_->Initialize(limits))
+      if (gl_->Initialize(limits) != gpu::ContextResult::kSuccess)
         return false;
 
       helper_->CommandBufferHelper::Finish();
@@ -3715,19 +3715,6 @@ TEST_F(GLES2ImplementationTest, Enable) {
   ClearCommands();
   gl_->Enable(GL_BLEND);
   EXPECT_TRUE(NoCommandsWritten());
-}
-
-TEST_F(GLES2ImplementationTest, ConsumeTextureCHROMIUM) {
-  struct Cmds {
-    cmds::ConsumeTextureCHROMIUMImmediate cmd;
-    GLbyte data[GL_MAILBOX_SIZE_CHROMIUM];
-  };
-
-  Mailbox mailbox = Mailbox::Generate();
-  Cmds expected;
-  expected.cmd.Init(GL_TEXTURE_2D, mailbox.name);
-  gl_->ConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
-  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
 TEST_F(GLES2ImplementationTest, CreateAndConsumeTextureCHROMIUM) {

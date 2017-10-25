@@ -46,12 +46,13 @@ gfx::Rect GetSnappedRecordingBoundsInternal(
 // edges of the parent, and its layer has to be able to paint to these
 // edges. Such cases should be handled case by case basis.
 gfx::Rect GetViewsLayerRecordingBounds(const ui::PaintContext& context,
-                                       const gfx::Size& parent_size,
                                        const gfx::Rect& child_bounds) {
   if (!context.is_pixel_canvas())
     return gfx::Rect(child_bounds.size());
-  return GetSnappedRecordingBoundsInternal(
-      gfx::Rect(), context.device_scale_factor(), parent_size, child_bounds);
+  return gfx::Rect(GetSnappedRecordingBoundsInternal(
+                       gfx::Rect(), context.device_scale_factor(),
+                       gfx::Size() /* not used */, child_bounds)
+                       .size());
 }
 
 }  // namespace
@@ -108,7 +109,6 @@ PaintInfo::PaintInfo(const PaintInfo& parent_paint_info,
       paint_recording_scale_y_(1.f),
       paint_recording_bounds_(
           is_layer ? GetViewsLayerRecordingBounds(parent_paint_info.context(),
-                                                  parent_size,
                                                   bounds)
                    : parent_paint_info.GetSnappedRecordingBounds(parent_size,
                                                                  bounds)),

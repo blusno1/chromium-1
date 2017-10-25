@@ -35,8 +35,7 @@ namespace blink {
 class MessagePort;
 class ExecutionContext;
 
-class MessageChannel final : public GarbageCollected<MessageChannel>,
-                             public ScriptWrappable {
+class MessageChannel final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -47,7 +46,7 @@ class MessageChannel final : public GarbageCollected<MessageChannel>,
   MessagePort* port1() const { return port1_; }
   MessagePort* port2() const { return port2_; }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   explicit MessageChannel(ExecutionContext*);

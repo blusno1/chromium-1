@@ -50,7 +50,7 @@ IPC::PlatformFileForTransit CreateEventLogFileForChildProcess(
     const base::FilePath& base_path,
     int render_process_id,
     int connection_id) {
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
   base::FilePath file_path =
       GetWebRtcEventLogPath(base_path, render_process_id, connection_id);
   base::File event_log_file(
@@ -132,7 +132,7 @@ base::WeakPtr<WebRTCEventLogHost> WebRTCEventLogHost::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-bool WebRTCEventLogHost::StartEventLogForPeerConnection(
+void WebRTCEventLogHost::StartEventLogForPeerConnection(
     int peer_connection_local_id) {
   if (number_active_log_files_ < kMaxNumberLogFiles) {
     ++number_active_log_files_;
@@ -143,7 +143,6 @@ bool WebRTCEventLogHost::StartEventLogForPeerConnection(
         base::Bind(&WebRTCEventLogHost::SendEventLogFileToRenderer,
                    weak_ptr_factory_.GetWeakPtr(), peer_connection_local_id));
   }
-  return true;
 }
 
 void WebRTCEventLogHost::SendEventLogFileToRenderer(

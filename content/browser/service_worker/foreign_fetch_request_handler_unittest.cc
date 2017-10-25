@@ -96,8 +96,9 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
 
     // Persist the registration data.
     std::vector<ServiceWorkerDatabase::ResourceRecord> records;
-    records.push_back(
-        ServiceWorkerDatabase::ResourceRecord(10, version_->script_url(), 100));
+    records.push_back(WriteToDiskCacheSync(
+        context()->storage(), version_->script_url(), 10, {} /* headers */,
+        "I'm the body", "I'm the meta data"));
     version_->script_cache_map()->SetResources(records);
     version_->set_fetch_handler_existence(
         ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
@@ -156,7 +157,7 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
         GURL(url), net::DEFAULT_PRIORITY, &url_request_delegate_,
         TRAFFIC_ANNOTATION_FOR_TESTS);
     if (initiator)
-      request_->set_initiator(url::Origin(GURL(initiator)));
+      request_->set_initiator(url::Origin::Create(GURL(initiator)));
     ForeignFetchRequestHandler::InitializeHandler(
         request_.get(), context_wrapper(), &blob_storage_context_,
         helper_->mock_render_process_id(), provider_host()->provider_id(),

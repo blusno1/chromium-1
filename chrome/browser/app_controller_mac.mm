@@ -175,7 +175,7 @@ void RecordLastRunAppBundlePath() {
   // real, user-visible app bundle directory. (The alternatives give either the
   // framework's path or the initial app's path, which may be an app mode shim
   // or a unit test.)
-  base::ThreadRestrictions::AssertIOAllowed();
+  base::AssertBlockingAllowed();
 
   base::FilePath app_bundle_path =
       chrome::GetVersionedDirectory().DirName().DirName().DirName();
@@ -419,6 +419,18 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   if (base::FeatureList::IsEnabled(features::kMacSystemShareMenu)) {
     // Initialize the share menu.
     [self initShareMenu];
+  }
+
+  // Remove "Enable Javascript in Apple Events" if the feature is disabled.
+  if (!base::FeatureList::IsEnabled(
+          features::kAppleScriptExecuteJavaScriptMenuItem)) {
+    NSMenu* mainMenu = [NSApp mainMenu];
+    NSMenu* viewMenu = [[mainMenu itemWithTag:IDC_VIEW_MENU] submenu];
+    NSMenu* devMenu = [[viewMenu itemWithTag:IDC_DEVELOPER_MENU] submenu];
+    NSMenuItem* javascriptAppleEventItem =
+        [devMenu itemWithTag:IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS];
+    if (javascriptAppleEventItem)
+      [devMenu removeItem:javascriptAppleEventItem];
   }
 }
 

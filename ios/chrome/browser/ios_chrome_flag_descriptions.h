@@ -24,6 +24,14 @@ extern const char kCaptivePortalDescription[];
 extern const char kContextualSearch[];
 extern const char kContextualSearchDescription[];
 
+// Title and description for the flag to enable drag and drop.
+extern const char kDragAndDropName[];
+extern const char kDragAndDropDescription[];
+
+// Title and description for the flag to enable External Search.
+extern const char kExternalSearchName[];
+extern const char kExternalSearchDescription[];
+
 // Title and description for the flag to enable feature_engagement::Tracker
 // demo mode.
 extern const char kInProductHelpDemoModeName[];
@@ -34,9 +42,6 @@ extern const char kInProductHelpDemoModeDescription[];
 extern const char kMarkHttpAsName[];
 extern const char kMarkHttpAsDescription[];
 extern const char kMarkHttpAsDangerous[];
-extern const char kMarkHttpAsNonSecureAfterEditing[];
-extern const char kMarkHttpAsNonSecureWhileIncognito[];
-extern const char kMarkHttpAsNonSecureWhileIncognitoOrEditing[];
 
 // Title and descript for the flag to enable a prompt asking user to choose
 // which mail client app to use to handle mailto:// URLs.
@@ -85,10 +90,6 @@ extern const char kWebPaymentsNativeAppsName[];
 extern const char kWebPaymentsNativeAppsDescription[];
 
 // Please insert your name/description above in alphabetical order.
-
-// Title and description for the flag to enable drag and drop.
-extern const char kDragAndDropName[];
-extern const char kDragAndDropDescription[];
 
 }  // namespace flag_descriptions
 

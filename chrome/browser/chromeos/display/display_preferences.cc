@@ -398,14 +398,15 @@ void StoreCurrentDisplayProperties() {
     property_value->SetInteger(
         "ui-scale", static_cast<int>(info.configured_ui_scale() * 1000));
 
-    scoped_refptr<display::ManagedDisplayMode> mode =
-        display_manager->GetSelectedModeForDisplayId(id);
-    if (!display.IsInternal() && mode && !mode->native()) {
-      property_value->SetInteger("width", mode->size().width());
-      property_value->SetInteger("height", mode->size().height());
+    display::ManagedDisplayMode mode;
+    if (!display.IsInternal() &&
+        display_manager->GetSelectedModeForDisplayId(id, &mode) &&
+        !mode.native()) {
+      property_value->SetInteger("width", mode.size().width());
+      property_value->SetInteger("height", mode.size().height());
       property_value->SetInteger(
           "device-scale-factor",
-          static_cast<int>(mode->device_scale_factor() * 1000));
+          static_cast<int>(mode.device_scale_factor() * 1000));
     }
     if (!info.overscan_insets_in_dip().IsEmpty())
       InsetsToValue(info.overscan_insets_in_dip(), property_value.get());
@@ -413,6 +414,14 @@ void StoreCurrentDisplayProperties() {
     if (info.touch_calibration_data_map().size()) {
       TouchDataMapToValue(info.touch_calibration_data_map(),
                           property_value.get());
+
+      // Ensure that the legacy data is still stored just in case.
+      uint32_t fallback_identifier =
+          display::TouchCalibrationData::GetFallbackTouchDeviceIdentifier();
+      if (info.HasTouchCalibrationData(fallback_identifier)) {
+        TouchDataToValue(info.GetTouchCalibrationData(fallback_identifier),
+                         property_value.get());
+      }
     }
 
     pref_data->Set(base::Int64ToString(id), std::move(property_value));

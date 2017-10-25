@@ -193,7 +193,7 @@ inline bool ShapeRange(hb_buffer_t* buffer,
                        hb_feature_t* font_features,
                        unsigned font_features_size,
                        const SimpleFontData* current_font,
-                       RefPtr<UnicodeRangeSet> current_font_range_set,
+                       scoped_refptr<UnicodeRangeSet> current_font_range_set,
                        UScriptCode current_run_script,
                        hb_direction_t direction,
                        hb_language_t language) {
@@ -310,7 +310,7 @@ void HarfBuzzShaper::ExtractShapeResults(
   // Find first notdef glyph in buffer.
   unsigned num_glyphs = hb_buffer_get_length(range_data->buffer);
   hb_glyph_info_t* glyph_info =
-      hb_buffer_get_glyph_infos(range_data->buffer, 0);
+      hb_buffer_get_glyph_infos(range_data->buffer, nullptr);
 
   unsigned last_change_glyph_index = 0;
   unsigned previous_cluster_start_glyph_index = 0;
@@ -748,7 +748,7 @@ void HarfBuzzShaper::ShapeSegment(RangeData* range_data,
   OpenTypeCapsSupport caps_support;
 
   FontOrientation orientation = font->GetFontDescription().Orientation();
-  RefPtr<FontFallbackIterator> fallback_iterator =
+  scoped_refptr<FontFallbackIterator> fallback_iterator =
       font->CreateFontFallbackIterator(segment.font_fallback_priority);
 
   range_data->reshape_queue.push_back(
@@ -758,7 +758,7 @@ void HarfBuzzShaper::ShapeSegment(RangeData* range_data,
 
   bool font_cycle_queued = false;
   Vector<UChar32> fallback_chars_hint;
-  RefPtr<FontDataForRangeSet> current_font_data_for_range_set;
+  scoped_refptr<FontDataForRangeSet> current_font_data_for_range_set;
   while (range_data->reshape_queue.size()) {
     ReshapeQueueItem current_queue_item = range_data->reshape_queue.TakeFirst();
 
@@ -840,7 +840,7 @@ void HarfBuzzShaper::ShapeSegment(RangeData* range_data,
 
     if (!ShapeRange(range_data->buffer,
                     range_data->font_features.IsEmpty()
-                        ? 0
+                        ? nullptr
                         : range_data->font_features.data(),
                     range_data->font_features.size(),
                     direction_and_small_caps_adjusted_font,
@@ -856,7 +856,7 @@ void HarfBuzzShaper::ShapeSegment(RangeData* range_data,
   }
 }
 
-RefPtr<ShapeResult> HarfBuzzShaper::Shape(const Font* font,
+scoped_refptr<ShapeResult> HarfBuzzShaper::Shape(const Font* font,
                                           TextDirection direction,
                                           unsigned start,
                                           unsigned end) const {
@@ -864,7 +864,7 @@ RefPtr<ShapeResult> HarfBuzzShaper::Shape(const Font* font,
   DCHECK(end <= text_length_);
 
   unsigned length = end - start;
-  RefPtr<ShapeResult> result = ShapeResult::Create(font, length, direction);
+  scoped_refptr<ShapeResult> result = ShapeResult::Create(font, length, direction);
   HarfBuzzScopedPtr<hb_buffer_t> buffer(hb_buffer_create(), hb_buffer_destroy);
 
   // Run segmentation needs to operate on the entire string, regardless of the
@@ -896,7 +896,7 @@ RefPtr<ShapeResult> HarfBuzzShaper::Shape(const Font* font,
   return result;
 }
 
-RefPtr<ShapeResult> HarfBuzzShaper::Shape(const Font* font,
+scoped_refptr<ShapeResult> HarfBuzzShaper::Shape(const Font* font,
                                           TextDirection direction) const {
   return Shape(font, direction, 0, text_length_);
 }

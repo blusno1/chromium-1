@@ -38,6 +38,7 @@
 #include "content/public/common/url_constants.h"
 #include "gpu/config/gpu_feature_type.h"
 #include "gpu/config/gpu_info.h"
+#include "gpu/config/gpu_lists_version.h"
 #include "gpu/ipc/host/gpu_memory_buffer_support.h"
 #include "skia/ext/skia_commit_hash.h"
 #include "third_party/angle/src/common/version.h"
@@ -51,7 +52,7 @@
 #include "ui/gfx/win/physical_size.h"
 #endif
 
-#if defined(OS_LINUX) && defined(USE_X11)
+#if defined(USE_X11)
 #include "ui/base/x/x11_util.h"       // nogncheck
 #include "ui/gfx/x/x11_atom_cache.h"  // nogncheck
 #endif
@@ -209,7 +210,7 @@ std::unique_ptr<base::DictionaryValue> GpuInfoAsDictionaryValue() {
                                              gpu_info.gl_ws_version));
   basic_info->Append(NewDescriptionValuePair("Window system binding extensions",
                                              gpu_info.gl_ws_extensions));
-#if defined(OS_LINUX) && defined(USE_X11)
+#if defined(USE_X11)
   basic_info->Append(NewDescriptionValuePair("Window manager",
                                              ui::GuessWindowManagerName()));
   {
@@ -526,10 +527,7 @@ std::unique_ptr<base::DictionaryValue> GpuMessageHandler::OnRequestClientInfo(
   dict->SetString("graphics_backend",
                   std::string("Skia/" STRINGIZE(SK_MILESTONE)
                               " " SKIA_COMMIT_HASH));
-  dict->SetString("blacklist_version",
-      GpuDataManagerImpl::GetInstance()->GetBlacklistVersion());
-  dict->SetString("driver_bug_list_version",
-      GpuDataManagerImpl::GetInstance()->GetDriverBugListVersion());
+  dict->SetString("revision_identifier", GPU_LISTS_VERSION);
 
   return dict;
 }

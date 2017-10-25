@@ -198,7 +198,7 @@ TreeScopeEventContext* EventPath::EnsureTreeScopeEventContext(
 
     TreeScopeEventContext* parent_tree_scope_event_context =
         EnsureTreeScopeEventContext(
-            0, tree_scope->OlderShadowRootOrParentTreeScope());
+            nullptr, tree_scope->OlderShadowRootOrParentTreeScope());
     if (parent_tree_scope_event_context &&
         parent_tree_scope_event_context->Target()) {
       tree_scope_event_context->SetTarget(
@@ -403,7 +403,7 @@ void EventPath::CheckReachability(TreeScope& tree_scope,
 }
 #endif
 
-DEFINE_TRACE(EventPath) {
+void EventPath::Trace(blink::Visitor* visitor) {
   visitor->Trace(node_event_contexts_);
   visitor->Trace(node_);
   visitor->Trace(event_);

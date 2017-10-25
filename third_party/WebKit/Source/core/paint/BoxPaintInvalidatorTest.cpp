@@ -36,9 +36,14 @@ class BoxPaintInvalidatorTest : public PaintControllerPaintTest {
       const LayoutBox& box,
       const LayoutRect& old_visual_rect,
       const LayoutPoint& old_location) {
+    FragmentData fragment_data;
     PaintInvalidatorContext context;
     context.old_visual_rect = old_visual_rect;
     context.old_location = old_location;
+    fragment_data_.SetVisualRect(box.FirstFragment().VisualRect());
+    fragment_data_.SetLocationInBacking(
+        box.FirstFragment().LocationInBacking());
+    context.fragment_data = &fragment_data_;
     return BoxPaintInvalidator(box, context).ComputePaintInvalidationReason();
   }
 
@@ -51,8 +56,8 @@ class BoxPaintInvalidatorTest : public PaintControllerPaintTest {
     GetDocument().View()->UpdateAllLifecyclePhases();
     auto& target = *GetDocument().getElementById("target");
     const auto& box = *ToLayoutBox(target.GetLayoutObject());
-    LayoutRect visual_rect = box.VisualRect();
-    LayoutPoint location = box.LocationInBacking();
+    LayoutRect visual_rect = box.FirstFragment().VisualRect();
+    LayoutPoint location = box.FirstFragment().LocationInBacking();
 
     // No geometry change.
     EXPECT_EQ(PaintInvalidationReason::kNone,
@@ -110,6 +115,7 @@ class BoxPaintInvalidatorTest : public PaintControllerPaintTest {
         "</style>"
         "<div id='target' class='border'></div>");
   }
+  FragmentData fragment_data_;
 };
 
 INSTANTIATE_TEST_CASE_P(All,
@@ -140,7 +146,8 @@ TEST_P(BoxPaintInvalidatorTest, SlowMapToVisualRectInAncestorSpaceLayoutView) {
             EnclosingIntRect(ToHTMLFrameOwnerElement(target)
                                  .contentDocument()
                                  ->GetLayoutView()
-                                 ->VisualRect()));
+                                 ->FirstFragment()
+                                 .VisualRect()));
 }
 
 TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonPaintingNothing) {
@@ -153,7 +160,7 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonPaintingNothing) {
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   EXPECT_TRUE(box.PaintedOutputOfObjectHasNoEffectRegardlessOfSize());
-  LayoutRect visual_rect = box.VisualRect();
+  LayoutRect visual_rect = box.FirstFragment().VisualRect();
   EXPECT_EQ(LayoutRect(0, 0, 50, 100), visual_rect);
 
   // No geometry change.
@@ -189,7 +196,8 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonBasic) {
   target.setAttribute(HTMLNames::styleAttr, "background: blue");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  LayoutRect visual_rect = box.VisualRect();
+  box.SetMayNeedPaintInvalidation();
+  LayoutRect visual_rect = box.FirstFragment().VisualRect();
   EXPECT_EQ(LayoutRect(0, 0, 50, 100), visual_rect);
 
   // No geometry change.
@@ -217,7 +225,8 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonBasic) {
   // Visual rect size change, with location in backing different from location
   // of visual rect.
   LayoutPoint fake_location = visual_rect.Location() + LayoutSize(10, 20);
-  box.GetMutableForPainting().SetLocationInBacking(fake_location);
+  box.GetMutableForPainting().FirstFragment().SetLocationInBacking(
+      fake_location);
   EXPECT_EQ(
       PaintInvalidationReason::kGeometry,
       ComputePaintInvalidationReason(box, old_visual_rect, fake_location));
@@ -259,6 +268,9 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonOtherCases) {
 
   target.setAttribute(HTMLNames::styleAttr, "-webkit-appearance: button");
   ExpectFullPaintInvalidationOnGeometryChange("With appearance");
+
+  target.setAttribute(HTMLNames::styleAttr, "clip-path: circle(50% at 0 50%)");
+  ExpectFullPaintInvalidationOnGeometryChange("With clip-path");
 }
 
 TEST_P(BoxPaintInvalidatorTest, IncrementalInvalidationExpand) {
@@ -379,7 +391,8 @@ TEST_P(BoxPaintInvalidatorTest, SubpixelVisualRectChangeWithTransform) {
 TEST_P(BoxPaintInvalidatorTest, SubpixelWithinPixelsChange) {
   Element* target = GetDocument().getElementById("target");
   LayoutObject* target_object = target->GetLayoutObject();
-  EXPECT_EQ(LayoutRect(0, 0, 70, 140), target_object->VisualRect());
+  EXPECT_EQ(LayoutRect(0, 0, 70, 140),
+            target_object->FirstFragment().VisualRect());
 
   GetDocument().View()->SetTracksPaintInvalidations(true);
   target->setAttribute(HTMLNames::styleAttr,
@@ -387,7 +400,7 @@ TEST_P(BoxPaintInvalidatorTest, SubpixelWithinPixelsChange) {
   GetDocument().View()->UpdateAllLifecyclePhases();
   EXPECT_EQ(LayoutRect(LayoutUnit(), LayoutUnit(0.6), LayoutUnit(70),
                        LayoutUnit(139.3)),
-            target_object->VisualRect());
+            target_object->FirstFragment().VisualRect());
   const auto* raster_invalidations =
       &GetRasterInvalidationTracking()->Invalidations();
   ASSERT_EQ(1u, raster_invalidations->size());
@@ -402,7 +415,7 @@ TEST_P(BoxPaintInvalidatorTest, SubpixelWithinPixelsChange) {
   GetDocument().View()->UpdateAllLifecyclePhases();
   EXPECT_EQ(LayoutRect(LayoutUnit(), LayoutUnit(0.6), LayoutUnit(69.3),
                        LayoutUnit(138.5)),
-            target_object->VisualRect());
+            target_object->FirstFragment().VisualRect());
   raster_invalidations = &GetRasterInvalidationTracking()->Invalidations();
   ASSERT_EQ(2u, raster_invalidations->size());
   EXPECT_EQ(IntRect(59, 0, 11, 140), (*raster_invalidations)[0].rect);

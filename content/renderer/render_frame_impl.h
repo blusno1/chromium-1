@@ -63,7 +63,6 @@
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
-#include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
 #include "third_party/WebKit/public/platform/WebFeaturePolicy.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
@@ -91,7 +90,6 @@
 #include "content/renderer/pepper/plugin_power_saver_helper.h"
 #endif
 
-struct FrameMsg_CommitDataNetworkService_Params;
 struct FrameMsg_MixedContentFound_Params;
 struct FrameMsg_PostMessage_Params;
 struct FrameMsg_SerializeAsMHTML_Params;
@@ -109,6 +107,7 @@ struct WebCursorInfo;
 struct WebFindOptions;
 class WebLayerTreeView;
 class WebRelatedAppsFetcher;
+struct WebRemoteScrollProperties;
 }  // namespace blink
 
 namespace gfx {
@@ -179,6 +178,7 @@ class CONTENT_EXPORT RenderFrameImpl
       blink::mojom::EngagementClient,
       blink::mojom::MediaEngagementClient,
       mojom::Frame,
+      mojom::FrameNavigationControl,
       mojom::HostZoom,
       mojom::FrameBindingsControl,
       public blink::WebFrameClient,
@@ -510,6 +510,15 @@ class CONTENT_EXPORT RenderFrameImpl
   // mojom::FrameBindingsControl implementation:
   void AllowBindings(int32_t enabled_bindings_flags) override;
 
+  // mojom::FrameNavigationControl implemenentation:
+  void CommitNavigation(const ResourceResponseHead& head,
+                        const GURL& body_url,
+                        const CommonNavigationParams& common_params,
+                        const RequestNavigationParams& request_params,
+                        mojo::ScopedDataPipeConsumerHandle body_data,
+                        mojom::URLLoaderFactoryPtr
+                            default_subresource_url_loader_factory) override;
+
   // mojom::HostZoom implementation:
   void SetHostZoomLevel(const GURL& url, double zoom_level) override;
 
@@ -619,7 +628,7 @@ class CONTENT_EXPORT RenderFrameImpl
   bool IsClientLoFiActiveForFrame() override;
   bool ShouldUseClientLoFiForRequest(const blink::WebURLRequest&) override;
   void DidBlockFramebust(const blink::WebURL& url) override;
-  blink::WebString GetDevToolsFrameToken() override;
+  blink::WebString GetInstrumentationToken() override;
   void AbortClientNavigation() override;
   void DidChangeSelection(bool is_empty_selection) override;
   bool HandleCurrentKeyboardEvent() override;
@@ -710,10 +719,14 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebSecurityOrigin& security_origin,
       blink::WebSetSinkIdCallbacks* web_callbacks) override;
   blink::WebPageVisibilityState VisibilityState() const override;
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
-      const blink::WebURLRequest& request,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
+  std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
   void DraggableRegionsChanged() override;
+  // |rect_to_scroll| is with respect to this frame's origin. |rect_to_scroll|
+  // will later be converted to this frame's parent frame origin before being
+  // continuing recursive scrolling in the parent frame's process.
+  void ScrollRectToVisibleInParentFrame(
+      const blink::WebRect& rect_to_scroll,
+      const blink::WebRemoteScrollProperties& properties) override;
 
   // WebFrameSerializerClient implementation:
   void DidSerializeDataForFrame(
@@ -738,6 +751,8 @@ class CONTENT_EXPORT RenderFrameImpl
 
   void BindFrameBindingsControl(
       mojom::FrameBindingsControlAssociatedRequest request);
+  void BindFrameNavigationControl(
+      mojom::FrameNavigationControlAssociatedRequest request);
 
   ManifestManager* manifest_manager();
 
@@ -813,8 +828,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void SyncSelectionIfRequired();
 
   // Sets the custom URLLoaderFactory instance to be used for network requests.
-  void SetCustomURLLoadeFactory(
-      mojo::MessagePipeHandle custom_loader_factory_handle);
+  void SetCustomURLLoaderFactory(mojom::URLLoaderFactoryPtr factory);
 
  protected:
   explicit RenderFrameImpl(const CreateParams& params);
@@ -884,6 +898,8 @@ class CONTENT_EXPORT RenderFrameImpl
     T* scoped_variable_;
     T original_value_;
   };
+
+  class FrameURLLoaderFactory;
 
   typedef std::map<GURL, double> HostZoomLevels;
   typedef std::pair<url::Origin, blink::mojom::EngagementLevel>
@@ -994,12 +1010,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnTextTrackSettingsChanged(
       const FrameMsg_TextTrackSettings_Params& params);
   void OnPostMessageEvent(const FrameMsg_PostMessage_Params& params);
-  void OnCommitNavigation(
-      const ResourceResponseHead& response,
-      const GURL& stream_url,
-      const FrameMsg_CommitDataNetworkService_Params& commit_data,
-      const CommonNavigationParams& common_params,
-      const RequestNavigationParams& request_params);
   void OnFailedNavigation(const CommonNavigationParams& common_params,
                           const RequestNavigationParams& request_params,
                           bool has_stale_copy_in_cache,
@@ -1059,7 +1069,7 @@ class CONTENT_EXPORT RenderFrameImpl
   // the current code path and the browser-side navigation path (in
   // development). Currently used by OnNavigate, with all *NavigationParams
   // provided by the browser. |stream_params| should be null.
-  // PlzNavigate: used by OnCommitNavigation, with |common_params| and
+  // PlzNavigate: used by CommitNavigation, with |common_params| and
   // |request_params| received by the browser. |stream_params| should be non
   // null and created from the information provided by the browser.
   // |start_params| is not used.
@@ -1209,6 +1219,10 @@ class CONTENT_EXPORT RenderFrameImpl
   void BindWidget(mojom::WidgetRequest request);
 
   void ShowDeferredContextMenu(const ContextMenuParams& params);
+
+  mojom::URLLoaderFactory* custom_url_loader_factory() {
+    return custom_url_loader_factory_.get();
+  }
 
   // Stores the WebLocalFrame we are associated with.  This is null from the
   // constructor until BindToFrame() is called, and it is null after
@@ -1454,6 +1468,8 @@ class CONTENT_EXPORT RenderFrameImpl
   mojo::AssociatedBinding<mojom::HostZoom> host_zoom_binding_;
   mojo::AssociatedBinding<mojom::FrameBindingsControl>
       frame_bindings_control_binding_;
+  mojo::AssociatedBinding<mojom::FrameNavigationControl>
+      frame_navigation_control_binding_;
   mojom::FrameHostInterfaceBrokerPtr frame_host_interface_broker_;
 
   // Indicates whether |didAccessInitialDocument| was called.

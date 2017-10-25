@@ -116,7 +116,7 @@ IDBDatabase::~IDBDatabase() {
     backend_->Close();
 }
 
-DEFINE_TRACE(IDBDatabase) {
+void IDBDatabase::Trace(blink::Visitor* visitor) {
   visitor->Trace(version_change_transaction_);
   visitor->Trace(transactions_);
   visitor->Trace(observers_);
@@ -126,7 +126,7 @@ DEFINE_TRACE(IDBDatabase) {
   ContextLifecycleObserver::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(IDBDatabase) {
+void IDBDatabase::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   for (const auto& observer : observers_.Values()) {
     visitor->TraceWrappers(observer);
   }
@@ -308,7 +308,7 @@ IDBObjectStore* IDBDatabase::createObjectStore(
   backend_->CreateObjectStore(version_change_transaction_->Id(),
                               object_store_id, name, key_path, auto_increment);
 
-  RefPtr<IDBObjectStoreMetadata> store_metadata =
+  scoped_refptr<IDBObjectStoreMetadata> store_metadata =
       WTF::AdoptRef(new IDBObjectStoreMetadata(
           name, object_store_id, key_path, auto_increment,
           WebIDBDatabase::kMinimumIndexId));
@@ -559,7 +559,7 @@ void IDBDatabase::RevertObjectStoreCreation(int64_t object_store_id) {
 }
 
 void IDBDatabase::RevertObjectStoreMetadata(
-    RefPtr<IDBObjectStoreMetadata> old_metadata) {
+    scoped_refptr<IDBObjectStoreMetadata> old_metadata) {
   DCHECK(version_change_transaction_) << "Object store metadata reverted on "
                                          "database without a versionchange "
                                          "transaction";

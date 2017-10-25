@@ -17,6 +17,7 @@
 #include "content/browser/service_worker/service_worker_database.pb.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "third_party/leveldatabase/src/include/leveldb/write_batch.h"
 #include "url/origin.h"
@@ -650,7 +651,8 @@ TEST(ServiceWorkerDatabaseTest, Registration_Basic) {
   EXPECT_EQ(ServiceWorkerDatabase::STATUS_OK,
             database->WriteRegistration(
                 data, resources, &deleted_version, &newly_purgeable_resources));
-  EXPECT_EQ(kInvalidServiceWorkerVersionId, deleted_version.version_id);
+  EXPECT_EQ(blink::mojom::kInvalidServiceWorkerVersionId,
+            deleted_version.version_id);
   EXPECT_TRUE(newly_purgeable_resources.empty());
 
   // Make sure that the registration and resource records are stored.
@@ -726,7 +728,8 @@ TEST(ServiceWorkerDatabaseTest, DeleteNonExistentRegistration) {
   EXPECT_EQ(ServiceWorkerDatabase::STATUS_OK,
             database->WriteRegistration(
                 data, resources, &deleted_version, &newly_purgeable_resources));
-  EXPECT_EQ(kInvalidServiceWorkerVersionId, deleted_version.version_id);
+  EXPECT_EQ(blink::mojom::kInvalidServiceWorkerVersionId,
+            deleted_version.version_id);
   EXPECT_TRUE(newly_purgeable_resources.empty());
 
   // Delete from an origin that has a registration.
@@ -737,7 +740,8 @@ TEST(ServiceWorkerDatabaseTest, DeleteNonExistentRegistration) {
                                          origin,
                                          &deleted_version,
                                          &newly_purgeable_resources));
-  EXPECT_EQ(kInvalidServiceWorkerVersionId, deleted_version.version_id);
+  EXPECT_EQ(blink::mojom::kInvalidServiceWorkerVersionId,
+            deleted_version.version_id);
   EXPECT_TRUE(newly_purgeable_resources.empty());
 
   // Delete from an origin that has no registration.
@@ -748,7 +752,8 @@ TEST(ServiceWorkerDatabaseTest, DeleteNonExistentRegistration) {
                                          GURL("http://example.net"),
                                          &deleted_version,
                                          &newly_purgeable_resources));
-  EXPECT_EQ(kInvalidServiceWorkerVersionId, deleted_version.version_id);
+  EXPECT_EQ(blink::mojom::kInvalidServiceWorkerVersionId,
+            deleted_version.version_id);
   EXPECT_TRUE(newly_purgeable_resources.empty());
 }
 
@@ -764,7 +769,7 @@ TEST(ServiceWorkerDatabaseTest, Registration_Overwrite) {
   data.resources_total_size_bytes = 10 + 11;
   data.foreign_fetch_scopes.push_back(URL(origin, "/foo"));
   data.foreign_fetch_origins.push_back(
-      url::Origin(GURL("https://chromium.org")));
+      url::Origin::Create(GURL("https://chromium.org")));
   data.used_features = {124, 901, 1019};
 
   std::vector<Resource> resources1;
@@ -779,7 +784,8 @@ TEST(ServiceWorkerDatabaseTest, Registration_Overwrite) {
       ServiceWorkerDatabase::STATUS_OK,
       database->WriteRegistration(
           data, resources1, &deleted_version, &newly_purgeable_resources));
-  EXPECT_EQ(kInvalidServiceWorkerVersionId, deleted_version.version_id);
+  EXPECT_EQ(blink::mojom::kInvalidServiceWorkerVersionId,
+            deleted_version.version_id);
   EXPECT_TRUE(newly_purgeable_resources.empty());
 
   // Make sure that the registration and resource records are stored.
@@ -797,7 +803,7 @@ TEST(ServiceWorkerDatabaseTest, Registration_Overwrite) {
   updated_data.resources_total_size_bytes = 12 + 13;
   updated_data.foreign_fetch_scopes.clear();
   updated_data.foreign_fetch_origins.push_back(
-      url::Origin(GURL("https://example.com")));
+      url::Origin::Create(GURL("https://example.com")));
   updated_data.used_features = {109, 421, 9101};
   std::vector<Resource> resources2;
   resources2.push_back(CreateResource(3, URL(origin, "/resource3"), 12));
@@ -957,7 +963,8 @@ TEST(ServiceWorkerDatabaseTest, Registration_UninitializedDatabase) {
   EXPECT_EQ(ServiceWorkerDatabase::STATUS_OK,
             database->DeleteRegistration(
                 100, origin, &deleted_version, &newly_purgeable_resources));
-  EXPECT_EQ(kInvalidServiceWorkerVersionId, deleted_version.version_id);
+  EXPECT_EQ(blink::mojom::kInvalidServiceWorkerVersionId,
+            deleted_version.version_id);
   EXPECT_TRUE(newly_purgeable_resources.empty());
 
   // Actually create a new database, but not initialized yet.
@@ -978,7 +985,8 @@ TEST(ServiceWorkerDatabaseTest, Registration_UninitializedDatabase) {
   EXPECT_EQ(ServiceWorkerDatabase::STATUS_OK,
             database->DeleteRegistration(
                 100, origin, &deleted_version, &newly_purgeable_resources));
-  EXPECT_EQ(kInvalidServiceWorkerVersionId, deleted_version.version_id);
+  EXPECT_EQ(blink::mojom::kInvalidServiceWorkerVersionId,
+            deleted_version.version_id);
   EXPECT_TRUE(newly_purgeable_resources.empty());
 }
 

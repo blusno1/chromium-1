@@ -30,7 +30,6 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
 #include "platform/exported/WrappedResourceResponse.h"
-#include "platform/http_names.h"
 #include "platform/loader/SubresourceIntegrity.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
@@ -38,6 +37,7 @@
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/network/NetworkUtils.h"
+#include "platform/network/http_names.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -68,10 +68,11 @@ class SRIBytesConsumer final : public BytesConsumer {
     DCHECK(underlying_);
     return underlying_->EndRead(read_size);
   }
-  RefPtr<BlobDataHandle> DrainAsBlobDataHandle(BlobSizePolicy policy) override {
+  scoped_refptr<BlobDataHandle> DrainAsBlobDataHandle(
+      BlobSizePolicy policy) override {
     return underlying_ ? underlying_->DrainAsBlobDataHandle(policy) : nullptr;
   }
-  RefPtr<EncodedFormData> DrainAsFormData() override {
+  scoped_refptr<EncodedFormData> DrainAsFormData() override {
     return underlying_ ? underlying_->DrainAsFormData() : nullptr;
   }
   void SetClient(BytesConsumer::Client* client) override {
@@ -126,7 +127,7 @@ class SRIBytesConsumer final : public BytesConsumer {
     }
   }
 
-  DEFINE_INLINE_TRACE() {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(underlying_);
     visitor->Trace(client_);
     BytesConsumer::Trace(visitor);
@@ -156,7 +157,7 @@ class FetchManager::Loader final
   }
 
   ~Loader() override;
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   void DidReceiveRedirectTo(const KURL&) override;
   void DidReceiveResponse(unsigned long,
@@ -249,7 +250,7 @@ class FetchManager::Loader final
 
     bool IsFinished() const { return finished_; }
 
-    DEFINE_INLINE_TRACE() {
+    void Trace(blink::Visitor* visitor) {
       visitor->Trace(updater_);
       visitor->Trace(response_);
       visitor->Trace(loader_);
@@ -322,7 +323,7 @@ FetchManager::Loader::~Loader() {
   DCHECK(!loader_);
 }
 
-DEFINE_TRACE(FetchManager::Loader) {
+void FetchManager::Loader::Trace(blink::Visitor* visitor) {
   visitor->Trace(fetch_manager_);
   visitor->Trace(resolver_);
   visitor->Trace(request_);
@@ -648,7 +649,10 @@ void FetchManager::Loader::Dispose() {
   // Prevent notification
   fetch_manager_ = nullptr;
   if (loader_) {
-    loader_->Cancel();
+    if (request_->Keepalive())
+      loader_->Detach();
+    else
+      loader_->Cancel();
     loader_ = nullptr;
   }
   if (integrity_verifier_)
@@ -749,6 +753,17 @@ void FetchManager::Loader::PerformHTTPFetch() {
                                    ? WebURLRequest::ServiceWorkerMode::kNone
                                    : WebURLRequest::ServiceWorkerMode::kAll);
 
+  if (request_->Keepalive()) {
+    if (!WebCORS::IsCORSSafelistedMethod(request.HttpMethod()) ||
+        !WebCORS::ContainsOnlyCORSSafelistedOrForbiddenHeaders(
+            request.HttpHeaderFields())) {
+      PerformNetworkError(
+          "Preflight request for request with keepalive "
+          "specified is currently not supported");
+      return;
+    }
+    request.SetKeepalive(true);
+  }
   // "3. Append `Host`, ..."
   // FIXME: Implement this when the spec is fixed.
 
@@ -860,7 +875,7 @@ void FetchManager::OnLoaderFinished(Loader* loader) {
   loader->Dispose();
 }
 
-DEFINE_TRACE(FetchManager) {
+void FetchManager::Trace(blink::Visitor* visitor) {
   visitor->Trace(loaders_);
   ContextLifecycleObserver::Trace(visitor);
 }

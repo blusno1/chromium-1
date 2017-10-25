@@ -265,10 +265,6 @@ const base::Feature kUseNewMediaCache{"use-new-media-cache",
 const base::Feature kUseR16Texture{"use-r16-texture",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Correct video colors based on output display?
-const base::Feature kVideoColorManagement{"video-color-management",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Use SurfaceLayer instead of VideoLayer.
 const base::Feature kUseSurfaceLayerForVideo{"UseSurfaceLayerForVideo",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -283,6 +279,10 @@ const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
 const base::Feature kExternalClearKeyForTesting{
     "ExternalClearKeyForTesting", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables support of experimental CDM interface version(s). This is usually
+// used to enable new CDM interface support for testing while it's still in
+// development. This switch may not be used anywhere if there's no experimental
+// CDM interface being developed.
 const base::Feature kSupportExperimentalCdmInterface{
     "SupportExperimentalCdmInterface", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -358,6 +358,14 @@ std::string GetEffectiveAutoplayPolicy(const base::CommandLine& command_line) {
   return switches::autoplay::kNoUserGestureRequiredPolicy;
 #endif
 }
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+MEDIA_EXPORT bool IsAudioFocusDuckFlashEnabled() {
+  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+             switches::kEnableAudioFocus) ==
+         switches::kEnableAudioFocusDuckFlash;
+}
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 // Adds icons to the overflow menu on the native media controls.
 // For experiment: crbug.com/763301

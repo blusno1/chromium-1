@@ -50,11 +50,11 @@
 #include "core/loader/ThreadableLoader.h"
 #include "core/probe/CoreProbes.h"
 #include "modules/eventsource/EventSourceInit.h"
-#include "platform/http_names.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
+#include "platform/network/http_names.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/WebURLRequest.h"
@@ -334,7 +334,7 @@ void EventSource::OnMessageEvent(const AtomicString& event_type,
                                  const AtomicString& last_event_id) {
   MessageEvent* e = MessageEvent::Create();
   e->initMessageEvent(event_type, false, false, data, event_stream_origin_,
-                      last_event_id, 0, nullptr);
+                      last_event_id, nullptr, nullptr);
 
   probe::willDispatchEventSourceEvent(GetExecutionContext(), this, event_type,
                                       last_event_id, data);
@@ -364,7 +364,7 @@ bool EventSource::HasPendingActivity() const {
   return state_ != kClosed;
 }
 
-DEFINE_TRACE(EventSource) {
+void EventSource::Trace(blink::Visitor* visitor) {
   visitor->Trace(parser_);
   visitor->Trace(loader_);
   EventTargetWithInlineData::Trace(visitor);

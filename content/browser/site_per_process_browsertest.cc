@@ -26,6 +26,8 @@
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/pattern.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
@@ -744,7 +746,7 @@ class SitePerProcessFeaturePolicyBrowserTest
     result[0].matches_all_origins = false;
     DCHECK(!origins.empty());
     for (const GURL& origin : origins)
-      result[0].origins.push_back(url::Origin(origin));
+      result[0].origins.push_back(url::Origin::Create(origin));
     return result;
   }
 
@@ -977,7 +979,9 @@ class InputEventAckWaiter
         desired_ack_type_received_(false) {}
   ~InputEventAckWaiter() override {}
 
-  void OnInputEventAck(const blink::WebInputEvent& event) override {
+  void OnInputEventAck(InputEventAckSource source,
+                       InputEventAckState state,
+                       const blink::WebInputEvent& event) override {
     if (event.GetType() == ack_type_waiting_for_) {
       desired_ack_type_received_ = true;
       if (message_loop_runner_->loop_running())
@@ -1342,14 +1346,26 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
   gesture_event.data.scroll_begin.delta_y_hint = 6.0f;
   rwhv_nested->GetRenderWidgetHost()->ForwardGestureEvent(gesture_event);
 
-  gesture_event.SetType(blink::WebGestureEvent::kGestureScrollUpdate);
+  gesture_event =
+      blink::WebGestureEvent(blink::WebGestureEvent::kGestureScrollUpdate,
+                             blink::WebInputEvent::kNoModifiers,
+                             blink::WebInputEvent::kTimeStampForTesting);
+  gesture_event.source_device = blink::kWebGestureDeviceTouchpad;
+  gesture_event.x = 1;
+  gesture_event.y = 1;
   gesture_event.data.scroll_update.delta_x = 0.0f;
   gesture_event.data.scroll_update.delta_y = 6.0f;
   gesture_event.data.scroll_update.velocity_x = 0;
   gesture_event.data.scroll_update.velocity_y = 0;
   rwhv_nested->GetRenderWidgetHost()->ForwardGestureEvent(gesture_event);
 
-  gesture_event.SetType(blink::WebGestureEvent::kGestureScrollEnd);
+  gesture_event =
+      blink::WebGestureEvent(blink::WebGestureEvent::kGestureScrollEnd,
+                             blink::WebInputEvent::kNoModifiers,
+                             blink::WebInputEvent::kTimeStampForTesting);
+  gesture_event.source_device = blink::kWebGestureDeviceTouchpad;
+  gesture_event.x = 1;
+  gesture_event.y = 1;
   rwhv_nested->GetRenderWidgetHost()->ForwardGestureEvent(gesture_event);
 
   filter->Wait();
@@ -1601,6 +1617,79 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
     rwhv_nested->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
     scroll_observer->Wait();
   }
+}
+
+// This test verifies that scrolling an element to view works across OOPIFs.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollElementIntoView) {
+  GURL url_domain_a(
+      embedded_test_server()->GetURL("a.com", "/bounding_rect_for_frame.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url_domain_a));
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+
+  GURL url_domain_b(
+      embedded_test_server()->GetURL("b.com", "/bounding_rect_for_frame.html"));
+  NavigateFrameToURL(root->child_at(0), url_domain_b);
+
+  GURL url_domain_c(embedded_test_server()->GetURL("c.com", "/title1.html"));
+  NavigateFrameToURL(root->child_at(0)->child_at(0), url_domain_c);
+
+  RenderFrameHostImpl* main_frame = root->current_frame_host();
+  RenderFrameHostImpl* child_frame_b = root->child_at(0)->current_frame_host();
+  RenderFrameHostImpl* child_frame_c =
+      root->child_at(0)->child_at(0)->current_frame_host();
+
+  // Helper function which returns the view bounds for a given frame. It applies
+  // page scale factor on the main frame when needed.
+  auto get_view_bounds_for_frame = [&](RenderFrameHostImpl* frame) {
+#if defined(OS_ANDROID)
+    if (frame == web_contents()->GetMainFrame()) {
+      // On Android page scale factor is not 1.0 and RWHVAndroid's view bounds
+      // always start off at (0, 0) and scaled. To make it comparable with the
+      // bounds from child frames remove the scaling.
+      return gfx::Rect(gfx::ScaleToRoundedSize(
+          web_contents()->GetRenderWidgetHostView()->GetViewBounds().size(),
+          1 / GetPageScaleFactor(shell())));
+    }
+#endif
+    return frame->GetView()->GetViewBounds();
+  };
+
+  // Helper function which returns true if the view bounds of the given frames
+  // intersect.
+  auto are_intersecting_views = [&](RenderFrameHostImpl* frame_a,
+                                    RenderFrameHostImpl* frame_b) {
+    return get_view_bounds_for_frame(frame_a).Intersects(
+        get_view_bounds_for_frame(frame_b));
+  };
+
+  // Wait until <iframe> 'b' is not visible (in main frame).
+  while (are_intersecting_views(main_frame, child_frame_b)) {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+  }
+
+  // Sanity check: <iframe> 'c' should not be visible either.
+  EXPECT_FALSE(are_intersecting_views(main_frame, child_frame_c));
+
+  // Scroll the inner most frame's body into view.
+  EXPECT_TRUE(ExecuteScript(child_frame_c, "document.body.scrollIntoView();"));
+
+  // Wait until <iframe> 'c' is in view bounds of parent frame and therefore
+  // visible.
+  while (!are_intersecting_views(main_frame, child_frame_c)) {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+  }
+
+  // Sanity check: <iframe> 'b' should also be visible inside parent frame.
+  EXPECT_TRUE(are_intersecting_views(main_frame, child_frame_b));
+
+  // Sanity check: <iframe> 'c' should be visible inside <iframe> 'b'.
+  EXPECT_TRUE(are_intersecting_views(child_frame_b, child_frame_c));
 }
 
 #if defined(USE_AURA) || defined(OS_ANDROID)

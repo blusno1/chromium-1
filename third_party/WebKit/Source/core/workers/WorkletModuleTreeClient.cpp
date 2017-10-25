@@ -14,7 +14,7 @@ namespace blink {
 
 WorkletModuleTreeClient::WorkletModuleTreeClient(
     Modulator* modulator,
-    RefPtr<WebTaskRunner> outside_settings_task_runner,
+    scoped_refptr<WebTaskRunner> outside_settings_task_runner,
     WorkletPendingTasks* pending_tasks)
     : modulator_(modulator),
       outside_settings_task_runner_(std::move(outside_settings_task_runner)),
@@ -54,7 +54,7 @@ void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
                       WrapCrossThreadPersistent(pending_tasks_.Get())));
 };
 
-DEFINE_TRACE(WorkletModuleTreeClient) {
+void WorkletModuleTreeClient::Trace(blink::Visitor* visitor) {
   visitor->Trace(modulator_);
   ModuleTreeClient::Trace(visitor);
 }

@@ -85,7 +85,7 @@ HTMLVideoElement* HTMLVideoElement::Create(Document& document) {
   return video;
 }
 
-DEFINE_TRACE(HTMLVideoElement) {
+void HTMLVideoElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(image_loader_);
   visitor->Trace(custom_controls_fullscreen_detector_);
   visitor->Trace(remoting_interstitial_);
@@ -180,8 +180,11 @@ void HTMLVideoElement::ParseAttribute(
         image_loader_ = HTMLImageLoader::Create(this);
       image_loader_->UpdateFromElement(ImageLoader::kUpdateIgnorePreviousError);
     } else {
-      if (GetLayoutObject())
-        ToLayoutImage(GetLayoutObject())->ImageResource()->SetImageResource(0);
+      if (GetLayoutObject()) {
+        ToLayoutImage(GetLayoutObject())
+            ->ImageResource()
+            ->SetImageResource(nullptr);
+      }
     }
     // Notify the player when the poster image URL changes.
     if (GetWebMediaPlayer())
@@ -436,7 +439,7 @@ KURL HTMLVideoElement::PosterImageURL() const {
   return GetDocument().CompleteURL(url);
 }
 
-RefPtr<Image> HTMLVideoElement::GetSourceImageForCanvas(
+scoped_refptr<Image> HTMLVideoElement::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint,
     SnapshotReason,
@@ -458,7 +461,7 @@ RefPtr<Image> HTMLVideoElement::GetSourceImageForCanvas(
 
   PaintCurrentFrame(image_buffer->Canvas(),
                     IntRect(IntPoint(0, 0), intrinsic_size), nullptr);
-  RefPtr<Image> snapshot = image_buffer->NewImageSnapshot();
+  scoped_refptr<Image> snapshot = image_buffer->NewImageSnapshot();
   if (!snapshot) {
     *status = kInvalidSourceImageStatus;
     return nullptr;

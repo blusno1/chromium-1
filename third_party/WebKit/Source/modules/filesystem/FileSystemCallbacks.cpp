@@ -143,7 +143,7 @@ ScriptErrorCallback* ScriptErrorCallback::Wrap(ErrorCallback* callback) {
   return new ScriptErrorCallback(callback);
 }
 
-DEFINE_TRACE(ScriptErrorCallback) {
+void ScriptErrorCallback::Trace(blink::Visitor* visitor) {
   ErrorCallbackBase::Trace(visitor);
   visitor->Trace(callback_);
 }
@@ -388,7 +388,7 @@ SnapshotFileCallback::SnapshotFileCallback(DOMFileSystemBase* filesystem,
 
 void SnapshotFileCallback::DidCreateSnapshotFile(
     const FileMetadata& metadata,
-    RefPtr<BlobDataHandle> snapshot) {
+    scoped_refptr<BlobDataHandle> snapshot) {
   if (!success_callback_)
     return;
 

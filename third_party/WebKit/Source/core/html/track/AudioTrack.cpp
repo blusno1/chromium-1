@@ -18,7 +18,8 @@ AudioTrack::AudioTrack(const String& id,
 
 AudioTrack::~AudioTrack() {}
 
-DEFINE_TRACE(AudioTrack) {
+void AudioTrack::Trace(blink::Visitor* visitor) {
+  ScriptWrappable::Trace(visitor);
   TrackBase::Trace(visitor);
 }
 

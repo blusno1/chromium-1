@@ -33,15 +33,16 @@ class ServiceWorkerFetchDispatcher;
 struct ServiceWorkerResponse;
 class ServiceWorkerVersion;
 
+// S13nServiceWorker:
 // ServiceWorkerURLLoaderJob works similar to ServiceWorkerURLRequestJob
-// but with mojom::URLLoader instead of URLRequest, and used only when
-// --enable-network-service and PlzNavigate is enabled.
+// but with mojom::URLLoader instead of URLRequest.
 // This also works as a URLLoaderClient for BlobURLLoader while reading
 // the blob content returned by SW.
 class CONTENT_EXPORT ServiceWorkerURLLoaderJob : public mojom::URLLoader,
                                                  public mojom::URLLoaderClient {
  public:
   using Delegate = ServiceWorkerURLJobWrapper::Delegate;
+  using ResponseType = ServiceWorkerResponseType;
 
   // Created by ServiceWorkerControlleeRequestHandler::MaybeCreateLoader
   // when starting to load a page for navigation.
@@ -101,7 +102,7 @@ class CONTENT_EXPORT ServiceWorkerURLLoaderJob : public mojom::URLLoader,
       ServiceWorkerFetchEventResult fetch_result,
       const ServiceWorkerResponse& response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-      storage::mojom::BlobPtr body_as_blob,
+      blink::mojom::BlobPtr body_as_blob,
       const scoped_refptr<ServiceWorkerVersion>& version);
 
   // Used as the StartLoaderCallback passed to |loader_callback_| when the
@@ -111,7 +112,7 @@ class CONTENT_EXPORT ServiceWorkerURLLoaderJob : public mojom::URLLoader,
   void StartResponse(const ServiceWorkerResponse& response,
                      scoped_refptr<ServiceWorkerVersion> version,
                      blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-                     storage::mojom::BlobPtr body_as_blob,
+                     blink::mojom::BlobPtr body_as_blob,
                      mojom::URLLoaderRequest request,
                      mojom::URLLoaderClientPtr client);
 
@@ -154,7 +155,7 @@ class CONTENT_EXPORT ServiceWorkerURLLoaderJob : public mojom::URLLoader,
       mojo::ScopedDataPipeConsumerHandle body) override;
   void OnComplete(const ResourceRequestCompletionStatus& status) override;
 
-  ServiceWorkerResponseType response_type_ = NOT_DETERMINED;
+  ResponseType response_type_ = ResponseType::NOT_DETERMINED;
   LoaderCallback loader_callback_;
 
   Delegate* delegate_;

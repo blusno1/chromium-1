@@ -11,7 +11,7 @@ namespace blink {
 
 // See http://www.whatwg.org/specs/web-apps/current-work/#attr-iframe-sandbox
 // for a list of the sandbox flags.  This enum should be kept in sync with
-// Source/core/dom/SandboxFlags.h.  Enforced in AssertMatchingEnums.cpp
+// Source/core/dom/SandboxFlags.h, as enforced in SandboxFlags.cpp.
 enum class WebSandboxFlags : int {
   kNone = 0,
   kNavigation = 1,
@@ -27,15 +27,19 @@ enum class WebSandboxFlags : int {
   kOrientationLock = 1 << 10,
   kPropagatesToAuxiliaryBrowsingContexts = 1 << 11,
   kModals = 1 << 12,
+  kPresentationController = 1 << 13,
+  kTopNavigationByUserActivation = 1 << 14,
   kAll = -1
 };
 
-inline WebSandboxFlags operator&(WebSandboxFlags a, WebSandboxFlags b) {
+inline constexpr WebSandboxFlags operator&(WebSandboxFlags a,
+                                           WebSandboxFlags b) {
   return static_cast<WebSandboxFlags>(static_cast<int>(a) &
                                       static_cast<int>(b));
 }
 
-inline WebSandboxFlags operator|(WebSandboxFlags a, WebSandboxFlags b) {
+inline constexpr WebSandboxFlags operator|(WebSandboxFlags a,
+                                           WebSandboxFlags b) {
   return static_cast<WebSandboxFlags>(static_cast<int>(a) |
                                       static_cast<int>(b));
 }
@@ -44,7 +48,7 @@ inline WebSandboxFlags& operator|=(WebSandboxFlags& a, WebSandboxFlags b) {
   return a = a | b;
 }
 
-inline WebSandboxFlags operator~(WebSandboxFlags flags) {
+inline constexpr WebSandboxFlags operator~(WebSandboxFlags flags) {
   return static_cast<WebSandboxFlags>(~static_cast<int>(flags));
 }
 

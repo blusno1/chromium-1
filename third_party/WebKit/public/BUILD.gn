@@ -142,7 +142,6 @@ source_set("blink_headers") {
     "platform/WebBlobRegistry.h",
     "platform/WebBrowserControlsState.h",
     "platform/WebCache.h",
-    "platform/WebCachePolicy.h",
     "platform/WebCallbacks.h",
     "platform/WebCanvas.h",
     "platform/WebCanvasCaptureHandler.h",
@@ -314,6 +313,7 @@ source_set("blink_headers") {
     "platform/WebRTCVoidRequest.h",
     "platform/WebRect.h",
     "platform/WebReferrerPolicy.h",
+    "platform/WebRemoteScrollProperties.h",
     "platform/WebRenderingStats.h",
     "platform/WebRuntimeFeatures.h",
     "platform/WebScreenInfo.h",
@@ -363,6 +363,7 @@ source_set("blink_headers") {
     "platform/WebURLLoadTiming.h",
     "platform/WebURLLoader.h",
     "platform/WebURLLoaderClient.h",
+    "platform/WebURLLoaderFactory.h",
     "platform/WebURLLoaderMockFactory.h",
     "platform/WebURLLoaderTestDelegate.h",
     "platform/WebURLRequest.h",
@@ -567,6 +568,7 @@ source_set("blink_headers") {
     "web/WebPopupMenuInfo.h",
     "web/WebPopupType.h",
     "web/WebPrerendererClient.h",
+    "web/WebPresentationReceiverFlags.h",
     "web/WebPrintParams.h",
     "web/WebPrintPresetOptions.h",
     "web/WebPrintScalingOption.h",
@@ -766,10 +768,12 @@ mojom("mojo_bindings") {
     "//chrome/common:mojo_bindings_blink",
     "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/platform/loader",
+    "//third_party/WebKit/Source/platform/network",
   ]
   sources = [
     "platform/address_space.mojom",
     "platform/content_security_policy.mojom",
+    "platform/dedicated_worker_factory.mojom",
     "platform/display_mode.mojom",
     "platform/media_download_in_product_help.mojom",
     "platform/media_engagement.mojom",
@@ -794,6 +798,7 @@ mojom("mojo_bindings") {
     "platform/modules/presentation/presentation.mojom",
     "platform/modules/serviceworker/service_worker_error_type.mojom",
     "platform/modules/serviceworker/service_worker_event_status.mojom",
+    "platform/modules/serviceworker/service_worker_object.mojom",
     "platform/modules/serviceworker/service_worker_registration.mojom",
     "platform/modules/serviceworker/service_worker_state.mojom",
     "platform/modules/serviceworker/service_worker_stream_handle.mojom",
@@ -816,17 +821,15 @@ mojom("mojo_bindings") {
     "//device/screen_orientation/public/interfaces",
     "//mojo/common:common_custom_types",
     "//services/network/public/interfaces:interfaces",
-    "//storage/public/interfaces",
+    "//services/service_manager/public/interfaces",
+    "//third_party/WebKit/common:mojo_platform_bindings",
     "//ui/gfx/geometry/mojo",
     "//url/mojo:url_mojom_gurl",
     "//url/mojo:url_mojom_origin",
   ]
 
-  # //storage/public/interfaces is configured to be exported
-  # as STORAGE_COMMON, so override the dependencies to make it
-  # depend via //storage/common.
-  overridden_deps = [ "//storage/public/interfaces" ]
-  component_deps = [ "//storage/common" ]
+  overridden_deps = [ "//third_party/WebKit/common:mojo_platform_bindings" ]
+  component_deps = [ "//third_party/WebKit/common:blink_common" ]
 
   component_output_prefix = "blink_mojo_bindings"
 
@@ -914,6 +917,9 @@ mojom("core_mojo_bindings") {
     "//third_party/WebKit/common:mojo_bindings",
     "//url/mojo:url_mojom_origin",
   ]
+
+  overridden_deps = [ "//third_party/WebKit/common:mojo_bindings" ]
+  component_deps = [ "//third_party/WebKit/common:blink_common" ]
 
   component_output_prefix = "blink_core_mojo_bindings"
 

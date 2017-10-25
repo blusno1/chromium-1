@@ -14,8 +14,7 @@
 #include "components/prefs/pref_store.h"
 
 PrefRegistry::PrefRegistry()
-    : defaults_(new DefaultPrefStore()) {
-}
+    : defaults_(base::MakeRefCounted<DefaultPrefStore>()) {}
 
 PrefRegistry::~PrefRegistry() {
 }
@@ -23,9 +22,7 @@ PrefRegistry::~PrefRegistry() {
 uint32_t PrefRegistry::GetRegistrationFlags(
     const std::string& pref_name) const {
   const auto& it = registration_flags_.find(pref_name);
-  if (it == registration_flags_.end())
-    return NO_REGISTRATION_FLAGS;
-  return it->second;
+  return it != registration_flags_.end() ? it->second : NO_REGISTRATION_FLAGS;
 }
 
 scoped_refptr<PrefStore> PrefRegistry::defaults() {
@@ -41,15 +38,15 @@ PrefRegistry::const_iterator PrefRegistry::end() const {
 }
 
 void PrefRegistry::SetDefaultPrefValue(const std::string& pref_name,
-                                       base::Value* value) {
-  DCHECK(value);
-  const base::Value* current_value = NULL;
+                                       base::Value value) {
+  const base::Value* current_value = nullptr;
   DCHECK(defaults_->GetValue(pref_name, &current_value))
       << "Setting default for unregistered pref: " << pref_name;
-  DCHECK(value->IsType(current_value->type()))
+  DCHECK(value.IsType(current_value->type()))
       << "Wrong type for new default: " << pref_name;
 
-  defaults_->ReplaceDefaultValue(pref_name, base::WrapUnique(value));
+  defaults_->ReplaceDefaultValue(
+      pref_name, std::make_unique<base::Value>(std::move(value)));
 }
 
 void PrefRegistry::SetDefaultForeignPrefValue(
@@ -69,8 +66,8 @@ void PrefRegistry::RegisterPreference(
   DCHECK(orig_type != base::Value::Type::NONE &&
          orig_type != base::Value::Type::BINARY) <<
          "invalid preference type: " << orig_type;
-  DCHECK(!defaults_->GetValue(path, NULL)) <<
-      "Trying to register a previously registered pref: " << path;
+  DCHECK(!defaults_->GetValue(path, nullptr))
+      << "Trying to register a previously registered pref: " << path;
   DCHECK(!base::ContainsKey(registration_flags_, path))
       << "Trying to register a previously registered pref: " << path;
 

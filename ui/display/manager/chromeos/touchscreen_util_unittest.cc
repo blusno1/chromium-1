@@ -48,17 +48,16 @@ class TouchscreenUtilTest : public testing::Test {
   void SetUp() override {
     // Recreate for each test, DisplayManager has a lot of state.
     display_manager_ =
-        base::MakeUnique<DisplayManager>(base::MakeUnique<ScreenBase>());
+        std::make_unique<DisplayManager>(std::make_unique<ScreenBase>());
 
     // Internal display will always match to internal touchscreen. If internal
     // touchscreen can't be detected, it is then associated to a touch screen
     // with matching size.
     {
       ManagedDisplayInfo display(1, "1", false);
-      scoped_refptr<ManagedDisplayMode> mode(new ManagedDisplayMode(
+      const ManagedDisplayMode mode(
           gfx::Size(1920, 1080), 60.0, false /* interlaced */,
-          true /* native */, 1.0 /* ui_scale */,
-          1.0 /* device_scale_factor */));
+          true /* native */, 1.0 /* ui_scale */, 1.0 /* device_scale_factor */);
       ManagedDisplayInfo::ManagedDisplayModeList modes(1, mode);
       display.SetManagedDisplayModes(modes);
       displays_.push_back(display);
@@ -67,9 +66,9 @@ class TouchscreenUtilTest : public testing::Test {
     {
       ManagedDisplayInfo display(2, "2", false);
 
-      scoped_refptr<ManagedDisplayMode> mode(new ManagedDisplayMode(
+      const ManagedDisplayMode mode(
           gfx::Size(800, 600), 60.0, false /* interlaced */, true /* native */,
-          1.0 /* ui_scale */, 1.0 /* device_scale_factor */));
+          1.0 /* ui_scale */, 1.0 /* device_scale_factor */);
       ManagedDisplayInfo::ManagedDisplayModeList modes(1, mode);
       display.SetManagedDisplayModes(modes);
       displays_.push_back(display);
@@ -84,10 +83,9 @@ class TouchscreenUtilTest : public testing::Test {
     {
       ManagedDisplayInfo display(4, "4", false);
 
-      scoped_refptr<ManagedDisplayMode> mode(new ManagedDisplayMode(
+      const ManagedDisplayMode mode(
           gfx::Size(1024, 768), 60.0, false /* interlaced */,
-          /* native */ true, 1.0 /* ui_scale */,
-          1.0 /* device_scale_factor */));
+          /* native */ true, 1.0 /* ui_scale */, 1.0 /* device_scale_factor */);
       ManagedDisplayInfo::ManagedDisplayModeList modes(1, mode);
       display.SetManagedDisplayModes(modes);
       displays_.push_back(display);

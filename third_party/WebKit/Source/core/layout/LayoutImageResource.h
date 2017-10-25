@@ -53,10 +53,14 @@ class LayoutImageResource
   void ResetAnimation();
   bool MaybeAnimated() const;
 
-  virtual RefPtr<Image> GetImage(const IntSize&) const;
+  virtual scoped_refptr<Image> GetImage(const IntSize&) const;
   virtual bool ErrorOccurred() const {
     return cached_image_ && cached_image_->ErrorOccurred();
   }
+
+  // Replace the resource this object references with a reference to
+  // the "broken image".
+  void UseBrokenImage();
 
   virtual bool ImageHasRelativeSize() const {
     return cached_image_ ? cached_image_->ImageHasRelativeSize() : false;
@@ -66,10 +70,16 @@ class LayoutImageResource
 
   virtual WrappedImagePtr ImagePtr() const { return cached_image_.Get(); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->Trace(cached_image_); }
+  virtual void Trace(blink::Visitor* visitor) { visitor->Trace(cached_image_); }
 
  protected:
   LayoutImageResource();
+
+  // Device scale factor for the associated LayoutObject.
+  float DeviceScaleFactor() const;
+  // Returns an image based on the passed device scale factor.
+  static Image* BrokenImage(float device_scale_factor);
+
   LayoutObject* layout_object_;
   Member<ImageResourceContent> cached_image_;
 };

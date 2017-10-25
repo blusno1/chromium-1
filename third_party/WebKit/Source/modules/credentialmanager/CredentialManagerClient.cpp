@@ -18,7 +18,7 @@ CredentialManagerClient::CredentialManagerClient(
 
 CredentialManagerClient::~CredentialManagerClient() {}
 
-DEFINE_TRACE(CredentialManagerClient) {
+void CredentialManagerClient::Trace(blink::Visitor* visitor) {
   visitor->Trace(authentication_client_);
   Supplement<Page>::Trace(visitor);
 }
@@ -33,7 +33,7 @@ CredentialManagerClient* CredentialManagerClient::From(
     ExecutionContext* execution_context) {
   if (!execution_context->IsDocument() ||
       !ToDocument(execution_context)->GetPage())
-    return 0;
+    return nullptr;
   return From(ToDocument(execution_context)->GetPage());
 }
 

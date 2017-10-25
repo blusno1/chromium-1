@@ -62,8 +62,8 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   }
 
   ~ScriptLoader() override;
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   enum LegacyTypeSupport {
     kDisallowLegacyTypeInTypeAttribute,
@@ -103,8 +103,6 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   bool WillExecuteWhenDocumentFinishedParsing() const {
     return will_execute_when_document_finished_parsing_;
   }
-  ScriptResource* GetResource() { return resource_.Get(); }
-
   void SetHaveFiredLoadEvent(bool have_fired_load) {
     have_fired_load_ = have_fired_load;
   }

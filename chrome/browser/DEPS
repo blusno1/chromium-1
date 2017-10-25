@@ -63,6 +63,7 @@ include_rules = [
   "+third_party/boringssl/src/include",
   "+third_party/crashpad",
   "+third_party/cros_system_api",
+  "+third_party/metrics_proto",
 
   # Code under //ash runs out-of-process under mustash (chrome --mash) so it
   # must be accessed via mojo interfaces in //ash/public/interfaces. See
@@ -148,6 +149,7 @@ include_rules = [
   "+third_party/WebKit/public/web/WebFindOptions.h",
   "+third_party/WebKit/public/web/WebMediaPlayerAction.h",
   "+third_party/WebKit/public/web/WebPluginAction.h",
+  "+third_party/WebKit/public/web/WebPresentationReceiverFlags.h",
   "+third_party/WebKit/public/web/WebTextDirection.h",
   "+third_party/WebKit/public/web/WebTriggeringEventInfo.h",
   "+third_party/WebKit/public/web/window_features.mojom.h",

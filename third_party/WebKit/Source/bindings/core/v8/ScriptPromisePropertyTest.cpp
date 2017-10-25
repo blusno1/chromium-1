@@ -88,7 +88,7 @@ class GarbageCollectedHolder : public GarbageCollectedScriptWrappable {
     return this;
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     GarbageCollectedScriptWrappable::Trace(visitor);
     visitor->Trace(property_);
   }
@@ -155,7 +155,7 @@ class ScriptPromisePropertyTestBase {
 
  private:
   std::unique_ptr<DummyPageHolder> page_;
-  RefPtr<ScriptState> other_script_state_;
+  scoped_refptr<ScriptState> other_script_state_;
 };
 
 // This is the main test class.

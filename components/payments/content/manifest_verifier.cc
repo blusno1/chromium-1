@@ -11,8 +11,8 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
-#include "components/payments/content/payment_manifest_parser_host.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
+#include "components/payments/content/utility/payment_manifest_parser.h"
 #include "components/payments/core/payment_manifest_downloader.h"
 #include "components/webdata/common/web_data_results.h"
 #include "url/gurl.h"
@@ -36,7 +36,7 @@ void EnableMethodManifestUrlForSupportedApps(
     const std::string app_origin_string = app_origin.Serialize();
     for (auto& app : *apps) {
       if (app_origin.IsSameOriginWith(
-              url::Origin(app.second->scope.GetOrigin()))) {
+              url::Origin::Create(app.second->scope.GetOrigin()))) {
         if (all_origins_supported ||
             std::find(supported_origin_strings.begin(),
                       supported_origin_strings.end(),
@@ -56,16 +56,14 @@ void EnableMethodManifestUrlForSupportedApps(
 
 ManifestVerifier::ManifestVerifier(
     std::unique_ptr<PaymentMethodManifestDownloaderInterface> downloader,
-    std::unique_ptr<PaymentManifestParserHost> parser,
+    std::unique_ptr<PaymentManifestParser> parser,
     scoped_refptr<PaymentManifestWebDataService> cache)
     : downloader_(std::move(downloader)),
       parser_(std::move(parser)),
       cache_(cache),
       number_of_manifests_to_verify_(0),
       number_of_manifests_to_download_(0),
-      weak_ptr_factory_(this) {
-  parser_->StartUtilityProcess();
-}
+      weak_ptr_factory_(this) {}
 
 ManifestVerifier::~ManifestVerifier() {
   for (const auto& handle : cache_request_handles_) {
@@ -107,8 +105,9 @@ void ManifestVerifier::Verify(content::PaymentAppProvider::PaymentApps apps,
       }
 
       // Same origin payment methods are always allowed.
-      url::Origin app_origin(app.second->scope.GetOrigin());
-      if (url::Origin(method_manifest_url.GetOrigin())
+      url::Origin app_origin =
+          url::Origin::Create(app.second->scope.GetOrigin());
+      if (url::Origin::Create(method_manifest_url.GetOrigin())
               .IsSameOriginWith(app_origin)) {
         verified_method_names.emplace_back(method);
         continue;

@@ -41,7 +41,7 @@ class CORE_EXPORT ClassicPendingScript final
   void SetStreamer(ScriptStreamer*);
   void StreamingFinished();
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   blink::ScriptType GetScriptType() const override {
     return blink::ScriptType::kClassic;
@@ -50,13 +50,12 @@ class CORE_EXPORT ClassicPendingScript final
   ClassicScript* GetSource(const KURL& document_url,
                            bool& error_occurred) const override;
   bool IsReady() const override;
-  bool IsExternal() const override { return GetResource(); }
+  bool IsExternal() const override { return is_external_; }
   bool ErrorOccurred() const override;
   bool WasCanceled() const override;
   bool StartStreamingIfPossible(ScriptStreamer::Type, WTF::Closure) override;
   bool IsCurrentlyStreaming() const override;
   KURL UrlForClassicScript() const override;
-  void RemoveFromMemoryCache() override;
   void DisposeInternal() override;
 
   void Prefinalize();
@@ -97,6 +96,7 @@ class CORE_EXPORT ClassicPendingScript final
   // MemoryCoordinatorClient
   void OnPurgeMemory() override;
 
+  const bool is_external_;
   ReadyState ready_state_;
   bool integrity_failure_;
 

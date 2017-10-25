@@ -17,10 +17,10 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/payments/content/content_payment_request_delegate.h"
 #include "components/payments/content/manifest_verifier.h"
-#include "components/payments/content/payment_manifest_parser_host.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/payment_response_helper.h"
 #include "components/payments/content/service_worker_payment_instrument.h"
+#include "components/payments/content/utility/payment_manifest_parser.h"
 #include "components/payments/core/autofill_payment_instrument.h"
 #include "components/payments/core/journey_logger.h"
 #include "components/payments/core/payment_instrument.h"
@@ -96,7 +96,7 @@ PaymentRequestState::PaymentRequestState(
         std::make_unique<payments::PaymentManifestDownloader>(
             content::BrowserContext::GetDefaultStoragePartition(context)
                 ->GetURLRequestContext()),
-        std::make_unique<payments::PaymentManifestParserHost>(),
+        std::make_unique<payments::PaymentManifestParser>(),
         payment_request_delegate_->GetPaymentManifestWebDataService());
     content::PaymentAppProvider::GetInstance()->GetAllPaymentApps(
         context, base::BindOnce(&PaymentRequestState::GetAllPaymentAppsCallback,
@@ -165,20 +165,6 @@ void PaymentRequestState::OnPaymentAppsVerifierFinishedUsingResources() {
 void PaymentRequestState::OnPaymentResponseReady(
     mojom::PaymentResponsePtr payment_response) {
   delegate_->OnPaymentResponseAvailable(std::move(payment_response));
-}
-
-void PaymentRequestState::OnAddressNormalized(
-    const autofill::AutofillProfile& normalized_profile) {
-  delegate_->OnShippingAddressSelected(
-      PaymentResponseHelper::GetMojomPaymentAddressFromAutofillProfile(
-          normalized_profile, app_locale_));
-}
-
-void PaymentRequestState::OnCouldNotNormalize(
-    const autofill::AutofillProfile& profile) {
-  // Since the phone number is formatted in either case, this profile should be
-  // used.
-  OnAddressNormalized(profile);
 }
 
 void PaymentRequestState::OnSpecUpdated() {
@@ -345,9 +331,11 @@ void PaymentRequestState::SetSelectedShippingProfile(
   // Use the country code from the profile if it is set, otherwise infer it
   // from the |app_locale_|.
   std::string country_code = autofill::data_util::GetCountryCodeWithFallback(
-      selected_shipping_profile_, app_locale_);
-  payment_request_delegate_->GetAddressNormalizer()->StartAddressNormalization(
-      *selected_shipping_profile_, country_code, /*timeout_seconds=*/2, this);
+      *selected_shipping_profile_, app_locale_);
+  payment_request_delegate_->GetAddressNormalizer()->NormalizeAddressAsync(
+      *selected_shipping_profile_, country_code, /*timeout_seconds=*/2,
+      base::BindOnce(&PaymentRequestState::OnAddressNormalized,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void PaymentRequestState::SetSelectedContactProfile(
@@ -507,6 +495,14 @@ bool PaymentRequestState::ArePaymentOptionsSatisfied() {
     return false;
 
   return profile_comparator()->IsContactInfoComplete(selected_contact_profile_);
+}
+
+void PaymentRequestState::OnAddressNormalized(
+    bool success,
+    const autofill::AutofillProfile& normalized_profile) {
+  delegate_->OnShippingAddressSelected(
+      PaymentResponseHelper::GetMojomPaymentAddressFromAutofillProfile(
+          normalized_profile, app_locale_));
 }
 
 }  // namespace payments

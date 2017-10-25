@@ -36,14 +36,11 @@ class MockQuicSession : public QuicSession {
   ~MockQuicSession() override {}
 
   // Writes outgoing data from QuicStream to a string.
-  QuicConsumedData WritevData(
-      QuicStream* stream,
-      QuicStreamId id,
-      QuicIOVector iovector,
-      QuicStreamOffset offset,
-      StreamSendingState state,
-      QuicReferenceCountedPointer<
-          QuicAckListenerInterface> /*ack_notifier_delegate*/) override {
+  QuicConsumedData WritevData(QuicStream* stream,
+                              QuicStreamId id,
+                              QuicIOVector iovector,
+                              QuicStreamOffset offset,
+                              StreamSendingState state) override {
     if (!writable_) {
       return QuicConsumedData(0, false);
     }
@@ -196,10 +193,6 @@ class QuartcStreamTest : public ::testing::Test,
 
   QuicRandom* GetRandomGenerator() override {
     return QuicRandom::GetInstance();
-  }
-
-  QuicBufferAllocator* GetStreamFrameBufferAllocator() override {
-    return &buffer_allocator_;
   }
 
   QuicBufferAllocator* GetStreamSendBufferAllocator() override {

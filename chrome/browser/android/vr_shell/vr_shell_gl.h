@@ -125,11 +125,17 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
   void InitializeRenderer();
   // Returns true if successfully resized.
   bool ResizeForWebVR(int16_t frame_index);
+  void UpdateSamples();
+  void UpdateEyeInfos(const gfx::Transform& head_pose,
+                      int viewport_offset,
+                      const gfx::Size& render_size,
+                      vr::RenderInfo* out_render_info);
   void DrawFrame(int16_t frame_index);
+  void DrawIntoAcquiredFrame(int16_t frame_index);
   void DrawFrameSubmitWhenReady(int16_t frame_index,
-                                gvr_frame* frame_ptr,
                                 const gfx::Transform& head_pose,
                                 std::unique_ptr<gl::GLFenceEGL> fence);
+  void DrawFrameSubmitNow(int16_t frame_index, const gfx::Transform& head_pose);
   bool ShouldDrawWebVr();
   void DrawWebVr();
   bool WebVrPoseByteIsValid(int pose_index_byte);
@@ -167,17 +173,13 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
 
   void OnContentFrameAvailable();
   void OnWebVRFrameAvailable();
-  void ScheduleWebVrFrameTimeout();
+  void ScheduleOrCancelWebVrFrameTimeout();
+  void OnWebVrTimeoutImminent();
   void OnWebVrFrameTimedOut();
 
   int64_t GetPredictedFrameTimeNanos();
 
   void OnVSync(base::TimeTicks frame_time);
-
-  void UpdateEyeInfos(const gfx::Transform& head_pose,
-                      int viewport_offset,
-                      const gfx::Size& render_size,
-                      vr::RenderInfo* out_render_info);
 
   // VRPresentationProvider
   void GetVSync(GetVSyncCallback callback) override;
@@ -215,6 +217,7 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
   std::unique_ptr<gvr::BufferViewport> webvr_left_viewport_;
   std::unique_ptr<gvr::BufferViewport> webvr_right_viewport_;
   std::unique_ptr<gvr::SwapChain> swap_chain_;
+  gvr::Frame acquired_frame_;
   base::queue<std::pair<uint8_t, WebVrBounds>> pending_bounds_;
   int premature_received_frames_ = 0;
   base::queue<uint16_t> pending_frames_;
@@ -239,10 +242,10 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
 
   std::unique_ptr<vr::Ui> ui_;
 
-  bool web_vr_mode_;
+  bool web_vr_mode_ = false;
   bool ready_to_draw_ = false;
   bool paused_ = true;
-  bool surfaceless_rendering_;
+  const bool surfaceless_rendering_;
   bool daydream_support_;
   bool is_exiting_ = false;
 
@@ -283,6 +286,12 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
   AndroidVSyncHelper vsync_helper_;
 
   base::CancelableCallback<void()> webvr_frame_timeout_;
+  base::CancelableCallback<void()> webvr_spinner_timeout_;
+  base::CancelableCallback<
+      void(int16_t, const gfx::Transform&, std::unique_ptr<gl::GLFenceEGL>)>
+      webvr_delayed_frame_submit_;
+
+  std::vector<gvr::BufferSpec> specs_;
 
   base::WeakPtrFactory<VrShellGl> weak_ptr_factory_;
 

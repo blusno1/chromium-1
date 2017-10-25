@@ -92,8 +92,7 @@ void WebFont::DrawText(WebCanvas* canvas,
   GraphicsContext& context = builder.Context();
 
   {
-    DrawingRecorder drawing_recorder(context, builder, DisplayItem::kWebFont,
-                                     int_rect);
+    DrawingRecorder recorder(context, builder, DisplayItem::kWebFont, int_rect);
     context.Save();
     context.SetFillColor(color);
     context.Clip(text_clip_rect);
@@ -105,7 +104,7 @@ void WebFont::DrawText(WebCanvas* canvas,
 }
 
 int WebFont::CalculateWidth(const WebTextRun& run) const {
-  return private_->GetFont().Width(run, 0);
+  return private_->GetFont().Width(run, nullptr);
 }
 
 int WebFont::OffsetForPosition(const WebTextRun& run, float position) const {

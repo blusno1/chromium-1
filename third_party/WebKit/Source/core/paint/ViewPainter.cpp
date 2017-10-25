@@ -12,11 +12,12 @@
 #include "core/paint/BlockPainter.h"
 #include "core/paint/BoxModelObjectPainter.h"
 #include "core/paint/BoxPainter.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ScrollRecorder.h"
 #include "core/paint/compositing/CompositedLayerMapping.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
+#include "platform/graphics/paint/ScopedPaintChunkProperties.h"
 #include "platform/runtime_enabled_features.h"
 
 namespace blink {
@@ -63,25 +64,35 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
   IntRect background_rect(
       IntRect(layout_view_.OverflowClipRect(LayoutPoint())));
 
-  if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled())
+  // When printing with root layer scrolling, we will paint the entire
+  // unclipped scrolling content area.
+  if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled() ||
+      paint_info.IsPrinting()) {
     background_rect.Unite(layout_view_.DocumentRect());
+  }
 
   const DisplayItemClient* display_item_client = &layout_view_;
 
+  Optional<ScopedPaintChunkProperties> scoped_scroll_property;
   Optional<ScrollRecorder> scroll_recorder;
   if (BoxModelObjectPainter::
           IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
               &layout_view_, paint_info)) {
     // Layout overflow, combined with the visible content size.
     background_rect.Unite(layout_view_.DocumentRect());
-    display_item_client =
-        static_cast<const DisplayItemClient*>(layout_view_.Layer()
-                                                  ->GetCompositedLayerMapping()
-                                                  ->ScrollingContentsLayer());
+    display_item_client = layout_view_.Layer()->GraphicsLayerBacking();
     if (!layout_view_.ScrolledContentOffset().IsZero()) {
       scroll_recorder.emplace(paint_info.context, layout_view_,
                               paint_info.phase,
                               layout_view_.ScrolledContentOffset());
+    }
+    if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
+      PaintChunkProperties properties(layout_view_.FirstFragment()
+                                          .GetRarePaintData()
+                                          ->ContentsProperties());
+      scoped_scroll_property.emplace(
+          paint_info.context.GetPaintController(), *display_item_client,
+          DisplayItem::kDocumentBackground, properties);
     }
   }
 

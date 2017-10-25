@@ -29,7 +29,8 @@ namespace blink {
 //   placeholders for displaying them.
 class NGPaintFragment : public DisplayItemClient, public ImageResourceObserver {
  public:
-  explicit NGPaintFragment(RefPtr<const NGPhysicalFragment>);
+  explicit NGPaintFragment(scoped_refptr<const NGPhysicalFragment>,
+                           bool stop_at_block_layout_root = false);
 
   const NGPhysicalFragment& PhysicalFragment() const {
     return *physical_fragment_;
@@ -44,7 +45,7 @@ class NGPaintFragment : public DisplayItemClient, public ImageResourceObserver {
   bool HasOverflowClip() const { return false; }
   bool ShouldClipOverflow() const { return false; }
   bool HasSelfPaintingLayer() const { return false; }
-  LayoutRect VisualRect() const { return visual_rect_; }
+  LayoutRect VisualRect() const override { return visual_rect_; }
   LayoutRect VisualOverflowRect() const { return VisualRect(); }
   LayoutRect OverflowClipRect(const LayoutPoint&,
                               OverlayScrollbarClipBehavior) const {
@@ -52,7 +53,7 @@ class NGPaintFragment : public DisplayItemClient, public ImageResourceObserver {
   }
 
   // DisplayItemClient methods.
-  String DebugName() const { return "NGPaintFragment"; }
+  String DebugName() const override { return "NGPaintFragment"; }
 
   // Commonly used functions for NGPhysicalFragment.
   Node* GetNode() const { return PhysicalFragment().GetNode(); }
@@ -66,9 +67,9 @@ class NGPaintFragment : public DisplayItemClient, public ImageResourceObserver {
  private:
   void SetVisualRect(const LayoutRect& rect) { visual_rect_ = rect; }
 
-  void PopulateDescendants();
+  void PopulateDescendants(bool stop_at_block_layout_root = false);
 
-  RefPtr<const NGPhysicalFragment> physical_fragment_;
+  scoped_refptr<const NGPhysicalFragment> physical_fragment_;
   LayoutRect visual_rect_;
 
   Vector<std::unique_ptr<const NGPaintFragment>> children_;

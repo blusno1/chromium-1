@@ -7,9 +7,8 @@ package org.chromium.chrome.browser.payments;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 
-import junit.framework.Assert;
-
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -113,8 +112,7 @@ public class AndroidPaymentAppFinderTest implements PaymentAppCreatedCallback {
     public void setUp() throws Throwable {
         mRule.startMainActivityOnBlankPage();
         mPackageManager.reset();
-        mServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
+        mServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         mDownloader.setTestServerUri(new URI(mServer.getURL("/components/test/data/payments/")));
         mPaymentApps = new ArrayList<>();
         mAllPaymentAppsCreated = false;

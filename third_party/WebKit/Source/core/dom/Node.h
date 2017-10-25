@@ -102,7 +102,7 @@ class NodeRenderingData {
 
  public:
   explicit NodeRenderingData(LayoutObject* layout_object,
-                             RefPtr<ComputedStyle> non_attached_style);
+                             scoped_refptr<ComputedStyle> non_attached_style);
   ~NodeRenderingData();
 
   LayoutObject* GetLayoutObject() const { return layout_object_; }
@@ -114,14 +114,14 @@ class NodeRenderingData {
   ComputedStyle* GetNonAttachedStyle() const {
     return non_attached_style_.get();
   }
-  void SetNonAttachedStyle(RefPtr<ComputedStyle> non_attached_style);
+  void SetNonAttachedStyle(scoped_refptr<ComputedStyle> non_attached_style);
 
   static NodeRenderingData& SharedEmptyData();
   bool IsSharedEmptyData() { return this == &SharedEmptyData(); }
 
  private:
   LayoutObject* layout_object_;
-  RefPtr<ComputedStyle> non_attached_style_;
+  scoped_refptr<ComputedStyle> non_attached_style_;
 };
 
 class NodeRareDataBase {
@@ -197,7 +197,7 @@ class CORE_EXPORT Node : public EventTarget {
     ThreadState* state =
         ThreadStateFor<ThreadingTrait<Node>::kAffinity>::GetState();
     const char* type_name = "blink::Node";
-    return ThreadHeap::AllocateOnArenaIndex(
+    return state->Heap().AllocateOnArenaIndex(
         state, size,
         is_eager ? BlinkGC::kEagerSweepArenaIndex : BlinkGC::kNodeArenaIndex,
         GCInfoTrait<EventTarget>::Index(), type_name);
@@ -271,7 +271,7 @@ class CORE_EXPORT Node : public EventTarget {
 
   bool SupportsAltText();
 
-  void SetNonAttachedStyle(RefPtr<ComputedStyle> non_attached_style);
+  void SetNonAttachedStyle(scoped_refptr<ComputedStyle> non_attached_style);
 
   ComputedStyle* GetNonAttachedStyle() const {
     return HasRareData()
@@ -832,9 +832,9 @@ class CORE_EXPORT Node : public EventTarget {
   // If the node is a plugin, then this returns its WebPluginContainer.
   WebPluginContainerImpl* GetWebPluginContainer() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   enum NodeFlags {

@@ -1200,7 +1200,21 @@ uploading your change for review.  These are checked by presubmit scripts.
 <enum name="AppListPlayStoreQueryState">
   <int value="0" label="SUCCESS"/>
   <int value="1" label="CANCELED"/>
-  <int value="2" label="ERROR"/>
+  <int value="2" label="ERROR_DEPRECATED"/>
+  <int value="3" label="PLAY_STORE_PROXY_NOT_AVAILABLE"/>
+  <int value="4" label="FAILED_TO_CALL_CANCEL"/>
+  <int value="5" label="FAILED_TO_CALL_FINDAPPS"/>
+  <int value="6" label="REQUEST_HAS_INVALID_PARAMS"/>
+  <int value="7" label="REQUEST_TIMEOUT"/>
+  <int value="8" label="PHONESKY_RESULT_REQUEST_CODE_UNMATCHED"/>
+  <int value="9" label="PHONESKY_RESULT_SESSION_ID_UNMATCHED"/>
+  <int value="10" label="PHONESKY_REQUEST_REQUEST_CODE_UNMATCHED"/>
+  <int value="11" label="PHONESKY_APP_DISCOVERY_NOT_AVAILABLE"/>
+  <int value="12" label="PHONESKY_VERSION_NOT_SUPPORTED"/>
+  <int value="13" label="PHONESKY_UNEXPECTED_EXCEPTION"/>
+  <int value="14" label="PHONESKY_MALFORMED_QUERY"/>
+  <int value="15" label="PHONESKY_INTERNAL_ERROR"/>
+  <int value="16" label="PHONESKY_RESULT_INVALID_DATA"/>
 </enum>
 
 <enum name="AppListSearchResult">
@@ -1356,7 +1370,7 @@ uploading your change for review.  These are checked by presubmit scripts.
 
 <enum name="ArcOptInSilentAuthCode">
   <summary>Defines Arc OptIn Silent Auth code state</summary>
-  <int value="0" label="Disabled"/>
+  <int value="0" label="Disabled (deprecated)"/>
   <int value="1" label="Success"/>
   <int value="2" label="HTTP Context cannot be prepared"/>
   <int value="3" label="No LST token is available"/>
@@ -1388,6 +1402,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="16" label="ARC instance is stopped before complete provisioning"/>
   <int value="17" label="Overall sign in timeout"/>
   <int value="19" label="Network is unavailable"/>
+  <int value="20" label="Disabled"/>
+  <int value="21" label="Already provisioned"/>
 </enum>
 
 <enum name="ArcVideoDecodeAcceleratorResult">
@@ -2755,6 +2771,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="178" label="RFH_KEEP_ALIVE_HANDLE_REQUESTED_INCORRECTLY"/>
   <int value="179" label="BFSI_INVALID_UNIQUE_ID"/>
   <int value="180" label="BPE_UNEXPECTED_MESSAGE_BEFORE_BPGM_CREATION"/>
+  <int value="181" label="WEBUI_SEND_FROM_UNAUTHORIZED_PROCESS"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions">
@@ -2846,6 +2863,13 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="0" label="Unknown"/>
   <int value="1" label="0"/>
   <int value="2" label="1+"/>
+</enum>
+
+<enum name="BeforeUnloadDialogResult">
+  <int value="0" label="No dialog: no string returned"/>
+  <int value="1" label="No dialog: blocked, no user gesture"/>
+  <int value="2" label="No dialog: blocked, multiple confirmation panels"/>
+  <int value="3" label="Show dialog"/>
 </enum>
 
 <enum name="BiquadFilterType">
@@ -3310,6 +3334,11 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1" label="User did change scale"/>
 </enum>
 
+<enum name="BooleanDispatched">
+  <int value="0" label="Not dispatched"/>
+  <int value="1" label="Dispatched"/>
+</enum>
+
 <enum name="BooleanDuplicate">
   <int value="0" label="Not Duplicate"/>
   <int value="1" label="Duplicate"/>
@@ -3323,6 +3352,11 @@ uploading your change for review.  These are checked by presubmit scripts.
 <enum name="BooleanEnabled">
   <int value="0" label="Disabled"/>
   <int value="1" label="Enabled"/>
+</enum>
+
+<enum name="BooleanEncryptedEvent">
+  <int value="0" label="Media player instance"/>
+  <int value="1" label="Encrypted event fired"/>
 </enum>
 
 <enum name="BooleanEqual">
@@ -3543,6 +3577,16 @@ uploading your change for review.  These are checked by presubmit scripts.
 <enum name="BooleanIsShared">
   <int value="0" label="Not Shared"/>
   <int value="1" label="Is Shared"/>
+</enum>
+
+<enum name="BooleanIsTagged">
+  <int value="0" label="Not Tagged"/>
+  <int value="1" label="Is Tagged"/>
+</enum>
+
+<enum name="BooleanLatched">
+  <int value="0" label="Not latched"/>
+  <int value="1" label="Latched"/>
 </enum>
 
 <enum name="BooleanLoaded">
@@ -5789,6 +5833,35 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2" label="Successful first layout"/>
 </enum>
 
+<enum name="CompileHeuristicsDecision">
+  <int value="0" label="NoCacheHandler">
+    No CachedMetadataHandler was provided, thus caching functionality is
+    disabled.
+  </int>
+  <int value="1" label="CachingDisabled">Caching is disabled by settings.</int>
+  <int value="2" label="CodeTooShortToCache">
+    The script is too short to benefit from caching, thus caching functionality
+    is disabled.
+  </int>
+  <int value="3" label="CacheTooCold">
+    The script is not loaded often enough to benefit from caching, thus not
+    producing cache.
+  </int>
+  <int value="4" label="ProduceParserCache">
+    Parser cache is produced for the script when compiled.
+  </int>
+  <int value="5" label="ConsumeParserCache">
+    Consume previously generated parser cache for the script.
+  </int>
+  <int value="6" label="ProduceCodeCache">
+    Code cache is produced for the script when compiled.
+  </int>
+  <int value="7" label="ConsumeCodeCache">
+    Consume previously generated code cache for the script.
+  </int>
+  <int value="8" label="StreamingCompile">Use streamed compilation result.</int>
+</enum>
+
 <enum name="ComponentUpdaterCalls">
   <int value="0" label="Install"/>
   <int value="1" label="Update"/>
@@ -6106,7 +6179,19 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="6" label="chrome-search"/>
 </enum>
 
+<enum name="ContentSuggestionsBreakingNewsMessageAction">
+  <int value="0" label="No action"/>
+  <int value="1" label="Invalid action"/>
+  <int value="2" label="Push-by-value"/>
+  <int value="3" label="Push-to-refresh"/>
+</enum>
+
 <enum name="ContentSuggestionsBreakingNewsMessageContainsNews">
+  <obsolete>
+    Deprecated as of 10/2017 as
+    NewTabPage.ContentSuggestions.BreakingNews.MessageReceived is replaced by
+    NewTabPage.ContentSuggestions.BreakingNews.ReceivedMessageAction.
+  </obsolete>
   <int value="0" label="Without pushed news, handler listening"/>
   <int value="1" label="With (possibly empty) pushed news, handler listening"/>
   <int value="2" label="Without pushed news, handler not listening"/>
@@ -7596,12 +7681,18 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="DataReductionProxyLoFiImplicitOptOutAction">
+  <obsolete>
+    Obsolete as of October 2017.
+  </obsolete>
   <int value="0" label="Lo-Fi disabled for the remainder of the session"/>
   <int value="1" label="Lo-Fi disabled until next opt out epoch"/>
   <int value="2" label="Next implict opt out epoch, Lo-Fi re-enabled"/>
 </enum>
 
 <enum name="DataReductionProxyLoFiSessionState">
+  <obsolete>
+    Deprecated as of October 2017 per transition to blacklist.
+  </obsolete>
   <int value="0" label="Lo-Fi was used"/>
   <int value="1"
       label="Lo-Fi was not used because the network quality was always good"/>
@@ -8114,6 +8205,25 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="3" label="Redirection to the default search engine"/>
 </enum>
 
+<enum name="DetachableBasePairResult">
+  <int value="0" label="UnknownError"/>
+  <int value="1" label="ChallengePassed"/>
+  <int value="2" label="ChallengeFailed"/>
+  <int value="3" label="NeedInjectEntropy"/>
+</enum>
+
+<enum name="DetachableBaseROUpdateResult">
+  <int value="1" label="Succeeded"/>
+  <int value="2" label="TransferFailed"/>
+</enum>
+
+<enum name="DetachableBaseRWUpdateResult">
+  <int value="1" label="Succeeded"/>
+  <int value="2" label="TransferFailed"/>
+  <int value="3" label="InvalidKey"/>
+  <int value="4" label="RollbackDisallowed"/>
+</enum>
+
 <enum name="DeviceIdMismatch">
   <int value="0" label="BOTH_NONEMPTY"/>
   <int value="1" label="SYNC_EMPTY"/>
@@ -8343,6 +8453,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="77" label="Validation Message"/>
   <int value="78" label="Web Share Target Picker"/>
   <int value="79" label="Zoom"/>
+  <int value="80" label="Lock Screen Note App Toast"/>
 </enum>
 
 <enum name="DidNavigateToAd">
@@ -9308,6 +9419,33 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="6" label="USER_VALIDATED"/>
   <int value="7" label="DANGEROUS_HOST"/>
   <int value="8" label="POTENTIALLY_UNWANTED"/>
+</enum>
+
+<enum name="DownloadNotificationForegroundLifecycle">
+  <int value="0" label="START"/>
+  <int value="1" label="UPDATE"/>
+  <int value="2" label="STOP"/>
+</enum>
+
+<enum name="DownloadNotificationInteractions">
+  <int value="0" label="CLICKED"/>
+  <int value="1" label="OPEN"/>
+  <int value="2" label="CANCEL"/>
+  <int value="3" label="PAUSE"/>
+  <int value="4" label="RESUME"/>
+</enum>
+
+<enum name="DownloadNotificationLaunchType">
+  <int value="0" label="LAUNCH"/>
+  <int value="1" label="RELAUNCH"/>
+</enum>
+
+<enum name="DownloadNotificationServiceStopped">
+  <int value="0" label="STOPPED"/>
+  <int value="1" label="DESTROYED"/>
+  <int value="2" label="TASK_REMOVED"/>
+  <int value="3" label="LOW_MEMORY"/>
+  <int value="4" label="START_STICKY"/>
 </enum>
 
 <enum name="DownloadOpenMethod">
@@ -11599,6 +11737,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="390" label="DeviceTPMFirmwareUpdateSettings"/>
   <int value="391" label="RunAllFlashInAllowMode"/>
   <int value="392" label="AutoFillCreditCardEnabled"/>
+  <int value="393" label="NtlmV2Enabled"/>
+  <int value="394" label="MinimumRequiredChromeVersion"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations">
@@ -16588,6 +16728,16 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2189" label="PerformanceObserverForWorker"/>
   <int value="2190" label="PaintTimingObserved"/>
   <int value="2191" label="PaintTimingRequested"/>
+  <int value="2192" label="HTMLMediaElementMediaPlaybackRateOutOfRange"/>
+  <int value="2193" label="CSSFilterFunctionNegativeBrightness"/>
+  <int value="2194" label="CookieSet"/>
+  <int value="2195" label="CookieGet"/>
+  <int value="2196" label="GeolocationDisabledByFeaturePolicy"/>
+  <int value="2197" label="EncryptedMediaDisabledByFeaturePolicy"/>
+  <int value="2198" label="BatteryStatusGetBattery"/>
+  <int value="2199" label="BatteryStatusInsecureOrigin"/>
+  <int value="2200" label="BatteryStatusCrossOrigin"/>
+  <int value="2201" label="BatteryStatusSameOriginABA"/>
 </enum>
 
 <enum name="FeedbackSource">
@@ -17728,15 +17878,24 @@ uploading your change for review.  These are checked by presubmit scripts.
 
   <int value="1615384" label="alert_notification_control_point"/>
   <int value="4531384" label="date_of_birth"/>
+  <int value="14295641"
+      label="PocketLab; f000aa1e-0452-4000-b000-000000000000"/>
   <int value="22829753" label="barometric_pressure_trend"/>
+  <int value="25010789"
+      label="PocketLab (from service 11);
+             f000aa17-0452-4000-b000-000000000000"/>
   <int value="33030714" label="scan_refresh"/>
   <int value="36624371"
       label="Anki OVERDRIVE cars; be15bee0-6186-407e-8381-0bd89c4d8df4"/>
   <int value="40437408" label="gender"/>
   <int value="42833873" label="42833873 (Unknown; not a 16bit UUID)"/>
+  <int value="61502349"
+      label="PocketLab; f000aa2c-0452-4000-b000-000000000000"/>
   <int value="64893984" label="local_east_coordinate.xml"/>
   <int value="67768539" label="alert_category_id_bit_mask"/>
   <int value="79560451" label="sc_control_point"/>
+  <int value="81699382"
+      label="PocketLab; f000aa1d-0452-4000-b000-000000000000"/>
   <int value="84948752"
       label="Eddystone Config ADV Slot Data;
              a3c8750a-8ed3-4bdf-8a39-a01bebede295"/>
@@ -17746,11 +17905,15 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="102699400" label="cycling_power_feature"/>
   <int value="107355463"
       label="konashi analogRead2; 229b300a-03fb-40da-98a7-b0def65c2d4b"/>
+  <int value="107684477"
+      label="PocketLab; f000aa2d-0452-4000-b000-000000000000"/>
   <int value="111826224"
       label="micro:bit client requirements;
              e95d23c4-251d-470a-a062-fa1922dfa9a8"/>
   <int value="121100653"
       label="Parrot Drone; 9a66fd22-0800-9191-11e4-012d1540cb8e"/>
+  <int value="129263762"
+      label="PocketLab; f000aa04-0452-4000-b000-000000000000"/>
   <int value="145478270" label="glucose_feature"/>
   <int value="162705488" label="manufacturer_name_string"/>
   <int value="164418508" label="weight_measurement"/>
@@ -17762,6 +17925,11 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="203846063" label="ff0c"/>
   <int value="205016416" label="body_composition_measurement"/>
   <int value="235785246" label="irradiance"/>
+  <int value="241152428"
+      label="PocketLab; f000aa25-0452-4000-b000-000000000000"/>
+  <int value="244169154"
+      label="PocketLab (from service 31);
+             f000aa32-0452-4000-b000-000000000000"/>
   <int value="248349383" label="csc_measurement"/>
   <int value="254703207" label="true_wind_speed"/>
   <int value="257107525" label="intermediate_temperature"/>
@@ -17796,21 +17964,32 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="micro:bit requirements; e95db84c-251d-470a-a062-fa1922dfa9a8"/>
   <int value="372306057"
       label="Bleno Pizza Example; 13333333-3333-3333-3333-333333330001"/>
+  <int value="384581502"
+      label="PocketLab; f000aa07-0452-4000-b000-000000000000"/>
   <int value="404638811"
       label="konashi pwmParameter; 229b3005-03fb-40da-98a7-b0def65c2d4b"/>
   <int value="405569435" label="boot_keyboard_output_report"/>
   <int value="409618715" label="cycling_power_vector"/>
   <int value="416059854"
       label="konashi uartRxNotification; 229b3013-03fb-40da-98a7-b0def65c2d4b"/>
+  <int value="416715482"
+      label="PocketLab (from service 11);
+             f000aa19-0452-4000-b000-000000000000"/>
   <int value="419477741" label="body_composition_feature"/>
+  <int value="426120542"
+      label="PocketLab; f000aa3b-0452-4000-b000-000000000000"/>
   <int value="440009071"
       label="konashi pwmDuty; 229b3006-03fb-40da-98a7-b0def65c2d4b"/>
   <int value="448606809" label="448606809 (Unknown; not a 16bit UUID)"/>
+  <int value="449334956"
+      label="PocketLab; f000aa3d-0452-4000-b000-000000000000"/>
   <int value="469191968" label="Playbulb Candle Color; fffc"/>
   <int value="473092981"
       label="Eddystone Config Advertising Interval;
              a3c87503-8ed3-4bdf-8a39-a01bebede295"/>
   <int value="486368335" label="location_name"/>
+  <int value="501361244"
+      label="PocketLab; f000aa21-0452-4000-b000-000000000000"/>
   <int value="508191605"
       label="Parrot Drone; 9a66fb1b-0800-9191-11e4-012d1540cb8e"/>
   <int value="511033835"
@@ -17834,14 +18013,29 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="589575132"
       label="Sphero Robot; 22bb746f-2bbd-7554-2d6f-726568705327"/>
   <int value="589741087" label="model_number_string"/>
+  <int value="599786587"
+      label="PocketLab (from service 11);
+             f000aa1a-0452-4000-b000-000000000000"/>
+  <int value="602410094"
+      label="PocketLab; f000aa28-0452-4000-b000-000000000000"/>
   <int value="625191771"
       label="Parrot Drone; 9a66fa0a-0800-9191-11e4-012d1540cb8e"/>
+  <int value="628511213"
+      label="PocketLab; f000aa3a-0452-4000-b000-000000000000"/>
   <int value="638602429" label="new_alert"/>
   <int value="640013977"
       label="konashi uartBaudRate; 229b3011-03fb-40da-98a7-b0def65c2d4b"/>
+  <int value="640611109"
+      label="PocketLab (from service 11);
+             f000aa14-0452-4000-b000-000000000000"/>
   <int value="642925692" label="anaerobic_heart_rate_lower_limit"/>
+  <int value="645640295"
+      label="PocketLab (from service 11);
+             f000aa16-0452-4000-b000-000000000000"/>
   <int value="650507215" label="aerobic_heart_rate_lower_limit"/>
   <int value="653904148" label="cgm_session_run_time"/>
+  <int value="659248322"
+      label="PocketLab; f000aa29-0452-4000-b000-000000000000"/>
   <int value="675543714" label="aerobic_threshold"/>
   <int value="682327952"
       label="Parrot Drone; 9a66fa0b-0800-9191-11e4-012d1540cb8e"/>
@@ -17850,23 +18044,35 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="689682673" label="unread_alert_status"/>
   <int value="710863194" label="dew_point"/>
   <int value="713208266" label="apparent_wind_direction"/>
+  <int value="724409151"
+      label="PocketLab; f000aa1f-0452-4000-b000-000000000000"/>
   <int value="724796397" label="weight"/>
+  <int value="725361228"
+      label="PocketLab; f000aa10-0452-4000-b000-000000000000"/>
   <int value="735462059"
       label="konashi uartConfig; 229b3010-03fb-40da-98a7-b0def65c2d4b"/>
   <int value="747671909" label="reference_time_information"/>
   <int value="747737913"
       label="konashi pioOutput; 229b3002-03fb-40da-98a7-b0def65c2d4b"/>
   <int value="752820597" label="boot_mouse_input_report"/>
+  <int value="753456499"
+      label="PocketLab; f000aa27-0452-4000-b000-000000000000"/>
   <int value="762835818" label="tx_power_level"/>
   <int value="765862810" label="cgm_session_start_time"/>
   <int value="777276843"
       label="Bleno Pizza Example; 13333333-3333-3333-3333-333333330003"/>
+  <int value="784175223"
+      label="PocketLab; f000aa39-0452-4000-b000-000000000000"/>
   <int value="786588903"
       label="Parrot Drone; 9a66fd53-0800-9191-11e4-012d1540cb8e"/>
   <int value="788890283"
       label="Eddystone Config Factory reset;
              a3c8750b-8ed3-4bdf-8a39-a01bebede295"/>
   <int value="797118889" label="time_source"/>
+  <int value="806223105"
+      label="PocketLab; f000aa1c-0452-4000-b000-000000000000"/>
+  <int value="827651216"
+      label="PocketLab; f000aa20-0452-4000-b000-000000000000"/>
   <int value="839366223" label="user_index"/>
   <int value="842908520" label="rsc_measurement"/>
   <int value="845003775"
@@ -17875,6 +18081,8 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="Elite trainer; 347b0011-7635-408b-8918-8ff3949ce592"/>
   <int value="851655329"
       label="konashi analogRead0; 229b3008-03fb-40da-98a7-b0def65c2d4b"/>
+  <int value="853857776"
+      label="PocketLab; f000aa2a-0452-4000-b000-000000000000"/>
   <int value="859809200" label="resting_heart_rate"/>
   <int value="867296114" label="gust_factor"/>
   <int value="868427891" label="local_north_coordinate"/>
@@ -17904,7 +18112,12 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="976761505" label="local_time_information"/>
   <int value="987658962" label="glucose_measurement"/>
   <int value="1002619180" label="exact_time_256"/>
+  <int value="1018346218"
+      label="PocketLab; f000aa03-0452-4000-b000-000000000000"/>
   <int value="1025676359" label="dst_offset"/>
+  <int value="1049176129"
+      label="PocketLab (from service 11);
+             f000aa15-0452-4000-b000-000000000000"/>
   <int value="1050948662"
       label="nRF UART TX; nrf52-Quadcopter;
              6e400002-b5a3-f393-e0a9-e50e24dcca9e"/>
@@ -17914,12 +18127,17 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1072163984" label="gap.reconnection_address"/>
   <int value="1077684177"
       label="Parrot Drone; 9a66fd52-0800-9191-11e4-012d1540cb8e"/>
+  <int value="1097514018"
+      label="PocketLab; f000aa06-0452-4000-b000-000000000000"/>
   <int value="1100640868" label="day_of_week"/>
   <int value="1115558005"
       label="konashi hardwareReset; 229b3014-03fb-40da-98a7-b0def65c2d4b"/>
   <int value="1117053056"
       label="Remote Lego; 7baf8dca-2bfc-47fb-af29-042fccc180eb"/>
   <int value="1125104414" label="gap.central_address_resolution_support"/>
+  <int value="1125757823"
+      label="PocketLab (from service 31);
+             f000aa33-0452-4000-b000-000000000000"/>
   <int value="1134538374" label="hip_circumference"/>
   <int value="1136624215" label="maximum_recommended_heart_rate"/>
   <int value="1136682523" label="date_time"/>
@@ -17927,12 +18145,17 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="konashi uartTx; 229b3012-03fb-40da-98a7-b0def65c2d4b"/>
   <int value="1161713439" label="Playbulb Candle Effect; fffb"/>
   <int value="1167525145" label="alert_status"/>
+  <int value="1167648736"
+      label="PocketLab (from service 11);
+             f000aa18-0452-4000-b000-000000000000"/>
   <int value="1169219288" label="1169219288 (Unknown; not a 16bit UUID)"/>
   <int value="1183399370" label="magnetic_flux_density_3D"/>
   <int value="1186677690"
       label="Eddystone Config Advertised Tx Power;
              a3c87505-8ed3-4bdf-8a39-a01bebede295"/>
   <int value="1193066711" label="uv_index"/>
+  <int value="1211834643"
+      label="PocketLab; f000aa02-0452-4000-b000-000000000000"/>
   <int value="1214133688" label="vo2_max"/>
   <int value="1217613737" label="three_zone_heart_rate_limits"/>
   <int value="1225369773"
@@ -17942,6 +18165,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1243630465"
       label="Sphero Robot; 22bb746f-2ba1-7554-2d6f-726568705327"/>
   <int value="1245615057" label="pnp_id"/>
+  <int value="1254514264"
+      label="PocketLab; f000aa05-0452-4000-b000-000000000000"/>
   <int value="1254532025" label="user_control_point"/>
   <int value="1266038031" label="1266038031 (Unknown; not a 16bit UUID)"/>
   <int value="1288236137" label="hid_control_point"/>
@@ -17961,8 +18186,12 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="sport_type_for_aerobic_and_anaerobic_thresholds"/>
   <int value="1359562687"
       label="PowerUp RC plane; 75b64e51-f184-4ed1-921a-476090d80ba7"/>
+  <int value="1366194038"
+      label="PocketLab; f000aa22-0452-4000-b000-000000000000"/>
   <int value="1370497910" label="position_quality"/>
   <int value="1370779343" label="apparent_wind_speed"/>
+  <int value="1378697826"
+      label="PocketLab; f000aa2f-0452-4000-b000-000000000000"/>
   <int value="1399905251" label="elevation"/>
   <int value="1403230035"
       label="konashi analogDrive; 229b3007-03fb-40da-98a7-b0def65c2d4b"/>
@@ -17973,11 +18202,19 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1418868404"
       label="gap.peripheral_preferred_connection_parameters"/>
   <int value="1419696114" label="record_access_control_point"/>
+  <int value="1423142122"
+      label="PocketLab; f000aa01-0452-4000-b000-000000000000"/>
   <int value="1426243900" label="time_update_state"/>
   <int value="1443769073"
       label="Parrot Drone; 9a66fb0e-0800-9191-11e4-012d1540cb8e"/>
   <int value="1445812935" label="current_time"/>
   <int value="1448457670" label="cgm_feature"/>
+  <int value="1451886110"
+      label="PocketLab; f000aa38-0452-4000-b000-000000000000"/>
+  <int value="1463907405"
+      label="PocketLab; f000aa2b-0452-4000-b000-000000000000"/>
+  <int value="1477417345"
+      label="PocketLab; f000aa23-0452-4000-b000-000000000000"/>
   <int value="1479031407" label="five_zone_heart_rate_limits"/>
   <int value="1480262218" label="height"/>
   <int value="1482584061"
@@ -18002,13 +18239,19 @@ uploading your change for review.  These are checked by presubmit scripts.
              a3c87502-8ed3-4bdf-8a39-a01bebede295"/>
   <int value="1548291582"
       label="konashi analogRead1; 229b3009-03fb-40da-98a7-b0def65c2d4b"/>
+  <int value="1551090056"
+      label="PocketLab; f000aa35-0452-4000-b000-000000000000"/>
   <int value="1556918420" label="supported_new_alert_category"/>
   <int value="1562359952" label="bond_management_control_point"/>
   <int value="1581120657"
       label="Parrot Drone; 9a66fb1c-0800-9191-11e4-012d1540cb8e"/>
+  <int value="1588237112"
+      label="PocketLab; f000aa3f-0452-4000-b000-000000000000"/>
   <int value="1594190447" label="anaerobic_threshold"/>
   <int value="1594284383" label="time_accuracy"/>
   <int value="1599786113" label="sensor_location"/>
+  <int value="1611458228"
+      label="PocketLab; f000aa34-0452-4000-b000-000000000000"/>
   <int value="1650767660" label="protocol_mode"/>
   <int value="1655824245" label="pressure"/>
   <int value="1658559118" label="digital"/>
@@ -18017,6 +18260,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1676607014"
       label="konashi i2cConfig; 229b300b-03fb-40da-98a7-b0def65c2d4b"/>
   <int value="1704141710" label="true_wind_direction"/>
+  <int value="1719495127"
+      label="PocketLab; f000aa00-0452-4000-b000-000000000000"/>
   <int value="1732815395" label="alert_level"/>
   <int value="1735563923" label="rsc_feature"/>
   <int value="1748731133" label="intermediate_blood_pressure"/>
@@ -18044,21 +18289,38 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="Parrot Drone; 9a66fd24-0800-9191-11e4-012d1540cb8e"/>
   <int value="1865494132"
       label="konashi i2cRead; 229b300f-03fb-40da-98a7-b0def65c2d4b"/>
+  <int value="1866335371"
+      label="PocketLab; f000aa36-0452-4000-b000-000000000000"/>
+  <int value="1873367042"
+      label="PocketLab; f000aa3c-0452-4000-b000-000000000000"/>
   <int value="1875571028"
       label="PowerUp RC plane; 75b64e51-f185-4ed1-921a-476090d80ba7"/>
   <int value="1881531610" label="descriptor_value_changed"/>
   <int value="1899652799" label="pollen_concentration"/>
   <int value="1904364134" label="aerobic_heart_rate_upper_limit"/>
+  <int value="1934342765"
+      label="PocketLab; f000aa30-0452-4000-b000-000000000000"/>
   <int value="1936155204" label="gap.device_name"/>
   <int value="1940300093"
       label="Tacx trainer; 6e40fec2-b5a3-f393-e0a9-e50e24dcca9e"/>
+  <int value="1945497075"
+      label="PocketLab; f000aa24-0452-4000-b000-000000000000"/>
   <int value="1954594648" label="temperature"/>
   <int value="1970019437" label="gap.peripheral_privacy_flag"/>
+  <int value="1974805193"
+      label="PocketLab; f000aa26-0452-4000-b000-000000000000"/>
   <int value="1981651466" label="wind_chill"/>
   <int value="1984759904" label="1984759904 (Unknown; not a 16bit UUID)"/>
+  <int value="1995515788"
+      label="PocketLab (from service 11);
+             f000aa1b-0452-4000-b000-000000000000"/>
   <int value="1999174392" label="glucose_measurement_context"/>
   <int value="2000824522" label="waist_circumference"/>
   <int value="2010182602" label="csc_feature"/>
+  <int value="2010559917"
+      label="PocketLab; f000aa2e-0452-4000-b000-000000000000"/>
+  <int value="2020665772"
+      label="PocketLab; f000aa3e-0452-4000-b000-000000000000"/>
   <int value="2022949018" label="cgm_status"/>
   <int value="2025615830" label="aggregate"/>
   <int value="2025816471"
@@ -18071,18 +18333,30 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="nrf52-Quadcopter; 6e400004-b5a3-f393-e0a9-e50e24dcca9e"/>
   <int value="2055293976"
       label="Remote Lego; b394673e-dea0-4044-a189-86f1c85ce22e"/>
+  <int value="2066621778"
+      label="PocketLab; f000aa37-0452-4000-b000-000000000000"/>
   <int value="2083994430" label="two_zone_heart_rate_limit"/>
   <int value="2084445069" label="ringer_control_point"/>
+  <int value="2088370773"
+      label="PocketLab (from service 11);
+             f000aa13-0452-4000-b000-000000000000"/>
   <int value="2091220203"
       label="konashi pioInputNotification;
              229b3003-03fb-40da-98a7-b0def65c2d4b"/>
   <int value="2091531878" label="weight_scale_feature"/>
+  <int value="2093050338"
+      label="PocketLab; f000aa08-0452-4000-b000-000000000000"/>
   <int value="2100140560" label="2100140560 (Unknown; not a 16bit UUID)"/>
   <int value="2101185135" label="time_zone"/>
+  <int value="2103247472"
+      label="PocketLab; f000aa09-0452-4000-b000-000000000000"/>
   <int value="2105952193" label="heart_rate_max"/>
   <int value="2110830087"
       label="Printer; 00002af1-0000-1000-8000-00805f9b34fb"/>
   <int value="2118566262" label="database_change_increment"/>
+  <int value="2122016879"
+      label="PocketLab (from service 11);
+             f000aa12-0452-4000-b000-000000000000"/>
   <int value="2125906618" label="gap.appearance"/>
   <int value="2140490935" label="gatt.service_changed"/>
 </enum>
@@ -18135,6 +18409,8 @@ uploading your change for review.  These are checked by presubmit scripts.
 <!-- Hash values can be produced using tool: bluetooth_metrics_hash -->
 
   <int value="7464675" label="pulse_oximeter"/>
+  <int value="14295641"
+      label="PocketLab; f000aa1e-0452-4000-b000-000000000000"/>
   <int value="26695985" label="fe20"/>
   <int value="35226455" label="fe44"/>
   <int value="35347197" label="fe26"/>
@@ -18146,17 +18422,25 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="48912332"
       label="micro:bit event; e95d93af-251d-470a-a062-fa1922dfa9a8"/>
   <int value="56938056" label="feb9"/>
+  <int value="61502349"
+      label="PocketLab; f000aa2c-0452-4000-b000-000000000000"/>
   <int value="62669585" label="feff"/>
   <int value="70653353" label="fe37"/>
   <int value="81094401" label="link_loss"/>
+  <int value="81699382"
+      label="PocketLab; f000aa1d-0452-4000-b000-000000000000"/>
   <int value="85709298" label="fe38"/>
   <int value="91953454" label="fe7b"/>
+  <int value="107684477"
+      label="PocketLab; f000aa2d-0452-4000-b000-000000000000"/>
   <int value="109066436" label="Printer; 18f0"/>
   <int value="117033282" label="fe1e"/>
   <int value="119232939" label="fe16"/>
   <int value="124193922"
       label="nrf52-Quadcopter; 6e400020-b5a3-f393-e0a9-e50e24dcca9e"/>
   <int value="126220948" label="fec4"/>
+  <int value="129263762"
+      label="PocketLab; f000aa04-0452-4000-b000-000000000000"/>
   <int value="130754956" label="fe0d"/>
   <int value="134110769" label="fecf"/>
   <int value="141942246" label="fe1d"/>
@@ -18172,6 +18456,10 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="229725863"
       label="Juggglow; 624e957f-cb42-4cd6-bacc-84aeb898f69b"/>
   <int value="239745754" label="fe22"/>
+  <int value="241152428"
+      label="PocketLab; f000aa25-0452-4000-b000-000000000000"/>
+  <int value="244169154"
+      label="PocketLab; f000aa32-0452-4000-b000-000000000000"/>
   <int value="252638028" label="fe9c"/>
   <int value="253001319" label="fe84"/>
   <int value="267848299" label="fe3e"/>
@@ -18195,21 +18483,29 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="353919198" label="fe41"/>
   <int value="367801999" label="fe19"/>
   <int value="381944619" label="continuous_glucose_monitoring"/>
+  <int value="384581502"
+      label="PocketLab; f000aa07-0452-4000-b000-000000000000"/>
   <int value="393442080" label="fe47"/>
   <int value="404751265" label="fe34"/>
   <int value="406443827" label="fe08"/>
   <int value="406667138" label="fe1b"/>
   <int value="408422717" label="fe12"/>
   <int value="411422080" label="feaf"/>
+  <int value="426120542"
+      label="PocketLab; f000aa3b-0452-4000-b000-000000000000"/>
   <int value="428955508" label="fed8"/>
   <int value="436040838" label="fe49"/>
   <int value="442258066" label="fec6"/>
   <int value="448479874" label="fe13"/>
+  <int value="449334956"
+      label="PocketLab; f000aa3d-0452-4000-b000-000000000000"/>
   <int value="452749537" label="fe6f"/>
   <int value="486403409" label="fe7e"/>
   <int value="493187195"
       label="Insight cards; 13630000-aeb9-10cf-ef69-81e145a91113"/>
   <int value="499379297" label="fe0c"/>
+  <int value="501361244"
+      label="PocketLab; f000aa21-0452-4000-b000-000000000000"/>
   <int value="517314925" label="fe0e"/>
   <int value="534472233" label="feea"/>
   <int value="535574137" label="feb1"/>
@@ -18230,17 +18526,23 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="599398840" label="feb4"/>
   <int value="601952480"
       label="PowerUp RC plane; 75b64e51-f181-4ed1-921a-476090d80ba7"/>
+  <int value="602410094"
+      label="PocketLab; f000aa28-0452-4000-b000-000000000000"/>
   <int value="603143198" label="fef5"/>
   <int value="604112254" label="fee4"/>
   <int value="612248808" label="612248808 (Unknown; not a 16bit UUID)"/>
   <int value="617434027" label="fe59"/>
   <int value="621358948" label="fec7"/>
   <int value="626013607" label="FIDO authentication service (fffd)"/>
+  <int value="628511213"
+      label="PocketLab; f000aa3a-0452-4000-b000-000000000000"/>
   <int value="633977000" label="fedf"/>
   <int value="634740644"
       label="Purple Eye; 00005100-0000-1000-8000-00805f9b34fb"/>
   <int value="642914459" label="fe3d"/>
   <int value="643543662" label="fefe"/>
+  <int value="659248322"
+      label="PocketLab; f000aa29-0452-4000-b000-000000000000"/>
   <int value="661885353"
       label="Remote Lego; 40480f29-7bad-4ea5-8bf8-499405c9b324"/>
   <int value="675211143" label="fe4a"/>
@@ -18258,19 +18560,33 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="712814660"
       label="Eddystone-URL Beacon Configuration;
              ee0c2080-8786-40ba-ab96-99b91ac981d8"/>
+  <int value="724409151"
+      label="PocketLab; f000aa1f-0452-4000-b000-000000000000"/>
+  <int value="725361228"
+      label="PocketLab; f000aa10-0452-4000-b000-000000000000"/>
   <int value="739317418" label="fe05"/>
   <int value="741183887" label="fe78"/>
   <int value="749323131" label="fece"/>
+  <int value="753456499"
+      label="PocketLab; f000aa27-0452-4000-b000-000000000000"/>
   <int value="762562796" label="fe5e"/>
   <int value="775377708" label="fe2b"/>
   <int value="780195705" label="fead"/>
+  <int value="784175223"
+      label="PocketLab; f000aa39-0452-4000-b000-000000000000"/>
   <int value="786171562" label="fe0a"/>
   <int value="803680658" label="fea3"/>
   <int value="805645044" label="glucose"/>
+  <int value="806223105"
+      label="PocketLab; f000aa1c-0452-4000-b000-000000000000"/>
   <int value="807272540" label="fe1a"/>
   <int value="817497010" label="fe18"/>
+  <int value="827651216"
+      label="PocketLab; f000aa20-0452-4000-b000-000000000000"/>
   <int value="836214784" label="cycling_power"/>
   <int value="841972234" label="feeb"/>
+  <int value="853857776"
+      label="PocketLab; f000aa2a-0452-4000-b000-000000000000"/>
   <int value="869059214" label="next_dst_change"/>
   <int value="869682406" label="fe60"/>
   <int value="876407493" label="location_and_navigation"/>
@@ -18298,6 +18614,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="978815669"
       label="CoolBeans Serial; a495ff10-c5b1-4b44-b512-1370f02d74de"/>
   <int value="1001310815" label="fe75"/>
+  <int value="1018346218"
+      label="PocketLab; f000aa03-0452-4000-b000-000000000000"/>
   <int value="1024550252" label="feda"/>
   <int value="1029767622" label="internet_protocol_support"/>
   <int value="1035129135" label="fe74"/>
@@ -18313,6 +18631,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1088150526" label="feb2"/>
   <int value="1091337779" label="fefb"/>
   <int value="1096286291" label="fed6"/>
+  <int value="1097514018"
+      label="PocketLab; f000aa06-0452-4000-b000-000000000000"/>
   <int value="1102290958" label="fe56"/>
   <int value="1103440256" label="fee9"/>
   <int value="1107293675" label="cycling_speed_and_cadence"/>
@@ -18322,6 +18642,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1122138707" label="fed2"/>
   <int value="1122276223" label="fe67"/>
   <int value="1122861451" label="Playbulb Candle; ff02"/>
+  <int value="1125757823"
+      label="PocketLab; f000aa33-0452-4000-b000-000000000000"/>
   <int value="1132318862" label="fe6a"/>
   <int value="1133574029" label="fede"/>
   <int value="1134418737" label="fed9"/>
@@ -18332,6 +18654,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1188875912" label="phone_alert_status"/>
   <int value="1204532270" label="fea1"/>
   <int value="1205730714" label="fe81"/>
+  <int value="1211834643"
+      label="PocketLab; f000aa02-0452-4000-b000-000000000000"/>
   <int value="1213218283" label="feb7"/>
   <int value="1219993345" label="device_information"/>
   <int value="1225001939" label="fe6c"/>
@@ -18340,6 +18664,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1239202871" label="generic_attribute"/>
   <int value="1244946418" label="fe61"/>
   <int value="1250531601" label="fe15"/>
+  <int value="1254514264"
+      label="PocketLab; f000aa05-0452-4000-b000-000000000000"/>
   <int value="1257014053" label="fe33"/>
   <int value="1262008705" label="fef2"/>
   <int value="1265172773" label="indoor_positioning"/>
@@ -18363,9 +18689,13 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="Physical Web Light Switch; ba42561b-b1d2-440a-8d04-0cefb43faece"/>
   <int value="1362860533" label="fe9a"/>
   <int value="1366014117" label="fe2c"/>
+  <int value="1366194038"
+      label="PocketLab; f000aa22-0452-4000-b000-000000000000"/>
   <int value="1369789354" label="current_time"/>
   <int value="1376579922" label="fef0"/>
   <int value="1377872916" label="fe51"/>
+  <int value="1378697826"
+      label="PocketLab; f000aa2f-0452-4000-b000-000000000000"/>
   <int value="1380007534" label="fe96"/>
   <int value="1382767841" label="fe93"/>
   <int value="1394327958" label="fe24"/>
@@ -18375,10 +18705,18 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1416866355" label="fe3b"/>
   <int value="1422100109"
       label="Sphero Robot; 22bb746f-2ba0-7554-2d6f-726568705327"/>
+  <int value="1423142122"
+      label="PocketLab; f000aa01-0452-4000-b000-000000000000"/>
   <int value="1424865940" label="alert_notification"/>
   <int value="1432421356" label="fe14"/>
   <int value="1433847022" label="fefa"/>
+  <int value="1451886110"
+      label="PocketLab; f000aa38-0452-4000-b000-000000000000"/>
+  <int value="1463907405"
+      label="PocketLab; f000aa2b-0452-4000-b000-000000000000"/>
   <int value="1465794357" label="feb0"/>
+  <int value="1477417345"
+      label="PocketLab; f000aa23-0452-4000-b000-000000000000"/>
   <int value="1482395712"
       label="Bleno Pizza Example; 13333333-3333-3333-3333-333333333337"/>
   <int value="1484296385" label="fe30"/>
@@ -18390,17 +18728,23 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1548928839" label="fec5"/>
   <int value="1549672811"
       label="nRF candy machine; b6c31337-6c07-453e-961a-d8a8a41bf368"/>
+  <int value="1551090056"
+      label="PocketLab; f000aa35-0452-4000-b000-000000000000"/>
   <int value="1553614739" label="fe6b"/>
   <int value="1563543855" label="fe72"/>
   <int value="1569655226" label="generic_access"/>
   <int value="1573199922" label="fe71"/>
   <int value="1578535968"
       label="Makeblock mBot; 0000ffe1-0000-1000-8000-00805f9b34fb"/>
+  <int value="1588237112"
+      label="PocketLab; f000aa3f-0452-4000-b000-000000000000"/>
   <int value="1594426590" label="fe4e"/>
   <int value="1600490722" label="fe46"/>
   <int value="1604724337" label="fe88"/>
   <int value="1606985074" label="feed"/>
   <int value="1607594729" label="fe0f"/>
+  <int value="1611458228"
+      label="PocketLab; f000aa34-0452-4000-b000-000000000000"/>
   <int value="1618872680" label="fe9b"/>
   <int value="1631386264" label="fefd"/>
   <int value="1635890706" label="fe9e"/>
@@ -18409,6 +18753,10 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1648320092" label="fe7f"/>
   <int value="1651126525" label="fe25"/>
   <int value="1651610232" label="fe52"/>
+<!-- Hash values can be produced using tool: bluetooth_metrics_hash -->
+
+  <int value="1655806770"
+      label="PocketLab; f000aa11-0452-4000-b000-000000000000"/>
   <int value="1660904097" label="immediate_alert"/>
   <int value="1663141542" label="battery_service"/>
   <int value="1671670551" label="fe5a"/>
@@ -18426,6 +18774,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1712085581"
       label="MiP Robot; Magic Blue Bulb; 0000ffe5-0000-1000-8000-00805f9b34fb"/>
   <int value="1714031075" label="fe10"/>
+  <int value="1719495127"
+      label="PocketLab; f000aa00-0452-4000-b000-000000000000"/>
   <int value="1724509641" label="fe8b"/>
   <int value="1729966097"
       label="Anki OVERDRIVE cars; be15beef-6186-407e-8381-0bd89c4d8df4"/>
@@ -18448,6 +18798,10 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1852765173" label="1852765173 (Unknown; not a 16bit UUID)"/>
   <int value="1855849484"
       label="iHealth Edge; 636f6d2e-6a69-7561-6e2e-414d56313100"/>
+  <int value="1866335371"
+      label="PocketLab; f000aa36-0452-4000-b000-000000000000"/>
+  <int value="1873367042"
+      label="PocketLab; f000aa3c-0452-4000-b000-000000000000"/>
   <int value="1891274929" label="fee2"/>
   <int value="1891804450" label="fe58"/>
   <int value="1905398969" label="fee6"/>
@@ -18456,23 +18810,33 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1922152740" label="fe8a"/>
   <int value="1922853101" label="fe28"/>
   <int value="1925022679" label="fe57"/>
+  <int value="1934342765"
+      label="PocketLab; f000aa30-0452-4000-b000-000000000000"/>
   <int value="1940012814" label="fe2a"/>
   <int value="1942373991"
       label="Eddystone-URL Beacon Configuration v2;
              a3c87500-8ed3-4bdf-8a39-a01bebede295"/>
+  <int value="1945497075"
+      label="PocketLab; f000aa24-0452-4000-b000-000000000000"/>
   <int value="1946977319" label="fec1"/>
   <int value="1953707948" label="fe9f"/>
   <int value="1960388103" label="fecb"/>
   <int value="1969478137" label="fe63"/>
   <int value="1970234661" label="reference_time_update"/>
   <int value="1971997463" label="fe07"/>
+  <int value="1974805193"
+      label="PocketLab; f000aa26-0452-4000-b000-000000000000"/>
   <int value="1976176123" label="fe4c"/>
   <int value="1983035069" label="fec9"/>
   <int value="1984351068" label="fea6"/>
+  <int value="2010559917"
+      label="PocketLab; f000aa2e-0452-4000-b000-000000000000"/>
   <int value="2016025023" label="febd"/>
   <int value="2017827114" label="fe4f"/>
   <int value="2018026941"
       label="konashi; 229bff00-03fb-40da-98a7-b0def65c2d4b"/>
+  <int value="2020665772"
+      label="PocketLab; f000aa3e-0452-4000-b000-000000000000"/>
   <int value="2021054861"
       label="Tacx trainer; 6e40fec1-b5a3-f393-e0a9-e50e24dcca9e"/>
   <int value="2022676622" label="fe35"/>
@@ -18480,13 +18844,21 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2055825405" label="fedc"/>
   <int value="2058080782" label="fecc"/>
   <int value="2061595680" label="fea5"/>
+  <int value="2066621778"
+      label="PocketLab; f000aa37-0452-4000-b000-000000000000"/>
   <int value="2069612985" label="fee5"/>
   <int value="2070392722" label="fec2"/>
   <int value="2075745564" label="heart_rate"/>
   <int value="2081534039" label="fe83"/>
   <int value="2086529225" label="tx_power"/>
+  <int value="2093050338"
+      label="PocketLab; f000aa08-0452-4000-b000-000000000000"/>
+  <int value="2095670709"
+      label="PocketLab; f000aa31-0452-4000-b000-000000000000"/>
   <int value="2097896377" label="fee8"/>
   <int value="2100033855" label="fef7"/>
+  <int value="2103247472"
+      label="PocketLab; f000aa09-0452-4000-b000-000000000000"/>
   <int value="2107223399" label="fee7"/>
   <int value="2108894990" label="fe2f"/>
   <int value="2110412550" label="fe43"/>
@@ -19601,7 +19973,7 @@ uploading your change for review.  These are checked by presubmit scripts.
              AMD"/>
 </enum>
 
-<enum name="GpuImageDecodeState">
+<enum name="GpuImageUsageState">
   <int value="0" label="Wasted, once"/>
   <int value="1" label="Used, once"/>
   <int value="2" label="Wasted, relocked"/>
@@ -21594,6 +21966,15 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1" label="Remote suggestions"/>
 </enum>
 
+<enum name="IOSRepeatedExternalAppPromptResponse">
+  <int value="0" label="Blocked">
+    User selected to block the application for the current session.
+  </int>
+  <int value="1" label="Allowed">
+    User selected to allow the application to run again.
+  </int>
+</enum>
+
 <enum name="IOSSearchExtensionAction">
   <int value="0" label="No Action"/>
   <int value="1" label="New Search"/>
@@ -23540,6 +23921,7 @@ from previous Chrome versions.
   <int value="-1749176684" label="PauseBackgroundTabs:disabled"/>
   <int value="-1746767834" label="ssl-interstitial-v2-gray"/>
   <int value="-1740519217" label="disable-software-rasterizer"/>
+  <int value="-1738416948" label="OptimizationHints:enabled"/>
   <int value="-1736075054" label="EnableFullscreenAppList:enabled"/>
   <int value="-1735643253" label="enable-display-list-2d-canvas"/>
   <int value="-1734254845" label="ash-enable-night-light"/>
@@ -23553,6 +23935,7 @@ from previous Chrome versions.
   <int value="-1703709912" label="enable-new-ntp"/>
   <int value="-1703308540" label="disable-webaudio"/>
   <int value="-1696366449" label="disable-permissions-bubbles"/>
+  <int value="-1694353093" label="ArcVpn:disabled"/>
   <int value="-1692384483" label="disambiguate-autofill-server-name-types"/>
   <int value="-1691892152" label="SafeSearchUrlReporting:disabled"/>
   <int value="-1691668194" label="enable-new-bookmark-apps"/>
@@ -23572,6 +23955,7 @@ from previous Chrome versions.
   <int value="-1648216169" label="NewOmniboxAnswerTypes:disabled"/>
   <int value="-1634878515" label="ChromeHomeModernLayout:enabled"/>
   <int value="-1634154256" label="ZeroSuggestRedirectToChrome:enabled"/>
+  <int value="-1633586675" label="TabModalJsDialog:enabled"/>
   <int value="-1631329950" label="ssl-version-max"/>
   <int value="-1630419335" label="enable-download-notification"/>
   <int value="-1624854957" label="enable-es3-apis"/>
@@ -23587,12 +23971,14 @@ from previous Chrome versions.
   <int value="-1607691647" label="MojoVideoEncodeAccelerator:disabled"/>
   <int value="-1605567628" label="disable-overlay-scrollbar"/>
   <int value="-1604051051" label="SpecialLocale:disabled"/>
+  <int value="-1603404046" label="V8VmFuture:disabled"/>
   <int value="-1599538279" label="enable-md-policy-page"/>
   <int value="-1596559650" label="max-tiles-for-interest-area"/>
   <int value="-1594298767" label="FullscreenToolbarReveal:enabled"/>
   <int value="-1586642651" label="MaterialDesignExtensions:disabled"/>
   <int value="-1583728573" label="AutofillCreditCardSigninPromo:disabled"/>
   <int value="-1581724231" label="ModalPermissionPrompts:enabled"/>
+  <int value="-1580376019" label="ShowAllDialogsWithViewsToolkit:enabled"/>
   <int value="-1578295753" label="UserMediaScreenCapturing:disabled"/>
   <int value="-1575984706" label="gl-composited-overlay-candidate-quad-border"/>
   <int value="-1575554415" label="AndroidPaymentAppsFilter:enabled"/>
@@ -23637,10 +24023,12 @@ from previous Chrome versions.
   <int value="-1468126425" label="ResourceLoadScheduler:disabled"/>
   <int value="-1467332609" label="tab-management-experiment-type-anise"/>
   <int value="-1466990325" label="CrosCompUpdates:enabled"/>
+  <int value="-1466759286" label="TabModalJsDialog:disabled"/>
   <int value="-1463410070" label="IPH_DemoMode:enabled"/>
   <int value="-1461261930" label="OutOfBlinkCORS:disabled"/>
   <int value="-1460462432" label="disable-media-source"/>
   <int value="-1456004000" label="VrShell:disabled"/>
+  <int value="-1454397907" label="OptimizationHints:disabled"/>
   <int value="-1450576851" label="OmniboxUIExperimentVerticalLayout:enabled"/>
   <int value="-1444051091" label="ash-disable-night-light"/>
   <int value="-1443796945" label="OfflinePagesSharing:disabled"/>
@@ -23654,6 +24042,8 @@ from previous Chrome versions.
   <int value="-1426817842" label="BlockTabUnders:enabled"/>
   <int value="-1426034869" label="NoCreditCardAbort:enabled"/>
   <int value="-1419788257" label="enable-experimental-hotwording"/>
+  <int value="-1417122729"
+      label="AutofillCreditCardAblationExperiment:disabled"/>
   <int value="-1416754663" label="enable-mac-views-native-app-windows"/>
   <int value="-1416184931" label="TranslateRankerEnforcement:enabled"/>
   <int value="-1411003295" label="disable-encrypted-media"/>
@@ -23687,6 +24077,7 @@ from previous Chrome versions.
   <int value="-1337185440" label="enable-webvr"/>
   <int value="-1334327410" label="ash-enable-touch-view-testing"/>
   <int value="-1327676774" label="disable-accelerated-mjpeg-decode"/>
+  <int value="-1325887476" label="NewPrintPreview:enabled"/>
   <int value="-1322882747" label="disable-datasaver-prompt"/>
   <int value="-1319688939" label="ignore-gpu-blacklist"/>
   <int value="-1318914924" label="OverflowIconsForMediaControls:enabled"/>
@@ -23704,6 +24095,7 @@ from previous Chrome versions.
   <int value="-1262152606" label="disable-lock-screen-apps"/>
   <int value="-1254070521" label="enable-slimming-paint-invalidation"/>
   <int value="-1251411236" label="disable-new-md-input-view"/>
+  <int value="-1248478422" label="enable-zip-archiver-packer"/>
   <int value="-1246840031" label="OptInImeMenu:disabled"/>
   <int value="-1241747717" label="enable-android-password-link"/>
   <int value="-1235586511" label="enable-datasaver-prompt"/>
@@ -23782,6 +24174,7 @@ from previous Chrome versions.
   <int value="-1033738911" label="enable-mac-views-dialogs"/>
   <int value="-1029920490" label="IdleTimeSpellChecking:enabled"/>
   <int value="-1028733699" label="MacViewsWebUIDialogs:disabled"/>
+  <int value="-1027124889" label="NtlmV2Enabled:enabled"/>
   <int value="-1022971520" label="enable-search-button-in-omnibox-for-str"/>
   <int value="-1022165708" label="BreakingNewsPush:disabled"/>
   <int value="-1020450980" label="gesture-deletion"/>
@@ -23861,9 +24254,12 @@ from previous Chrome versions.
   <int value="-814097014" label="disable-session-crashed-bubble"/>
   <int value="-813474479" label="site-per-process"/>
   <int value="-812461825" label="AutofillCreditCardSigninPromo:enabled"/>
+  <int value="-810684526"
+      label="AutofillToolkitViewsCreditCardDialogsMac:disabled"/>
   <int value="-802348444" label="disable-site-engagement-service"/>
   <int value="-798187384" label="try-supported-channel-layouts"/>
   <int value="-795600188" label="disable-async-dns"/>
+  <int value="-793921836" label="ShowAllDialogsWithViewsToolkit:disabled"/>
   <int value="-790036192" label="overscroll-start-threshold"/>
   <int value="-780798969" label="disable-single-click-autofill"/>
   <int value="-776686417" label="SiteExplorationUi:disabled"/>
@@ -23894,6 +24290,7 @@ from previous Chrome versions.
   <int value="-711991950" label="SiteExplorationUi:enabled"/>
   <int value="-711890895" label="enable-website-settings-manager"/>
   <int value="-709058455" label="ui-slow-animations"/>
+  <int value="-706733351" label="enable-floating-virtual-keyboard:enabled"/>
   <int value="-702477233" label="ContentFullscreen:enabled"/>
   <int value="-699767107" label="enable-sync-app-list"/>
   <int value="-697751423" label="disable-quickoffice-component-app"/>
@@ -23902,6 +24299,7 @@ from previous Chrome versions.
   <int value="-680787130" label="ExperimentalVRFeatures:disabled"/>
   <int value="-680589442" label="MacRTL:disabled"/>
   <int value="-671992446" label="TranslateRankerEnforcement:disabled"/>
+  <int value="-670188266" label="enable-zip-archiver-unpacker"/>
   <int value="-667517406" label="overscroll-history-navigation"/>
   <int value="-666508951" label="CrOSContainer:enabled"/>
   <int value="-663476391" label="enable-pixel-canvas-recording:enabled"/>
@@ -24015,6 +24413,7 @@ from previous Chrome versions.
   <int value="-329727402" label="disable-files-quick-view"/>
   <int value="-328361990" label="enable-experimental-extension-apis"/>
   <int value="-326083626" label="AppBanners:disabled"/>
+  <int value="-323964300" label="ArcVpn:enabled"/>
   <int value="-323831744" label="token-binding:enabled"/>
   <int value="-322937746" label="disable-desktop-capture-picker-new-ui"/>
   <int value="-322827131" label="tab-management-experiment-type-basil"/>
@@ -24029,6 +24428,7 @@ from previous Chrome versions.
       label="CrossOriginMediaPlaybackRequiresUserGesture:disabled"/>
   <int value="-290672626" label="enable-asm-wasm"/>
   <int value="-288316828" label="enable-delegated-renderer"/>
+  <int value="-281844827" label="AutofillCreditCardAblationExperiment:enabled"/>
   <int value="-279920685" label="affiliation-based-matching:enabled"/>
   <int value="-279493876" label="WebVRExperimentalRendering:enabled"/>
   <int value="-278347667" label="default-tile-height"/>
@@ -24108,6 +24508,7 @@ from previous Chrome versions.
   <int value="-48920737" label="enable-smooth-scrolling"/>
   <int value="-45532639" label="enable-default-media-session"/>
   <int value="-45074716" label="SystemDownloadManager:disabled"/>
+  <int value="-45067971" label="NewPrintPreview:disabled"/>
   <int value="-29847483" label="MemoryAblation:enabled"/>
   <int value="-23090520" label="disable-search-button-in-omnibox"/>
   <int value="-22544408" label="enable-video-player-chromecast-support"/>
@@ -24138,6 +24539,7 @@ from previous Chrome versions.
   <int value="56723110" label="enable-webfonts-intervention"/>
   <int value="57639188" label="SoundContentSetting:disabled"/>
   <int value="57791920" label="MemoryCoordinator:enabled"/>
+  <int value="58099178" label="SecondaryUiMd:enabled"/>
   <int value="59784035" label="ImeThread:disabled"/>
   <int value="59964519" label="OmniboxEnableClipboardProvider:disabled"/>
   <int value="61205887" label="enable-text-input-focus-manager"/>
@@ -24213,8 +24615,10 @@ from previous Chrome versions.
   <int value="341152650" label="SoundContentSetting:enabled"/>
   <int value="346711293" label="enable-save-password-bubble"/>
   <int value="348854923" label="v8-cache-strategies-for-cache-storage"/>
+  <int value="350399958" label="ModuleScriptsImportMetaUrl:disabled"/>
   <int value="352191859" label="disabled-new-style-notification"/>
   <int value="352937987" label="OverflowIconsForMediaControls:disabled"/>
+  <int value="357138275" label="enable-floating-virtual-keyboard:disabled"/>
   <int value="358399482" label="enable-high-dpi-fixed-position-compositing"/>
   <int value="358493847" label="BackgroundLoader:disabled"/>
   <int value="360391863" label="NTPOfflineBadge:enabled"/>
@@ -24225,6 +24629,7 @@ from previous Chrome versions.
   <int value="370486304" label="enable-origin-chip-on-srp"/>
   <int value="371268743" label="OmniboxUIExperimentVerticalMargin:disabled"/>
   <int value="372460068" label="QuickUnlockFingerprint:disabled"/>
+  <int value="375785554" label="UserActivationV2:disabled"/>
   <int value="377093001" label="WebRtcHWH264Encoding:disabled"/>
   <int value="379326303" label="enable-add-to-shelf"/>
   <int value="379428799" label="security-chip-animation"/>
@@ -24331,6 +24736,8 @@ from previous Chrome versions.
   <int value="651844675" label="EasyUnlockPromotions:enabled"/>
   <int value="652561231" label="CustomContextMenu:enabled"/>
   <int value="659086147" label="OverlayScrollbarFlashWhenMouseEnter:enabled"/>
+  <int value="665409384"
+      label="AutofillToolkitViewsCreditCardDialogsMac:enabled"/>
   <int value="679931272" label="DcheckIsFatal:enabled"/>
   <int value="684806628" label="TranslateLanguageByULP:disabled"/>
   <int value="685916283" label="enable-zip-archiver-on-file-manager"/>
@@ -24352,6 +24759,7 @@ from previous Chrome versions.
   <int value="719267310"
       label="KeepAliveRendererForKeepaliveRequests:disabled"/>
   <int value="721225492" label="PolicyTool:enabled"/>
+  <int value="723619383" label="TopSitesFromSiteEngagement:enabled"/>
   <int value="724208771" label="TabsInCBD:enabled"/>
   <int value="730024226" label="enable-out-of-process-pdf"/>
   <int value="730750097" label="PermissionsBlacklist:disabled"/>
@@ -24384,6 +24792,7 @@ from previous Chrome versions.
   <int value="841276069" label="ChromeHomeDoodle:disabled"/>
   <int value="841343322" label="disable-new-korean-ime"/>
   <int value="842432903" label="CaptureThumbnailOnNavigatingAway:enabled"/>
+  <int value="843896452" label="UserActivationV2:enabled"/>
   <int value="846951416" label="CopylessPaste:enabled"/>
   <int value="848324390" label="enable-lock-screen-apps"/>
   <int value="851085848" label="enable-settings-window"/>
@@ -24394,6 +24803,7 @@ from previous Chrome versions.
   <int value="867512869" label="mark-non-secure-as"/>
   <int value="869531646" label="enable-session-crashed-bubble"/>
   <int value="871713352" label="ImprovedLanguageSettings:enabled"/>
+  <int value="878773995" label="ChromeHomeBottomNavLabels:disabled"/>
   <int value="879699575" label="disable-gesture-tap-highlight"/>
   <int value="879992337" label="disable-pull-to-refresh-effect"/>
   <int value="880510010" label="enable-permissions-bubbles"/>
@@ -24409,6 +24819,7 @@ from previous Chrome versions.
   <int value="908523940" label="PassiveEventListenersDueToFling:disabled"/>
   <int value="909439558" label="disable-device-discovery"/>
   <int value="916316159" label="disable-new-app-list-mixer"/>
+  <int value="918046854" label="NtlmV2Enabled:disabled"/>
   <int value="926852901" label="DataReductionProxyMainMenu:disabled"/>
   <int value="929462705" label="disable-link-disambiguation-popup"/>
   <int value="935655516" label="password-import-export:disabled"/>
@@ -24431,6 +24842,7 @@ from previous Chrome versions.
   <int value="983311394" label="tab-management-experiment-type"/>
   <int value="986796748" label="AccountConsistency:enabled"/>
   <int value="988981463" label="ImageCaptureAPI:enabled"/>
+  <int value="989062160" label="ModuleScriptsImportMetaUrl:enabled"/>
   <int value="996797157" label="V8ContextSnapshot:enabled"/>
   <int value="1000706989" label="AutomaticTabDiscarding:disabled"/>
   <int value="1002585107" label="emphasize-titles-in-omnibox-dropdown"/>
@@ -24559,11 +24971,13 @@ from previous Chrome versions.
   <int value="1314681756" label="NoStatePrefetch:disabled"/>
   <int value="1317562265" label="SeccompSandboxAndroid:disabled"/>
   <int value="1318073661" label="MaterialDesignExtensions:enabled"/>
+  <int value="1319068611" label="SecondaryUiMd:disabled"/>
   <int value="1319725131" label="enable-distance-field-text"/>
   <int value="1320201920" label="enable-touchpad-three-finger-click"/>
   <int value="1330029351" label="AutofillUpstreamShowGoogleLogo:disabled"/>
   <int value="1330264457" label="OmniboxUIExperimentVerticalLayout:disabled"/>
   <int value="1333847867" label="NoScriptPreviews:enabled"/>
+  <int value="1339426771" label="TopSitesFromSiteEngagement:disabled"/>
   <int value="1340690624" label="WebPaymentsMethodSectionOrderV2:disabled"/>
   <int value="1344833841" label="ImeThread:enabled"/>
   <int value="1351830811" label="do-not-ignore-autocomplete-off"/>
@@ -24613,6 +25027,7 @@ from previous Chrome versions.
   <int value="1454143461" label="CaptureThumbnailOnNavigatingAway:disabled"/>
   <int value="1454363479" label="disable-storage-manager"/>
   <int value="1454527518" label="ArcNativeBridgeExperiment:enabled"/>
+  <int value="1455881930" label="V8VmFuture:enabled"/>
   <int value="1458583431" label="arc-use-auth-endpoint"/>
   <int value="1459529277" label="disable-text-input-focus-manager"/>
   <int value="1460747747" label="GdiTextPrinting:enabled"/>
@@ -24742,6 +25157,7 @@ from previous Chrome versions.
   <int value="1851085023" label="PwaMinimalUi:enabled"/>
   <int value="1852630189" label="NTPBookmarkSuggestions:disabled"/>
   <int value="1855524566" label="allow-insecure-websocket-from-https-origin"/>
+  <int value="1858385315" label="ChromeHomeBottomNavLabels:enabled"/>
   <int value="1860597983" label="AndroidSpellChecker:disabled"/>
   <int value="1861251313"
       label="enable-message-center-always-scroll-up-upon-notification-removal"/>
@@ -25888,9 +26304,15 @@ from previous Chrome versions.
 <enum name="MarkHttpAsStatus">
   <int value="0" label="Neutral (deprecated February 2017)"/>
   <int value="1" label="Non-Secure"/>
-  <int value="2" label="Neutral with a verbose warning on sensitive fields"/>
-  <int value="3" label="Neutral with a verbose warning after editing a form"/>
-  <int value="4" label="Neutral with a verbose warning in Incognito mode"/>
+  <int value="2"
+      label="Neutral with a verbose warning on sensitive fields (deprecated
+             October 2017)"/>
+  <int value="3"
+      label="Neutral with a verbose warning after editing a form (deprecated
+             October 2017)"/>
+  <int value="4"
+      label="Neutral with a verbose warning in Incognito mode (deprecated
+             October 2017)"/>
   <int value="5"
       label="Neutral with a verbose warning after editing a form or in
              Incognito mode"/>
@@ -29504,6 +29926,19 @@ from previous Chrome versions.
   <int value="10" label="Hide for now"/>
 </enum>
 
+<enum name="OutOfProcessHeapProfilingMode">
+  <int value="0" label="None"/>
+  <int value="1" label="Minimal"/>
+  <int value="2" label="All"/>
+</enum>
+
+<enum name="OutOfProcessHeapProfilingProcessType">
+  <int value="0" label="Other"/>
+  <int value="1" label="Browser"/>
+  <int value="2" label="Renderer"/>
+  <int value="3" label="GPU"/>
+</enum>
+
 <enum name="OutputDeviceStatus">
   <int value="0" label="Ok"/>
   <int value="1" label="Not found"/>
@@ -30847,6 +31282,13 @@ from previous Chrome versions.
   <int value="0" label="Loaded Document"/>
   <int value="1" label="Has Title"/>
   <int value="2" label="Has Bookmarks"/>
+</enum>
+
+<enum name="PDFFormTypes">
+  <int value="0" label="None"/>
+  <int value="1" label="AcroForm"/>
+  <int value="2" label="Full XFA"/>
+  <int value="3" label="Foreground XFA (XFAF)"/>
 </enum>
 
 <enum name="PeerConnectionCounters">
@@ -33598,6 +34040,7 @@ from previous Chrome versions.
   <int value="13" label="FrameDeferrable"/>
   <int value="14" label="FramePausable"/>
   <int value="15" label="FrameUnpausable"/>
+  <int value="16" label="V8"/>
 </enum>
 
 <enum name="RendererType">
@@ -37916,6 +38359,16 @@ would be helpful to identify which type is being sent.
   </int>
 </enum>
 
+<enum name="SurveyDownloadResponseCodes">
+  <int value="-1" label="Response code missing"/>
+  <int value="0" label="Survey downloaded"/>
+  <int value="1" label="No survey available"/>
+  <int value="2" label="Survey library version disabled"/>
+  <int value="3" label="Max surveys already shown"/>
+  <int value="4" label="Failed to download survey"/>
+  <int value="5" label="Unknown response code"/>
+</enum>
+
 <enum name="SuspendAttempt">
   <int value="0" label="Attempted"/>
 </enum>
@@ -38227,6 +38680,7 @@ would be helpful to identify which type is being sent.
   <int value="0" label="Saved on Chrome sign-in"/>
   <int value="1" label="Saved in the content area"/>
   <int value="2" label="Cleared on Chrome sign-out"/>
+  <int value="3" label="Changed in the content area"/>
 </enum>
 
 <enum name="SyncPromoAction">
@@ -38850,6 +39304,23 @@ would be helpful to identify which type is being sent.
       label="Bubbling Root-scroller, scrollable document, not handled"/>
   <int value="35"
       label="Bubbling Root-scroller, scrollable document, handled application"/>
+</enum>
+
+<enum name="TPMFirmwareUpdateResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Success after retry"/>
+  <int value="2" label="Failure but still booting"/>
+</enum>
+
+<enum name="TPMFirmwareUpdateStatus">
+  <int value="0" label="EXIT_CODE_SUCCESS"/>
+  <int value="1" label="EXIT_CODE_ERROR"/>
+  <int value="3" label="EXIT_CODE_NO_UPDATE"/>
+  <int value="4" label="EXIT_CODE_UPDATE_FAILED"/>
+  <int value="5" label="EXIT_CODE_LOW_BATTERY"/>
+  <int value="6" label="EXIT_CODE_NOT_UPDATABLE"/>
+  <int value="7" label="EXIT_CODE_MISSING_APPROVAL"/>
+  <int value="8" label="EXIT_CODE_SUCCESS_COLD_REBOOT"/>
 </enum>
 
 <enum name="TPMResultCodeEnum">
@@ -40907,6 +41378,30 @@ Called by update_traffic_annotation_histograms.py.-->
   <int value="4" label="Failed"/>
 </enum>
 
+<enum name="WebApkInstallGooglePlayErrorCode">
+  <int value="192" label="STATUS_RUNNING"/>
+  <int value="194" label="STATUS_WAITING_TO_RETRY"/>
+  <int value="198" label="STATUS_INSUFFICIENT_SPACE_ERROR"/>
+  <int value="400" label="STATUS_BAD_REQUEST"/>
+  <int value="406" label="STATUS_NOT_ACCEPTABLE"/>
+  <int value="489" label="STATUS_CANNOT_RESUME"/>
+  <int value="490" label="STATUS_CANCELED"/>
+  <int value="491" label="STATUS_UNKNOWN_ERROR"/>
+  <int value="492" label="STATUS_FILE_ERROR"/>
+  <int value="495" label="STATUS_HTTP_DATA_ERROR"/>
+  <int value="907" label="ERROR_DOWNLOAD_INTERNAL_CONDITION_5"/>
+  <int value="908" label="ERROR_DOWNLOAD_INTERNAL_FREE_SPACE"/>
+  <int value="910" label="ERROR_INSTALL_INCOMPLETE"/>
+  <int value="919" label="ERROR_INSTALL_APK_VERIFICATION_SIZE"/>
+  <int value="920" label="ERROR_VOLLEY_AUTH_FAILURE"/>
+  <int value="922" label="ERROR_VOLLEY_DFE_SERVER"/>
+  <int value="923" label="ERROR_VOLLEY_NETWORK"/>
+  <int value="924" label="ERROR_VOLLEY_NO_CONNECTION"/>
+  <int value="927" label="ERROR_VOLLEY_TIMEOUT"/>
+  <int value="961" label="ERROR_INSTALL_APK_VERIFICATION_OTHER"/>
+  <int value="963" label="ERROR_INSTALL_APK_COPY_FAILURE"/>
+</enum>
+
 <enum name="WebApkInstallInfoBarShown">
   <obsolete>
     Deprecated as of 8/2017
@@ -42290,6 +42785,14 @@ Called by update_traffic_annotation_histograms.py.-->
   <int value="8" label="BYPASS">
     The &quot;frame-ancestors&quot; CSP directive should take effect instead.
   </int>
+</enum>
+
+<enum name="XHRPageDismissalState">
+  <int value="0" label="No page dismissal."/>
+  <int value="1" label="Page dismissal: beforeunload."/>
+  <int value="2" label="Page dismissal: pagehide."/>
+  <int value="3" label="Page dismissal: visibility change (during unload)."/>
+  <int value="4" label="Page dismissal: unload."/>
 </enum>
 
 <enum name="XMLHttpRequestHeaderValueCategoryInRFC7230">

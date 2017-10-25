@@ -80,12 +80,16 @@ class FrameIdTest : public HeadlessAsyncDevTooledBrowserTest,
     devtools_client_->GetNetwork()->Enable();
 
     if (EnableInterception()) {
-      devtools_client_->GetNetwork()
-          ->GetExperimental()
-          ->SetRequestInterceptionEnabled(
-              network::SetRequestInterceptionEnabledParams::Builder()
-                  .SetEnabled(true)
-                  .Build());
+      std::unique_ptr<headless::network::RequestPattern> match_all =
+          headless::network::RequestPattern::Builder()
+              .SetUrlPattern("*")
+              .Build();
+      std::vector<std::unique_ptr<headless::network::RequestPattern>> patterns;
+      patterns.push_back(std::move(match_all));
+      devtools_client_->GetNetwork()->GetExperimental()->SetRequestInterception(
+          network::SetRequestInterceptionParams::Builder()
+              .SetPatterns(std::move(patterns))
+              .Build());
     }
 
     devtools_client_->GetPage()->AddObserver(this);
@@ -103,7 +107,7 @@ class FrameIdTest : public HeadlessAsyncDevTooledBrowserTest,
     ProtocolHandlerMap protocol_handlers;
     std::unique_ptr<TestInMemoryProtocolHandler> http_handler(
         new TestInMemoryProtocolHandler(browser()->BrowserIOThread(),
-                                        /* simulate_slow_fetch */ false));
+                                        /* request_deferrer */ nullptr));
     http_handler_ = http_handler.get();
     http_handler_->InsertResponse("http://foo.com/index.html",
                                   {kIndexHtml, "text/html"});

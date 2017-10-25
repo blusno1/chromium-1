@@ -412,6 +412,8 @@ class CONTENT_EXPORT RenderWidget
   // Requests a BeginMainFrame callback from the compositor.
   void SetNeedsMainFrame() override;
 
+  int GetWidgetRoutingIdAtPoint(const gfx::Point& point);
+
   void HandleInputEvent(const blink::WebCoalescedInputEvent& input_event,
                         const ui::LatencyInfo& latency_info,
                         HandledEventCallback callback) override;
@@ -577,8 +579,6 @@ class CONTENT_EXPORT RenderWidget
   // used only with auto resize mode WebWidgets, as normal WebWidgets should
   // go through OnResize.
   void AutoResizeCompositor();
-
-  virtual void OnSetDeviceScaleFactor(float device_scale_factor);
 
   void OnOrientationChange();
 

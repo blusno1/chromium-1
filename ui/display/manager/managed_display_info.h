@@ -65,11 +65,9 @@ struct DISPLAY_MANAGER_EXPORT TouchCalibrationData {
 };
 
 // A class that represents the display's mode info.
-class DISPLAY_MANAGER_EXPORT ManagedDisplayMode
-    : public base::RefCounted<ManagedDisplayMode> {
+class DISPLAY_MANAGER_EXPORT ManagedDisplayMode {
  public:
   ManagedDisplayMode();
-
   explicit ManagedDisplayMode(const gfx::Size& size);
 
   ManagedDisplayMode(const gfx::Size& size,
@@ -83,11 +81,16 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayMode
                      bool native,
                      float ui_scale,
                      float device_scale_factor);
+
+  ~ManagedDisplayMode();
+  ManagedDisplayMode(const ManagedDisplayMode& other);
+  ManagedDisplayMode& operator=(const ManagedDisplayMode& other);
+
   // Returns the size in DIP which is visible to the user.
   gfx::Size GetSizeInDIP(bool is_internal) const;
 
   // Returns true if |other| has same size and scale factors.
-  bool IsEquivalent(const scoped_refptr<ManagedDisplayMode>& other) const;
+  bool IsEquivalent(const ManagedDisplayMode& other) const;
 
   const gfx::Size& size() const { return size_; }
   bool is_interlaced() const { return is_interlaced_; }
@@ -103,18 +106,13 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayMode
   float device_scale_factor() const { return device_scale_factor_; }
 
  private:
-  ~ManagedDisplayMode();
-  friend class base::RefCounted<ManagedDisplayMode>;
-
-  gfx::Size size_;             // Physical pixel size of the display.
-  float refresh_rate_;         // Refresh rate of the display, in Hz.
-  bool is_interlaced_;         // True if mode is interlaced.
-  bool native_;                // True if mode is native mode of the display.
-  bool is_default_ = false;    // True if mode is one with default UI scale.
-  float ui_scale_;             // The UI scale factor of the mode.
-  float device_scale_factor_;  // The device scale factor of the mode.
-
-  DISALLOW_COPY_AND_ASSIGN(ManagedDisplayMode);
+  gfx::Size size_;              // Physical pixel size of the display.
+  float refresh_rate_ = 0.0f;   // Refresh rate of the display, in Hz.
+  bool is_interlaced_ = false;  // True if mode is interlaced.
+  bool native_ = false;         // True if mode is native mode of the display.
+  bool is_default_ = false;     // True if mode is one with default UI scale.
+  float ui_scale_ = 1.0f;       // The UI scale factor of the mode.
+  float device_scale_factor_ = 1.0f;  // The device scale factor of the mode.
 };
 
 // ManagedDisplayInfo contains metadata for each display. This is used to create
@@ -122,7 +120,7 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayMode
 // environment. This class is intentionally made copiable.
 class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
  public:
-  using ManagedDisplayModeList = std::vector<scoped_refptr<ManagedDisplayMode>>;
+  using ManagedDisplayModeList = std::vector<ManagedDisplayMode>;
 
   // Creates a ManagedDisplayInfo from string spec. 100+200-1440x800 creates
   // display
@@ -325,20 +323,14 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   }
 
   // Returns a string representation of the ManagedDisplayInfo, excluding
-  // display
-  // modes.
+  // display modes.
   std::string ToString() const;
 
   // Returns a string representation of the ManagedDisplayInfo, including
-  // display
-  // modes.
+  // display modes.
   std::string ToFullString() const;
 
  private:
-  // Returns true if this display should use DSF=1.25 for UI scaling; i.e.
-  // SetUse125DSFForUIScaling(true) is called and this is the internal display.
-  bool Use125DSFForUIScaling() const;
-
   int64_t id_;
   std::string name_;
   base::FilePath sys_path_;
@@ -350,11 +342,10 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   // Identifiers for touch devices that are associated with this display.
   std::set<uint32_t> touch_device_identifiers_;
 
-  // This specifies the device's pixel density. (For example, a
-  // display whose DPI is higher than the threshold is considered to have
-  // device_scale_factor = 2.0 on Chrome OS).  This is used by the
-  // grapics layer to choose and draw appropriate images and scale
-  // layers properly.
+  // This specifies the device's pixel density. (For example, a display whose
+  // DPI is higher than the threshold is considered to have device_scale_factor
+  // = 2.0 on Chrome OS).  This is used by the graphics layer to choose and draw
+  // appropriate images and scale layers properly.
   float device_scale_factor_;
   gfx::Rect bounds_in_native_;
 
@@ -366,12 +357,11 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   gfx::Size size_in_pixel_;
   gfx::Insets overscan_insets_in_dip_;
 
-  // The pixel scale of the display. This is used to simply expand (or
-  // shrink) the desktop over the native display resolution (useful in
-  // HighDPI display).  Note that this should not be confused with the
-  // device scale factor, which specifies the pixel density of the
-  // display. The actuall scale value to be used depends on the device
-  // scale factor.  See |GetEffectiveScaleFactor()|.
+  // The pixel scale of the display. This is used to simply expand (or shrink)
+  // the desktop over the native display resolution (useful in HighDPI display).
+  // Note that this should not be confused with the device scale factor, which
+  // specifies the pixel density of the display. The actuall scale value to be
+  // used depends on the device scale factor.  See |GetEffectiveScaleFactor()|.
   float configured_ui_scale_;
 
   // True if this comes from native platform (DisplayChangeObserver).

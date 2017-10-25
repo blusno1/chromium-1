@@ -7,6 +7,7 @@
 
 #include "bindings/core/v8/ScriptModule.h"
 #include "core/CoreExport.h"
+#include "core/dom/ModuleImportMeta.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/V8PerContextData.h"
 #include "platform/heap/Handle.h"
@@ -39,7 +40,7 @@ class CORE_EXPORT SingleModuleClient
       public TraceWrapperBase {
  public:
   virtual ~SingleModuleClient() = default;
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 
   virtual void NotifyModuleLoadFinished(ModuleScript*) = 0;
 };
@@ -51,7 +52,7 @@ class CORE_EXPORT ModuleTreeClient
       public TraceWrapperBase {
  public:
   virtual ~ModuleTreeClient() = default;
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 
   virtual void NotifyModuleTreeLoadFinished(ModuleScript*) = 0;
 };
@@ -77,7 +78,7 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
   static void SetModulator(ScriptState*, Modulator*);
   static void ClearModulator(ScriptState*);
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  virtual void Trace(blink::Visitor* visitor) {}
 
   virtual ScriptModuleResolver* GetScriptModuleResolver() = 0;
   virtual WebTaskRunner* TaskRunner() = 0;
@@ -119,6 +120,9 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
                                   const KURL&,
                                   const ReferrerScriptInfo&,
                                   ScriptPromiseResolver*) = 0;
+
+  // https://html.spec.whatwg.org/#hostgetimportmetaproperties
+  virtual ModuleImportMeta HostGetImportMetaProperties(ScriptModule) const = 0;
 
   virtual bool HasValidContext() = 0;
 

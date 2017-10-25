@@ -33,6 +33,7 @@
 #include <memory>
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "platform/CrossThreadFunctional.h"
+#include "platform/Histogram.h"
 #include "platform/UUID.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/blob/BlobBytesProvider.h"
@@ -47,20 +48,22 @@
 #include "public/platform/FilePathConversion.h"
 #include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
-
-using storage::mojom::blink::BlobPtr;
-using storage::mojom::blink::BlobRegistryPtr;
-using storage::mojom::blink::BytesProviderPtr;
-using storage::mojom::blink::BytesProviderRequest;
-using storage::mojom::blink::DataElement;
-using storage::mojom::blink::DataElementBlob;
-using storage::mojom::blink::DataElementPtr;
-using storage::mojom::blink::DataElementBytes;
-using storage::mojom::blink::DataElementBytesPtr;
-using storage::mojom::blink::DataElementFile;
-using storage::mojom::blink::DataElementFilesystemURL;
+#include "third_party/WebKit/common/blob/blob_registry.mojom-blink.h"
 
 namespace blink {
+
+using mojom::blink::BlobPtr;
+using mojom::blink::BlobPtrInfo;
+using mojom::blink::BlobRegistryPtr;
+using mojom::blink::BytesProviderPtr;
+using mojom::blink::BytesProviderRequest;
+using mojom::blink::DataElement;
+using mojom::blink::DataElementBlob;
+using mojom::blink::DataElementPtr;
+using mojom::blink::DataElementBytes;
+using mojom::blink::DataElementBytesPtr;
+using mojom::blink::DataElementFile;
+using mojom::blink::DataElementFilesystemURL;
 
 namespace {
 
@@ -141,7 +144,7 @@ void BlobData::SetContentType(const String& content_type) {
     content_type_ = "";
 }
 
-void BlobData::AppendData(RefPtr<RawData> data,
+void BlobData::AppendData(scoped_refptr<RawData> data,
                           long long offset,
                           long long length) {
   DCHECK_EQ(file_composition_, FileCompositionStatus::NO_UNKNOWN_SIZE_FILES)
@@ -164,7 +167,7 @@ void BlobData::AppendFile(const String& path,
       BlobDataItem(path, offset, length, expected_modification_time));
 }
 
-void BlobData::AppendBlob(RefPtr<BlobDataHandle> data_handle,
+void BlobData::AppendBlob(scoped_refptr<BlobDataHandle> data_handle,
                           long long offset,
                           long long length) {
   DCHECK_EQ(file_composition_, FileCompositionStatus::NO_UNKNOWN_SIZE_FILES)
@@ -190,7 +193,7 @@ void BlobData::AppendText(const String& text,
       << "Blobs with a unknown-size file cannot have other items.";
   CString utf8_text =
       UTF8Encoding().Encode(text, WTF::kEntitiesForUnencodables);
-  RefPtr<RawData> data = nullptr;
+  scoped_refptr<RawData> data = nullptr;
   Vector<char>* buffer;
   if (CanConsolidateData(text.length())) {
     buffer = items_.back().data->MutableData();
@@ -217,7 +220,7 @@ void BlobData::AppendBytes(const void* bytes, size_t length) {
                                               length);
     return;
   }
-  RefPtr<RawData> data = RawData::Create();
+  scoped_refptr<RawData> data = RawData::Create();
   Vector<char>* buffer = data->MutableData();
   buffer->Append(static_cast<const char*>(bytes), length);
   items_.push_back(BlobDataItem(std::move(data)));
@@ -293,7 +296,8 @@ BlobDataHandle::BlobDataHandle(std::unique_ptr<BlobData> data, long long size)
     Vector<DataElementPtr> elements;
     const DataElementPtr null_element = nullptr;
     BlobBytesProvider* last_bytes_provider = nullptr;
-    RefPtr<WebTaskRunner> file_runner = Platform::Current()->FileTaskRunner();
+    scoped_refptr<WebTaskRunner> file_runner =
+        Platform::Current()->FileTaskRunner();
 
     // TODO(mek): When the mojo code path is the default BlobData should
     // directly create mojom::DataElements rather than BlobDataItems,
@@ -396,10 +400,11 @@ BlobDataHandle::BlobDataHandle(const String& uuid,
       size_(size),
       is_single_unknown_size_file_(false) {
   if (RuntimeEnabledFeatures::MojoBlobsEnabled()) {
+    SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Storage.Blob.GetBlobFromUUIDTime");
     // TODO(mek): Going through InterfaceProvider to get a BlobRegistryPtr
     // ends up going through the main thread. Ideally workers wouldn't need
     // to do that.
-    storage::mojom::blink::BlobRegistryPtr registry;
+    BlobRegistryPtr registry;
     Platform::Current()->GetInterfaceProvider()->GetInterface(
         MakeRequest(&registry));
     registry->GetBlobFromUUID(MakeRequest(&blob_info_), uuid_);
@@ -411,7 +416,7 @@ BlobDataHandle::BlobDataHandle(const String& uuid,
 BlobDataHandle::BlobDataHandle(const String& uuid,
                                const String& type,
                                long long size,
-                               storage::mojom::blink::BlobPtrInfo blob_info)
+                               BlobPtrInfo blob_info)
     : uuid_(uuid.IsolatedCopy()),
       type_(IsValidBlobType(type) ? type.IsolatedCopy() : ""),
       size_(size),

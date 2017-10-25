@@ -30,7 +30,9 @@ enum UiElementName {
   kLocationAccessIndicator,
   kBluetoothConnectedIndicator,
   kLoadingIndicator,
+  kLoadingIndicatorForeground,
   kCloseButton,
+  kVoiceSearchButton,
   kScreenDimmer,
   kExitWarning,
   kExitPrompt,
@@ -53,6 +55,14 @@ enum UiElementName {
   kBackgroundTop,
   kBackgroundBottom,
   kUnderDevelopmentNotice,
+  kWebVrTimeoutSpinner,
+  kWebVrTimeoutSpinnerBackground,
+  kWebVrTimeoutMessage,
+  kWebVrTimeoutMessageLayout,
+  kWebVrTimeoutMessageIcon,
+  kWebVrTimeoutMessageText,
+  kWebVrTimeoutMessageButton,
+  kWebVrTimeoutMessageButtonText,
 };
 
 }  // namespace vr

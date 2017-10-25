@@ -53,7 +53,6 @@
 #include "ash/message_center/message_center_controller.h"
 #include "ash/new_window_controller.h"
 #include "ash/note_taking_controller.h"
-#include "ash/palette_delegate.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_model.h"
@@ -475,6 +474,12 @@ void Shell::SetLargeCursorSizeInDip(int large_cursor_size_in_dip) {
       ->SetLargeCursorSizeInDip(large_cursor_size_in_dip);
 }
 
+void Shell::UpdateCursorCompositingEnabled() {
+  SetCursorCompositingEnabled(
+      window_tree_host_manager_->cursor_window_controller()
+          ->ShouldEnableCursorCompositing());
+}
+
 void Shell::SetCursorCompositingEnabled(bool enabled) {
   if (GetAshConfig() != Config::MASH) {
     // TODO: needs to work in mash. http://crbug.com/705592.
@@ -876,7 +881,6 @@ void Shell::Init(const ShellInitParams& init_params) {
   accessibility_delegate_.reset(shell_delegate_->CreateAccessibilityDelegate());
   accessibility_controller_ = std::make_unique<AccessibilityController>(
       shell_delegate_->GetShellConnector());
-  palette_delegate_ = shell_delegate_->CreatePaletteDelegate();
   toast_manager_ = std::make_unique<ToastManager>();
 
   // Install the custom factory early on so that views::FocusManagers for Tray,

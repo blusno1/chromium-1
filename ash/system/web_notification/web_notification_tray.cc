@@ -84,7 +84,8 @@ class WebNotificationBubbleWrapper {
     init_params.anchor_view = anchor_tray->GetBubbleAnchor();
     init_params.anchor_alignment = tray->GetAnchorAlignment();
     const int width = message_center::kNotificationWidth +
-                      message_center::kMarginBetweenItems * 2;
+                      message_center::kNotificationBorderThickness * 2 +
+                      message_center::kMarginBetweenItemsInList * 2;
     init_params.min_width = width;
     init_params.max_width = width;
     init_params.max_height = bubble->max_height();
@@ -93,7 +94,8 @@ class WebNotificationBubbleWrapper {
 
     views::TrayBubbleView* bubble_view = new views::TrayBubbleView(init_params);
     bubble_view->set_anchor_view_insets(anchor_tray->GetBubbleAnchorInsets());
-    bubble_wrapper_.reset(new TrayBubbleWrapper(tray, bubble_view));
+    bubble_wrapper_ = std::make_unique<TrayBubbleWrapper>(
+        tray, bubble_view, false /* is_persistent */);
     bubble->InitializeContents(bubble_view);
   }
 

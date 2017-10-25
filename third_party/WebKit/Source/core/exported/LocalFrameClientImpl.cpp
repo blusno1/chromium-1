@@ -151,7 +151,7 @@ LocalFrameClientImpl* LocalFrameClientImpl::Create(WebLocalFrameImpl* frame) {
 
 LocalFrameClientImpl::~LocalFrameClientImpl() {}
 
-DEFINE_TRACE(LocalFrameClientImpl) {
+void LocalFrameClientImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(web_frame_);
   LocalFrameClient::Trace(visitor);
 }
@@ -335,7 +335,7 @@ void LocalFrameClientImpl::Detached(FrameDetachType type) {
 
   // Signal that no further communication with WebFrameClient should take
   // place at this point since we are no longer associated with the Page.
-  web_frame_->SetClient(0);
+  web_frame_->SetClient(nullptr);
 
   client->FrameDetached(static_cast<WebFrameClient::DetachType>(type));
 
@@ -893,7 +893,7 @@ WebRemotePlaybackClient* LocalFrameClientImpl::CreateWebRemotePlaybackClient(
 
 WebCookieJar* LocalFrameClientImpl::CookieJar() const {
   if (!web_frame_->Client())
-    return 0;
+    return nullptr;
   return web_frame_->Client()->CookieJar();
 }
 
@@ -1066,6 +1066,9 @@ KURL LocalFrameClientImpl::OverrideFlashEmbedWithHTML(const KURL& url) {
 void LocalFrameClientImpl::SetHasReceivedUserGesture(bool received_previously) {
   // The client potentially needs to dispatch the event to other processes only
   // for the first time.
+  //
+  // TODO(mustaq): Can we remove |received_previously|, specially when
+  // autofill-client below ignores it already? crbug.com/775930
   if (!received_previously && web_frame_->Client())
     web_frame_->Client()->SetHasReceivedUserGesture();
   // WebAutofillClient reacts only to the user gestures for this particular
@@ -1089,12 +1092,9 @@ TextCheckerClient& LocalFrameClientImpl::GetTextCheckerClient() const {
   return web_frame_->GetTextCheckerClient();
 }
 
-std::unique_ptr<blink::WebURLLoader> LocalFrameClientImpl::CreateURLLoader(
-    const ResourceRequest& request,
-    WebTaskRunner* task_runner) {
-  WrappedResourceRequest wrapped(request);
-  return web_frame_->CreateURLLoader(wrapped,
-                                     task_runner->ToSingleThreadTaskRunner());
+std::unique_ptr<blink::WebURLLoaderFactory>
+LocalFrameClientImpl::CreateURLLoaderFactory() {
+  return web_frame_->CreateURLLoaderFactory();
 }
 
 service_manager::InterfaceProvider*
@@ -1110,8 +1110,15 @@ void LocalFrameClientImpl::DidBlockFramebust(const KURL& url) {
   web_frame_->Client()->DidBlockFramebust(url);
 }
 
-String LocalFrameClientImpl::GetDevToolsFrameToken() {
-  return web_frame_->Client()->GetDevToolsFrameToken();
+String LocalFrameClientImpl::GetInstrumentationToken() {
+  return web_frame_->Client()->GetInstrumentationToken();
+}
+
+void LocalFrameClientImpl::ScrollRectToVisibleInParentFrame(
+    const WebRect& rect_to_scroll,
+    const WebRemoteScrollProperties& properties) {
+  web_frame_->Client()->ScrollRectToVisibleInParentFrame(rect_to_scroll,
+                                                         properties);
 }
 
 }  // namespace blink

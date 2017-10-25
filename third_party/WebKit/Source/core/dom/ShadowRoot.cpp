@@ -57,7 +57,7 @@ static_assert(sizeof(ShadowRoot) == sizeof(SameSizeAsShadowRoot),
               "ShadowRoot should stay small");
 
 ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
-    : DocumentFragment(0, kCreateShadowRoot),
+    : DocumentFragment(nullptr, kCreateShadowRoot),
       TreeScope(*this, document),
       style_sheet_list_(nullptr),
       child_shadow_root_count_(0),
@@ -351,7 +351,7 @@ void ShadowRoot::DistributeV1() {
   EnsureSlotAssignment().ResolveDistribution();
 }
 
-DEFINE_TRACE(ShadowRoot) {
+void ShadowRoot::Trace(blink::Visitor* visitor) {
   visitor->Trace(shadow_root_rare_data_v0_);
   visitor->Trace(slot_assignment_);
   visitor->Trace(style_sheet_list_);
@@ -359,7 +359,7 @@ DEFINE_TRACE(ShadowRoot) {
   DocumentFragment::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(ShadowRoot) {
+void ShadowRoot::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(style_sheet_list_);
   DocumentFragment::TraceWrappers(visitor);
 }

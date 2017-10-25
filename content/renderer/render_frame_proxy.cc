@@ -12,7 +12,6 @@
 #include "base/lazy_instance.h"
 #include "components/viz/common/switches.h"
 #include "content/child/feature_policy/feature_policy_platform.h"
-#include "content/child/web_url_request_util.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
@@ -26,6 +25,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/renderer/child_frame_compositing_helper.h"
 #include "content/renderer/frame_owner_properties.h"
+#include "content/renderer/loader/web_url_request_util.h"
 #include "content/renderer/mash_util.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
@@ -42,6 +42,7 @@
 #include "third_party/WebKit/public/web/WebView.h"
 
 #if defined(USE_AURA)
+#include "content/renderer/mus/mus_embedded_frame.h"
 #include "content/renderer/mus/renderer_window_tree_client.h"
 #endif
 
@@ -316,6 +317,21 @@ void RenderFrameProxy::MaybeUpdateCompositingHelper() {
     compositing_helper_->SetPrimarySurfaceInfo(surface_info);
 }
 
+void RenderFrameProxy::SetChildFrameSurface(
+    const viz::SurfaceInfo& surface_info,
+    const viz::SurfaceSequence& sequence) {
+  // If this WebFrame has already been detached, its parent will be null. This
+  // can happen when swapping a WebRemoteFrame with a WebLocalFrame, where this
+  // message may arrive after the frame was removed from the frame tree, but
+  // before the frame has been destroyed. http://crbug.com/446575.
+  if (!web_frame()->Parent())
+    return;
+
+  if (!enable_surface_synchronization_)
+    compositing_helper_->SetPrimarySurfaceInfo(surface_info);
+  compositing_helper_->SetFallbackSurfaceId(surface_info.id(), sequence);
+}
+
 bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
   // Forward Page IPCs to the RenderView.
   if ((IPC_MESSAGE_CLASS(msg) == PageMsgStart)) {
@@ -352,6 +368,7 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameMsg_WillEnterFullscreen, OnWillEnterFullscreen)
     IPC_MESSAGE_HANDLER(FrameMsg_SetHasReceivedUserGesture,
                         OnSetHasReceivedUserGesture)
+    IPC_MESSAGE_HANDLER(FrameMsg_ScrollRectToVisible, OnScrollRectToVisible)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -375,16 +392,7 @@ void RenderFrameProxy::OnChildFrameProcessGone() {
 void RenderFrameProxy::OnSetChildFrameSurface(
     const viz::SurfaceInfo& surface_info,
     const viz::SurfaceSequence& sequence) {
-  // If this WebFrame has already been detached, its parent will be null. This
-  // can happen when swapping a WebRemoteFrame with a WebLocalFrame, where this
-  // message may arrive after the frame was removed from the frame tree, but
-  // before the frame has been destroyed. http://crbug.com/446575.
-  if (!web_frame()->Parent())
-    return;
-
-  if (!enable_surface_synchronization_)
-    compositing_helper_->SetPrimarySurfaceInfo(surface_info);
-  compositing_helper_->SetFallbackSurfaceId(surface_info.id(), sequence);
+  SetChildFrameSurface(surface_info, sequence);
 }
 
 void RenderFrameProxy::OnUpdateOpener(int opener_routing_id) {
@@ -474,16 +482,13 @@ void RenderFrameProxy::OnSetHasReceivedUserGesture() {
   web_frame_->SetHasReceivedUserGesture();
 }
 
-#if defined(USE_AURA)
-void RenderFrameProxy::OnMusFrameSinkIdAllocated(
-    const viz::FrameSinkId& frame_sink_id) {
-  frame_sink_id_ = frame_sink_id;
-  MaybeUpdateCompositingHelper();
-  // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
-  // changes.
-  ResendFrameRects();
+void RenderFrameProxy::OnScrollRectToVisible(
+    const gfx::Rect& rect_to_scroll,
+    const blink::WebRemoteScrollProperties& properties) {
+  web_frame_->ScrollRectToVisible(rect_to_scroll, properties);
 }
 
+#if defined(USE_AURA)
 void RenderFrameProxy::SetMusEmbeddedFrame(
     std::unique_ptr<MusEmbeddedFrame> mus_embedded_frame) {
   mus_embedded_frame_ = std::move(mus_embedded_frame);
@@ -642,5 +647,21 @@ void RenderFrameProxy::AdvanceFocus(blink::WebFocusType type,
 void RenderFrameProxy::FrameFocused() {
   Send(new FrameHostMsg_FrameFocused(routing_id_));
 }
+
+#if defined(USE_AURA)
+void RenderFrameProxy::OnMusEmbeddedFrameSurfaceChanged(
+    const viz::SurfaceInfo& surface_info) {
+  SetChildFrameSurface(surface_info, viz::SurfaceSequence());
+}
+
+void RenderFrameProxy::OnMusEmbeddedFrameSinkIdAllocated(
+    const viz::FrameSinkId& frame_sink_id) {
+  frame_sink_id_ = frame_sink_id;
+  MaybeUpdateCompositingHelper();
+  // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
+  // changes.
+  ResendFrameRects();
+}
+#endif
 
 }  // namespace

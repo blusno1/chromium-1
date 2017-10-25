@@ -68,7 +68,7 @@ CSSPaintDefinition::CSSPaintDefinition(
 
 CSSPaintDefinition::~CSSPaintDefinition() {}
 
-RefPtr<Image> CSSPaintDefinition::Paint(
+scoped_refptr<Image> CSSPaintDefinition::Paint(
     const ImageResourceObserver& client,
     const IntSize& container_size,
     const CSSStyleValueVector* paint_arguments,
@@ -156,7 +156,8 @@ void CSSPaintDefinition::MaybeCreatePaintInstance() {
   did_call_constructor_ = true;
 }
 
-DEFINE_TRACE_WRAPPERS(CSSPaintDefinition) {
+void CSSPaintDefinition::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(constructor_.Cast<v8::Value>());
   visitor->TraceWrappers(paint_.Cast<v8::Value>());
   visitor->TraceWrappers(instance_.Cast<v8::Value>());

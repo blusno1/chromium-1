@@ -990,8 +990,7 @@ void PaymentRequest::OnUpdatePaymentDetails(
                                  details_script_value.V8Value(), details,
                                  exception_state);
   if (exception_state.HadException()) {
-    show_resolver_->Reject(
-        DOMException::Create(kSyntaxError, exception_state.Message()));
+    show_resolver_->Reject(exception_state.GetException());
     ClearResolversAndCloseMojoConnection();
     return;
   }
@@ -1009,8 +1008,7 @@ void PaymentRequest::OnUpdatePaymentDetails(
       details, options_, validated_details, shipping_option_,
       *GetExecutionContext(), exception_state);
   if (exception_state.HadException()) {
-    show_resolver_->Reject(
-        DOMException::Create(kSyntaxError, exception_state.Message()));
+    show_resolver_->Reject(exception_state.GetException());
     ClearResolversAndCloseMojoConnection();
     return;
   }
@@ -1029,7 +1027,7 @@ void PaymentRequest::OnUpdatePaymentDetailsFailure(const String& error) {
   ClearResolversAndCloseMojoConnection();
 }
 
-DEFINE_TRACE(PaymentRequest) {
+void PaymentRequest::Trace(blink::Visitor* visitor) {
   visitor->Trace(options_);
   visitor->Trace(shipping_address_);
   visitor->Trace(show_resolver_);
@@ -1042,7 +1040,7 @@ DEFINE_TRACE(PaymentRequest) {
 
 void PaymentRequest::OnCompleteTimeoutForTesting() {
   complete_timer_.Stop();
-  OnCompleteTimeout(0);
+  OnCompleteTimeout(nullptr);
 }
 
 PaymentRequest::PaymentRequest(ExecutionContext* execution_context,

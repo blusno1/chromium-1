@@ -5,12 +5,15 @@
 #include "remoting/codec/webrtc_video_encoder_gpu.h"
 
 #include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "media/gpu/gpu_video_encode_accelerator_factory.h"
+#include "remoting/base/constants.h"
 #include "third_party/libyuv/include/libyuv/convert_from_argb.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
@@ -62,7 +65,9 @@ void WebrtcVideoEncoderGpu::Encode(std::unique_ptr<webrtc::DesktopFrame> frame,
     // likely the initialization may fail by using H264 encoder. We should
     // provide a way to tell the WebrtcVideoStream to stop the video stream.
     DLOG(ERROR) << "Encoder failed to initialize; dropping encode request";
-    std::move(done).Run(nullptr);
+    // Initialization fails only when the input frame size exceeds the
+    // limitation.
+    std::move(done).Run(EncodeResult::FRAME_SIZE_EXCEEDS_CAPABILITY, nullptr);
     return;
   }
 
@@ -107,6 +112,11 @@ void WebrtcVideoEncoderGpu::Encode(std::unique_ptr<webrtc::DesktopFrame> frame,
 
   callbacks_[video_frame->timestamp()] = std::move(done);
 
+  if (params.bitrate_kbps > 0) {
+    // TODO(zijiehe): Forward frame_rate from FrameParams.
+    video_encode_accelerator_->RequestEncodingParametersChange(
+        params.bitrate_kbps * 1024, 30);
+  }
   video_encode_accelerator_->Encode(video_frame, params.key_frame);
 }
 
@@ -170,7 +180,8 @@ void WebrtcVideoEncoderGpu::BitstreamBufferReady(int32_t bitstream_buffer_id,
   auto callback_it = callbacks_.find(timestamp);
   DCHECK(callback_it != callbacks_.end())
       << "Callback not found for timestamp " << timestamp;
-  std::move(std::get<1>(*callback_it)).Run(std::move(encoded_frame));
+  std::move(std::get<1>(*callback_it)).Run(
+      EncodeResult::SUCCEEDED, std::move(encoded_frame));
   callbacks_.erase(timestamp);
 }
 
@@ -184,9 +195,14 @@ void WebrtcVideoEncoderGpu::BeginInitialization() {
 
   media::VideoPixelFormat input_format =
       media::VideoPixelFormat::PIXEL_FORMAT_I420;
-  // TODO(gusss): implement some logical way to set an initial bitrate.
-  uint32_t initial_bitrate = 8 * 1024 * 8;
+  // TODO(zijiehe): implement some logical way to set an initial bitrate.
+  // Currently we set the bitrate to 8M bits / 1M bytes per frame, and 30 frames
+  // per second.
+  uint32_t initial_bitrate = kTargetFrameRate * 1024 * 1024 * 8;
   gpu::GpuPreferences gpu_preferences;
+#if defined(OS_WIN)
+  gpu_preferences.enable_media_foundation_vea_on_windows7 = true;
+#endif
 
   video_encode_accelerator_ =
       media::GpuVideoEncodeAcceleratorFactory::CreateVEA(
@@ -221,14 +237,10 @@ void WebrtcVideoEncoderGpu::RunAnyPendingEncode() {
 std::unique_ptr<WebrtcVideoEncoderGpu> WebrtcVideoEncoderGpu::CreateForH264() {
   DVLOG(3) << __func__;
 
-  // MediaFoundationVideoEncodeAccelerator supports only baseline profile.
-  // TODO(zijiehe): H264 encoder on Windows supports more input formats and
-  // profiles than the limitation in MediaFoundationVideoEncodeAccelerator.
-  // https://msdn.microsoft.com/en-us/library/windows/desktop/dd797816(v=vs.85).aspx
-  // Loosen the limitation in MediaFoundationVideoEncodeAccelerator and use a
-  // profile with higher quality here.
+  // HIGH profile requires Windows 8 or upper. Considering encoding latency,
+  // frame size and image quality, MAIN should be fine for us.
   return base::WrapUnique(new WebrtcVideoEncoderGpu(
-      media::VideoCodecProfile::H264PROFILE_BASELINE));
+      media::VideoCodecProfile::H264PROFILE_MAIN));
 }
 
 }  // namespace remoting

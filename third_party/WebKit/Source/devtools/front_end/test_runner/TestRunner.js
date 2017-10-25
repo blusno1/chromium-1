@@ -36,6 +36,20 @@ TestRunner.executeTestScript = function() {
       });
 };
 
+/**
+ * Note: This is only needed to debug a test in release DevTools.
+ * Usage: wrap the entire test with debugTest() and use dtrun test --debug-release
+ * @param {!Function} testFunction
+ * @return {!Function}
+ */
+function debugReleaseTest(testFunction) {
+  return testRunner => {
+    TestRunner.addResult = console.log;
+    TestRunner.completeTest = () => console.log('Test completed');
+    window.test = () => testFunction(testRunner);
+  };
+}
+
 /** @type {!Array<string>} */
 TestRunner._results = [];
 
@@ -457,7 +471,7 @@ TestRunner.deprecatedRunAfterPendingDispatches = function(callback) {
  * @return {!Promise<undefined>}
  */
 TestRunner.loadHTML = function(html) {
-  var testPath = TestRunner.url('');
+  var testPath = TestRunner.url();
   if (!html.includes('<base'))
     html = `<base href="${testPath}">` + html;
   html = html.replace(/'/g, '\\\'').replace(/\n/g, '\\n');
@@ -503,16 +517,20 @@ TestRunner.addStylesheetTag = function(path) {
     })();
   `);
 };
-
 /**
  * @param {string} path
+ * @param {!Object|undefined} options
  * @return {!Promise<!SDK.RemoteObject|undefined>}
  */
-TestRunner.addIframe = function(path) {
+TestRunner.addIframe = function(path, options = {}) {
+  options.id = options.id || '';
+  options.name = options.name || '';
   return TestRunner.evaluateInPageAsync(`
     (function(){
       var iframe = document.createElement('iframe');
       iframe.src = '${path}';
+      iframe.id = '${options.id}';
+      iframe.name = '${options.name}';
       document.body.appendChild(iframe);
       return new Promise(f => iframe.onload = f);
     })();
@@ -840,6 +858,9 @@ TestRunner.assertGreaterOrEqual = function(a, b, message) {
  */
 TestRunner.navigate = function(url, callback) {
   TestRunner._pageLoadedCallback = TestRunner.safeWrap(callback);
+  TestRunner.resourceTreeModel.addEventListener(SDK.ResourceTreeModel.Events.Load, TestRunner._pageNavigated);
+  // Note: injected <base> means that url is relative to test
+  // and not the inspected page
   TestRunner.evaluateInPageAnonymously('window.location.replace(\'' + url + '\')');
 };
 
@@ -848,6 +869,11 @@ TestRunner.navigate = function(url, callback) {
  */
 TestRunner.navigatePromise = function(url) {
   return new Promise(fulfill => TestRunner.navigate(url, fulfill));
+};
+
+TestRunner._pageNavigated = function() {
+  TestRunner.resourceTreeModel.removeEventListener(SDK.ResourceTreeModel.Events.Load, TestRunner._pageNavigated);
+  TestRunner._handlePageLoaded();
 };
 
 /**
@@ -884,6 +910,10 @@ TestRunner._innerReloadPage = function(hardReload, callback) {
 TestRunner.pageLoaded = function() {
   TestRunner.resourceTreeModel.removeEventListener(SDK.ResourceTreeModel.Events.Load, TestRunner.pageLoaded);
   TestRunner.addResult('Page reloaded.');
+  TestRunner._handlePageLoaded();
+};
+
+TestRunner._handlePageLoaded = function() {
   if (TestRunner._pageLoadedCallback) {
     var callback = TestRunner._pageLoadedCallback;
     delete TestRunner._pageLoadedCallback;
@@ -1153,12 +1183,18 @@ TestRunner.waitForUISourceCodeRemoved = function(callback) {
 };
 
 /**
- * @param {string} relativeURL
+ * @param {string=} url
  * @return {string}
  */
-TestRunner.url = function(relativeURL) {
-  var testScriptURL = /** @type {string} */ (Runtime.queryParam('test'));
-  return new URL(testScriptURL + '/../' + relativeURL).href;
+TestRunner.url = function(url = '') {
+  // TODO(chenwilliam): only new-style tests will have a test queryParam;
+  // remove inspectedURL() after all tests have been migrated to new test framework.
+  var testScriptURL =
+      /** @type {string} */ (Runtime.queryParam('test')) || SDK.targetManager.mainTarget().inspectedURL();
+
+  // This handles relative (e.g. "../file"), root (e.g. "/resource"),
+  // absolute (e.g. "http://", "data:") and empty (e.g. "") paths
+  return new URL(url, testScriptURL + '/../').href;
 };
 
 /**
@@ -1185,6 +1221,32 @@ TestRunner.dumpSyntaxHighlight = function(str, mimeType) {
 
     TestRunner.addResult(str + ': ' + node_parts.join(', '));
   }
+};
+
+/**
+ * @param {string} messageType
+ */
+TestRunner._consoleOutputHook = function(messageType) {
+  TestRunner.addResult(messageType + ': ' + Array.prototype.slice.call(arguments, 1));
+};
+
+/**
+ * This monkey patches console functions in DevTools context so the console
+ * messages are shown in the right places, instead of having all of the console
+ * messages printed at the top of the test expectation file (default behavior).
+ */
+TestRunner.printDevToolsConsole = function() {
+  console.log = TestRunner._consoleOutputHook.bind(TestRunner, 'log');
+  console.error = TestRunner._consoleOutputHook.bind(TestRunner, 'error');
+  console.info = TestRunner._consoleOutputHook.bind(TestRunner, 'info');
+};
+
+/**
+ * @param {string} querySelector
+ */
+TestRunner.dumpInspectedPageElementText = async function(querySelector) {
+  var remoteObject = await TestRunner.evaluateInPageAsync(`document.querySelector('${querySelector}').innerText`);
+  TestRunner.addResult(remoteObject.value);
 };
 
 /** @type {boolean} */
@@ -1215,7 +1277,7 @@ TestRunner.TestObserver = class {
 };
 
 TestRunner.runTest = async function() {
-  var testPath = TestRunner.url('');
+  var testPath = TestRunner.url();
   await TestRunner.loadHTML(`
     <head>
       <base href="${testPath}">

@@ -103,7 +103,6 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.page_info.PageInfoPopup;
-import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.physicalweb.PhysicalWebShareActivity;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
@@ -1296,12 +1295,19 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     private void triggerShare(
             final Tab currentTab, final boolean shareDirectly, boolean isIncognito) {
-        final Activity mainActivity = this;
-        WebContents webContents = currentTab.getWebContents();
-
         RecordHistogram.recordBooleanHistogram(
                 "OfflinePages.SharedPageWasOffline", OfflinePageUtils.isOfflinePage(currentTab));
+
         boolean canShareOfflinePage = OfflinePageBridge.isPageSharingEnabled();
+        if (canShareOfflinePage && OfflinePageUtils.isOfflinePage(currentTab)) {
+            ShareParams params = OfflinePageUtils.buildShareParams(this, currentTab);
+            if (params == null) return;
+            ShareHelper.share(params);
+            return;
+        }
+
+        final Activity mainActivity = this;
+        WebContents webContents = currentTab.getWebContents();
 
         // Share an empty blockingUri in place of screenshot file. The file ready notification is
         // sent by onScreenshotReady call below when the file is written.
@@ -1313,15 +1319,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                         .setShareDirectly(shareDirectly)
                         .setSaveLastUsed(!shareDirectly)
                         .setScreenshotUri(blockingUri);
-        if (canShareOfflinePage) {
-            OfflinePageUtils.shareOfflinePage(builder, currentTab);
+        ShareHelper.share(builder.build());
+        if (shareDirectly) {
+            RecordUserAction.record("MobileMenuDirectShare");
         } else {
-            ShareHelper.share(builder.build());
-            if (shareDirectly) {
-                RecordUserAction.record("MobileMenuDirectShare");
-            } else {
-                RecordUserAction.record("MobileMenuShare");
-            }
+            RecordUserAction.record("MobileMenuShare");
         }
 
         if (blockingUri == null) return;
@@ -1453,10 +1455,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
         final BookmarkModel bookmarkModel = new BookmarkModel();
 
-        // Partner bookmarks need to be loaded explicitly so that BookmarkModel can be loaded.
-        PartnerBookmarksShim.kickOffReading(this);
-
-        bookmarkModel.runAfterBookmarkModelLoaded(() -> {
+        bookmarkModel.finishLoadingBookmarkModel(() -> {
             // Gives up the bookmarking if the tab is being destroyed.
             if (!tabToBookmark.isClosing() && tabToBookmark.isInitialized()) {
                 // The BookmarkModel will be destroyed by BookmarkUtils#addOrEditBookmark() when
@@ -1829,6 +1828,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         if ((level >= TRIM_MEMORY_RUNNING_LOW && level < TRIM_MEMORY_UI_HIDDEN)
                 || level >= TRIM_MEMORY_MODERATE) {
             mReferencePool.drain();
+            clearToolbarResourceCache();
         }
     }
 
@@ -2265,5 +2265,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     @Deprecated
     public DiscardableReferencePool getReferencePool() {
         return mReferencePool;
+    }
+
+    private void clearToolbarResourceCache() {
+        ControlContainer controlContainer = (ControlContainer) findViewById(R.id.control_container);
+        controlContainer.getToolbarResourceAdapter().dropCachedBitmap();
     }
 }

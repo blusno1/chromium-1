@@ -55,7 +55,6 @@
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
@@ -120,7 +119,7 @@ class Resource::CachedMetadataHandlerImpl : public CachedMetadataHandler {
     return new CachedMetadataHandlerImpl(resource);
   }
   ~CachedMetadataHandlerImpl() override {}
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
   void SetCachedMetadata(uint32_t, const char*, size_t, CacheType) override;
   void ClearCachedMetadata(CacheType) override;
   RefPtr<CachedMetadata> GetCachedMetadata(uint32_t) const override;
@@ -145,7 +144,7 @@ Resource::CachedMetadataHandlerImpl::CachedMetadataHandlerImpl(
     Resource* resource)
     : resource_(resource) {}
 
-DEFINE_TRACE(Resource::CachedMetadataHandlerImpl) {
+void Resource::CachedMetadataHandlerImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(resource_);
   CachedMetadataHandler::Trace(visitor);
 }
@@ -214,7 +213,7 @@ class Resource::ServiceWorkerResponseCachedMetadataHandler
                                                           security_origin);
   }
   ~ServiceWorkerResponseCachedMetadataHandler() override {}
-  DECLARE_VIRTUAL_TRACE();
+  void Trace(blink::Visitor*) override;
 
  protected:
   void SendToPlatform() override;
@@ -231,7 +230,8 @@ Resource::ServiceWorkerResponseCachedMetadataHandler::
                                                SecurityOrigin* security_origin)
     : CachedMetadataHandlerImpl(resource), security_origin_(security_origin) {}
 
-DEFINE_TRACE(Resource::ServiceWorkerResponseCachedMetadataHandler) {
+void Resource::ServiceWorkerResponseCachedMetadataHandler::Trace(
+    blink::Visitor* visitor) {
   CachedMetadataHandlerImpl::Trace(visitor);
 }
 
@@ -292,7 +292,7 @@ Resource::~Resource() {
   InstanceCounters::DecrementCounter(InstanceCounters::kResourceCounter);
 }
 
-DEFINE_TRACE(Resource) {
+void Resource::Trace(blink::Visitor* visitor) {
   visitor->Trace(loader_);
   visitor->Trace(cache_handler_);
   visitor->Trace(clients_);
@@ -398,7 +398,7 @@ void Resource::TriggerNotificationForFinishObservers(
   if (finish_observers_.IsEmpty())
     return;
 
-  auto new_collections = new HeapHashSet<WeakMember<ResourceFinishObserver>>(
+  auto* new_collections = new HeapHashSet<WeakMember<ResourceFinishObserver>>(
       std::move(finish_observers_));
   finish_observers_.clear();
 
@@ -422,7 +422,7 @@ void Resource::FinishAsError(const ResourceError& error,
   error_ = error;
   is_revalidating_ = false;
 
-  if ((error_.IsCancellation() || !is_unused_preload_) && IsMainThread())
+  if (IsMainThread())
     GetMemoryCache()->Remove(this);
 
   if (!ErrorOccurred())
@@ -756,7 +756,7 @@ void Resource::DidRemoveClientOrObserver() {
 }
 
 void Resource::AllClientsAndObserversRemoved() {
-  if (loader_)
+  if (loader_ && !detachable_)
     loader_->ScheduleCancel();
 }
 
@@ -1012,7 +1012,7 @@ String Resource::GetMemoryDumpName() const {
 }
 
 void Resource::SetCachePolicyBypassingCache() {
-  resource_request_.SetCachePolicy(WebCachePolicy::kBypassingCache);
+  resource_request_.SetCacheMode(mojom::FetchCacheMode::kBypassCache);
 }
 
 void Resource::SetPreviewsState(WebURLRequest::PreviewsState previews_state) {

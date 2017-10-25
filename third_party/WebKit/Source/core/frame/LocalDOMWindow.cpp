@@ -111,7 +111,7 @@ class PostMessageTimer final
  public:
   PostMessageTimer(LocalDOMWindow& window,
                    MessageEvent* event,
-                   RefPtr<SecurityOrigin> target_origin,
+                   scoped_refptr<SecurityOrigin> target_origin,
                    std::unique_ptr<SourceLocation> location,
                    UserGestureToken* user_gesture_token)
       : SuspendableTimer(window.document(), TaskType::kPostedMessage),
@@ -142,7 +142,7 @@ class PostMessageTimer final
   // Eager finalization is needed to promptly stop this timer object.
   // (see DOMTimer comment for more.)
   EAGERLY_FINALIZE();
-  DEFINE_INLINE_VIRTUAL_TRACE() {
+  virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(event_);
     visitor->Trace(window_);
     SuspendableTimer::Trace(visitor);
@@ -165,9 +165,9 @@ class PostMessageTimer final
 
   Member<MessageEvent> event_;
   Member<LocalDOMWindow> window_;
-  RefPtr<SecurityOrigin> target_origin_;
+  scoped_refptr<SecurityOrigin> target_origin_;
   std::unique_ptr<SourceLocation> location_;
-  RefPtr<UserGestureToken> user_gesture_token_;
+  scoped_refptr<UserGestureToken> user_gesture_token_;
   bool disposal_allowed_;
 };
 
@@ -413,13 +413,14 @@ void LocalDOMWindow::EnqueueHashchangeEvent(const String& old_url,
 }
 
 void LocalDOMWindow::EnqueuePopstateEvent(
-    RefPtr<SerializedScriptValue> state_object) {
+    scoped_refptr<SerializedScriptValue> state_object) {
   // FIXME: https://bugs.webkit.org/show_bug.cgi?id=36202 Popstate event needs
   // to fire asynchronously
   DispatchEvent(PopStateEvent::Create(std::move(state_object), history()));
 }
 
-void LocalDOMWindow::StatePopped(RefPtr<SerializedScriptValue> state_object) {
+void LocalDOMWindow::StatePopped(
+    scoped_refptr<SerializedScriptValue> state_object) {
   if (!GetFrame())
     return;
 
@@ -608,7 +609,7 @@ Navigator* LocalDOMWindow::navigator() const {
 }
 
 void LocalDOMWindow::SchedulePostMessage(MessageEvent* event,
-                                         RefPtr<SecurityOrigin> target,
+                                         scoped_refptr<SecurityOrigin> target,
                                          Document* source) {
   // Allowing unbounded amounts of messages to build up for a suspended context
   // is problematic; consider imposing a limit or other restriction if this
@@ -629,9 +630,9 @@ void LocalDOMWindow::PostMessageTimerFired(PostMessageTimer* timer) {
   MessageEvent* event = timer->Event();
 
   UserGestureToken* token = timer->GetUserGestureToken();
-  UserGestureIndicator gesture_indicator(token);
-  if (token && token->HasGestures() && document() && document()->GetFrame())
-    document()->GetFrame()->NotifyUserActivation();
+  std::unique_ptr<UserGestureIndicator> gesture_indicator;
+  if (token && token->HasGestures() && document())
+    gesture_indicator = Frame::NotifyUserActivation(document()->GetFrame());
 
   event->EntangleMessagePorts(document());
 
@@ -674,7 +675,7 @@ void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
     }
   }
 
-  KURL sender(kParsedURLString, static_cast<MessageEvent*>(event)->origin());
+  KURL sender(static_cast<MessageEvent*>(event)->origin());
   if (!document()->GetContentSecurityPolicy()->AllowConnectToSource(
           sender, RedirectStatus::kNoRedirect,
           SecurityViolationReportingPolicy::kSuppressReporting)) {
@@ -945,30 +946,20 @@ int LocalDOMWindow::outerWidth() const {
   return chrome_client.RootWindowRect().Width();
 }
 
-FloatSize LocalDOMWindow::GetViewportSize(
-    IncludeScrollbarsInRect scrollbar_inclusion) const {
-  if (!GetFrame())
-    return FloatSize();
-
+IntSize LocalDOMWindow::GetViewportSize() const {
   LocalFrameView* view = GetFrame()->View();
   if (!view)
-    return FloatSize();
+    return IntSize();
 
   Page* page = GetFrame()->GetPage();
   if (!page)
-    return FloatSize();
+    return IntSize();
 
   // The main frame's viewport size depends on the page scale. If viewport is
   // enabled, the initial page scale depends on the content width and is set
   // after a layout, perform one now so queries during page load will use the
   // up to date viewport.
-  bool affectedByScale =
-      page->GetSettings().GetViewportEnabled() && GetFrame()->IsMainFrame();
-  bool affectedByScrollbars =
-      scrollbar_inclusion == kExcludeScrollbars &&
-      !ScrollbarTheme::GetTheme().UsesOverlayScrollbars();
-
-  if (affectedByScale || affectedByScrollbars)
+  if (page->GetSettings().GetViewportEnabled() && GetFrame()->IsMainFrame())
     document()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   // FIXME: This is potentially too much work. We really only need to know the
@@ -980,18 +971,14 @@ FloatSize LocalDOMWindow::GetViewportSize(
           ->UpdateStyleAndLayoutIgnorePendingStylesheets();
   }
 
-  return GetFrame()->IsMainFrame() &&
-                 !page->GetSettings().GetInertVisualViewport()
-             ? FloatSize(page->GetVisualViewport().VisibleRect().Size())
-             : FloatSize(view->VisibleContentRect(scrollbar_inclusion).Size());
+  return document()->View()->Size();
 }
 
 int LocalDOMWindow::innerHeight() const {
   if (!GetFrame())
     return 0;
 
-  FloatSize viewport_size = GetViewportSize(kIncludeScrollbars);
-  return AdjustForAbsoluteZoom(ExpandedIntSize(viewport_size).Height(),
+  return AdjustForAbsoluteZoom(GetViewportSize().Height(),
                                GetFrame()->PageZoomFactor());
 }
 
@@ -999,8 +986,7 @@ int LocalDOMWindow::innerWidth() const {
   if (!GetFrame())
     return 0;
 
-  FloatSize viewport_size = GetViewportSize(kIncludeScrollbars);
-  return AdjustForAbsoluteZoom(ExpandedIntSize(viewport_size).Width(),
+  return AdjustForAbsoluteZoom(GetViewportSize().Width(),
                                GetFrame()->PageZoomFactor());
 }
 
@@ -1038,9 +1024,6 @@ double LocalDOMWindow::scrollX() const {
   if (!GetFrame() || !GetFrame()->GetPage())
     return 0;
 
-  if (!GetFrame()->GetPage()->GetSettings().GetInertVisualViewport())
-    return visualViewport_->pageLeft();
-
   LocalFrameView* view = GetFrame()->View();
   if (!view)
     return 0;
@@ -1057,9 +1040,6 @@ double LocalDOMWindow::scrollX() const {
 double LocalDOMWindow::scrollY() const {
   if (!GetFrame() || !GetFrame()->GetPage())
     return 0;
-
-  if (!GetFrame()->GetPage()->GetSettings().GetInertVisualViewport())
-    return visualViewport_->pageTop();
 
   LocalFrameView* view = GetFrame()->View();
   if (!view)
@@ -1170,10 +1150,7 @@ void LocalDOMWindow::scrollBy(double x,
   x = ScrollableArea::NormalizeNonFiniteScroll(x);
   y = ScrollableArea::NormalizeNonFiniteScroll(y);
 
-  ScrollableArea* viewport = page->GetSettings().GetInertVisualViewport()
-                                 ? view->LayoutViewportScrollableArea()
-                                 : view->GetScrollableArea();
-
+  ScrollableArea* viewport = view->LayoutViewportScrollableArea();
   ScrollOffset current_offset = viewport->GetScrollOffset();
   ScrollOffset scaled_delta(x * GetFrame()->PageZoomFactor(),
                             y * GetFrame()->PageZoomFactor());
@@ -1217,9 +1194,7 @@ void LocalDOMWindow::scrollTo(double x, double y) const {
 
   ScrollOffset layout_offset(x * GetFrame()->PageZoomFactor(),
                              y * GetFrame()->PageZoomFactor());
-  ScrollableArea* viewport = page->GetSettings().GetInertVisualViewport()
-                                 ? view->LayoutViewportScrollableArea()
-                                 : view->GetScrollableArea();
+  ScrollableArea* viewport = view->LayoutViewportScrollableArea();
   viewport->SetScrollOffset(layout_offset, kProgrammaticScroll,
                             kScrollBehaviorAuto);
 }
@@ -1246,10 +1221,7 @@ void LocalDOMWindow::scrollTo(const ScrollToOptions& scroll_to_options) const {
   double scaled_x = 0.0;
   double scaled_y = 0.0;
 
-  ScrollableArea* viewport = page->GetSettings().GetInertVisualViewport()
-                                 ? view->LayoutViewportScrollableArea()
-                                 : view->GetScrollableArea();
-
+  ScrollableArea* viewport = view->LayoutViewportScrollableArea();
   ScrollOffset current_offset = viewport->GetScrollOffset();
   scaled_x = current_offset.Width();
   scaled_y = current_offset.Height();
@@ -1621,7 +1593,7 @@ DOMWindow* LocalDOMWindow::open(const String& url_string,
   return new_window;
 }
 
-DEFINE_TRACE(LocalDOMWindow) {
+void LocalDOMWindow::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(screen_);
   visitor->Trace(history_);
@@ -1645,7 +1617,8 @@ DEFINE_TRACE(LocalDOMWindow) {
   Supplementable<LocalDOMWindow>::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(LocalDOMWindow) {
+void LocalDOMWindow::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(custom_elements_);
   visitor->TraceWrappers(document_);
   visitor->TraceWrappers(modulator_);

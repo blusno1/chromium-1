@@ -219,7 +219,7 @@ void MediaSession::DidReceiveAction(
   DCHECK(GetExecutionContext()->IsDocument());
   Document* document = ToDocument(GetExecutionContext());
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(document ? document->GetFrame() : nullptr);
+      Frame::NotifyUserActivation(document ? document->GetFrame() : nullptr);
 
   auto iter = action_handlers_.find(MojomActionToActionName(action));
   if (iter == action_handlers_.end())
@@ -228,13 +228,14 @@ void MediaSession::DidReceiveAction(
   iter->value->call(this);
 }
 
-DEFINE_TRACE(MediaSession) {
+void MediaSession::Trace(blink::Visitor* visitor) {
   visitor->Trace(metadata_);
   visitor->Trace(action_handlers_);
+  ScriptWrappable::Trace(visitor);
   ContextClient::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(MediaSession) {
+void MediaSession::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   for (auto handler : action_handlers_.Values())
     visitor->TraceWrappers(handler);
 }

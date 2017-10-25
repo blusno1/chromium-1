@@ -52,18 +52,19 @@ template("chrome_repack_percent") {
       deps += invoker.deps
     }
 
-    if (use_ash) {
-      sources +=
-          [ "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak" ]
-      deps += [ "//ash/resources" ]
-    }
     if (toolkit_views) {
       sources += [ "$root_gen_dir/ui/views/resources/views_resources_${percent}_percent.pak" ]
       deps += [ "//ui/views/resources" ]
     }
     if (is_chromeos) {
-      sources += [ "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak" ]
-      deps += [ "//ui/chromeos/resources" ]
+      sources += [
+        "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak",
+        "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak",
+      ]
+      deps += [
+        "//ash/resources",
+        "//ui/chromeos/resources",
+      ]
     }
     if (enable_extensions) {
       sources += [ "$root_gen_dir/extensions/extensions_browser_resources_${percent}_percent.pak" ]
@@ -94,7 +95,6 @@ template("chrome_extra_paks") {
       "$root_gen_dir/chrome/common_resources.pak",
       "$root_gen_dir/chrome/invalidations_resources.pak",
       "$root_gen_dir/chrome/net_internals_resources.pak",
-      "$root_gen_dir/chrome/password_manager_internals_resources.pak",
       "$root_gen_dir/chrome/quota_internals_resources.pak",
       "$root_gen_dir/chrome/task_scheduler_internals_resources.pak",
       "$root_gen_dir/chrome/translate_internals_resources.pak",
@@ -109,7 +109,6 @@ template("chrome_extra_paks") {
       "//chrome/browser:resources",
       "//chrome/browser/resources:invalidations_resources",
       "//chrome/browser/resources:net_internals_resources",
-      "//chrome/browser/resources:password_manager_internals_resources",
       "//chrome/browser/resources:quota_internals_resources",
       "//chrome/browser/resources:task_scheduler_internals_resources",
       "//chrome/browser/resources:translate_internals_resources",

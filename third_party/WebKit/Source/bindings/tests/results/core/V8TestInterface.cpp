@@ -1868,11 +1868,12 @@ static void partialVoidMethodPartialCallbackTypeArgMethod(const v8::FunctionCall
   }
 
   ScriptValue partialCallbackTypeArg;
-  if (!(info[0]->IsObject() && v8::Local<v8::Object>::Cast(info[0])->IsCallable())) {
+  if (0 < info.Length() && info[0]->IsFunction()) {
+    partialCallbackTypeArg = ScriptValue(ScriptState::Current(info.GetIsolate()), info[0]);
+  } else {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("partialVoidMethodPartialCallbackTypeArg", "TestInterface", "The callback provided as parameter 1 is not a function."));
     return;
   }
-  partialCallbackTypeArg = ScriptValue(ScriptState::Current(info.GetIsolate()), info[0]);
 
   TestInterfacePartial::partialVoidMethodPartialCallbackTypeArg(*impl, partialCallbackTypeArg);
 }
@@ -2079,11 +2080,12 @@ static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   ScriptValue callback;
   ScriptValue thisArg;
-  if (!(info[0]->IsObject() && v8::Local<v8::Object>::Cast(info[0])->IsCallable())) {
+  if (0 < info.Length() && info[0]->IsFunction()) {
+    callback = ScriptValue(ScriptState::Current(info.GetIsolate()), info[0]);
+  } else {
     exceptionState.ThrowTypeError("The callback provided as parameter 1 is not a function.");
     return;
   }
-  callback = ScriptValue(ScriptState::Current(info.GetIsolate()), info[0]);
 
   thisArg = ScriptValue(ScriptState::Current(info.GetIsolate()), info[1]);
 
@@ -2094,16 +2096,11 @@ static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 }
 
 static void toJSONMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kExecutionContext, "TestInterface", "toJSON");
-
   TestInterfaceImplementation* impl = V8TestInterface::ToImpl(info.Holder());
 
   ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
-  ScriptValue result = impl->toJSONForBinding(scriptState, exceptionState);
-  if (exceptionState.HadException()) {
-    return;
-  }
+  ScriptValue result = impl->toJSONForBinding(scriptState);
   V8SetReturnValue(info, result.V8Value());
 }
 
@@ -3457,7 +3454,7 @@ static const V8DOMConfiguration::MethodConfiguration V8TestInterfaceMethods[] = 
     {"keys", V8TestInterface::keysMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
     {"values", V8TestInterface::valuesMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
     {"forEach", V8TestInterface::forEachMethodCallback, 1, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
-    {"toJSON", V8TestInterface::toJSONMethodCallback, 0, static_cast<v8::PropertyAttribute>(v8::DontEnum), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
+    {"toJSON", V8TestInterface::toJSONMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
     {"toString", V8TestInterface::toStringMethodCallback, 0, static_cast<v8::PropertyAttribute>(v8::DontEnum), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kAllWorlds},
 };
 

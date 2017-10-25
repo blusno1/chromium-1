@@ -19,6 +19,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "content/common/service_worker/controller_service_worker.mojom.h"
 #include "content/common/service_worker/embedded_worker.mojom.h"
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_provider.mojom.h"
@@ -27,7 +28,7 @@
 #include "content/public/common/service_worker_modes.h"
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "storage/public/interfaces/blobs.mojom.h"
+#include "third_party/WebKit/common/blob/blob_registry.mojom.h"
 #include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h"
@@ -90,6 +91,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       const GURL& script_url,
       bool is_script_streaming,
       mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ControllerServiceWorkerRequest controller_request,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
       mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
       std::unique_ptr<EmbeddedWorkerInstanceClientImpl> embedded_worker_client);
@@ -253,6 +255,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
  private:
   struct WorkerContextData;
   class NavigationPreloadRequest;
+  friend class ControllerServiceWorkerImpl;
 
   // Get routing_id for sending message to the ServiceWorkerVersion
   // in the browser process.
@@ -390,6 +393,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
 
   // This is bound on the worker thread.
   mojom::ServiceWorkerEventDispatcherRequest pending_dispatcher_request_;
+  mojom::ControllerServiceWorkerRequest pending_controller_request_;
 
   // This is bound on the main thread.
   scoped_refptr<mojom::ThreadSafeEmbeddedWorkerInstanceHostAssociatedPtr>
@@ -403,7 +407,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   // This is valid from the ctor to workerContextDestroyed.
   std::unique_ptr<EmbeddedWorkerInstanceClientImpl> embedded_worker_client_;
 
-  storage::mojom::BlobRegistryPtr blob_registry_;
+  blink::mojom::BlobRegistryPtr blob_registry_;
 
   // Initialized on the worker thread in workerContextStarted and
   // destructed on the worker thread in willDestroyWorkerContext.

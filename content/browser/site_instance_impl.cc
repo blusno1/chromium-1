@@ -5,6 +5,7 @@
 #include "content/browser/site_instance_impl.h"
 
 #include "base/command_line.h"
+#include "base/debug/crash_logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "content/browser/browsing_instance.h"
@@ -321,8 +322,8 @@ bool SiteInstance::IsSameWebSite(BrowserContext* browser_context,
   if (dest_url == blank_page)
     return true;
 
-  url::Origin src_origin(src_url);
-  url::Origin dest_origin(dest_url);
+  url::Origin src_origin = url::Origin::Create(src_url);
+  url::Origin dest_origin = url::Origin::Create(dest_url);
 
   // If the schemes differ, they aren't part of the same site.
   if (src_origin.scheme() != dest_origin.scheme())
@@ -361,13 +362,13 @@ GURL SiteInstance::GetSiteForURL(BrowserContext* browser_context,
     return real_url;
 
   GURL url = SiteInstanceImpl::GetEffectiveURL(browser_context, real_url);
-  url::Origin origin(url);
+  url::Origin origin = url::Origin::Create(url);
 
   // Isolated origins should use the full origin as their site URL. A subdomain
   // of an isolated origin should also use that isolated origin's site URL.
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
   url::Origin isolated_origin;
-  if (policy->GetMatchingIsolatedOrigin(url::Origin(real_url),
+  if (policy->GetMatchingIsolatedOrigin(url::Origin::Create(real_url),
                                         &isolated_origin)) {
     return isolated_origin.GetURL();
   }
@@ -400,7 +401,7 @@ GURL SiteInstanceImpl::GetEffectiveURL(BrowserContext* browser_context,
   // Don't resolve URLs corresponding to isolated origins, as isolated origins
   // take precedence over hosted apps.
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  if (policy->IsIsolatedOrigin(url::Origin(url)))
+  if (policy->IsIsolatedOrigin(url::Origin::Create(url)))
     return url;
 
   return GetContentClient()->browser()->
@@ -418,7 +419,7 @@ bool SiteInstanceImpl::DoesSiteRequireDedicatedProcess(
   // Always require a dedicated process for isolated origins.
   GURL site_url = GetSiteForURL(browser_context, url);
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  if (policy->IsIsolatedOrigin(url::Origin(site_url)))
+  if (policy->IsIsolatedOrigin(url::Origin::Create(site_url)))
     return true;
 
   // Let the content embedder enable site isolation for specific URLs. Use the
@@ -539,6 +540,10 @@ void SiteInstanceImpl::LockToOriginIfNeeded() {
           HAS_WRONG_LOCK:
         // We should never attempt to reassign a different origin lock to a
         // process.
+        base::debug::SetCrashKeyValue("requested_site_url", site_.spec());
+        base::debug::SetCrashKeyValue(
+            "killed_process_origin_lock",
+            policy->GetOriginLock(process_->GetID()).spec());
         CHECK(false) << "Trying to lock a process to " << site_
                      << " but the process is already locked to "
                      << policy->GetOriginLock(process_->GetID());
@@ -555,6 +560,10 @@ void SiteInstanceImpl::LockToOriginIfNeeded() {
     // If the site that we've just committed doesn't require a dedicated
     // process, make sure we aren't putting it in a process for a site that
     // does.
+    base::debug::SetCrashKeyValue("requested_site_url", site_.spec());
+    base::debug::SetCrashKeyValue(
+        "killed_process_origin_lock",
+        policy->GetOriginLock(process_->GetID()).spec());
     CHECK_EQ(lock_state,
              ChildProcessSecurityPolicyImpl::CheckOriginLockResult::NO_LOCK)
         << "Trying to commit non-isolated site " << site_

@@ -56,10 +56,6 @@ class ASH_EXPORT TabletPowerButtonController
                               base::TickClock* tick_clock);
   ~TabletPowerButtonController() override;
 
-  // Returns true if power button events should be handled by this class instead
-  // of PowerButtonController.
-  bool ShouldHandlePowerButtonEvents() const;
-
   // Handles a power button event.
   void OnPowerButtonEvent(bool down, const base::TimeTicks& timestamp);
 
@@ -73,6 +69,9 @@ class ASH_EXPORT TabletPowerButtonController
   // TabletModeObserver:
   void OnTabletModeStarted() override;
   void OnTabletModeEnded() override;
+
+  // Cancel the ongoing tablet power button behavior.
+  void CancelTabletPowerButton();
 
  private:
   friend class TabletPowerButtonControllerTestApi;

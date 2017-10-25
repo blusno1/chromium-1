@@ -13,6 +13,7 @@
 
 namespace blink {
 
+class AudioNodeInput;
 class AudioWorkletProcessor;
 class BaseAudioContext;
 class CrossThreadAudioParamInfo;
@@ -29,17 +30,19 @@ class ExceptionState;
 
 class AudioWorkletHandler final : public AudioHandler {
  public:
-  static RefPtr<AudioWorkletHandler> Create(
+  static scoped_refptr<AudioWorkletHandler> Create(
       AudioNode&,
       float sample_rate,
       String name,
-      HashMap<String, RefPtr<AudioParamHandler>> param_handler_map,
+      HashMap<String, scoped_refptr<AudioParamHandler>> param_handler_map,
       const AudioWorkletNodeOptions&);
 
   ~AudioWorkletHandler() override;
 
   // Called from render thread.
   void Process(size_t frames_to_process) override;
+
+  void CheckNumberOfChannelsForInput(AudioNodeInput*) override;
 
   double TailTime() const override;
   double LatencyTime() const override { return 0; }
@@ -58,7 +61,7 @@ class AudioWorkletHandler final : public AudioHandler {
       AudioNode&,
       float sample_rate,
       String name,
-      HashMap<String, RefPtr<AudioParamHandler>> param_handler_map,
+      HashMap<String, scoped_refptr<AudioParamHandler>> param_handler_map,
       const AudioWorkletNodeOptions&);
 
   String name_;
@@ -68,7 +71,7 @@ class AudioWorkletHandler final : public AudioHandler {
   // MUST be set/used by render thread.
   CrossThreadPersistent<AudioWorkletProcessor> processor_;
 
-  HashMap<String, RefPtr<AudioParamHandler>> param_handler_map_;
+  HashMap<String, scoped_refptr<AudioParamHandler>> param_handler_map_;
   HashMap<String, std::unique_ptr<AudioFloatArray>> param_value_map_;
 };
 
@@ -91,7 +94,7 @@ class AudioWorkletNode final : public AudioNode,
   // IDL
   AudioParamMap* parameters() const;
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   AudioWorkletNode(BaseAudioContext&,

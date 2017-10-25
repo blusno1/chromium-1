@@ -39,6 +39,14 @@ public final class EventConstants {
     public static final String CHROME_HOME_MENU_HEADER_CLICKED = "chrome_home_menu_header_clicked";
 
     /**
+     * Either bookmarks, downloads or history were shown in the Chrome Home bottom sheet.
+     * This may be triggered either by the user clicking an item in the navigation bar or by the
+     * user triggering panel contents through other means (e.g. download notification).
+     */
+    public static final String CHROME_HOME_NON_HOME_CONTENT_SHOWN =
+            "chrome_home_non_home_content_shown";
+
+    /**
      * Screenshot is taken with Chrome in the foreground.
      */
     public static final String SCREENSHOT_TAKEN_CHROME_IN_FOREGROUND =
@@ -74,6 +82,11 @@ public final class EventConstants {
      * Contextual Search panel was opened.
      */
     public static final String CONTEXTUAL_SEARCH_PANEL_OPENED = "contextual_search_panel_opened";
+
+    /**
+     * User performed a web search for a query by choosing the Web Search option on the popup menu.
+     */
+    public static final String WEB_SEARCH_PERFORMED = "web_search_performed";
 
     /**
      * Contextual Search showed an entity result for the searched query.

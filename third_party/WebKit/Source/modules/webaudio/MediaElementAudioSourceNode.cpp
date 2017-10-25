@@ -61,9 +61,9 @@ MediaElementAudioSourceHandler::MediaElementAudioSourceHandler(
   Initialize();
 }
 
-RefPtr<MediaElementAudioSourceHandler> MediaElementAudioSourceHandler::Create(
-    AudioNode& node,
-    HTMLMediaElement& media_element) {
+scoped_refptr<MediaElementAudioSourceHandler>
+MediaElementAudioSourceHandler::Create(AudioNode& node,
+                                       HTMLMediaElement& media_element) {
   return WTF::AdoptRef(new MediaElementAudioSourceHandler(node, media_element));
 }
 
@@ -204,7 +204,7 @@ void MediaElementAudioSourceHandler::Process(size_t number_of_frames) {
               ->PostTask(BLINK_FROM_HERE,
                          CrossThreadBind(
                              &MediaElementAudioSourceHandler::PrintCORSMessage,
-                             WrapRefPtr(this), current_src_string_));
+                             WrapRefCounted(this), current_src_string_));
         }
       }
       output_bus->Zero();
@@ -277,7 +277,7 @@ MediaElementAudioSourceNode* MediaElementAudioSourceNode::Create(
   return Create(*context, *options.mediaElement(), exception_state);
 }
 
-DEFINE_TRACE(MediaElementAudioSourceNode) {
+void MediaElementAudioSourceNode::Trace(blink::Visitor* visitor) {
   AudioSourceProviderClient::Trace(visitor);
   AudioNode::Trace(visitor);
 }

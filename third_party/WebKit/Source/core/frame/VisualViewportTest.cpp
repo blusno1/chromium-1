@@ -31,11 +31,11 @@
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebCoalescedInputEvent.h"
 #include "public/platform/WebInputEvent.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "public/web/WebContextMenuData.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebFrameClient.h"
@@ -81,7 +81,7 @@ class VisualViewportTest
         base_url_("http://www.test.com/") {}
 
   void InitializeWithDesktopSettings(
-      void (*override_settings_func)(WebSettings*) = 0) {
+      void (*override_settings_func)(WebSettings*) = nullptr) {
     if (!override_settings_func)
       override_settings_func = &ConfigureSettings;
     helper_.Initialize(nullptr, &mock_web_view_client_, nullptr,
@@ -90,7 +90,7 @@ class VisualViewportTest
   }
 
   void InitializeWithAndroidSettings(
-      void (*override_settings_func)(WebSettings*) = 0) {
+      void (*override_settings_func)(WebSettings*) = nullptr) {
     if (!override_settings_func)
       override_settings_func = &ConfigureAndroidSettings;
     helper_.Initialize(nullptr, &mock_web_view_client_, nullptr,
@@ -860,7 +860,7 @@ TEST_P(VisualViewportTest, TestRestoredFromHistoryItem) {
 
   FrameTestHelpers::LoadHistoryItem(WebView()->MainFrameImpl(), item,
                                     kWebHistoryDifferentDocumentLoad,
-                                    WebCachePolicy::kUseProtocolCachePolicy);
+                                    mojom::FetchCacheMode::kDefault);
 
   VisualViewport& visual_viewport = GetFrame()->GetPage()->GetVisualViewport();
   EXPECT_EQ(2, visual_viewport.Scale());
@@ -891,7 +891,7 @@ TEST_P(VisualViewportTest, TestRestoredFromLegacyHistoryItem) {
 
   FrameTestHelpers::LoadHistoryItem(WebView()->MainFrameImpl(), item,
                                     kWebHistoryDifferentDocumentLoad,
-                                    WebCachePolicy::kUseProtocolCachePolicy);
+                                    mojom::FetchCacheMode::kDefault);
 
   VisualViewport& visual_viewport = GetFrame()->GetPage()->GetVisualViewport();
   EXPECT_EQ(2, visual_viewport.Scale());

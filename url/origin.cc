@@ -36,6 +36,10 @@ GURL AddSuboriginToUrl(const GURL& url, const std::string& suborigin) {
 
 Origin::Origin() : unique_(true), suborigin_(std::string()) {}
 
+Origin Origin::Create(const GURL& url) {
+  return Origin(url);
+}
+
 Origin::Origin(const GURL& url) : unique_(true), suborigin_(std::string()) {
   if (!url.is_valid() || (!url.IsStandard() && !url.SchemeIsBlob()))
     return;
@@ -79,6 +83,11 @@ Origin::Origin(const GURL& url) : unique_(true), suborigin_(std::string()) {
 
   unique_ = tuple_.IsInvalid();
 }
+
+Origin::Origin(const Origin&) = default;
+Origin& Origin::operator=(const Origin&) = default;
+Origin::Origin(Origin&&) = default;
+Origin& Origin::operator=(Origin&&) = default;
 
 Origin::Origin(base::StringPiece scheme,
                base::StringPiece host,
@@ -184,11 +193,11 @@ std::ostream& operator<<(std::ostream& out, const url::Origin& origin) {
 }
 
 bool IsSameOriginWith(const GURL& a, const GURL& b) {
-  return Origin(a).IsSameOriginWith(Origin(b));
+  return Origin::Create(a).IsSameOriginWith(Origin::Create(b));
 }
 
 bool IsSamePhysicalOriginWith(const GURL& a, const GURL& b) {
-  return Origin(a).IsSamePhysicalOriginWith(Origin(b));
+  return Origin::Create(a).IsSamePhysicalOriginWith(Origin::Create(b));
 }
 
 }  // namespace url

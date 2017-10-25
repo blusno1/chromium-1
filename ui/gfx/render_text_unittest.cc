@@ -439,11 +439,11 @@ class RenderTextTest : public testing::Test,
   std::unique_ptr<RenderText> CreateRenderTextInstance() const {
     switch (GetParam()) {
       case RENDER_TEXT_HARFBUZZ:
-        return base::MakeUnique<RenderTextHarfBuzz>();
+        return std::make_unique<RenderTextHarfBuzz>();
 
       case RENDER_TEXT_MAC:
 #if defined(OS_MACOSX)
-        return base::MakeUnique<RenderTextMac>();
+        return std::make_unique<RenderTextMac>();
 #else
         break;
 #endif
@@ -3940,6 +3940,30 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_BreakRunsByAscii) {
   EXPECT_EQ("[0->1][2]", GetRunListStructureString());
 }
 
+// Test that, on Mac, font fallback mechanisms and Harfbuzz configuration cause
+// the correct glyphs to be chosen for unicode regional indicators.
+TEST_P(RenderTextHarfBuzzTest, EmojiFlagGlyphCount) {
+  RenderText* render_text = GetRenderText();
+  render_text->SetDisplayRect(Rect(1000, 1000));
+  // Two flags: UK and Japan. Note macOS 10.9 only has flags for 10 countries.
+  base::string16 text(UTF8ToUTF16("🇬🇧🇯🇵"));
+  // Each flag is 4 UTF16 characters (2 surrogate pair code points).
+  EXPECT_EQ(8u, text.length());
+  render_text->SetText(text);
+  test_api()->EnsureLayout();
+
+  const internal::TextRunList* run_list = GetHarfBuzzRunList();
+  ASSERT_EQ(1U, run_list->runs().size());
+#if defined(OS_MACOSX)
+  // On Mac, the flags should be found, so two glyphs result.
+  EXPECT_EQ(2u, run_list->runs()[0]->glyph_count);
+#else
+  // Elsewhere, the flags are not found, so each surrogate pair gets a
+  // placeholder glyph. Eventually, all platforms should have 2 glyphs.
+  EXPECT_EQ(4u, run_list->runs()[0]->glyph_count);
+#endif
+}
+
 TEST_P(RenderTextHarfBuzzTest, GlyphBounds) {
   const char* kTestStrings[] = {"asdf 1234 qwer", "\u0647\u0654",
                                 "\u0645\u0631\u062D\u0628\u0627"};
@@ -4079,17 +4103,9 @@ TEST_P(RenderTextHarfBuzzTest, HarfBuzz_UnicodeFallback) {
 }
 #endif  // !defined(OS_LINUX)
 
-// http://crbug/624513
-#if !defined(OS_WIN)
 // Ensure that the width reported by RenderText is sufficient for drawing. Draws
 // to a canvas and checks if any pixel beyond the bounding rectangle is colored.
 TEST_P(RenderTextTest, TextDoesntClip) {
-// Fails on Mac with RenderTextHarfBuzz. See http://crbug.com/640068.
-#if defined(OS_MACOSX)
-  if (GetParam() == RENDER_TEXT_HARFBUZZ)
-    return;
-#endif
-
   const char* kTestStrings[] = {
       "            ",
       // TODO(dschuyler): Underscores draw outside GetStringSize;
@@ -4097,8 +4113,7 @@ TEST_P(RenderTextTest, TextDoesntClip) {
       // revealed by the prior unit tests.
       // "TEST_______",
       "TEST some stuff", "WWWWWWWWWW", "gAXAXAXAXAXAXA",
-      // TODO(dschuyler): A-Ring draws outside GetStringSize; crbug.com/459812.
-      // "g\u00C5X\u00C5X\u00C5X\u00C5X\u00C5X\u00C5X\u00C5",
+      "g\u00C5X\u00C5X\u00C5X\u00C5X\u00C5X\u00C5X\u00C5",
       "\u0647\u0654\u0647\u0654\u0647\u0654\u0647\u0654\u0645\u0631\u062D"
       "\u0628\u0627"};
   const Size kCanvasSize(300, 50);
@@ -4116,11 +4131,11 @@ TEST_P(RenderTextTest, TextDoesntClip) {
   for (auto* string : kTestStrings) {
     paint_canvas.clear(SK_ColorWHITE);
     render_text->SetText(UTF8ToUTF16(string));
-    const Size string_size = render_text->GetStringSize();
     render_text->ApplyBaselineStyle(SUPERSCRIPT, Range(1, 2));
     render_text->ApplyBaselineStyle(SUPERIOR, Range(3, 4));
     render_text->ApplyBaselineStyle(INFERIOR, Range(5, 6));
     render_text->ApplyBaselineStyle(SUBSCRIPT, Range(7, 8));
+    const Size string_size = render_text->GetStringSize();
     render_text->SetWeight(Font::Weight::BOLD);
     render_text->SetDisplayRect(
         Rect(kTestSize, kTestSize, string_size.width(), string_size.height()));
@@ -4135,37 +4150,24 @@ TEST_P(RenderTextTest, TextDoesntClip) {
     TestRectangleBuffer rect_buffer(string, buffer, kCanvasSize.width(),
                                     kCanvasSize.height());
     {
-#if !defined(OS_CHROMEOS)
-      int top_test_height = kTestSize;
-      // Windows 8+ and RenderTextMac (since 10.13) draw 1 pixel above the
-      // display rect.
-      if (IsWin8Plus() || GetParam() == RENDER_TEXT_MAC)
-        top_test_height = kTestSize - 1;
-
-      // TODO(dschuyler): On ChromeOS text draws above the GetStringSize rect.
       SCOPED_TRACE("TextDoesntClip Top Side");
       rect_buffer.EnsureSolidRect(SK_ColorWHITE, 0, 0, kCanvasSize.width(),
-                                  top_test_height);
-#endif // !OS_CHROMEOS
+                                  kTestSize);
     }
     {
-      int bottom_test_y = kTestSize + string_size.height();
-      int bottom_test_height = kTestSize;
-      // Windows 8+ draws 1 pixel below the display rect.
-      if (IsWin8Plus()) {
-        bottom_test_y = kTestSize + string_size.height() + 1;
-        bottom_test_height = kTestSize - 1;
-      }
       SCOPED_TRACE("TextDoesntClip Bottom Side");
-      rect_buffer.EnsureSolidRect(SK_ColorWHITE, 0, bottom_test_y,
-                                  kCanvasSize.width(), bottom_test_height);
+      rect_buffer.EnsureSolidRect(SK_ColorWHITE, 0,
+                                  kTestSize + string_size.height(),
+                                  kCanvasSize.width(), kTestSize);
     }
     {
       SCOPED_TRACE("TextDoesntClip Left Side");
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-      // TODO(dschuyler): On Windows, Chrome OS and Mac smoothing draws to the
+      // TODO(dschuyler): On Windows, Chrome OS, and Mac smoothing draws to the
       // left of text.  This appears to be a preexisting issue that wasn't
-      // revealed by the prior unit tests.
+      // revealed by the prior unit tests.  RenderText currently only uses
+      // origins and advances and ignores bounding boxes so cannot account for
+      // under- and over-hang.
       rect_buffer.EnsureSolidRect(SK_ColorWHITE, 0, kTestSize, kTestSize - 1,
                                   string_size.height());
 #else
@@ -4175,18 +4177,25 @@ TEST_P(RenderTextTest, TextDoesntClip) {
     }
     {
       SCOPED_TRACE("TextDoesntClip Right Side");
-#if !defined(OS_MACOSX)
-      // TODO(dschuyler): On Mac text draws to right of GetStringSize.  This
-      // appears to be a preexisting issue that wasn't revealed by the prior
-      // unit tests.
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+      // TODO(dschuyler): On Windows, Chrome OS, and Mac smoothing draws to the
+      // right of text.  This appears to be a preexisting issue that wasn't
+      // revealed by the prior unit tests.  RenderText currently only uses
+      // origins and advances and ignores bounding boxes so cannot account for
+      // under- and over-hang.
       rect_buffer.EnsureSolidRect(SK_ColorWHITE,
-                                  kTestSize + string_size.width(), kTestSize,
-                                  kTestSize, string_size.height());
+                                  kTestSize + string_size.width() + 1,
+                                  kTestSize, kTestSize - 1,
+                                  string_size.height());
+#else
+      rect_buffer.EnsureSolidRect(SK_ColorWHITE,
+                                  kTestSize + string_size.width(),
+                                  kTestSize, kTestSize,
+                                  string_size.height());
 #endif
     }
   }
 }
-#endif  // !defined(OS_WIN)
 
 // Ensure that the text will clip to the display rect. Draws to a canvas and
 // checks whether any pixel beyond the bounding rectangle is colored.

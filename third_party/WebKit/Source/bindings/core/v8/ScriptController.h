@@ -74,7 +74,7 @@ class CORE_EXPORT ScriptController final
     return new ScriptController(frame, window_proxy_manager);
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   // This returns an initialized window proxy. (If the window proxy is not
   // yet initialized, it's implicitly initialized at the first access.)
@@ -117,7 +117,7 @@ class CORE_EXPORT ScriptController final
 
   // Creates a new isolated world for DevTools with the given human readable
   // |world_name| and returns it id or nullptr on failure.
-  RefPtr<DOMWrapperWorld> CreateNewInspectorIsolatedWorld(
+  scoped_refptr<DOMWrapperWorld> CreateNewInspectorIsolatedWorld(
       const String& world_name);
 
   // Returns true if the current world is isolated, and has its own Content

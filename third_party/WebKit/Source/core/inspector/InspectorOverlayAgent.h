@@ -72,7 +72,7 @@ class CORE_EXPORT InspectorOverlayAgent final
                         v8_inspector::V8InspectorSession*,
                         InspectorDOMAgent*);
   ~InspectorOverlayAgent() override;
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
   // protocol::Dispatcher::OverlayCommandHandler implementation.
   protocol::Response enable() override;

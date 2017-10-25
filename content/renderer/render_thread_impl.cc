@@ -60,19 +60,9 @@
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 #include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "components/viz/common/switches.h"
-#include "content/child/appcache/appcache_dispatcher.h"
-#include "content/child/appcache/appcache_frontend_impl.h"
-#include "content/child/blob_storage/blob_message_filter.h"
-#include "content/child/child_resource_message_filter.h"
-#include "content/child/indexed_db/indexed_db_dispatcher.h"
 #include "content/child/memory/child_memory_coordinator_impl.h"
-#include "content/child/resource_dispatcher.h"
-#include "content/child/resource_scheduling_filter.h"
 #include "content/child/runtime_features.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/child/web_database_impl.h"
-#include "content/child/web_database_observer_impl.h"
-#include "content/child/worker_thread_registry.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/dom_storage/dom_storage_messages.h"
@@ -96,6 +86,9 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_thread_observer.h"
 #include "content/public/renderer/render_view_visitor.h"
+#include "content/renderer/appcache/appcache_dispatcher.h"
+#include "content/renderer/appcache/appcache_frontend_impl.h"
+#include "content/renderer/blob_storage/blob_message_filter.h"
 #include "content/renderer/browser_plugin/browser_plugin_manager.h"
 #include "content/renderer/cache_storage/cache_storage_dispatcher.h"
 #include "content/renderer/cache_storage/cache_storage_message_filter.h"
@@ -105,12 +98,18 @@
 #include "content/renderer/dom_storage/webstoragearea_impl.h"
 #include "content/renderer/dom_storage/webstoragenamespace_impl.h"
 #include "content/renderer/effective_connection_type_helper.h"
+#include "content/renderer/fileapi/file_system_dispatcher.h"
+#include "content/renderer/fileapi/webfilesystem_impl.h"
 #include "content/renderer/gpu/compositor_external_begin_frame_source.h"
 #include "content/renderer/gpu/compositor_forwarding_message_filter.h"
 #include "content/renderer/gpu/frame_swap_message_queue.h"
+#include "content/renderer/indexed_db/indexed_db_dispatcher.h"
 #include "content/renderer/input/input_event_filter.h"
 #include "content/renderer/input/input_handler_manager.h"
 #include "content/renderer/input/main_thread_input_event_filter.h"
+#include "content/renderer/loader/child_resource_message_filter.h"
+#include "content/renderer/loader/resource_dispatcher.h"
+#include "content/renderer/loader/resource_scheduling_filter.h"
 #include "content/renderer/mash_util.h"
 #include "content/renderer/media/audio_input_message_filter.h"
 #include "content/renderer/media/audio_message_filter.h"
@@ -123,7 +122,10 @@
 #include "content/renderer/mus/render_widget_window_tree_client_factory.h"
 #include "content/renderer/mus/renderer_window_tree_client.h"
 #include "content/renderer/net_info_helper.h"
+#include "content/renderer/notifications/notification_dispatcher.h"
 #include "content/renderer/p2p/socket_dispatcher.h"
+#include "content/renderer/quota_dispatcher.h"
+#include "content/renderer/quota_message_filter.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_process_impl.h"
 #include "content/renderer/render_view_impl.h"
@@ -132,8 +134,12 @@
 #include "content/renderer/service_worker/embedded_worker_instance_client_impl.h"
 #include "content/renderer/service_worker/service_worker_context_client.h"
 #include "content/renderer/service_worker/service_worker_context_message_filter.h"
+#include "content/renderer/service_worker/service_worker_message_filter.h"
 #include "content/renderer/shared_worker/embedded_shared_worker_stub.h"
 #include "content/renderer/shared_worker/shared_worker_factory_impl.h"
+#include "content/renderer/web_database_impl.h"
+#include "content/renderer/web_database_observer_impl.h"
+#include "content/renderer/worker_thread_registry.h"
 #include "device/gamepad/public/cpp/gamepads.h"
 #include "gin/public/debug.h"
 #include "gpu/GLES2/gl2extchromium.h"
@@ -674,11 +680,27 @@ void RenderThreadImpl::Init(
           shared_bitmap_allocation_notifier_ptr.PassInterface(),
           GetChannel()->ipc_task_runner_refptr()));
 
+  notification_dispatcher_ =
+      new NotificationDispatcher(thread_safe_sender());
+  AddFilter(notification_dispatcher_->GetFilter());
+
+  resource_dispatcher_.reset(new ResourceDispatcher(
+      this, message_loop()->task_runner()));
+  resource_message_filter_ =
+      new ChildResourceMessageFilter(resource_dispatcher_.get());
+  AddFilter(resource_message_filter_.get());
+  quota_message_filter_ =
+      new QuotaMessageFilter(thread_safe_sender());
+  quota_dispatcher_.reset(new QuotaDispatcher(thread_safe_sender(),
+                                              quota_message_filter_.get()));
+
+  AddFilter(quota_message_filter_->GetFilter());
+
   InitializeWebKit(resource_task_queue);
   blink_initialized_time_ = base::TimeTicks::Now();
 
   // In single process the single process is all there is.
-  webkit_shared_timer_suspended_handle_ = nullptr;
+  webkit_shared_timer_suspended_ = false;
   widget_count_ = 0;
   hidden_widget_count_ = 0;
   idle_notification_delay_in_ms_ = kInitialIdleHandlerDelayMs;
@@ -690,6 +712,7 @@ void RenderThreadImpl::Init(
   main_thread_indexed_db_dispatcher_.reset(new IndexedDBDispatcher());
   main_thread_cache_storage_dispatcher_.reset(
       new CacheStorageDispatcher(thread_safe_sender()));
+  file_system_dispatcher_.reset(new FileSystemDispatcher());
 
   // Note: This may reorder messages from the ResourceDispatcher with respect to
   // other subsystems.
@@ -697,7 +720,7 @@ void RenderThreadImpl::Init(
       static_cast<RenderThread*>(this), renderer_scheduler_.get(),
       base::TimeDelta::FromSecondsD(kThrottledResourceRequestFlushPeriodS),
       kMaxResourceRequestsPerFlushWhenThrottled));
-  resource_dispatcher()->set_message_sender(resource_dispatch_throttler_.get());
+  resource_dispatcher_->set_message_sender(resource_dispatch_throttler_.get());
 
   blob_message_filter_ = new BlobMessageFilter(GetFileThreadTaskRunner());
   AddFilter(blob_message_filter_.get());
@@ -960,6 +983,10 @@ RenderThreadImpl::~RenderThreadImpl() {
 }
 
 void RenderThreadImpl::Shutdown() {
+  ChildThreadImpl::Shutdown();
+  quota_dispatcher_.reset();
+  file_system_dispatcher_.reset();
+  WebFileSystemImpl::DeleteThreadSpecificInstance();
   // In a multi-process mode, we immediately exit the renderer.
   // Historically we had a graceful shutdown sequence here but it was
   // 1) a waste of performance and 2) a source of lots of complicated
@@ -1131,7 +1158,7 @@ void RenderThreadImpl::RemoveObserver(RenderThreadObserver* observer) {
 
 void RenderThreadImpl::SetResourceDispatcherDelegate(
     ResourceDispatcherDelegate* delegate) {
-  resource_dispatcher()->set_delegate(delegate);
+  resource_dispatcher_->set_delegate(delegate);
 }
 
 void RenderThreadImpl::InitializeCompositorThread() {
@@ -1225,15 +1252,15 @@ void RenderThreadImpl::InitializeWebKit(
   // particular task runner.
   scoped_refptr<ResourceSchedulingFilter> filter(
       new ResourceSchedulingFilter(
-          resource_task_queue2, resource_dispatcher()));
+          resource_task_queue2, resource_dispatcher_.get()));
   channel()->AddFilter(filter.get());
-  resource_dispatcher()->SetResourceSchedulingFilter(filter);
+  resource_dispatcher_->SetResourceSchedulingFilter(filter);
 
   // The ChildResourceMessageFilter and the ResourceDispatcher need to use the
   // same queue to ensure tasks are executed in the expected order.
-  child_resource_message_filter()->SetMainThreadTaskRunner(
+  resource_message_filter_->SetMainThreadTaskRunner(
       resource_task_queue2);
-  resource_dispatcher()->SetThreadTaskRunner(resource_task_queue2);
+  resource_dispatcher_->SetThreadTaskRunner(resource_task_queue2);
 
   if (!command_line.HasSwitch(switches::kDisableThreadedCompositing))
     InitializeCompositorThread();
@@ -1272,6 +1299,10 @@ void RenderThreadImpl::InitializeWebKit(
     // the isolate is in background. This reduces memory usage.
     isolate->IsolateInBackgroundNotification();
   }
+
+  service_worker_message_filter_ =
+      new ServiceWorkerMessageFilter(thread_safe_sender());
+  AddFilter(service_worker_message_filter_->GetFilter());
 
   renderer_scheduler_->SetStoppingWhenBackgroundedEnabled(
       GetContentClient()->renderer()->AllowStoppingWhenProcessBackgrounded());
@@ -1358,7 +1389,7 @@ void RenderThreadImpl::IdleHandler() {
 
   // Continue the idle timer if the webkit shared timer is not suspended or
   // something is left to do.
-  bool continue_timer = !webkit_shared_timer_suspended_handle_;
+  bool continue_timer = !webkit_shared_timer_suspended_;
 
   // Schedule next invocation. When the tab is originally hidden, an invocation
   // is scheduled for kInitialIdleHandlerDelayMs in
@@ -1450,7 +1481,8 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
                              support_oop_rasterization,
                              ui::command_buffer_metrics::MEDIA_CONTEXT,
                              kGpuStreamIdDefault, kGpuStreamPriorityDefault);
-  if (!media_context_provider->BindToCurrentThread())
+  auto result = media_context_provider->BindToCurrentThread();
+  if (result != gpu::ContextResult::kSuccess)
     return nullptr;
 
   scoped_refptr<base::SingleThreadTaskRunner> media_task_runner =
@@ -1505,7 +1537,8 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
       support_oop_rasterization,
       ui::command_buffer_metrics::RENDERER_MAINTHREAD_CONTEXT,
       kGpuStreamIdDefault, kGpuStreamPriorityDefault);
-  if (!shared_main_thread_contexts_->BindToCurrentThread())
+  auto result = shared_main_thread_contexts_->BindToCurrentThread();
+  if (result != gpu::ContextResult::kSuccess)
     shared_main_thread_contexts_ = nullptr;
   return shared_main_thread_contexts_;
 }
@@ -1556,6 +1589,15 @@ int32_t RenderThreadImpl::GetClientId() {
 void RenderThreadImpl::SetRendererProcessType(
     blink::scheduler::RendererProcessType type) {
   renderer_scheduler_->SetRendererProcessType(type);
+}
+
+bool RenderThreadImpl::OnMessageReceived(const IPC::Message& msg) {
+  // Resource responses are sent to the resource dispatcher.
+  if (resource_dispatcher_->OnMessageReceived(msg))
+    return true;
+  if (file_system_dispatcher_->OnMessageReceived(msg))
+    return true;
+  return ChildThreadImpl::OnMessageReceived(msg);
 }
 
 void RenderThreadImpl::OnAssociatedInterfaceRequest(
@@ -2222,11 +2264,11 @@ void RenderThreadImpl::OnNetworkQualityChanged(
 void RenderThreadImpl::SetWebKitSharedTimersSuspended(bool suspend) {
 #if defined(OS_ANDROID)
   if (suspend) {
-    webkit_shared_timer_suspended_handle_ =
-        renderer_scheduler_->PauseRenderer();
+    renderer_scheduler_->PauseTimersForAndroidWebView();
   } else {
-    webkit_shared_timer_suspended_handle_.reset();
+    renderer_scheduler_->ResumeTimersForAndroidWebView();
   }
+  webkit_shared_timer_suspended_ = suspend;
 #else
   NOTREACHED();
 #endif
@@ -2396,7 +2438,8 @@ RenderThreadImpl::SharedCompositorWorkerContextProvider() {
       support_oop_rasterization,
       ui::command_buffer_metrics::RENDER_WORKER_CONTEXT, stream_id,
       stream_priority);
-  if (!shared_worker_context_provider_->BindToCurrentThread())
+  auto result = shared_worker_context_provider_->BindToCurrentThread();
+  if (result != gpu::ContextResult::kSuccess)
     shared_worker_context_provider_ = nullptr;
   return shared_worker_context_provider_;
 }

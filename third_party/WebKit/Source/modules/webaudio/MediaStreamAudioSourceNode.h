@@ -41,7 +41,7 @@ class MediaStreamAudioSourceOptions;
 
 class MediaStreamAudioSourceHandler final : public AudioHandler {
  public:
-  static RefPtr<MediaStreamAudioSourceHandler> Create(
+  static scoped_refptr<MediaStreamAudioSourceHandler> Create(
       AudioNode&,
       std::unique_ptr<AudioSourceProvider>);
   ~MediaStreamAudioSourceHandler() override;
@@ -89,7 +89,7 @@ class MediaStreamAudioSourceNode final : public AudioNode,
       const MediaStreamAudioSourceOptions&,
       ExceptionState&);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   MediaStream* getMediaStream() const;
 

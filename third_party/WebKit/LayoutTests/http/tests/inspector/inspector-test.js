@@ -264,16 +264,15 @@ function runTest(pixelTest, enableWatchDogWhileDebugging)
         // 1. Preload panels.
         var lastLoadedPanel;
 
-        var modulePromise = Promise.resolve();
+        var promise = Promise.resolve();
 
         for (let moduleName of InspectorTest._modulesToPreload)
-            modulePromise = modulePromise.then(() => TestRunner.loadModule(moduleName));
-
-        var promises = [modulePromise];
+            promise = promise.then(() => TestRunner.loadModule(moduleName));
 
         for (var i = 0; i < InspectorTest._panelsToPreload.length; ++i) {
-            lastLoadedPanel = InspectorTest._panelsToPreload[i];
-            promises.push(UI.inspectorView.panel(lastLoadedPanel));
+            let panel = InspectorTest._panelsToPreload[i];
+            lastLoadedPanel = panel;
+            promise = promise.then(() => UI.inspectorView.panel(panel));
         }
 
         var testPath = Common.settings.createSetting("testPath", "").get();
@@ -290,7 +289,6 @@ function runTest(pixelTest, enableWatchDogWhileDebugging)
             "profiler": "heap_profiler",
             "resource-tree": "resources",
             "search": "sources",
-            "security": "security",
             "service-workers": "resources",
             "sources": "sources",
             "timeline": "timeline",
@@ -300,13 +298,13 @@ function runTest(pixelTest, enableWatchDogWhileDebugging)
         for (var folder in initialPanelByFolder) {
             if (testPath.indexOf(folder + "/") !== -1) {
                 lastLoadedPanel = initialPanelByFolder[folder];
-                promises.push(UI.inspectorView.panel(lastLoadedPanel));
+                promise = promise.then(() => UI.inspectorView.panel(lastLoadedPanel));
                 break;
             }
         }
 
         // 3. Run test function.
-        Promise.all(promises).then(() => {
+        promise.then(() => {
             if (lastLoadedPanel)
                 UI.inspectorView.showPanel(lastLoadedPanel).then(testFunction);
             else
@@ -326,7 +324,7 @@ function runTest(pixelTest, enableWatchDogWhileDebugging)
     testRunner.evaluateInWebInspector(initializeCallId, toEvaluate);
 
     if (window.debugTest)
-        test = "function() { Protocol.InspectorBackend.Options.suppressRequestErrors = false; window.test = " + test.toString() + "; InspectorTest.addResult = window._originalConsoleLog; InspectorTest.completeTest = function() {}; TestRunner.addResult = InspectorTest.addResult; TestRunner.completeTest = InspectorTest.completeTest; }";
+        test = "function() { Protocol.InspectorBackend.Options.suppressRequestErrors = false; window.test = " + test.toString() + "; InspectorTest.addResult = window._originalConsoleLog; InspectorTest.completeTest = () => console.log('Test completed'); TestRunner.addResult = InspectorTest.addResult; TestRunner.completeTest = InspectorTest.completeTest; }";
     toEvaluate = "(" + runTestInFrontend + ")(" + test + ");";
     testRunner.evaluateInWebInspector(runTestCallId, toEvaluate);
 

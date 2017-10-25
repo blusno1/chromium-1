@@ -218,7 +218,7 @@ void ScrollbarTheme::PaintScrollCorner(
 #else
   Platform::Current()->ThemeEngine()->Paint(
       context.Canvas(), WebThemeEngine::kPartScrollbarCorner,
-      WebThemeEngine::kStateNormal, WebRect(corner_rect), 0);
+      WebThemeEngine::kStateNormal, WebRect(corner_rect), nullptr);
 #endif
 }
 
@@ -394,7 +394,7 @@ void ScrollbarTheme::SplitTrack(const ScrollbarThemeClient& scrollbar,
   }
 }
 
-ScrollbarTheme& ScrollbarTheme::GetTheme() {
+ScrollbarTheme& ScrollbarTheme::DeprecatedStaticGetTheme() {
   if (ScrollbarTheme::MockScrollbarsEnabled()) {
     if (RuntimeEnabledFeatures::OverlayScrollbarsEnabled()) {
       DEFINE_STATIC_LOCAL(ScrollbarThemeOverlayMock, overlay_mock_theme, ());

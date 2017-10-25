@@ -51,7 +51,8 @@ PresentationRequest* PresentationRequest::Create(
     ExecutionContext* execution_context,
     const Vector<String>& urls,
     ExceptionState& exception_state) {
-  if (ToDocument(execution_context)->IsSandboxed(kSandboxPresentation)) {
+  if (ToDocument(execution_context)
+          ->IsSandboxed(kSandboxPresentationController)) {
     exception_state.ThrowSecurityError(
         "The document is sandboxed and lacks the 'allow-presentation' flag.");
     return nullptr;
@@ -222,7 +223,7 @@ const Vector<KURL>& PresentationRequest::Urls() const {
   return urls_;
 }
 
-DEFINE_TRACE(PresentationRequest) {
+void PresentationRequest::Trace(blink::Visitor* visitor) {
   visitor->Trace(availability_property_);
   EventTargetWithInlineData::Trace(visitor);
   ContextClient::Trace(visitor);

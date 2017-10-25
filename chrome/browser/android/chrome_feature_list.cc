@@ -62,12 +62,11 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kCCTRedirectPreconnect,
     &kChromeHomeFeature,
     &kChromeHomeDestroySuggestions,
-    &kChromeHomeDoodle,
+    &kChromeHomeBottomNavLabels,
     &kChromeHomePromo,
     &kChromeHomeOptOutSnackbar,
     &kChromeHomeSwipeLogic,
     &kChromeMemexFeature,
-    &kContentSuggestionsLargeThumbnail,
     &kContentSuggestionsScrollToLoad,
     &kContentSuggestionsSettings,
     &kContentSuggestionsThumbnailDominantColor,
@@ -172,8 +171,8 @@ const base::Feature kChromeHomeFeature{"ChromeHome",
 const base::Feature kChromeHomeDestroySuggestions{
     "ChromeHomeDestroySuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kChromeHomeDoodle{"ChromeHomeDoodle",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kChromeHomeBottomNavLabels{
+    "ChromeHomeBottomNavLabels", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kChromeHomePromo{"ChromeHomePromo",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
@@ -186,9 +185,6 @@ const base::Feature kChromeHomeSwipeLogic{"ChromeHomeSwipeLogic",
 
 const base::Feature kChromeMemexFeature{"ChromeMemex",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kContentSuggestionsLargeThumbnail{
-    "ContentSuggestionsLargeThumbnail", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kContentSuggestionsScrollToLoad{
     "ContentSuggestionsScrollToLoad", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -293,6 +289,9 @@ const base::Feature kSpecialLocaleFeature{"SpecialLocale",
 
 const base::Feature kSpecialLocaleWrapper{"SpecialLocaleWrapper",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kTabModalJsDialog{"TabModalJsDialog",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kTabReparenting{"TabReparenting",
                                     base::FEATURE_ENABLED_BY_DEFAULT};

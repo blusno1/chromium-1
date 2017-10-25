@@ -98,7 +98,7 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_popup_model_observer.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -109,7 +109,6 @@
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #import "ui/base/cocoa/touch_bar_forward_declarations.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/display/screen.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/gfx/mac/scoped_cocoa_disable_screen_updates.h"
@@ -1197,6 +1196,34 @@ bool IsTabDetachingInFullscreenEnabled() {
   [touchBar_ setIsPageLoading:isLoading];
 }
 
+- (void)firstResponderUpdated:(NSResponder*)responder {
+  if (![self isInAppKitFullscreen] ||
+      [fullscreenToolbarController_ toolbarStyle] ==
+          FullscreenToolbarStyle::TOOLBAR_NONE) {
+    return;
+  }
+
+  if (!responder) {
+    [self releaseToolbarVisibilityForOwner:self withAnimation:YES];
+    return;
+  }
+
+  if (![responder isKindOfClass:[NSView class]])
+    return;
+
+  // If the view is in the download shelf or the tab content area, don't
+  // lock the toolbar.
+  NSView* view = base::mac::ObjCCastStrict<NSView>(responder);
+  if (![view isDescendantOf:[[self window] contentView]] ||
+      [view isDescendantOf:[downloadShelfController_ view]] ||
+      [view isDescendantOf:[self tabContentArea]]) {
+    [self releaseToolbarVisibilityForOwner:self withAnimation:YES];
+    return;
+  }
+
+  [self lockToolbarVisibilityForOwner:self withAnimation:YES];
+}
+
 // Make the location bar the first responder, if possible.
 - (void)focusLocationBar:(BOOL)selectAll {
   [toolbarController_ focusLocationBar:selectAll];
@@ -1583,7 +1610,7 @@ bool IsTabDetachingInFullscreenEnabled() {
 
   bookmarkBubbleObserver_.reset(new BookmarkBubbleObserverCocoa(self));
 
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+  if (chrome::ShowPilotDialogsWithViewsToolkit()) {
     chrome::ShowBookmarkBubbleViewsAtPoint(
         gfx::ScreenPointFromNSPoint(ui::ConvertPointFromWindowToScreen(
             [self window], [self bookmarkBubblePoint])),
@@ -1631,7 +1658,7 @@ bool IsTabDetachingInFullscreenEnabled() {
                                      step:(translate::TranslateStep)step
                                 errorType:(translate::TranslateErrors::Type)
                                 errorType {
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+  if (chrome::ShowAllDialogsWithViewsToolkit()) {
     ShowTranslateBubbleViews([self window], [self locationBarBridge], contents,
                              step, errorType, true);
     return;

@@ -135,8 +135,6 @@ component("base") {
     "cocoa/nsgraphics_context_additions.mm",
     "cocoa/nsview_additions.h",
     "cocoa/nsview_additions.mm",
-    "cocoa/quartzcore_additions.h",
-    "cocoa/quartzcore_additions.mm",
     "cocoa/remote_layer_api.h",
     "cocoa/remote_layer_api.mm",
     "cocoa/scoped_cg_context_smooth_fonts.h",
@@ -268,6 +266,8 @@ component("base") {
     "touch/touch_editing_controller.h",
     "ui_base_export.h",
     "ui_base_exports.cc",
+    "ui_base_features.cc",
+    "ui_base_features.h",
     "ui_base_paths.cc",
     "ui_base_paths.h",
     "ui_base_switches.cc",
@@ -556,7 +556,6 @@ component("base") {
       "Carbon.framework",
       "CoreVideo.framework",
       "Foundation.framework",
-      "QuartzCore.framework",
     ]
   }
 

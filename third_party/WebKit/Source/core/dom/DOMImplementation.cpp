@@ -241,7 +241,7 @@ Document* DOMImplementation::createDocument(const String& type,
     // init.frame()->tree().top()->securityContext() returns nullptr.
     // For that reason, the origin must be retrieved directly from init.url().
     if (init.GetFrame()->IsMainFrame()) {
-      RefPtr<SecurityOrigin> origin = SecurityOrigin::Create(init.Url());
+      scoped_refptr<SecurityOrigin> origin = SecurityOrigin::Create(init.Url());
       plugin_data = init.GetFrame()->GetPage()->GetPluginData(origin.get());
     } else {
       plugin_data =
@@ -285,8 +285,9 @@ Document* DOMImplementation::createDocument(const String& type,
   return HTMLDocument::Create(init);
 }
 
-DEFINE_TRACE(DOMImplementation) {
+void DOMImplementation::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

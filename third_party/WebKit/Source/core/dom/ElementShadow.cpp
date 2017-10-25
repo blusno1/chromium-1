@@ -34,7 +34,7 @@
 #include "core/frame/Deprecation.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/EventDispatchForbiddenScope.h"
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 
 namespace blink {
 
@@ -109,7 +109,7 @@ void ElementShadow::AppendShadowRoot(ShadowRoot& shadow_root) {
 
 void ElementShadow::Attach(const Node::AttachContext& context) {
   Node::AttachContext children_context(context);
-  children_context.resolved_style = 0;
+  children_context.resolved_style = nullptr;
 
   for (ShadowRoot* root = &YoungestShadowRoot(); root;
        root = root->OlderShadowRoot()) {
@@ -120,7 +120,7 @@ void ElementShadow::Attach(const Node::AttachContext& context) {
 
 void ElementShadow::Detach(const Node::AttachContext& context) {
   Node::AttachContext children_context(context);
-  children_context.resolved_style = 0;
+  children_context.resolved_style = nullptr;
 
   for (ShadowRoot* root = &YoungestShadowRoot(); root;
        root = root->OlderShadowRoot())
@@ -163,12 +163,12 @@ void ElementShadow::Distribute() {
     V0().Distribute();
 }
 
-DEFINE_TRACE(ElementShadow) {
+void ElementShadow::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_shadow_v0_);
   visitor->Trace(shadow_root_);
 }
 
-DEFINE_TRACE_WRAPPERS(ElementShadow) {
+void ElementShadow::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(element_shadow_v0_);
   visitor->TraceWrappers(shadow_root_);
 }

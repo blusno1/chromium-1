@@ -12,6 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "chrome/browser/android/banners/app_banner_manager_android.h"
+#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/feature_utilities.h"
 #include "chrome/browser/android/hung_renderer_infobar_delegate.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -30,6 +31,7 @@
 #include "chrome/browser/ui/find_bar/find_notification_details.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
 #include "chrome/browser/ui/interventions/framebust_block_message_delegate.h"
+#include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/chrome_switches.h"
@@ -108,14 +110,6 @@ TabWebContentsDelegateAndroid::TabWebContentsDelegateAndroid(JNIEnv* env,
 
 TabWebContentsDelegateAndroid::~TabWebContentsDelegateAndroid() {
   notification_registrar_.RemoveAll();
-}
-
-void TabWebContentsDelegateAndroid::LoadingStateChanged(
-    WebContents* source, bool to_different_document) {
-  bool has_stopped = source == nullptr || !source->IsLoading();
-  WebContentsDelegateAndroid::LoadingStateChanged(
-      source, to_different_document);
-  LoadProgressChanged(source, has_stopped ? 1 : 0);
 }
 
 void TabWebContentsDelegateAndroid::RunFileChooser(
@@ -269,6 +263,9 @@ TabWebContentsDelegateAndroid::GetJavaScriptDialogManager(
   if (vr::VrTabHelper::IsInVr(source)) {
     vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kJavascriptDialog);
     return nullptr;
+  }
+  if (base::FeatureList::IsEnabled(chrome::android::kTabModalJsDialog)) {
+    return JavaScriptDialogTabHelper::FromWebContents(source);
   }
   return app_modal::JavaScriptDialogManager::GetInstance();
 }

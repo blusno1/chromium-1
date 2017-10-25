@@ -56,8 +56,8 @@ class SolidColorOverlay : public PageOverlay::Delegate {
             graphics_context, page_overlay, DisplayItem::kPageOverlay))
       return;
     FloatRect rect(0, 0, size.width, size.height);
-    DrawingRecorder drawing_recorder(graphics_context, page_overlay,
-                                     DisplayItem::kPageOverlay, rect);
+    DrawingRecorder recorder(graphics_context, page_overlay,
+                             DisplayItem::kPageOverlay, rect);
     graphics_context.FillRect(rect, color_);
   }
 
@@ -146,7 +146,7 @@ TEST_F(PageOverlayTest, PageOverlay_AcceleratedCompositing) {
   PaintController& paint_controller = graphics_layer->GetPaintController();
   GraphicsContext graphics_context(paint_controller);
   graphics_context.BeginRecording(int_rect);
-  paint_controller.GetPaintArtifact().Replay(int_rect, graphics_context);
+  paint_controller.GetPaintArtifact().Replay(graphics_context);
   graphics_context.EndRecording()->Playback(&canvas);
 }
 

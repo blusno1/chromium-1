@@ -66,16 +66,6 @@ TaskQueueImpl::~TaskQueueImpl() {
 #endif
 }
 
-TaskQueueImpl::Task::Task()
-    : TaskQueue::Task(TaskQueue::PostedTask(base::Closure(), base::Location()),
-                      base::TimeTicks()),
-#ifndef NDEBUG
-      enqueue_order_set_(false),
-#endif
-      enqueue_order_(0) {
-  sequence_num = 0;
-}
-
 TaskQueueImpl::Task::Task(TaskQueue::PostedTask task,
                           base::TimeTicks desired_run_time,
                           EnqueueOrder sequence_number)
@@ -318,7 +308,11 @@ TaskQueueImpl::TaskDeque TaskQueueImpl::TakeImmediateIncomingQueue() {
   TaskQueueImpl::TaskDeque queue;
   queue.Swap(immediate_incoming_queue());
 
-  // Activate delayed fence if necessary.
+  // Activate delayed fence if necessary. This is ideologically similar to
+  // ActivateDelayedFenceIfNeeded, but due to immediate tasks being posted
+  // from any thread we can't generate an enqueue order for the fence there,
+  // so we have to check all immediate tasks and use their enqueue order for
+  // a fence.
   if (main_thread_only().delayed_fence) {
     for (const Task& task : queue) {
       if (task.delayed_run_time >= main_thread_only().delayed_fence.value()) {
@@ -333,22 +327,6 @@ TaskQueueImpl::TaskDeque TaskQueueImpl::TakeImmediateIncomingQueue() {
     }
   }
 
-  // Temporary check for crbug.com/752914. Ideally we'd check the entire queue
-  // but that would be too expensive.
-  // TODO(skyostil): Remove this.
-  if (!queue.empty()) {
-    if (!queue.front().task) {
-      static const char kBlinkSchedulerTaskFunctionNameKey[] =
-          "blink_scheduler_task_function_name";
-      static const char kBlinkSchedulerTaskFileNameKey[] =
-          "blink_scheduler_task_file_name";
-      base::debug::SetCrashKeyValue(kBlinkSchedulerTaskFunctionNameKey,
-                                    queue.front().posted_from.function_name());
-      base::debug::SetCrashKeyValue(kBlinkSchedulerTaskFileNameKey,
-                                    queue.front().posted_from.file_name());
-    }
-    CHECK(queue.front().task);
-  }
   return queue;
 }
 
@@ -676,7 +654,12 @@ bool TaskQueueImpl::BlockedByFence() const {
          main_thread_only().current_fence;
 }
 
-bool TaskQueueImpl::HasFence() const {
+bool TaskQueueImpl::HasActiveFence() {
+  if (main_thread_only().delayed_fence &&
+      main_thread_only().time_domain->Now() >
+          main_thread_only().delayed_fence.value()) {
+    return true;
+  }
   return !!main_thread_only().current_fence;
 }
 

@@ -21,6 +21,7 @@
 #include "cc/animation/scroll_offset_animations.h"
 #include "cc/animation/scroll_offset_animations_impl.h"
 #include "cc/animation/timing_function.h"
+#include "cc/animation/worklet_animation_player.h"
 #include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 
@@ -45,7 +46,6 @@ AnimationHost::AnimationHost(ThreadInstance thread_instance)
       thread_instance_(thread_instance),
       supports_scroll_animations_(false),
       needs_push_properties_(false),
-      mutator_needs_mutate_(false),
       mutator_(nullptr) {
   if (thread_instance_ == ThreadInstance::IMPL) {
     scroll_offset_animations_impl_ =
@@ -270,7 +270,7 @@ bool AnimationHost::NeedsTickAnimations() const {
 }
 
 bool AnimationHost::NeedsTickMutator() const {
-  return mutator_ && mutator_needs_mutate_;
+  return mutator_ && mutator_->HasAnimators();
 }
 
 bool AnimationHost::NeedsTickAnimationPlayers() const {
@@ -302,10 +302,11 @@ bool AnimationHost::TickAnimations(base::TimeTicks monotonic_time) {
   }
   if (NeedsTickMutator()) {
     // TODO(majidvp): At the moment we call this for both active and pending
-    // trees similar to other animations. However our final goal is to only
-    // call these once ideally after activation.
-    did_animate |= mutator_->Mutate(monotonic_time);
-    mutator_needs_mutate_ = did_animate;
+    // trees similar to other animations. However our final goal is to only call
+    // it once, ideally after activation, and only when the input
+    // to an active timeline has changed. http://crbug.com/767210
+    mutator_->Mutate(CollectAnimatorsState(monotonic_time));
+    did_animate = true;
   }
 
   return did_animate;
@@ -321,7 +322,30 @@ void AnimationHost::TickScrollAnimations(base::TimeTicks monotonic_time) {
   // TODO(majidvp): We need to return a boolean here so that LTHI knows
   // whether it needs to schedule another frame.
   if (mutator_)
-    mutator_->Mutate(monotonic_time);
+    mutator_->Mutate(CollectAnimatorsState(monotonic_time));
+}
+
+std::unique_ptr<MutatorInputState> AnimationHost::CollectAnimatorsState(
+    base::TimeTicks timeline_time) {
+  TRACE_EVENT0("cc", "AnimationHost::CollectAnimatorsState");
+  std::unique_ptr<MutatorInputState> result =
+      base::MakeUnique<MutatorInputState>();
+
+  for (auto& player : ticking_players_) {
+    if (!player->IsWorkletAnimationPlayer())
+      continue;
+
+    WorkletAnimationPlayer* worklet_player =
+        static_cast<WorkletAnimationPlayer*>(player.get());
+    // TODO(majidvp): Do not assume timeline time to be the worklet player's
+    // current time but instead ask the player to provide it.
+    MutatorInputState::AnimationState state{
+        worklet_player->id(), worklet_player->name(), timeline_time};
+
+    result->animations.push_back(std::move(state));
+  }
+
+  return result;
 }
 
 bool AnimationHost::UpdateAnimationState(bool start_ready_animations,
@@ -569,8 +593,29 @@ void AnimationHost::SetLayerTreeMutator(
   mutator_->SetClient(this);
 }
 
-void AnimationHost::SetNeedsMutate() {
-  mutator_needs_mutate_ = true;
+void AnimationHost::SetMutationUpdate(
+    std::unique_ptr<MutatorOutputState> output_state) {
+  if (!output_state)
+    return;
+
+  TRACE_EVENT0("cc", "AnimationHost::SetMutationUpdate");
+  for (auto& animation_state : output_state->animations) {
+    int id = animation_state.animation_player_id;
+
+    // TODO(majidvp): Use a map to make lookup O(1)
+    auto to_update =
+        std::find_if(ticking_players_.begin(), ticking_players_.end(),
+                     [id](auto& it) { return it->id() == id; });
+
+    if (to_update == ticking_players_.end())
+      continue;
+
+    DCHECK(to_update->get()->IsWorkletAnimationPlayer());
+    WorkletAnimationPlayer* worklet_player_to_update =
+        static_cast<WorkletAnimationPlayer*>(to_update->get());
+
+    worklet_player_to_update->SetLocalTime(animation_state.local_time);
+  }
 }
 
 }  // namespace cc

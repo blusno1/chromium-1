@@ -74,7 +74,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
  public:
   virtual ~Image();
 
-  static RefPtr<Image> LoadPlatformResource(const char* name);
+  static scoped_refptr<Image> LoadPlatformResource(const char* name);
   static bool SupportsType(const String&);
 
   virtual bool IsSVGImage() const { return false; }
@@ -125,7 +125,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   // Otherwise:
   //   Image loading is completed synchronously.
   //   ImageResourceObserver::AsyncLoadCompleted() is not called.
-  virtual SizeAvailability SetData(RefPtr<SharedBuffer> data,
+  virtual SizeAvailability SetData(scoped_refptr<SharedBuffer> data,
                                    bool all_data_received);
   virtual SizeAvailability DataChanged(bool /*all_data_received*/) {
     return kSizeUnavailable;
@@ -136,7 +136,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
   virtual void DestroyDecodedData() = 0;
 
-  virtual RefPtr<SharedBuffer> Data() { return encoded_image_data_; }
+  virtual scoped_refptr<SharedBuffer> Data() { return encoded_image_data_; }
 
   // Animation begins whenever someone draws the image, so startAnimation() is
   // not normally called. It will automatically pause once all observers no
@@ -172,9 +172,18 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
   enum TileRule { kStretchTile, kRoundTile, kSpaceTile, kRepeatTile };
 
-  virtual RefPtr<Image> ImageForDefaultFrame();
+  virtual scoped_refptr<Image> ImageForDefaultFrame();
 
-  enum ImageDecodingMode { kUnspecifiedDecode, kSyncDecode, kAsyncDecode };
+  enum ImageDecodingMode {
+    // No preference specified.
+    kUnspecifiedDecode,
+    // Prefer to display the image synchronously with the rest of the content
+    // updates.
+    kSyncDecode,
+    // Prefer to display the image asynchronously with the rest of the content
+    // updates.
+    kAsyncDecode
+  };
 
   static PaintImage::DecodingMode ToPaintImageDecodingMode(
       ImageDecodingMode mode) {
@@ -186,6 +195,8 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
       case kAsyncDecode:
         return PaintImage::DecodingMode::kAsync;
     }
+
+    NOTREACHED();
     return PaintImage::DecodingMode::kUnspecified;
   }
 
@@ -255,6 +266,8 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     high_contrast_classification_ = high_contrast_classification;
   }
 
+  PaintImage::Id paint_image_id() const { return stable_image_id_; }
+
  protected:
   Image(ImageObserver* = 0, bool is_multipart = false);
 
@@ -289,7 +302,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
  private:
   bool image_observer_disabled_;
-  RefPtr<SharedBuffer> encoded_image_data_;
+  scoped_refptr<SharedBuffer> encoded_image_data_;
   // TODO(Oilpan): consider having Image on the Oilpan heap and
   // turn this into a Member<>.
   //

@@ -58,7 +58,6 @@
 #include "chrome/browser/metrics/chrome_metrics_services_manager_client.h"
 #include "chrome/browser/metrics/thread_watcher.h"
 #include "chrome/browser/net/chrome_net_log_helper.h"
-#include "chrome/browser/net/crl_set_fetcher.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
@@ -104,7 +103,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/rappor_service_impl.h"
-#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/subresource_filter/content/browser/content_ruleset_service.h"
 #include "components/subresource_filter/core/browser/ruleset_service.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
@@ -561,11 +560,6 @@ rappor::RapporServiceImpl* BrowserProcessImpl::rappor_service() {
   return GetMetricsServicesManager()->GetRapporServiceImpl();
 }
 
-ukm::UkmRecorder* BrowserProcessImpl::ukm_recorder() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return GetMetricsServicesManager()->GetUkmService();
-}
-
 IOThread* BrowserProcessImpl::io_thread() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(io_thread_.get());
@@ -968,12 +962,6 @@ BrowserProcessImpl::component_updater() {
           g_browser_process->local_state()));
 
   return component_updater_.get();
-}
-
-CRLSetFetcher* BrowserProcessImpl::crl_set_fetcher() {
-  if (!crl_set_fetcher_)
-    crl_set_fetcher_ = base::MakeRefCounted<CRLSetFetcher>();
-  return crl_set_fetcher_.get();
 }
 
 component_updater::SupervisedUserWhitelistInstaller*

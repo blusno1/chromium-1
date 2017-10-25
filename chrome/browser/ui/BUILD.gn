@@ -9,6 +9,7 @@ import("//build/config/ui.gni")
 import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
 import("//components/nacl/features.gni")
+import("//components/offline_pages/features/features.gni")
 import("//components/signin/features.gni")
 import("//extensions/features/features.gni")
 import("//media/media_options.gni")
@@ -121,6 +122,9 @@ split_static_library("ui") {
     "interventions/framebust_block_message_delegate.cc",
     "interventions/framebust_block_message_delegate.h",
     "javascript_dialogs/chrome_javascript_native_dialog_factory.h",
+    "javascript_dialogs/javascript_dialog.h",
+    "javascript_dialogs/javascript_dialog_tab_helper.cc",
+    "javascript_dialogs/javascript_dialog_tab_helper.h",
     "login/login_handler.cc",
     "login/login_handler.h",
     "login/login_interstitial_delegate.cc",
@@ -138,6 +142,8 @@ split_static_library("ui") {
     "passwords/manage_passwords_state.h",
     "passwords/manage_passwords_view_utils.cc",
     "passwords/manage_passwords_view_utils.h",
+    "passwords/password_access_authenticator.cc",
+    "passwords/password_access_authenticator.h",
     "passwords/password_manager_porter.cc",
     "passwords/password_manager_porter.h",
     "passwords/password_manager_presenter.cc",
@@ -412,9 +418,6 @@ split_static_library("ui") {
     "//components/net_log",
     "//components/ntp_snippets",
     "//components/ntp_tiles",
-    "//components/offline_pages/core",
-    "//components/offline_pages/core/background:background_offliner",
-    "//components/offline_pages/core/prefetch",
     "//components/offline_pages/features:features",
     "//components/omnibox/browser",
     "//components/onc",
@@ -446,8 +449,7 @@ split_static_library("ui") {
     "//components/sessions",
     "//components/signin/core/account_id",
     "//components/signin/core/browser",
-    "//components/signin/core/common",
-    "//components/signin/core/common:signin_features",
+    "//components/signin/core/browser:signin_features",
     "//components/spellcheck/browser",
     "//components/ssl_errors",
     "//components/startup_metric_utils/browser:lib",
@@ -620,6 +622,8 @@ split_static_library("ui") {
       "android/interventions/framebust_block_message_delegate_bridge.h",
       "android/javascript_app_modal_dialog_android.cc",
       "android/javascript_app_modal_dialog_android.h",
+      "android/javascript_dialog_android.cc",
+      "android/javascript_dialog_android.h",
       "android/login_handler_android.cc",
       "android/omnibox/omnibox_url_emphasizer.cc",
       "android/omnibox/omnibox_url_emphasizer.h",
@@ -800,9 +804,6 @@ split_static_library("ui") {
       "global_error/global_error_service_factory.h",
       "infobar_container_delegate.cc",
       "infobar_container_delegate.h",
-      "javascript_dialogs/javascript_dialog.h",
-      "javascript_dialogs/javascript_dialog_tab_helper.cc",
-      "javascript_dialogs/javascript_dialog_tab_helper.h",
       "javascript_dialogs/javascript_dialog_views.cc",
       "javascript_dialogs/javascript_dialog_views.h",
       "layout_constants.cc",
@@ -1254,8 +1255,6 @@ split_static_library("ui") {
       "ash/multi_user/user_switch_animator_chromeos.h",
       "ash/networking_config_delegate_chromeos.cc",
       "ash/networking_config_delegate_chromeos.h",
-      "ash/palette_delegate_chromeos.cc",
-      "ash/palette_delegate_chromeos.h",
       "ash/session_controller_client.cc",
       "ash/session_controller_client.h",
       "ash/session_util.cc",
@@ -1341,8 +1340,8 @@ split_static_library("ui") {
       "webui/chromeos/image_source.h",
       "webui/chromeos/internet_config_dialog.cc",
       "webui/chromeos/internet_config_dialog.h",
-      "webui/chromeos/internet_detail_dialog_ui.cc",
-      "webui/chromeos/internet_detail_dialog_ui.h",
+      "webui/chromeos/internet_detail_dialog.cc",
+      "webui/chromeos/internet_detail_dialog.h",
       "webui/chromeos/keyboard_overlay_ui.cc",
       "webui/chromeos/keyboard_overlay_ui.h",
       "webui/chromeos/login/active_directory_password_change_screen_handler.cc",
@@ -1448,6 +1447,8 @@ split_static_library("ui") {
       "webui/chromeos/sys_internals/sys_internals_message_handler.h",
       "webui/chromeos/sys_internals/sys_internals_ui.cc",
       "webui/chromeos/sys_internals/sys_internals_ui.h",
+      "webui/chromeos/system_web_dialog_delegate.cc",
+      "webui/chromeos/system_web_dialog_delegate.h",
       "webui/chromeos/user_image_source.cc",
       "webui/chromeos/user_image_source.h",
       "webui/chromeos/voice_search_ui.cc",
@@ -1762,10 +1763,14 @@ split_static_library("ui") {
       "cocoa/tab_contents/chrome_web_contents_view_delegate_mac.mm",
       "cocoa/tab_contents/web_drag_bookmark_handler_mac.h",
       "cocoa/tab_contents/web_drag_bookmark_handler_mac.mm",
+      "cocoa/task_manager_mac.h",
+      "cocoa/task_manager_mac.mm",
       "cocoa/ui_localizer.h",
       "cocoa/ui_localizer.mm",
       "cocoa/web_contents_modal_dialog_host_cocoa.h",
       "cocoa/web_contents_modal_dialog_host_cocoa.mm",
+      "cocoa/window_size_autosaver.h",
+      "cocoa/window_size_autosaver.mm",
 
       # TODO(estade): this class should be folded into
       # manage_passwords_decoration.mm
@@ -2350,8 +2355,6 @@ split_static_library("ui") {
         "cocoa/tabs/tab_view.mm",
         "cocoa/tabs/tab_window_controller.h",
         "cocoa/tabs/tab_window_controller.mm",
-        "cocoa/task_manager_mac.h",
-        "cocoa/task_manager_mac.mm",
         "cocoa/themed_window.h",
         "cocoa/themed_window.mm",
         "cocoa/toolbar/app_toolbar_button.h",
@@ -2388,8 +2391,6 @@ split_static_library("ui") {
         "cocoa/web_contents_modal_dialog_manager_views_mac.mm",
         "cocoa/web_textfield_touch_bar_controller.h",
         "cocoa/web_textfield_touch_bar_controller.mm",
-        "cocoa/window_size_autosaver.h",
-        "cocoa/window_size_autosaver.mm",
 
         # TODO(estade): this class should be deleted in favor of a combobox model.
         # See crbug.com/590850
@@ -2427,6 +2428,8 @@ split_static_library("ui") {
       "views/certificate_viewer_win.cc",
       "views/chrome_cleaner_dialog_win.cc",
       "views/chrome_cleaner_dialog_win.h",
+      "views/chrome_cleaner_reboot_dialog_win.cc",
+      "views/chrome_cleaner_reboot_dialog_win.h",
       "views/color_chooser_dialog.cc",
       "views/color_chooser_dialog.h",
       "views/color_chooser_win.cc",
@@ -3573,6 +3576,14 @@ split_static_library("ui") {
 
   if (use_udev) {
     deps += [ "//device/udev_linux" ]
+  }
+
+  if (enable_offline_pages) {
+    deps += [
+      "//components/offline_pages/core",
+      "//components/offline_pages/core/background:background_offliner",
+      "//components/offline_pages/core/prefetch",
+    ]
   }
 }
 

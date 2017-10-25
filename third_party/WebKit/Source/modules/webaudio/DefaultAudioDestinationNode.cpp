@@ -45,7 +45,8 @@ DefaultAudioDestinationHandler::DefaultAudioDestinationHandler(
   SetInternalChannelInterpretation(AudioBus::kSpeakers);
 }
 
-RefPtr<DefaultAudioDestinationHandler> DefaultAudioDestinationHandler::Create(
+scoped_refptr<DefaultAudioDestinationHandler>
+DefaultAudioDestinationHandler::Create(
     AudioNode& node,
     const WebAudioLatencyHint& latency_hint) {
   return WTF::AdoptRef(new DefaultAudioDestinationHandler(node, latency_hint));
@@ -115,6 +116,11 @@ void DefaultAudioDestinationHandler::StopRendering() {
     DCHECK(destination_->IsPlaying());
     StopDestination();
   }
+}
+
+void DefaultAudioDestinationHandler::RestartDestination() {
+  StopDestination();
+  StartDestination();
 }
 
 unsigned long DefaultAudioDestinationHandler::MaxChannelCount() const {

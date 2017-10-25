@@ -61,11 +61,11 @@ OfflineAudioDestinationHandler::OfflineAudioDestinationHandler(
   SetInternalChannelInterpretation(AudioBus::kSpeakers);
 }
 
-RefPtr<OfflineAudioDestinationHandler> OfflineAudioDestinationHandler::Create(
-    AudioNode& node,
-    unsigned number_of_channels,
-    size_t frames_to_process,
-    float sample_rate) {
+scoped_refptr<OfflineAudioDestinationHandler>
+OfflineAudioDestinationHandler::Create(AudioNode& node,
+                                       unsigned number_of_channels,
+                                       size_t frames_to_process,
+                                       float sample_rate) {
   return WTF::AdoptRef(new OfflineAudioDestinationHandler(
       node, number_of_channels, frames_to_process, sample_rate));
 }
@@ -115,7 +115,7 @@ void OfflineAudioDestinationHandler::StartRendering() {
     GetRenderingThread()->GetWebTaskRunner()->PostTask(
         BLINK_FROM_HERE,
         CrossThreadBind(&OfflineAudioDestinationHandler::StartOfflineRendering,
-                        WrapRefPtr(this)));
+                        WrapRefCounted(this)));
     return;
   }
 
@@ -124,7 +124,7 @@ void OfflineAudioDestinationHandler::StartRendering() {
   GetRenderingThread()->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
       CrossThreadBind(&OfflineAudioDestinationHandler::DoOfflineRendering,
-                      WrapRefPtr(this)));
+                      WrapRefCounted(this)));
 }
 
 void OfflineAudioDestinationHandler::StopRendering() {
@@ -205,7 +205,7 @@ void OfflineAudioDestinationHandler::DoOfflineRendering() {
       GetRenderingThread()->GetWebTaskRunner()->PostTask(
           BLINK_FROM_HERE,
           WTF::Bind(&OfflineAudioDestinationHandler::DoOfflineRendering,
-                    WrapRefPtr(this)));
+                    WrapRefCounted(this)));
       return;
     }
 
@@ -221,7 +221,7 @@ void OfflineAudioDestinationHandler::DoOfflineRendering() {
   while (frames_to_process_ > 0) {
     // Suspend the rendering if a scheduled suspend found at the current
     // sample frame. Otherwise render one quantum.
-    if (RenderIfNotSuspended(0, render_bus_.get(),
+    if (RenderIfNotSuspended(nullptr, render_bus_.get(),
                              AudioUtilities::kRenderQuantumFrames))
       return;
 
@@ -253,10 +253,10 @@ void OfflineAudioDestinationHandler::SuspendOfflineRendering() {
   if (Context()->GetExecutionContext()) {
     TaskRunnerHelper::Get(TaskType::kMediaElementEvent,
                           Context()->GetExecutionContext())
-        ->PostTask(
-            BLINK_FROM_HERE,
-            CrossThreadBind(&OfflineAudioDestinationHandler::NotifySuspend,
-                            WrapRefPtr(this), Context()->CurrentSampleFrame()));
+        ->PostTask(BLINK_FROM_HERE,
+                   CrossThreadBind(
+                       &OfflineAudioDestinationHandler::NotifySuspend,
+                       WrapRefCounted(this), Context()->CurrentSampleFrame()));
   }
 }
 
@@ -270,7 +270,7 @@ void OfflineAudioDestinationHandler::FinishOfflineRendering() {
         ->PostTask(
             BLINK_FROM_HERE,
             CrossThreadBind(&OfflineAudioDestinationHandler::NotifyComplete,
-                            WrapRefPtr(this)));
+                            WrapRefCounted(this)));
   }
 }
 
@@ -380,6 +380,19 @@ WebThread* OfflineAudioDestinationHandler::GetRenderingThread() {
   DCHECK(render_thread_ && !worklet_backing_thread_);
   return render_thread_.get();
 }
+
+void OfflineAudioDestinationHandler::RestartDestination() {
+  // If the worklet thread is not assigned yet, that means the context has
+  // started without a valid WorkletGlobalScope. Assign the worklet thread,
+  // and it will be picked up when the GetRenderingThread() is called next.
+  if (RuntimeEnabledFeatures::AudioWorkletEnabled() &&
+      Context()->HasWorkletMessagingProxy() &&
+      !worklet_backing_thread_) {
+    DCHECK(Context()->WorkletMessagingProxy()->GetWorkletBackingThread());
+    worklet_backing_thread_ =
+        Context()->WorkletMessagingProxy()->GetWorkletBackingThread();
+  }
+};
 
 // ----------------------------------------------------------------
 

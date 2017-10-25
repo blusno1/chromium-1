@@ -115,7 +115,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // For unit tests, manually trigger the UpdateContainerPolicy method.
   void UpdateContainerPolicyForTests() { UpdateContainerPolicy(); }
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   HTMLFrameOwnerElement(const QualifiedName& tag_name, Document&);
@@ -133,7 +133,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // policies, as "the origin of the URL in the frame's src attribute" (see
   // https://wicg.github.io/feature-policy/#iframe-allow-attribute).
   // This method is intended to be overridden by specific frame classes.
-  virtual RefPtr<SecurityOrigin> GetOriginForFeaturePolicy() const {
+  virtual scoped_refptr<SecurityOrigin> GetOriginForFeaturePolicy() const {
     return SecurityOrigin::CreateUnique();
   }
 

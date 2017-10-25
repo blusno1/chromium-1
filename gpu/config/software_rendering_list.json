@@ -1,6 +1,5 @@
 {
   "name": "software rendering list",
-  "version": "13.12",
   "entries": [
     {
       "id": 1,
@@ -1384,16 +1383,6 @@
       ]
     },
     {
-      "id": 138,
-      "description": "Accelerated video encode is unavailable on Linux",
-      "os": {
-        "type": "linux"
-      },
-      "features": [
-        "accelerated_video_encode"
-      ]
-    },
-    {
       "id": 139,
       "description": "GPU Rasterization is disabled on pre-GCN AMD cards",
       "cr_bugs": [643850],
@@ -1536,6 +1525,41 @@
       },
       "gl_renderer": ".*VideoCore V.*",
       "features": [
+        "gpu_rasterization"
+      ]
+    },
+    {
+      "id": 149,
+      "description": "Adreno 420 support for EXT_multisampled_render_to_texture is buggy on Android < 5.1",
+      "comment": "Corresponds to GPU driver bug #116",
+      "cr_bugs": [490379, 767913],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "5.1"
+        }
+      },
+      "gl_renderer": "Adreno \\(TM\\) 4.*",
+      "features": [
+        "accelerated_webgl2"
+      ]
+    },
+    {
+      "id": 150,
+      "description": "Macs with NVidia GPUs experience rendering issues on High Sierra",
+      "cr_bugs": [773705],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": ">=",
+          "value": "10.13"
+        }
+      },
+      "vendor_id": "0x10de",
+      "multi_gpu_category": "any",
+      "features": [
+        "accelerated_2d_canvas",
         "gpu_rasterization"
       ]
     }

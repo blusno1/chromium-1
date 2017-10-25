@@ -254,8 +254,6 @@ WorkerGlobalScope::LoadingScriptFromInstalledScriptsManager(
       GetThread()->GetInstalledScriptsManager()->GetScriptData(script_url,
                                                                &script_data);
   switch (status) {
-    case InstalledScriptsManager::ScriptStatus::kTaken:
-      return LoadResult::kNotHandled;
     case InstalledScriptsManager::ScriptStatus::kFailed:
       return LoadResult::kFailed;
     case InstalledScriptsManager::ScriptStatus::kSuccess:
@@ -277,7 +275,7 @@ WorkerGlobalScope::LoadingScriptFromWorkerScriptLoader(
     String* out_source_code,
     std::unique_ptr<Vector<char>>* out_cached_meta_data) {
   ExecutionContext* execution_context = GetExecutionContext();
-  RefPtr<WorkerScriptLoader> script_loader(WorkerScriptLoader::Create());
+  scoped_refptr<WorkerScriptLoader> script_loader(WorkerScriptLoader::Create());
   script_loader->LoadSynchronously(
       *execution_context, script_url, WebURLRequest::kRequestContextScript,
       execution_context->GetSecurityContext().AddressSpace());
@@ -381,13 +379,13 @@ WorkerGlobalScope::WorkerGlobalScope(
       event_queue_(WorkerEventQueue::Create(this)),
       timers_(TaskRunnerHelper::Get(TaskType::kJavascriptTimer, this)),
       time_origin_(time_origin),
-      font_selector_(OffscreenFontSelector::Create()) {
+      font_selector_(OffscreenFontSelector::Create(this)) {
   InstanceCounters::IncrementCounter(
       InstanceCounters::kWorkerGlobalScopeCounter);
   SetSecurityOrigin(SecurityOrigin::Create(url_));
-  if (creation_params->starter_origin_privilege_data) {
+  if (creation_params->starter_origin) {
     GetSecurityOrigin()->TransferPrivilegesFrom(
-        std::move(creation_params->starter_origin_privilege_data));
+        creation_params->starter_origin->CreatePrivilegeData());
   }
   ApplyContentSecurityPolicyFromVector(
       *creation_params->content_security_policy_parsed_headers);
@@ -453,7 +451,7 @@ void WorkerGlobalScope::ApplyContentSecurityPolicyFromVector(
   GetContentSecurityPolicy()->BindToExecutionContext(GetExecutionContext());
 }
 
-DEFINE_TRACE(WorkerGlobalScope) {
+void WorkerGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(location_);
   visitor->Trace(navigator_);
   visitor->Trace(event_queue_);
@@ -467,7 +465,8 @@ DEFINE_TRACE(WorkerGlobalScope) {
   Supplementable<WorkerGlobalScope>::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(WorkerGlobalScope) {
+void WorkerGlobalScope::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   EventTargetWithInlineData::TraceWrappers(visitor);
   Supplementable<WorkerGlobalScope>::TraceWrappers(visitor);
 }

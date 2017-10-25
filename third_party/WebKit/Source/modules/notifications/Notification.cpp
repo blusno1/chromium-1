@@ -232,8 +232,8 @@ void Notification::DispatchClickEvent() {
   ExecutionContext* context = GetExecutionContext();
   Document* document = context->IsDocument() ? ToDocument(context) : nullptr;
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::CreateUserGesture(document ? document->GetFrame() : nullptr,
-                                    UserGestureToken::kNewGesture);
+      Frame::NotifyUserActivation(document ? document->GetFrame() : nullptr,
+                                  UserGestureToken::kNewGesture);
   ScopedWindowFocusAllowedIndicator window_focus_allowed(GetExecutionContext());
   DispatchEvent(Event::Create(EventTypeNames::click));
 }
@@ -319,7 +319,7 @@ bool Notification::requireInteraction() const {
 
 ScriptValue Notification::data(ScriptState* script_state) {
   const WebVector<char>& serialized_data = data_.data;
-  RefPtr<SerializedScriptValue> serialized_value =
+  scoped_refptr<SerializedScriptValue> serialized_value =
       SerializedScriptValue::Create(serialized_data.Data(),
                                     serialized_data.size());
 
@@ -464,7 +464,7 @@ bool Notification::HasPendingActivity() const {
   return false;
 }
 
-DEFINE_TRACE(Notification) {
+void Notification::Trace(blink::Visitor* visitor) {
   visitor->Trace(prepare_show_method_runner_);
   visitor->Trace(loader_);
   EventTargetWithInlineData::Trace(visitor);

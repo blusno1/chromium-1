@@ -25,9 +25,13 @@
 #include "content/network/network_service_impl.h"
 #include "content/network/network_service_url_loader_factory_impl.h"
 #include "content/network/restricted_cookie_manager_impl.h"
+#include "content/network/throttling/network_conditions.h"
+#include "content/network/throttling/throttling_controller.h"
+#include "content/network/throttling/throttling_network_transaction_factory.h"
 #include "content/network/url_loader_impl.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/network/ignore_errors_cert_verifier.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
@@ -226,6 +230,12 @@ std::unique_ptr<net::URLRequestContext> NetworkContext::MakeURLRequestContext(
     builder.set_proxy_service(net::ProxyService::CreateDirect());
   }
 
+  std::unique_ptr<net::CertVerifier> cert_verifier =
+      net::CertVerifier::CreateDefault();
+  builder.SetCertVerifier(
+      content::IgnoreErrorsCertVerifier::MaybeWrapCertVerifier(
+          *command_line, nullptr, std::move(cert_verifier)));
+
   ApplyContextParamsToBuilder(&builder, network_context_params);
 
   return builder.Build();
@@ -235,7 +245,7 @@ void NetworkContext::ApplyContextParamsToBuilder(
     net::URLRequestContextBuilder* builder,
     mojom::NetworkContextParams* network_context_params) {
   // |network_service_| may be nullptr in tests.
-  if (!builder->net_log() && network_service_)
+  if (network_service_)
     builder->set_net_log(network_service_->net_log());
 
   builder->set_enable_brotli(network_context_params->enable_brotli);
@@ -276,7 +286,7 @@ void NetworkContext::ApplyContextParamsToBuilder(
         std::make_unique<net::HttpServerPropertiesManager>(
             std::make_unique<HttpServerPropertiesPrefDelegate>(
                 pref_service_.get()),
-            builder->net_log()));
+            network_service_->net_log()));
   }
 
   builder->set_data_enabled(network_context_params->enable_data_url_support);
@@ -304,6 +314,11 @@ void NetworkContext::ApplyContextParamsToBuilder(
       network_context_params->http_09_on_non_default_ports_enabled;
 
   builder->set_http_network_session_params(session_params);
+  builder->SetCreateHttpTransactionFactoryCallback(
+      base::BindOnce([](net::HttpNetworkSession* session)
+                         -> std::unique_ptr<net::HttpTransactionFactory> {
+        return std::make_unique<ThrottlingNetworkTransactionFactory>(session);
+      }));
 }
 
 void NetworkContext::ClearNetworkingHistorySince(
@@ -319,6 +334,19 @@ void NetworkContext::ClearNetworkingHistorySince(
 
   url_request_context_->http_server_properties()->Clear();
   std::move(completion_callback).Run();
+}
+
+void NetworkContext::SetNetworkConditions(
+    const std::string& profile_id,
+    mojom::NetworkConditionsPtr conditions) {
+  std::unique_ptr<NetworkConditions> network_conditions;
+  if (conditions) {
+    network_conditions.reset(new NetworkConditions(
+        conditions->offline, conditions->latency.InMillisecondsF(),
+        conditions->download_throughput, conditions->upload_throughput));
+  }
+  ThrottlingController::SetConditions(profile_id,
+                                      std::move(network_conditions));
 }
 
 }  // namespace content

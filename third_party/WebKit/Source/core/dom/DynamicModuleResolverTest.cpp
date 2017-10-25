@@ -25,10 +25,10 @@ constexpr const char* kTestReferrerURL = "https://example.com/referrer.js";
 constexpr const char* kTestDependencyURL = "https://example.com/dependency.js";
 
 const KURL TestReferrerURL() {
-  return KURL(kParsedURLString, kTestReferrerURL);
+  return KURL(kTestReferrerURL);
 }
 const KURL TestDependencyURL() {
-  return KURL(kParsedURLString, kTestDependencyURL);
+  return KURL(kTestDependencyURL);
 }
 
 class DynamicModuleResolverTestModulator final : public DummyModulator {
@@ -43,7 +43,7 @@ class DynamicModuleResolverTestModulator final : public DummyModulator {
     pending_client_ = nullptr;
   }
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   // Implements Modulator:
@@ -85,11 +85,11 @@ class DynamicModuleResolverTestModulator final : public DummyModulator {
                        record.ErrorCompletion(script_state_.get()));
   }
 
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   Member<ModuleTreeClient> pending_client_;
 };
 
-DEFINE_TRACE(DynamicModuleResolverTestModulator) {
+void DynamicModuleResolverTestModulator::Trace(blink::Visitor* visitor) {
   visitor->Trace(pending_client_);
   DummyModulator::Trace(visitor);
 }
@@ -304,7 +304,7 @@ TEST(DynamicModuleResolverTest, ExceptionThrown) {
 
 TEST(DynamicModuleResolverTest, ResolveWithNullReferrerScriptSuccess) {
   V8TestingScope scope;
-  scope.GetDocument().SetURL(KURL(kParsedURLString, "https://example.com"));
+  scope.GetDocument().SetURL(KURL("https://example.com"));
 
   auto modulator =
       new DynamicModuleResolverTestModulator(scope.GetScriptState());

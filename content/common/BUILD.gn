@@ -114,18 +114,6 @@ source_set("common") {
     "cursors/webcursor_mac.mm",
     "cursors/webcursor_ozone.cc",
     "date_time_suggestion.h",
-    "devtools/devtools_network_conditions.cc",
-    "devtools/devtools_network_conditions.h",
-    "devtools/devtools_network_controller.cc",
-    "devtools/devtools_network_controller.h",
-    "devtools/devtools_network_interceptor.cc",
-    "devtools/devtools_network_interceptor.h",
-    "devtools/devtools_network_transaction.cc",
-    "devtools/devtools_network_transaction.h",
-    "devtools/devtools_network_transaction_factory.cc",
-    "devtools/devtools_network_transaction_factory.h",
-    "devtools/devtools_network_upload_data_stream.cc",
-    "devtools/devtools_network_upload_data_stream.h",
     "devtools_messages.h",
     "dom_storage/dom_storage_map.cc",
     "dom_storage/dom_storage_map.h",
@@ -184,8 +172,7 @@ source_set("common") {
     "input/input_event.h",
     "input/input_event_ack.cc",
     "input/input_event_ack.h",
-    "input/input_event_ack_source.h",
-    "input/input_event_ack_state.h",
+    "input/input_event_ack_state.cc",
     "input/input_event_dispatch_type.h",
     "input/input_event_stream_validator.cc",
     "input/input_event_stream_validator.h",
@@ -290,6 +277,7 @@ source_set("common") {
     "resize_params.h",
     "resource_messages.cc",
     "resource_messages.h",
+    "sandbox_init_linux.cc",
     "sandbox_init_mac.cc",
     "sandbox_init_win.cc",
     "sandbox_linux/bpf_cdm_policy_linux.cc",
@@ -312,13 +300,10 @@ source_set("common") {
     "sandbox_linux/sandbox_bpf_base_policy_linux.h",
     "sandbox_linux/sandbox_debug_handling_linux.cc",
     "sandbox_linux/sandbox_debug_handling_linux.h",
-    "sandbox_linux/sandbox_init_linux.cc",
     "sandbox_linux/sandbox_linux.cc",
     "sandbox_linux/sandbox_linux.h",
     "sandbox_linux/sandbox_seccomp_bpf_linux.cc",
     "sandbox_linux/sandbox_seccomp_bpf_linux.h",
-    "sandbox_win.cc",
-    "sandbox_win.h",
     "savable_subframe.h",
     "send_zygote_child_ping_linux.cc",
     "service_manager/service_manager_connection_impl.cc",
@@ -668,7 +653,6 @@ mojom("mojo_bindings") {
     "//services/video_capture/public/interfaces",
     "//services/viz/public/interfaces",
     "//skia/public/interfaces",
-    "//storage/public/interfaces",
     "//third_party/WebKit/public:mojo_bindings",
     "//ui/base/mojo:mojo_bindings",
     "//ui/gfx/geometry/mojo",
@@ -676,12 +660,6 @@ mojom("mojo_bindings") {
     "//url/mojo:url_mojom_gurl",
     "//url/mojo:url_mojom_origin",
   ]
-
-  # //storage/public/interfaces is configured to be exported
-  # as STORAGE_COMMON, so override the dependencies to make it
-  # depend via //storage/common.
-  overridden_deps = [ "//storage/public/interfaces" ]
-  component_deps = [ "//storage/common" ]
 
   component_output_prefix = "content_common_mojo_bindings"
   export_class_attribute = "CONTENT_EXPORT"

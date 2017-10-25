@@ -22,6 +22,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebMixedContent.h"
 #include "public/platform/WebMixedContentContextType.h"
+#include "public/platform/WebURLLoaderFactory.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebWorkerFetchContext.h"
 
@@ -53,7 +54,9 @@ class WorkerFetchContextHolder final
     return std::move(web_context_);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { Supplement<WorkerClients>::Trace(visitor); }
+  void Trace(blink::Visitor* visitor) override {
+    Supplement<WorkerClients>::Trace(visitor);
+  }
 
  private:
   std::unique_ptr<WebWorkerFetchContext> web_context_;
@@ -217,11 +220,13 @@ SecurityOrigin* WorkerFetchContext::GetSecurityOrigin() const {
 
 std::unique_ptr<WebURLLoader> WorkerFetchContext::CreateURLLoader(
     const ResourceRequest& request,
-    WebTaskRunner* task_runner) {
+    scoped_refptr<WebTaskRunner> task_runner) {
   CountUsage(WebFeature::kOffMainThreadFetch);
+  if (!url_loader_factory_)
+    url_loader_factory_ = web_context_->CreateURLLoaderFactory();
   WrappedResourceRequest wrapped(request);
-  return web_context_->CreateURLLoader(wrapped,
-                                       task_runner->ToSingleThreadTaskRunner());
+  return url_loader_factory_->CreateURLLoader(
+      wrapped, task_runner->ToSingleThreadTaskRunner());
 }
 
 bool WorkerFetchContext::IsControlledByServiceWorker() const {
@@ -340,11 +345,11 @@ void WorkerFetchContext::SetFirstPartyCookieAndRequestorOrigin(
     out_request.SetRequestorOrigin(GetSecurityOrigin());
 }
 
-RefPtr<WebTaskRunner> WorkerFetchContext::GetLoadingTaskRunner() {
+scoped_refptr<WebTaskRunner> WorkerFetchContext::GetLoadingTaskRunner() {
   return loading_task_runner_;
 }
 
-DEFINE_TRACE(WorkerFetchContext) {
+void WorkerFetchContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(global_scope_);
   visitor->Trace(subresource_filter_);
   visitor->Trace(resource_fetcher_);

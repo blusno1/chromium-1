@@ -21,7 +21,7 @@ ExecutionContext* ModulatorImplBase::GetExecutionContext() const {
   return ExecutionContext::From(script_state_.get());
 }
 
-ModulatorImplBase::ModulatorImplBase(RefPtr<ScriptState> script_state)
+ModulatorImplBase::ModulatorImplBase(scoped_refptr<ScriptState> script_state)
     : script_state_(std::move(script_state)),
       task_runner_(
           TaskRunnerHelper::Get(TaskType::kNetworking, script_state_.get())),
@@ -113,6 +113,20 @@ void ModulatorImplBase::ResolveDynamically(
     ScriptPromiseResolver* resolver) {
   dynamic_module_resolver_->ResolveDynamically(specifier, referrer_url,
                                                referrer_info, resolver);
+}
+
+// https://html.spec.whatwg.org/#hostgetimportmetaproperties
+ModuleImportMeta ModulatorImplBase::HostGetImportMetaProperties(
+    ScriptModule record) const {
+  // 1. Let module script be moduleRecord.[[HostDefined]]. [spec text]
+  ModuleScript* module_script = script_module_resolver_->GetHostDefined(record);
+  DCHECK(module_script);
+
+  // 2. Let urlString be module script's base URL, serialized. [spec text]
+  String url_string = module_script->BaseURL().GetString();
+
+  // 3. Return <<Record { [[Key]]: "url", [[Value]]: urlString }>>. [spec text]
+  return ModuleImportMeta(url_string);
 }
 
 ScriptModule ModulatorImplBase::CompileModule(
@@ -251,7 +265,7 @@ ScriptValue ModulatorImplBase::ExecuteModule(
   return ScriptValue();
 }
 
-DEFINE_TRACE(ModulatorImplBase) {
+void ModulatorImplBase::Trace(blink::Visitor* visitor) {
   Modulator::Trace(visitor);
   visitor->Trace(map_);
   visitor->Trace(loader_registry_);
@@ -260,7 +274,8 @@ DEFINE_TRACE(ModulatorImplBase) {
   visitor->Trace(dynamic_module_resolver_);
 }
 
-DEFINE_TRACE_WRAPPERS(ModulatorImplBase) {
+void ModulatorImplBase::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(map_);
   visitor->TraceWrappers(tree_linker_registry_);
 }

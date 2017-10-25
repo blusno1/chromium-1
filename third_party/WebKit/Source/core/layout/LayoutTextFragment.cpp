@@ -28,6 +28,7 @@
 #include "core/dom/Text.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/layout/HitTestResult.h"
+#include "core/layout/ng/inline/ng_offset_mapping.h"
 
 namespace blink {
 
@@ -74,7 +75,7 @@ void LayoutTextFragment::WillBeDestroyed() {
   LayoutText::WillBeDestroyed();
 }
 
-RefPtr<StringImpl> LayoutTextFragment::CompleteText() const {
+scoped_refptr<StringImpl> LayoutTextFragment::CompleteText() const {
   Text* text = AssociatedTextNode();
   return text ? text->DataImpl() : ContentString();
 }
@@ -84,14 +85,14 @@ void LayoutTextFragment::SetContentString(StringImpl* str) {
   SetText(str);
 }
 
-RefPtr<StringImpl> LayoutTextFragment::OriginalText() const {
-  RefPtr<StringImpl> result = CompleteText();
+scoped_refptr<StringImpl> LayoutTextFragment::OriginalText() const {
+  scoped_refptr<StringImpl> result = CompleteText();
   if (!result)
     return nullptr;
   return result->Substring(Start(), FragmentLength());
 }
 
-void LayoutTextFragment::SetText(RefPtr<StringImpl> text, bool force) {
+void LayoutTextFragment::SetText(scoped_refptr<StringImpl> text, bool force) {
   LayoutText::SetText(std::move(text), force);
 
   start_ = 0;
@@ -106,7 +107,7 @@ void LayoutTextFragment::SetText(RefPtr<StringImpl> text, bool force) {
   }
 }
 
-void LayoutTextFragment::SetTextFragment(RefPtr<StringImpl> text,
+void LayoutTextFragment::SetTextFragment(scoped_refptr<StringImpl> text,
                                          unsigned start,
                                          unsigned length) {
   LayoutText::SetText(std::move(text), false);
@@ -119,7 +120,7 @@ void LayoutTextFragment::TransformText() {
   // Note, we have to call LayoutText::setText here because, if we use our
   // version we will, potentially, screw up the first-letter settings where
   // we only use portions of the string.
-  if (RefPtr<StringImpl> text_to_transform = OriginalText())
+  if (scoped_refptr<StringImpl> text_to_transform = OriginalText())
     LayoutText::SetText(std::move(text_to_transform), true);
 }
 
@@ -171,6 +172,107 @@ void LayoutTextFragment::UpdateHitTestResult(HitTestResult& result,
   if (is_remaining_text_layout_object_ || !GetFirstLetterPseudoElement())
     return;
   result.SetInnerNode(GetFirstLetterPseudoElement());
+}
+
+int LayoutTextFragment::CaretMinOffset() const {
+  if (!ShouldUseNGAlternatives())
+    return LayoutText::CaretMinOffset();
+
+  const Node* node = AssociatedTextNode();
+  if (!node)
+    return 0;
+
+  Optional<unsigned> candidate =
+      GetNGOffsetMapping().StartOfNextNonCollapsedCharacter(*node, Start());
+  DCHECK(!candidate || *candidate >= Start());
+  // Align with the legacy behavior that 0 is returned if the entire layout
+  // object contains only collapsed whitespaces.
+  const bool fully_collapsed =
+      !candidate || *candidate >= Start() + FragmentLength();
+  return fully_collapsed ? 0 : *candidate - Start();
+}
+
+int LayoutTextFragment::CaretMaxOffset() const {
+  if (!ShouldUseNGAlternatives())
+    return LayoutText::CaretMaxOffset();
+
+  const Node* node = AssociatedTextNode();
+  if (!node)
+    return 0;
+
+  Optional<unsigned> candidate =
+      GetNGOffsetMapping().EndOfLastNonCollapsedCharacter(
+          *node, Start() + FragmentLength());
+  // Align with the legacy behavior that FragmentLength() is returned if the
+  // entire layout object contains only collapsed whitespaces.
+  const bool fully_collapsed = !candidate || *candidate <= Start();
+  return fully_collapsed ? FragmentLength() : *candidate - Start();
+}
+
+unsigned LayoutTextFragment::ResolvedTextLength() const {
+  if (!ShouldUseNGAlternatives())
+    return LayoutText::ResolvedTextLength();
+
+  const Node* node = AssociatedTextNode();
+  if (!node)
+    return 0;
+  const NGOffsetMapping& mapping = GetNGOffsetMapping();
+  Optional<unsigned> start = mapping.GetTextContentOffset(*node, Start());
+  Optional<unsigned> end =
+      mapping.GetTextContentOffset(*node, Start() + FragmentLength());
+  DCHECK(start);
+  DCHECK(end);
+  DCHECK_LE(*start, *end);
+  return *end - *start;
+}
+
+bool LayoutTextFragment::ContainsCaretOffset(int text_offset) const {
+  if (!ShouldUseNGAlternatives())
+    return LayoutText::ContainsCaretOffset(text_offset);
+
+  DCHECK_GE(text_offset, 0);
+  if (text_offset > static_cast<int>(FragmentLength()))
+    return false;
+  const Node* node = AssociatedTextNode();
+  if (!node)
+    return false;
+  const unsigned dom_offset = text_offset + Start();
+  const NGOffsetMapping& mapping = GetNGOffsetMapping();
+  if (mapping.IsBeforeNonCollapsedCharacter(*node, dom_offset))
+    return true;
+  if (text_offset == 0)
+    return false;
+  if (!mapping.IsAfterNonCollapsedCharacter(*node, dom_offset))
+    return false;
+  return *mapping.GetCharacterBefore(*node, dom_offset) != kNewlineCharacter;
+}
+
+bool LayoutTextFragment::IsBeforeNonCollapsedCharacter(
+    unsigned text_offset) const {
+  if (!ShouldUseNGAlternatives())
+    return LayoutText::IsBeforeNonCollapsedCharacter(text_offset);
+
+  if (text_offset >= FragmentLength())
+    return false;
+  const Node* node = AssociatedTextNode();
+  if (!node)
+    return false;
+  const unsigned dom_offset = text_offset + Start();
+  return GetNGOffsetMapping().IsBeforeNonCollapsedCharacter(*node, dom_offset);
+}
+
+bool LayoutTextFragment::IsAfterNonCollapsedCharacter(
+    unsigned text_offset) const {
+  if (!ShouldUseNGAlternatives())
+    return LayoutText::IsAfterNonCollapsedCharacter(text_offset);
+
+  if (!text_offset)
+    return false;
+  const Node* node = AssociatedTextNode();
+  if (!node)
+    return false;
+  const unsigned dom_offset = text_offset + Start();
+  return GetNGOffsetMapping().IsAfterNonCollapsedCharacter(*node, dom_offset);
 }
 
 }  // namespace blink

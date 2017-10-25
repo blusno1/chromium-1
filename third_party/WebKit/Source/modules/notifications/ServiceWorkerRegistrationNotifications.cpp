@@ -140,7 +140,7 @@ void ServiceWorkerRegistrationNotifications::ContextDestroyed(
     loader->Stop();
 }
 
-DEFINE_TRACE(ServiceWorkerRegistrationNotifications) {
+void ServiceWorkerRegistrationNotifications::Trace(blink::Visitor* visitor) {
   visitor->Trace(registration_);
   visitor->Trace(loaders_);
   Supplement<ServiceWorkerRegistration>::Trace(visitor);
@@ -170,7 +170,8 @@ ServiceWorkerRegistrationNotifications::From(
 void ServiceWorkerRegistrationNotifications::PrepareShow(
     const WebNotificationData& data,
     std::unique_ptr<WebNotificationShowCallbacks> callbacks) {
-  RefPtr<SecurityOrigin> origin = GetExecutionContext()->GetSecurityOrigin();
+  scoped_refptr<SecurityOrigin> origin =
+      GetExecutionContext()->GetSecurityOrigin();
   NotificationResourcesLoader* loader = new NotificationResourcesLoader(
       WTF::Bind(&ServiceWorkerRegistrationNotifications::DidLoadResources,
                 WrapWeakPersistent(this), std::move(origin), data,
@@ -180,7 +181,7 @@ void ServiceWorkerRegistrationNotifications::PrepareShow(
 }
 
 void ServiceWorkerRegistrationNotifications::DidLoadResources(
-    RefPtr<SecurityOrigin> origin,
+    scoped_refptr<SecurityOrigin> origin,
     const WebNotificationData& data,
     std::unique_ptr<WebNotificationShowCallbacks> callbacks,
     NotificationResourcesLoader* loader) {

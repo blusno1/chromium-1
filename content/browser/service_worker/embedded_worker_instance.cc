@@ -30,6 +30,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "ipc/ipc_message.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "url/gurl.h"
 
@@ -135,7 +136,7 @@ void SetupOnUIThread(
           process_id, routing_id,
           ServiceWorkerDevToolsManager::ServiceWorkerIdentifier(
               context, weak_context, params->service_worker_version_id,
-              params->script_url, params->scope),
+              params->script_url, params->scope, params->devtools_worker_token),
           params->is_installed);
   params->worker_devtools_agent_route_id = routing_id;
   // Create DevToolsProxy here to ensure that the WorkerCreated() call is
@@ -476,6 +477,7 @@ void EmbeddedWorkerInstance::Start(
     std::unique_ptr<EmbeddedWorkerStartParams> params,
     ProviderInfoGetter provider_info_getter,
     mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+    mojom::ControllerServiceWorkerRequest controller_request,
     mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
     StatusCallback callback) {
   restart_count_++;
@@ -487,7 +489,8 @@ void EmbeddedWorkerInstance::Start(
   DCHECK_EQ(EmbeddedWorkerStatus::STOPPED, status_);
 
   DCHECK(!params->pause_after_download || !params->is_installed);
-  DCHECK_NE(kInvalidServiceWorkerVersionId, params->service_worker_version_id);
+  DCHECK_NE(blink::mojom::kInvalidServiceWorkerVersionId,
+            params->service_worker_version_id);
 
   step_time_ = base::TimeTicks::Now();
   status_ = EmbeddedWorkerStatus::STARTING;
@@ -501,6 +504,7 @@ void EmbeddedWorkerInstance::Start(
   params->embedded_worker_id = embedded_worker_id_;
   params->worker_devtools_agent_route_id = MSG_ROUTING_NONE;
   params->wait_for_debugger = false;
+  params->devtools_worker_token = devtools_worker_token_;
   params->settings.v8_cache_options = GetV8CacheOptions();
 
   mojom::EmbeddedWorkerInstanceClientAssociatedRequest request =
@@ -508,6 +512,7 @@ void EmbeddedWorkerInstance::Start(
   client_.set_connection_error_handler(
       base::BindOnce(&EmbeddedWorkerInstance::Detach, base::Unretained(this)));
   pending_dispatcher_request_ = std::move(dispatcher_request);
+  pending_controller_request_ = std::move(controller_request);
   pending_installed_scripts_info_ = std::move(installed_scripts_info);
 
   inflight_start_task_.reset(
@@ -588,6 +593,7 @@ EmbeddedWorkerInstance::EmbeddedWorkerInstance(
       thread_id_(kInvalidEmbeddedWorkerThreadId),
       instance_host_binding_(this),
       devtools_attached_(false),
+      devtools_worker_token_(base::UnguessableToken::Create()),
       network_accessed_for_script_(false),
       weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -638,6 +644,7 @@ ServiceWorkerStatusCode EmbeddedWorkerInstance::SendStartWorker(
     return SERVICE_WORKER_ERROR_IPC_FAILED;
   }
   DCHECK(pending_dispatcher_request_.is_pending());
+  DCHECK(pending_controller_request_.is_pending());
 
   DCHECK(!instance_host_binding_.is_bound());
   mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo host_ptr_info;
@@ -653,6 +660,7 @@ ServiceWorkerStatusCode EmbeddedWorkerInstance::SendStartWorker(
   mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info =
       std::move(provider_info_getter_).Run(process_id());
   client_->StartWorker(*params, std::move(pending_dispatcher_request_),
+                       std::move(pending_controller_request_),
                        std::move(pending_installed_scripts_info_),
                        std::move(host_ptr_info), std::move(provider_info),
                        std::move(content_settings_proxy_ptr_info));

@@ -46,7 +46,6 @@
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCORS.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebData.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
@@ -55,10 +54,10 @@
 
 namespace blink {
 
-static WebTaskRunner* GetTaskRunnerFor(const ResourceRequest& request,
-                                       FetchContext& context) {
+static RefPtr<WebTaskRunner> GetTaskRunnerFor(const ResourceRequest& request,
+                                              FetchContext& context) {
   if (!request.GetKeepalive())
-    return context.GetLoadingTaskRunner().get();
+    return context.GetLoadingTaskRunner();
   // The loader should be able to work after the frame destruction, so we
   // cannot use the task runner associated with the frame.
   return Platform::Current()->CurrentThread()->Scheduler()->LoadingTaskRunner();
@@ -90,7 +89,7 @@ ResourceLoader::ResourceLoader(ResourceFetcher* fetcher,
 
 ResourceLoader::~ResourceLoader() {}
 
-DEFINE_TRACE(ResourceLoader) {
+void ResourceLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(fetcher_);
   visitor->Trace(scheduler_);
   visitor->Trace(resource_);
@@ -135,7 +134,8 @@ void ResourceLoader::StartWith(const ResourceRequest& request) {
     // Override cache policy for cache-aware loading. If this request fails, a
     // reload with original request will be triggered in DidFail().
     ResourceRequest cache_aware_request(request);
-    cache_aware_request.SetCachePolicy(WebCachePolicy::kReturnCacheDataIfValid);
+    cache_aware_request.SetCacheMode(
+        mojom::FetchCacheMode::kUnspecifiedOnlyIfCachedStrict);
     loader_->LoadAsynchronously(WrappedResourceRequest(cache_aware_request),
                                 this);
     return;
@@ -739,7 +739,11 @@ void ResourceLoader::ActivateCacheAwareLoadingIfNeeded(
     return;
 
   // Don't activate if cache policy is explicitly set.
-  if (request.GetCachePolicy() != WebCachePolicy::kUseProtocolCachePolicy)
+  if (request.GetCacheMode() != mojom::FetchCacheMode::kDefault)
+    return;
+
+  // Don't activate if the page is controlled by service worker.
+  if (fetcher_->IsControlledByServiceWorker())
     return;
 
   is_cache_aware_loading_activated_ = true;

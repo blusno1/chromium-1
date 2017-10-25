@@ -228,15 +228,10 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
       const std::string& account_id,
       std::string* policy_out) = 0;
 
-  // Used for StoreDevicePolicy, StorePolicyForUser and
-  // StoreDeviceLocalAccountPolicy. Takes a boolean indicating whether the
-  // operation was successful or not.
-  using StorePolicyCallback = base::Callback<void(bool success)>;
-
   // Attempts to asynchronously store |policy_blob| as device policy.  Upon
   // completion of the store attempt, we will call callback.
   virtual void StoreDevicePolicy(const std::string& policy_blob,
-                                 const StorePolicyCallback& callback) = 0;
+                                 VoidDBusMethodCallback callback) = 0;
 
   // Attempts to asynchronously store |policy_blob| as user policy for the
   // given |cryptohome_id|. Upon completion of the store attempt, we will call
@@ -244,14 +239,14 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   virtual void StorePolicyForUser(
       const cryptohome::Identification& cryptohome_id,
       const std::string& policy_blob,
-      const StorePolicyCallback& callback) = 0;
+      VoidDBusMethodCallback callback) = 0;
 
   // Sends a request to store a policy blob for the specified device-local
   // account. The result of the operation is reported through |callback|.
   virtual void StoreDeviceLocalAccountPolicy(
       const std::string& account_id,
       const std::string& policy_blob,
-      const StorePolicyCallback& callback) = 0;
+      VoidDBusMethodCallback callback) = 0;
 
   // Returns whether session manager can be used to restart Chrome in order to
   // apply per-user session flags.
@@ -299,15 +294,15 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // param. The ID is passed to ArcInstanceStopped() to identify which instance
   // is stopped.
   using StartArcInstanceCallback =
-      base::Callback<void(StartArcInstanceResult result,
-                          const std::string& container_instance_id,
-                          base::ScopedFD server_socket)>;
+      base::OnceCallback<void(StartArcInstanceResult result,
+                              const std::string& container_instance_id,
+                              base::ScopedFD server_socket)>;
   virtual void StartArcInstance(ArcStartupMode startup_mode,
                                 const cryptohome::Identification& cryptohome_id,
                                 bool skip_boot_completed_broadcast,
                                 bool scan_vendor_priv_app,
                                 bool native_bridge_experiment,
-                                const StartArcInstanceCallback& callback) = 0;
+                                StartArcInstanceCallback callback) = 0;
 
   // Asynchronously stops the ARC instance.  Upon completion, invokes
   // |callback| with the result; true on success, false on failure (either

@@ -548,7 +548,7 @@ unsigned AXTable::RowCount() {
 AXTableCell* AXTable::CellForColumnAndRow(unsigned column, unsigned row) {
   UpdateChildrenIfNecessary();
   if (column >= ColumnCount() || row >= RowCount())
-    return 0;
+    return nullptr;
 
   // Iterate backwards through the rows in case the desired cell has a rowspan
   // and exists in a previous row.
@@ -581,7 +581,7 @@ AXTableCell* AXTable::CellForColumnAndRow(unsigned column, unsigned row) {
     }
   }
 
-  return 0;
+  return nullptr;
 }
 
 AccessibilityRole AXTable::RoleValue() const {
@@ -605,7 +605,7 @@ bool AXTable::ComputeAccessibilityIsIgnored(
   return false;
 }
 
-DEFINE_TRACE(AXTable) {
+void AXTable::Trace(blink::Visitor* visitor) {
   visitor->Trace(rows_);
   visitor->Trace(columns_);
   visitor->Trace(header_container_);

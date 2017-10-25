@@ -239,7 +239,7 @@ unsigned ShapeResult::EndIndexForResult() const {
   return first_run.start_index_ + first_run.num_characters_;
 }
 
-RefPtr<ShapeResult> ShapeResult::MutableUnique() const {
+scoped_refptr<ShapeResult> ShapeResult::MutableUnique() const {
   if (HasOneRef())
     return const_cast<ShapeResult*>(this);
   return ShapeResult::Create(*this);
@@ -450,8 +450,28 @@ void ShapeResult::ApplySpacingImpl(
       total_space += 1;
   }
 
-  // Glyph bounding box is in logical space.
-  glyph_bounding_box_.SetWidth(glyph_bounding_box_.Width() + total_space);
+  // Set the width because glyph bounding box is in logical space.
+  float glyph_bounding_box_width = glyph_bounding_box_.Width() + total_space;
+  if (width_ >= 0 && glyph_bounding_box_width >= 0) {
+    glyph_bounding_box_.SetWidth(glyph_bounding_box_width);
+    return;
+  }
+
+  // Negative word-spacing and/or letter-spacing may cause some glyphs to
+  // overflow the left boundary and result negative measured width. Adjust glyph
+  // bounds accordingly to cover the overflow.
+  // The negative width should be clamped to 0 in CSS box model, but it's up to
+  // caller's responsibility.
+  float left = std::min(width_, glyph_bounding_box_width);
+  if (left < glyph_bounding_box_.X()) {
+    // The right edge should be the width of the first character in most cases,
+    // but computing it requires re-measuring bounding box of each glyph. Leave
+    // it unchanged, which gives an excessive right edge but assures it covers
+    // all glyphs.
+    glyph_bounding_box_.ShiftXEdgeTo(left);
+  } else {
+    glyph_bounding_box_.SetWidth(glyph_bounding_box_width);
+  }
 }
 
 void ShapeResult::ApplySpacing(ShapeResultSpacing<String>& spacing,
@@ -459,12 +479,12 @@ void ShapeResult::ApplySpacing(ShapeResultSpacing<String>& spacing,
   ApplySpacingImpl(spacing, text_start_offset);
 }
 
-RefPtr<ShapeResult> ShapeResult::ApplySpacingToCopy(
+scoped_refptr<ShapeResult> ShapeResult::ApplySpacingToCopy(
     ShapeResultSpacing<TextRun>& spacing,
     const TextRun& run) const {
   unsigned index_of_sub_run = spacing.Text().IndexOfSubRun(run);
   DCHECK_NE(std::numeric_limits<unsigned>::max(), index_of_sub_run);
-  RefPtr<ShapeResult> result = ShapeResult::Create(*this);
+  scoped_refptr<ShapeResult> result = ShapeResult::Create(*this);
   if (index_of_sub_run != std::numeric_limits<unsigned>::max())
     result->ApplySpacingImpl(spacing, index_of_sub_run);
   return result;
@@ -509,9 +529,9 @@ void ShapeResult::ComputeGlyphPositions(ShapeResult::RunInfo* run,
   DCHECK_EQ(is_horizontal_run, run->IsHorizontal());
   const SimpleFontData* current_font_data = run->font_data_.get();
   const hb_glyph_info_t* glyph_infos =
-      hb_buffer_get_glyph_infos(harf_buzz_buffer, 0);
+      hb_buffer_get_glyph_infos(harf_buzz_buffer, nullptr);
   const hb_glyph_position_t* glyph_positions =
-      hb_buffer_get_glyph_positions(harf_buzz_buffer, 0);
+      hb_buffer_get_glyph_positions(harf_buzz_buffer, nullptr);
   const unsigned start_cluster =
       HB_DIRECTION_IS_FORWARD(hb_buffer_get_direction(harf_buzz_buffer))
           ? glyph_infos[start_glyph].cluster
@@ -740,7 +760,7 @@ void ShapeResult::CopyRange(unsigned start_offset,
   target->has_vertical_offsets_ |= has_vertical_offsets_;
 }
 
-RefPtr<ShapeResult> ShapeResult::CreateForTabulationCharacters(
+scoped_refptr<ShapeResult> ShapeResult::CreateForTabulationCharacters(
     const Font* font,
     const TextRun& text_run,
     float position_offset,
@@ -764,7 +784,7 @@ RefPtr<ShapeResult> ShapeResult::CreateForTabulationCharacters(
   }
   run->width_ = position - start_position;
 
-  RefPtr<ShapeResult> result =
+  scoped_refptr<ShapeResult> result =
       ShapeResult::Create(font, count, text_run.Direction());
   result->width_ = run->width_;
   result->num_glyphs_ = count;

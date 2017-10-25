@@ -15,6 +15,7 @@ using base::trace_event::MemoryAllocatorDumpGuid;
 using base::trace_event::MemoryDumpArgs;
 using base::trace_event::MemoryDumpLevelOfDetail;
 using base::trace_event::ProcessMemoryDump;
+using Edge = GlobalDumpGraph::Edge;
 using Node = GlobalDumpGraph::Node;
 
 class GraphProcessorTest : public testing::Test {
@@ -24,9 +25,18 @@ class GraphProcessorTest : public testing::Test {
   void MarkImplicitWeakParentsRecursively(Node* node) {
     GraphProcessor::MarkImplicitWeakParentsRecursively(node);
   }
+
+  void MarkWeakOwnersAndChildrenRecursively(Node* node) {
+    std::set<const Node*> visited;
+    GraphProcessor::MarkWeakOwnersAndChildrenRecursively(node, &visited);
+  }
+
+  void RemoveWeakNodesRecursively(Node* node) {
+    GraphProcessor::RemoveWeakNodesRecursively(node);
+  }
 };
 
-TEST_F(GraphProcessorTest, ComputeMemoryGraph) {
+TEST_F(GraphProcessorTest, SmokeComputeMemoryGraph) {
   std::map<ProcessId, ProcessMemoryDump> process_dumps;
 
   MemoryDumpArgs dump_args = {MemoryDumpLevelOfDetail::DETAILED};
@@ -151,6 +161,155 @@ TEST_F(GraphProcessorTest, MarkWeakParentsComplex) {
   ASSERT_TRUE(first.is_weak());
   ASSERT_TRUE(first_child.is_weak());
   ASSERT_TRUE(first_grandchild.is_weak());
+}
+
+TEST_F(GraphProcessorTest, MarkWeakOwners) {
+  GlobalDumpGraph graph;
+  Node owner(graph.shared_memory_graph(), nullptr);
+  Node owned(graph.shared_memory_graph(), nullptr);
+  Node owned_2(graph.shared_memory_graph(), nullptr);
+
+  Edge edge_1(&owner, &owned, 0);
+  Edge edge_2(&owned, &owned_2, 0);
+
+  owner.SetOwnsEdge(&edge_1);
+  owned.AddOwnedByEdge(&edge_1);
+
+  owned.SetOwnsEdge(&edge_2);
+  owned_2.AddOwnedByEdge(&edge_2);
+
+  // Make only the ultimate owned node weak.
+  owner.set_weak(false);
+  owned.set_weak(false);
+  owned_2.set_weak(true);
+
+  // Starting from leaf node should lead to everything being weak.
+  MarkWeakOwnersAndChildrenRecursively(&owned_2);
+  ASSERT_TRUE(owner.is_weak());
+  ASSERT_TRUE(owned.is_weak());
+  ASSERT_TRUE(owned_2.is_weak());
+}
+
+TEST_F(GraphProcessorTest, MarkWeakParent) {
+  GlobalDumpGraph graph;
+  Node parent(graph.shared_memory_graph(), nullptr);
+  Node child(graph.shared_memory_graph(), &parent);
+  Node child_2(graph.shared_memory_graph(), &child);
+
+  parent.InsertChild("child", &child);
+  child.InsertChild("child", &child_2);
+
+  // Make only the ultimate parent node weak.
+  parent.set_weak(true);
+  child.set_weak(false);
+  child_2.set_weak(false);
+
+  // Starting from parent node should lead to everything being weak.
+  MarkWeakOwnersAndChildrenRecursively(&parent);
+  ASSERT_TRUE(parent.is_weak());
+  ASSERT_TRUE(child.is_weak());
+  ASSERT_TRUE(child_2.is_weak());
+}
+
+TEST_F(GraphProcessorTest, MarkWeakParentOwner) {
+  GlobalDumpGraph graph;
+  Node parent(graph.shared_memory_graph(), nullptr);
+  Node child(graph.shared_memory_graph(), &parent);
+  Node child_2(graph.shared_memory_graph(), &child);
+
+  parent.InsertChild("child", &child);
+  child.InsertChild("child", &child_2);
+
+  Node owner(graph.shared_memory_graph(), nullptr);
+
+  Edge edge(&owner, &parent, 0);
+  owner.SetOwnsEdge(&edge);
+  parent.AddOwnedByEdge(&edge);
+
+  // Make only the parent node weak.
+  parent.set_weak(true);
+  child.set_weak(false);
+  child_2.set_weak(false);
+  owner.set_weak(false);
+
+  // Starting from parent node should lead to everything being weak.
+  MarkWeakOwnersAndChildrenRecursively(&parent);
+  ASSERT_TRUE(parent.is_weak());
+  ASSERT_TRUE(child.is_weak());
+  ASSERT_TRUE(child_2.is_weak());
+  ASSERT_TRUE(owner.is_weak());
+}
+
+TEST_F(GraphProcessorTest, RemoveWeakNodesRecursively) {
+  GlobalDumpGraph graph;
+  Node parent(graph.shared_memory_graph(), nullptr);
+  Node child(graph.shared_memory_graph(), &parent);
+  Node child_2(graph.shared_memory_graph(), &child);
+  Node owned(graph.shared_memory_graph(), &parent);
+
+  parent.InsertChild("owned", &owned);
+  parent.InsertChild("child", &child);
+  child.InsertChild("child", &child_2);
+
+  Edge edge(&child, &owned, 0);
+  owned.AddOwnedByEdge(&edge);
+  child.SetOwnsEdge(&edge);
+
+  // Make only the parent node weak.
+  child.set_weak(true);
+  child_2.set_weak(false);
+  owned.set_weak(false);
+
+  // Starting from parent node should lead child and child_2 being
+  // removed and owned to have the edge from it removed.
+  RemoveWeakNodesRecursively(&parent);
+
+  ASSERT_EQ(parent.children()->size(), 1ul);
+  ASSERT_EQ(parent.children()->begin()->second, &owned);
+
+  ASSERT_TRUE(owned.owned_by_edges()->empty());
+}
+
+TEST_F(GraphProcessorTest, RemoveWeakNodesRecursivelyBetweenGraphs) {
+  GlobalDumpGraph graph;
+  GlobalDumpGraph::Process first_process(&graph);
+  GlobalDumpGraph::Process second_process(&graph);
+
+  Node parent(&first_process, first_process.root());
+  Node child(&first_process, &parent);
+  Node child_2(&first_process, &child);
+  Node owned(&second_process, second_process.root());
+
+  first_process.root()->InsertChild("parent", &parent);
+  parent.InsertChild("child", &child);
+  child.InsertChild("child", &child_2);
+
+  second_process.root()->InsertChild("owned", &owned);
+
+  Edge edge(&child, &owned, 0);
+  owned.AddOwnedByEdge(&edge);
+  child.SetOwnsEdge(&edge);
+
+  // Make only the parent node weak.
+  child.set_weak(true);
+  child_2.set_weak(false);
+  owned.set_weak(false);
+
+  // Starting from parent node should lead child and child_2 being
+  // removed.
+  RemoveWeakNodesRecursively(first_process.root());
+
+  ASSERT_EQ(first_process.root()->children()->size(), 1ul);
+  ASSERT_EQ(parent.children()->size(), 0ul);
+  ASSERT_EQ(second_process.root()->children()->size(), 1ul);
+
+  // This should be false until our next pass.
+  ASSERT_FALSE(owned.owned_by_edges()->empty());
+
+  RemoveWeakNodesRecursively(second_process.root());
+
+  // We should now have cleaned up the owned node's edges.
+  ASSERT_TRUE(owned.owned_by_edges()->empty());
 }
 
 }  // namespace memory_instrumentation

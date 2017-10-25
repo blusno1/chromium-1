@@ -20,7 +20,7 @@ namespace blink {
 class CORE_EXPORT ReadableStreamController final
     : public GarbageCollectedFinalized<ReadableStreamController> {
  public:
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor* visitor) {}
 
   explicit ReadableStreamController(ScriptValue controller)
       : script_state_(controller.GetScriptState()),
@@ -112,7 +112,7 @@ class CORE_EXPORT ReadableStreamController final
   }
 
  private:
-  RefPtr<ScriptState> script_state_;
+  scoped_refptr<ScriptState> script_state_;
   ScopedPersistent<v8::Value> js_controller_;
 };
 

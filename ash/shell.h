@@ -124,7 +124,6 @@ class NewWindowController;
 class NightLightController;
 class NoteTakingController;
 class OverlayEventFilter;
-class PaletteDelegate;
 class PartialMagnificationController;
 class PeripheralBatteryNotifier;
 class PowerButtonController;
@@ -373,7 +372,9 @@ class ASH_EXPORT Shell : public SessionObserver,
     return magnification_controller_.get();
   }
   MediaController* media_controller() { return media_controller_.get(); }
-  UserMetricsRecorder* metrics() { return user_metrics_recorder_.get(); }
+  MessageCenterController* message_center_controller() {
+    return message_center_controller_.get();
+  }
   MouseCursorEventFilter* mouse_cursor_filter() {
     return mouse_cursor_filter_.get();
   }
@@ -386,7 +387,6 @@ class ASH_EXPORT Shell : public SessionObserver,
     return note_taking_controller_.get();
   }
   OverlayEventFilter* overlay_filter() { return overlay_filter_.get(); }
-  PaletteDelegate* palette_delegate() { return palette_delegate_.get(); }
   PartialMagnificationController* partial_magnification_controller() {
     return partial_magnification_controller_.get();
   }
@@ -450,6 +450,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   TrayBluetoothHelper* tray_bluetooth_helper() {
     return tray_bluetooth_helper_.get();
   }
+  UserMetricsRecorder* metrics() { return user_metrics_recorder_.get(); }
   VideoDetector* video_detector() { return video_detector_.get(); }
   VirtualKeyboardController* virtual_keyboard_controller() {
     return virtual_keyboard_controller_.get();
@@ -511,10 +512,12 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   void SetLargeCursorSizeInDip(int large_cursor_size_in_dip);
 
-  // Toggles cursor compositing on/off. Native cursor is disabled when cursor
+  // Updates cursor compositing on/off. Native cursor is disabled when cursor
   // compositing is enabled, and vice versa.
-  void SetCursorCompositingEnabled(bool enabled);
+  void UpdateCursorCompositingEnabled();
 
+  // Force setting compositing on/off without checking dependency.
+  void SetCursorCompositingEnabled(bool enabled);
 
   // Returns true if split view mode is active.
   bool IsSplitViewModeActive() const;
@@ -679,7 +682,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<MediaController> media_controller_;
   std::unique_ptr<MruWindowTracker> mru_window_tracker_;
   std::unique_ptr<NewWindowController> new_window_controller_;
-  std::unique_ptr<PaletteDelegate> palette_delegate_;
   std::unique_ptr<ResizeShadowController> resize_shadow_controller_;
   std::unique_ptr<SessionController> session_controller_;
   std::unique_ptr<NightLightController> night_light_controller_;

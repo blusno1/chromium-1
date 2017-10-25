@@ -15,7 +15,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
@@ -26,6 +25,7 @@
 #include "components/variations/entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 using metrics::OmniboxEventProto;
 
@@ -52,7 +52,7 @@ void PopulateAutocompleteMatchesFromTestData(
     const AutocompleteMatchTestData* data,
     size_t count,
     ACMatches* matches) {
-  ASSERT_TRUE(matches != NULL);
+  ASSERT_TRUE(matches != nullptr);
   for (size_t i = 0; i < count; ++i) {
     AutocompleteMatch match;
     match.destination_url = GURL(data[i].destination_url);
@@ -113,7 +113,7 @@ class AutocompleteResultTest : public testing::Test {
   }
 
   void SetUp() override {
-    template_url_service_.reset(new TemplateURLService(NULL, 0));
+    template_url_service_.reset(new TemplateURLService(nullptr, 0));
     template_url_service_->Load();
   }
 

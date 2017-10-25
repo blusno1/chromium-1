@@ -8,22 +8,24 @@
 #include <memory>
 
 #include "chrome/browser/vr/elements/textured_element.h"
+#include "chrome/browser/vr/elements/ui_texture.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace vr {
 
 class TextTexture;
-class UiTexture;
 
 class Text : public TexturedElement {
  public:
   Text(int maximum_width_pixels,
        float font_height_meters,
-       float text_width_meters,
-       const base::string16& text);
+       float text_width_meters);
   ~Text() override;
 
+  void SetText(const base::string16& text);
   void SetColor(SkColor color);
+
+  void SetTextAlignment(UiTexture::TextAlignment alignment);
 
  private:
   UiTexture* GetTexture() const override;

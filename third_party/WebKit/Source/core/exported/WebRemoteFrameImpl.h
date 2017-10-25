@@ -20,6 +20,8 @@ class RemoteFrame;
 class RemoteFrameClientImpl;
 enum class WebFrameLoadType;
 class WebView;
+struct WebRect;
+struct WebRemoteScrollProperties;
 
 class CORE_EXPORT WebRemoteFrameImpl final
     : public GarbageCollectedFinalized<WebRemoteFrameImpl>,
@@ -73,6 +75,8 @@ class CORE_EXPORT WebRemoteFrameImpl final
   bool IsIgnoredForHitTest() const override;
   void WillEnterFullscreen() override;
   void SetHasReceivedUserGesture() override;
+  void ScrollRectToVisible(const WebRect&,
+                           const WebRemoteScrollProperties&) override;
   v8::Local<v8::Object> GlobalProxy() const override;
 
   void InitializeCoreFrame(Page&, FrameOwner*, const AtomicString& name);
@@ -84,7 +88,7 @@ class CORE_EXPORT WebRemoteFrameImpl final
 
   static WebRemoteFrameImpl* FromFrame(RemoteFrame&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   WebRemoteFrameImpl(WebTreeScopeType, WebRemoteFrameClient*);

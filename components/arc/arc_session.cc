@@ -14,7 +14,6 @@
 
 #include "base/files/file_util.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
@@ -101,47 +100,69 @@ bool WaitForSocketReadable(int raw_socket_fd, int raw_cancel_fd) {
   return true;
 }
 
+// Returns the ArcStopReason corresponding to the ARC instance staring failure.
+ArcStopReason GetArcStopReason(StartArcInstanceResult result,
+                               bool stop_requested) {
+  if (stop_requested)
+    return ArcStopReason::SHUTDOWN;
+
+  switch (result) {
+    case StartArcInstanceResult::SUCCESS:
+      NOTREACHED();
+      break;
+    case StartArcInstanceResult::UNKNOWN_ERROR:
+      return ArcStopReason::GENERIC_BOOT_FAILURE;
+    case StartArcInstanceResult::LOW_FREE_DISK_SPACE:
+      return ArcStopReason::LOW_DISK_SPACE;
+  }
+
+  NOTREACHED();
+  return ArcStopReason::GENERIC_BOOT_FAILURE;
+}
+
 // TODO(hidehiko): Refactor more to make this class unittest-able, for at least
 // state-machine part.
 class ArcSessionImpl : public ArcSession,
                        public chromeos::SessionManagerClient::Observer {
  public:
-  // The possible states of the session.  In the normal flow, the state changes
-  // in the following sequence:
+  // The possible states of the session. Expected state changes are as follows.
   //
+  // 1) Starting MINI_INSTANCE.
   // NOT_STARTED
-  //   Start() ->
-  // STARTING_INSTANCE
-  //   -> OnInstanceStarted() ->
+  //   -> StartMiniInstance() ->
+  // STARTING_MINI_INSTANCE
+  //   -> OnMiniInstanceStarted() ->
+  // RUNNING_MINI_INSTANCE.
+  //
+  // 2) Starting FULL_INSTANCE.
+  // NOT_STARTED
+  //   -> StartFullInstance() ->
+  // STARTING_FULL_INSTANCE
+  //   -> OnFullInstanceStarted() ->
   // CONNECTING_MOJO
-  //   ConnectMojo() -> OnMojoConnected() ->
-  // RUNNING
+  //   -> OnMojoConnected() ->
+  // RUNNING_FULL_INSTANCE
   //
-  // Also, StartForLoginScreen() may start ARC instance with
-  // |login_screen_instance_requested_| set to |true|. In that case, the state
-  // changes like the following:
+  // 3) Upgrading from a MINI_INSTANCE to FULL_INSTANCE.
+  // RUNNING_MINI_INSTANCE
+  //   -> StartFullInstance() ->
+  // STARTING_FULL_INSTANCE
+  //   -> ... (remaining is as same as (2)).
   //
-  // NOT_STARTED
-  //   StartForLoginScreen() ->
-  // STARTING_INSTANCE
-  //   -> OnInstanceStarted() ->
-  // RUNNING_FOR_LOGIN_SCREEN
+  // Note that, if Start(FULL_INSTANCE) is called during STARTING_MINI_INSTANCE
+  // state, the state change to STARTING_FULL_INSTANCE is suspended until
+  // the state becomes RUNNING_MINI_INSTANCE.
   //
-  // Start() can also be used at both STARTING_INSTANCE and
-  // RUNNING_FOR_LOGIN_SCREEN to turn the instance for login screen into a
-  // fully functional one.
-  //
-  // Regardless of whether the instance is for login screen or not, at any
-  // state, Stop() can be called. It may not immediately stop the instance,
-  // but will eventually stop it. The actual stop will be notified via
-  // ArcSession::Observer::OnSessionStopped().
+  // At any state, Stop() can be called. It may not immediately stop the
+  // instance, but will eventually stop it. The actual stop will be notified
+  // via ArcSession::Observer::OnSessionStopped().
   //
   // When Stop() is called, it makes various behavior based on the current
   // phase.
   //
   // NOT_STARTED:
   //   Do nothing. Immediately transition to the STOPPED state.
-  // STARTING_INSTANCE:
+  // STARTING_{MINI,FULL}_INSTANCE:
   //   The ARC instance is starting via SessionManager. Stop() just sets the
   //   flag and return. On the main task completion, a callback will run on the
   //   thread, and the flag is checked at the beginning of them. This should
@@ -154,10 +175,10 @@ class ArcSessionImpl : public ArcSession,
   //   The main task runs on TaskScheduler's thread, but it is a blocking call.
   //   So, Stop() sends a request to cancel the blocking by closing the pipe
   //   whose read side is also polled. Then, in its callback, similar to
-  //   STARTING_INSTANCE, a request to stop the ARC instance is sent to
-  //   SessionManager, and ArcInstanceStopped handles remaining procedure.
-  // RUNNING_FOR_LOGIN_SCREEN:
-  // RUNNING:
+  //   STARTING_{MINI,FULL}_INSTANCE, a request to stop the ARC instance is
+  //   sent to SessionManager, and ArcInstanceStopped handles remaining
+  //   procedure.
+  // RUNNING_{MINI,FULL}_INSTANCE:
   //   There is no more callback which runs on normal flow, so Stop() requests
   //   to stop the ARC instance via SessionManager.
   //
@@ -177,48 +198,80 @@ class ArcSessionImpl : public ArcSession,
     // ARC is not yet started.
     NOT_STARTED,
 
-    // The request to start or resume the instance has been sent.
-    STARTING_INSTANCE,
+    // The request to start a mini instance has been sent.
+    STARTING_MINI_INSTANCE,
 
     // The instance is set up, but only a handful of processes NOT including
     // arcbridgeservice (i.e. mojo endpoint) are running.
-    RUNNING_FOR_LOGIN_SCREEN,
+    RUNNING_MINI_INSTANCE,
+
+    // The request to start or upgrade to a full instance has been sent.
+    STARTING_FULL_INSTANCE,
 
     // The instance has started. Waiting for it to connect to the IPC bridge.
     CONNECTING_MOJO,
 
     // The instance is fully set up.
-    RUNNING,
+    RUNNING_FULL_INSTANCE,
 
     // ARC is terminated.
     STOPPED,
   };
 
-  explicit ArcSessionImpl(ArcBridgeService* arc_bridge_service);
+  // Delegate interface to emulate ArcBridgeHost mojo connection establishment.
+  class Delegate {
+   public:
+    // Used for ConnectMojo completion callback.
+    using ConnectMojoCallback =
+        base::OnceCallback<void(std::unique_ptr<mojom::ArcBridgeHost>)>;
+
+    virtual ~Delegate() = default;
+
+    // Connects ArcBridgeHost via |socket_fd|, and invokes |callback| with
+    // connected ArcBridgeHost instance if succeeded (or nullptr if failed).
+    // Returns a FD which cancels the current connection on close(2).
+    virtual base::ScopedFD ConnectMojo(base::ScopedFD socket_fd,
+                                       ConnectMojoCallback callback) = 0;
+  };
+
+  explicit ArcSessionImpl(std::unique_ptr<Delegate> delegate);
   ~ArcSessionImpl() override;
 
   // ArcSession overrides:
-  void StartForLoginScreen() override;
-  bool IsForLoginScreen() override;
-  void Start() override;
-  bool IsRunning() override;
+  void Start(ArcInstanceMode request_mode) override;
   void Stop() override;
+  base::Optional<ArcInstanceMode> GetTargetMode() override;
   bool IsStopRequested() override;
   void OnShutdown() override;
 
  private:
-  // DBus callback for StartArcInstance().
-  void OnInstanceStarted(bool instance_is_for_login_screen,
-                         StartArcInstanceResult result,
-                         const std::string& container_instance_id,
-                         base::ScopedFD socket_fd);
+  // Sends a D-Bus message to start a mini instance.
+  void StartMiniInstance();
 
-  // Synchronously accepts a connection on |socket_fd| and then processes the
-  // connected socket's file descriptor.
-  static mojo::ScopedMessagePipeHandle ConnectMojo(
-      mojo::edk::ScopedPlatformHandle socket_fd,
-      base::ScopedFD cancel_fd);
-  void OnMojoConnected(mojo::ScopedMessagePipeHandle server_pipe);
+  // D-Bus callback for StartArcInstance() for a mini instance.
+  // In case of success, |container_instance_id| must not be empty, and
+  // |socket_fd| is /dev/null.
+  // TODO(hidehiko): Remove |socket_fd| from this callback.
+  void OnMiniInstanceStarted(StartArcInstanceResult result,
+                             const std::string& container_instance_id,
+                             base::ScopedFD socket_fd);
+
+  // Sends a D-Bus message to start or to upgrade to a full instance.
+  void StartFullInstance();
+
+  // D-Bus callback for StartArcInstance() for a full instance.
+  // In case of success, |container_instance_id| must not be empty, if this is
+  // actually starting an instance, or empty if this is upgrade from a mini
+  // instance to a full instance.
+  // In either start or upgrade case, |socket_fd| should be a socket which
+  // shold be accept(2)ed to connect ArcBridgeService Mojo channel.
+  void OnFullInstanceStarted(StartArcInstanceResult result,
+                             const std::string& container_instance_id,
+                             base::ScopedFD socket_fd);
+
+  // Called when Mojo connection is established (or canceled during the
+  // connect.)
+  void OnMojoConnected(std::unique_ptr<mojom::ArcBridgeHost> arc_bridge_host);
 
   // Request to stop ARC instance via DBus.
   void StopArcInstance();
@@ -233,15 +286,15 @@ class ArcSessionImpl : public ArcSession,
 
   // Sends a StartArcInstance D-Bus request to session_manager.
   static void SendStartArcInstanceDBusMessage(
-      bool instance_is_for_login_screen,
-      const chromeos::SessionManagerClient::StartArcInstanceCallback& cb);
+      ArcInstanceMode target_mode,
+      chromeos::SessionManagerClient::StartArcInstanceCallback callback);
 
   // Checks whether a function runs on the thread where the instance is
   // created.
   THREAD_CHECKER(thread_checker_);
 
-  // Owned by ArcServiceManager.
-  ArcBridgeService* const arc_bridge_service_;
+  // Delegate implementation.
+  std::unique_ptr<Delegate> delegate_;
 
   // The state of the session.
   State state_ = State::NOT_STARTED;
@@ -249,12 +302,12 @@ class ArcSessionImpl : public ArcSession,
   // When Stop() is called, this flag is set.
   bool stop_requested_ = false;
 
-  // When StartForLoginScreen() is called, this flag is set. After
-  // that, when Start() is called to resume the boot, the flag is unset.
-  bool login_screen_instance_requested_ = false;
+  // In which mode this instance should be running eventually.
+  // Initialized in nullopt.
+  base::Optional<ArcInstanceMode> target_mode_;
 
   // Container instance id passed from session_manager.
-  // Should be available only after OnInstanceStarted().
+  // Should be available only after On{Mini,Full}InstanceStarted().
   std::string container_instance_id_;
 
   // In CONNECTING_MOJO state, this is set to the write side of the pipe
@@ -271,159 +324,52 @@ class ArcSessionImpl : public ArcSession,
   DISALLOW_COPY_AND_ASSIGN(ArcSessionImpl);
 };
 
-ArcSessionImpl::ArcSessionImpl(ArcBridgeService* arc_bridge_service)
-    : arc_bridge_service_(arc_bridge_service), weak_factory_(this) {
-  chromeos::SessionManagerClient* client = GetSessionManagerClient();
-  if (client == nullptr)
-    return;
-  client->AddObserver(this);
-}
+// Real Delegate implementation to connect Mojo.
+class ArcSessionDelegateImpl : public ArcSessionImpl::Delegate {
+ public:
+  explicit ArcSessionDelegateImpl(ArcBridgeService* arc_bridge_service);
+  ~ArcSessionDelegateImpl() override = default;
 
-ArcSessionImpl::~ArcSessionImpl() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(state_ == State::NOT_STARTED || state_ == State::STOPPED);
-  chromeos::SessionManagerClient* client = GetSessionManagerClient();
-  if (client == nullptr)
-    return;
-  client->RemoveObserver(this);
-}
+  // ArcSessionImpl::Delegate override.
+  base::ScopedFD ConnectMojo(base::ScopedFD socket_fd,
+                             ConnectMojoCallback callback) override;
 
-void ArcSessionImpl::Start() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  // Start() can be called either for starting ARC from scratch or for
-  // resuming an existing one. Start() must be able to start a fully
-  // functional instance from all of |state_| up to and including
-  // RUNNING_FOR_LOGIN_SCREEN.
-  DCHECK_GE(State::RUNNING_FOR_LOGIN_SCREEN, state_);
+ private:
+  // Synchronously accepts a connection on |socket_fd| and then processes the
+  // connected socket's file descriptor. This is designed to run on a
+  // blocking thread.
+  static mojo::ScopedMessagePipeHandle ConnectMojoInternal(
+      mojo::edk::ScopedPlatformHandle socket_fd,
+      base::ScopedFD cancel_fd);
 
-  // Flip the flag now so that callback functions like OnInstanceStarted()
-  // can do the right thing.
-  login_screen_instance_requested_ = false;
+  // Called when Mojo connection is established or canceled.
+  // In case of cancel or error, |server_pipe| is invalid.
+  void OnMojoConnected(ConnectMojoCallback callback,
+                       mojo::ScopedMessagePipeHandle server_pipe);
 
-  if (state_ == State::NOT_STARTED) {
-    // An instance for login screen does not exist. Start a new one from
-    // scratch.
-    VLOG(2) << "Starting ARC session";
-    state_ = State::STARTING_INSTANCE;
-    SendStartArcInstanceDBusMessage(
-        false /* instance_is_for_login_screen */,
-        base::Bind(&ArcSessionImpl::OnInstanceStarted,
-                   weak_factory_.GetWeakPtr(),
-                   false /* instance_is_for_login_screen */));
+  // Owned by ArcServiceManager.
+  ArcBridgeService* const arc_bridge_service_;
 
-  } else if (state_ == State::STARTING_INSTANCE) {
-    VLOG(2) << "Requested to resume an existing ARC instance";
-    // OnInstanceStarted() will start a fully featured instance.
-  } else if (state_ == State::RUNNING_FOR_LOGIN_SCREEN) {
-    VLOG(2) << "Resuming an existing ARC instance";
-    state_ = State::STARTING_INSTANCE;
-    SendStartArcInstanceDBusMessage(
-        false /* instance_is_for_login_screen */,
-        base::Bind(&ArcSessionImpl::OnInstanceStarted,
-                   weak_factory_.GetWeakPtr(),
-                   false /* instance_is_for_login_screen */));
-  }
-}
+  // WeakPtrFactory to use callbacks.
+  base::WeakPtrFactory<ArcSessionDelegateImpl> weak_factory_;
 
-// static
-void ArcSessionImpl::SendStartArcInstanceDBusMessage(
-    bool instance_is_for_login_screen,
-    const chromeos::SessionManagerClient::StartArcInstanceCallback& cb) {
-  chromeos::SessionManagerClient* session_manager_client =
-      chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
-  const bool native_bridge_experiment =
-      base::FeatureList::IsEnabled(arc::kNativeBridgeExperimentFeature);
-  if (instance_is_for_login_screen) {
-    session_manager_client->StartArcInstance(
-        chromeos::SessionManagerClient::ArcStartupMode::LOGIN_SCREEN,
-        // All variables below except |cb| will be ignored.
-        cryptohome::Identification(), false, false,
-        native_bridge_experiment, cb);
-    return;
-  }
+  DISALLOW_COPY_AND_ASSIGN(ArcSessionDelegateImpl);
+};
 
-  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
-  DCHECK(user_manager->GetPrimaryUser());
-  const cryptohome::Identification cryptohome_id(
-      user_manager->GetPrimaryUser()->GetAccountId());
+ArcSessionDelegateImpl::ArcSessionDelegateImpl(
+    ArcBridgeService* arc_bridge_service)
+    : arc_bridge_service_(arc_bridge_service), weak_factory_(this) {}
 
-  const bool skip_boot_completed_broadcast =
-      !base::FeatureList::IsEnabled(arc::kBootCompletedBroadcastFeature);
-
-  // We only enable /vendor/priv-app when voice interaction is enabled because
-  // voice interaction service apk would be bundled in this location.
-  const bool scan_vendor_priv_app =
-      chromeos::switches::IsVoiceInteractionEnabled();
-
-  session_manager_client->StartArcInstance(
-      chromeos::SessionManagerClient::ArcStartupMode::FULL, cryptohome_id,
-      skip_boot_completed_broadcast, scan_vendor_priv_app,
-      native_bridge_experiment, cb);
-}
-
-void ArcSessionImpl::OnInstanceStarted(bool instance_is_for_login_screen,
-                                       StartArcInstanceResult result,
-                                       const std::string& container_instance_id,
-                                       base::ScopedFD socket_fd) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK_EQ(state_, State::STARTING_INSTANCE);
-
-  bool resumed = false;
-  if (!container_instance_id_.empty()) {
-    // |container_instance_id_| has already been initialized when the instance
-    // for login screen was started.
-    DCHECK(container_instance_id.empty());
-    DCHECK(!instance_is_for_login_screen);
-    resumed = true;
-  } else {
-    container_instance_id_ = container_instance_id;
-  }
-
-  if (stop_requested_) {
-    if (result == StartArcInstanceResult::SUCCESS) {
-      // The ARC instance has started to run. Request to stop.
-      StopArcInstance();
-      return;
-    }
-    OnStopped(ArcStopReason::SHUTDOWN);
-    return;
-  }
-
-  if (result != StartArcInstanceResult::SUCCESS) {
-    LOG(ERROR) << "Failed to start ARC instance";
-    OnStopped(result == StartArcInstanceResult::LOW_FREE_DISK_SPACE
-                  ? ArcStopReason::LOW_DISK_SPACE
-                  : ArcStopReason::GENERIC_BOOT_FAILURE);
-    return;
-  }
-
-  if (instance_is_for_login_screen) {
-    VLOG(2) << "ARC instance for login screen is successfully started.";
-    if (login_screen_instance_requested_) {
-      state_ = State::RUNNING_FOR_LOGIN_SCREEN;
-    } else {
-      // Start() has been called.
-      VLOG(2) << "Resuming an existing ARC instance";
-      state_ = State::STARTING_INSTANCE;
-      SendStartArcInstanceDBusMessage(
-          false /* instance_is_for_login_screen */,
-          base::Bind(&ArcSessionImpl::OnInstanceStarted,
-                     weak_factory_.GetWeakPtr(),
-                     false /* instance_is_for_login_screen */));
-    }
-    return;
-  }
-
-  VLOG(2) << "ARC instance is successfully "
-          << (resumed ? "resumed" : "started") << ". Connecting Mojo...";
-  state_ = State::CONNECTING_MOJO;
-
+base::ScopedFD ArcSessionDelegateImpl::ConnectMojo(
+    base::ScopedFD socket_fd,
+    ConnectMojoCallback callback) {
   // Prepare a pipe so that AcceptInstanceConnection can be interrupted on
   // Stop().
   base::ScopedFD cancel_fd;
-  if (!CreatePipe(&cancel_fd, &accept_cancel_pipe_)) {
-    StopArcInstance();
-    return;
+  base::ScopedFD return_fd;
+  if (!CreatePipe(&cancel_fd, &return_fd)) {
+    LOG(ERROR) << "Failed to create a pipe to cancel accept()";
+    return base::ScopedFD();
   }
 
   // For production, |socket_fd| passed from session_manager is either a valid
@@ -435,13 +381,15 @@ void ArcSessionImpl::OnInstanceStarted(bool instance_is_for_login_screen,
   mojo::edk::ScopedPlatformHandle mojo_socket_fd(raw_handle);
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE, {base::MayBlock()},
-      base::Bind(&ArcSessionImpl::ConnectMojo, base::Passed(&mojo_socket_fd),
-                 base::Passed(&cancel_fd)),
-      base::Bind(&ArcSessionImpl::OnMojoConnected, weak_factory_.GetWeakPtr()));
+      base::BindOnce(&ArcSessionDelegateImpl::ConnectMojoInternal,
+                     std::move(mojo_socket_fd), std::move(cancel_fd)),
+      base::BindOnce(&ArcSessionDelegateImpl::OnMojoConnected,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
+  return return_fd;
 }
 
 // static
-mojo::ScopedMessagePipeHandle ArcSessionImpl::ConnectMojo(
+mojo::ScopedMessagePipeHandle ArcSessionDelegateImpl::ConnectMojoInternal(
     mojo::edk::ScopedPlatformHandle socket_fd,
     base::ScopedFD cancel_fd) {
   if (!WaitForSocketReadable(socket_fd.get().handle, cancel_fd.get())) {
@@ -490,8 +438,217 @@ mojo::ScopedMessagePipeHandle ArcSessionImpl::ConnectMojo(
   return pipe;
 }
 
-void ArcSessionImpl::OnMojoConnected(
+void ArcSessionDelegateImpl::OnMojoConnected(
+    ConnectMojoCallback callback,
     mojo::ScopedMessagePipeHandle server_pipe) {
+  if (!server_pipe.is_valid()) {
+    LOG(ERROR) << "Invalid pipe";
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
+  mojom::ArcBridgeInstancePtr instance;
+  instance.Bind(mojo::InterfacePtrInfo<mojom::ArcBridgeInstance>(
+      std::move(server_pipe), 0u));
+  std::move(callback).Run(std::make_unique<ArcBridgeHostImpl>(
+      arc_bridge_service_, std::move(instance)));
+}
+
+ArcSessionImpl::ArcSessionImpl(std::unique_ptr<Delegate> delegate)
+    : delegate_(std::move(delegate)), weak_factory_(this) {
+  chromeos::SessionManagerClient* client = GetSessionManagerClient();
+  if (client == nullptr)
+    return;
+  client->AddObserver(this);
+}
+
+ArcSessionImpl::~ArcSessionImpl() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(state_ == State::NOT_STARTED || state_ == State::STOPPED);
+  chromeos::SessionManagerClient* client = GetSessionManagerClient();
+  if (client == nullptr)
+    return;
+  client->RemoveObserver(this);
+}
+
+void ArcSessionImpl::Start(ArcInstanceMode request_mode) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  target_mode_ = request_mode;
+  switch (request_mode) {
+    case ArcInstanceMode::MINI_INSTANCE:
+      StartMiniInstance();
+      return;
+    case ArcInstanceMode::FULL_INSTANCE:
+      StartFullInstance();
+      return;
+  }
+
+  NOTREACHED();
+}
+
+void ArcSessionImpl::StartMiniInstance() {
+  DCHECK_EQ(State::NOT_STARTED, state_);
+
+  VLOG(2) << "Starting ARC mini instance";
+  state_ = State::STARTING_MINI_INSTANCE;
+  SendStartArcInstanceDBusMessage(
+      target_mode_.value(),
+      base::BindOnce(&ArcSessionImpl::OnMiniInstanceStarted,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void ArcSessionImpl::OnMiniInstanceStarted(
+    StartArcInstanceResult result,
+    const std::string& container_instance_id,
+    base::ScopedFD socket_fd) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK_EQ(state_, State::STARTING_MINI_INSTANCE);
+
+  if (result != StartArcInstanceResult::SUCCESS) {
+    LOG(ERROR) << "Failed to start ARC instance";
+    OnStopped(GetArcStopReason(result, stop_requested_));
+    return;
+  }
+
+  DCHECK(!container_instance_id.empty());
+  container_instance_id_ = container_instance_id;
+  VLOG(2) << "ARC mini instance is successfully started: "
+          << container_instance_id_;
+
+  if (stop_requested_) {
+    // The ARC instance has started to run. Request to stop.
+    StopArcInstance();
+    return;
+  }
+
+  state_ = State::RUNNING_MINI_INSTANCE;
+
+  if (target_mode_ == ArcInstanceMode::FULL_INSTANCE) {
+    // Start(FULL_INSTANCE) has been called during the D-Bus call.
+    StartFullInstance();
+  }
+}
+
+void ArcSessionImpl::StartFullInstance() {
+  // StartFullInstance() can be called either for starting ARC from scratch or
+  // for upgrading to an existing one. StartFullInstance() must be able to
+  // start a fully functional instance from all of |state_| up to and including
+  // RUNNING_MINI_INSTANCE.
+  switch (state_) {
+    case State::NOT_STARTED:
+      // A mini instance does not exist. Start a new one from scratch.
+      VLOG(2) << "Starting ARC session";
+      state_ = State::STARTING_FULL_INSTANCE;
+      SendStartArcInstanceDBusMessage(
+          target_mode_.value(),
+          base::BindOnce(&ArcSessionImpl::OnFullInstanceStarted,
+                         weak_factory_.GetWeakPtr()));
+      break;
+    case State::STARTING_MINI_INSTANCE:
+      VLOG(2) << "Requested to upgrade a starting ARC mini instance";
+      // OnMiniInstanceStarted() will restart a full instance.
+      break;
+    case State::RUNNING_MINI_INSTANCE:
+      VLOG(2) << "Upgrading an existing ARC mini instance";
+      state_ = State::STARTING_FULL_INSTANCE;
+      SendStartArcInstanceDBusMessage(
+          target_mode_.value(),
+          base::BindOnce(&ArcSessionImpl::OnFullInstanceStarted,
+                         weak_factory_.GetWeakPtr()));
+      break;
+    case State::STARTING_FULL_INSTANCE:
+    case State::CONNECTING_MOJO:
+    case State::RUNNING_FULL_INSTANCE:
+    case State::STOPPED:
+      // These mean Start(FULL_INSTANCE) is called twice or called after
+      // stopped, which are invalid operations.
+      NOTREACHED();
+      break;
+  }
+}
+
+void ArcSessionImpl::OnFullInstanceStarted(
+    StartArcInstanceResult result,
+    const std::string& container_instance_id,
+    base::ScopedFD socket_fd) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK_EQ(state_, State::STARTING_FULL_INSTANCE);
+
+  if (result != StartArcInstanceResult::SUCCESS) {
+    LOG(ERROR) << "Failed to start ARC instance";
+    OnStopped(GetArcStopReason(result, stop_requested_));
+    return;
+  }
+
+  if (container_instance_id.empty()) {
+    // This was upgrade request.
+    VLOG(2) << "ARC instance is successfully upgraded.";
+    DCHECK(!container_instance_id_.empty());
+  } else {
+    // This was a request to start a full instance from scratch.
+    container_instance_id_ = container_instance_id;
+    VLOG(2) << "ARC instance is successfully started: "
+            << container_instance_id_;
+  }
+
+  if (stop_requested_) {
+    // The ARC instance has started to run. Request to stop.
+    StopArcInstance();
+    return;
+  }
+
+  VLOG(2) << "Connecting mojo...";
+  state_ = State::CONNECTING_MOJO;
+  accept_cancel_pipe_ = delegate_->ConnectMojo(
+      std::move(socket_fd), base::BindOnce(&ArcSessionImpl::OnMojoConnected,
+                                           weak_factory_.GetWeakPtr()));
+  if (!accept_cancel_pipe_.is_valid()) {
+    // Failed to post a task to accept() the request.
+    StopArcInstance();
+    return;
+  }
+}
+
+// static
+void ArcSessionImpl::SendStartArcInstanceDBusMessage(
+    ArcInstanceMode target_mode,
+    chromeos::SessionManagerClient::StartArcInstanceCallback callback) {
+  chromeos::SessionManagerClient* session_manager_client =
+      chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
+  const bool native_bridge_experiment =
+      base::FeatureList::IsEnabled(arc::kNativeBridgeExperimentFeature);
+  if (target_mode == ArcInstanceMode::MINI_INSTANCE) {
+    session_manager_client->StartArcInstance(
+        chromeos::SessionManagerClient::ArcStartupMode::LOGIN_SCREEN,
+        // All variables below except |callback| will be ignored.
+        cryptohome::Identification(), false, false, native_bridge_experiment,
+        std::move(callback));
+    return;
+  }
+  DCHECK_EQ(ArcInstanceMode::FULL_INSTANCE, target_mode);
+
+  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+  DCHECK(user_manager->GetPrimaryUser());
+  const cryptohome::Identification cryptohome_id(
+      user_manager->GetPrimaryUser()->GetAccountId());
+
+  const bool skip_boot_completed_broadcast =
+      !base::FeatureList::IsEnabled(arc::kBootCompletedBroadcastFeature);
+
+  // We only enable /vendor/priv-app when voice interaction is enabled because
+  // voice interaction service apk would be bundled in this location.
+  const bool scan_vendor_priv_app =
+      chromeos::switches::IsVoiceInteractionEnabled();
+
+  session_manager_client->StartArcInstance(
+      chromeos::SessionManagerClient::ArcStartupMode::FULL, cryptohome_id,
+      skip_boot_completed_broadcast, scan_vendor_priv_app,
+      native_bridge_experiment, std::move(callback));
+}
+
+void ArcSessionImpl::OnMojoConnected(
+    std::unique_ptr<mojom::ArcBridgeHost> arc_bridge_host) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_EQ(state_, State::CONNECTING_MOJO);
   accept_cancel_pipe_.reset();
@@ -501,20 +658,15 @@ void ArcSessionImpl::OnMojoConnected(
     return;
   }
 
-  if (!server_pipe.is_valid()) {
-    LOG(ERROR) << "Invalid pipe";
+  if (!arc_bridge_host.get()) {
+    LOG(ERROR) << "Invalid pipe.";
     StopArcInstance();
     return;
   }
-
-  mojom::ArcBridgeInstancePtr instance;
-  instance.Bind(mojo::InterfacePtrInfo<mojom::ArcBridgeInstance>(
-      std::move(server_pipe), 0u));
-  arc_bridge_host_ = std::make_unique<ArcBridgeHostImpl>(arc_bridge_service_,
-                                                         std::move(instance));
+  arc_bridge_host_ = std::move(arc_bridge_host);
 
   VLOG(0) << "ARC ready.";
-  state_ = State::RUNNING;
+  state_ = State::RUNNING_FULL_INSTANCE;
 }
 
 void ArcSessionImpl::Stop() {
@@ -533,7 +685,8 @@ void ArcSessionImpl::Stop() {
       OnStopped(ArcStopReason::SHUTDOWN);
       return;
 
-    case State::STARTING_INSTANCE:
+    case State::STARTING_MINI_INSTANCE:
+    case State::STARTING_FULL_INSTANCE:
       // Before starting the ARC instance, we do nothing here.
       // At some point, a callback will be invoked on UI thread,
       // and stopping procedure will be run there.
@@ -544,8 +697,9 @@ void ArcSessionImpl::Stop() {
       // clean it up.
       return;
 
-    case State::RUNNING_FOR_LOGIN_SCREEN:
-      // An ARC instance for login screen is running. Request to stop it.
+    case State::RUNNING_MINI_INSTANCE:
+    case State::RUNNING_FULL_INSTANCE:
+      // An ARC {mini,full} instance is running. Request to stop it.
       StopArcInstance();
       return;
 
@@ -556,11 +710,6 @@ void ArcSessionImpl::Stop() {
       accept_cancel_pipe_.reset();
       return;
 
-    case State::RUNNING:
-      // Now ARC instance is running. Request to stop it.
-      StopArcInstance();
-      return;
-
     case State::STOPPED:
       // The instance is already stopped. Do nothing.
       return;
@@ -569,13 +718,15 @@ void ArcSessionImpl::Stop() {
 
 void ArcSessionImpl::StopArcInstance() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(state_ == State::STARTING_INSTANCE ||
-         state_ == State::RUNNING_FOR_LOGIN_SCREEN ||
-         state_ == State::CONNECTING_MOJO || state_ == State::RUNNING);
+  DCHECK(state_ == State::STARTING_MINI_INSTANCE ||
+         state_ == State::RUNNING_MINI_INSTANCE ||
+         state_ == State::STARTING_FULL_INSTANCE ||
+         state_ == State::CONNECTING_MOJO ||
+         state_ == State::RUNNING_FULL_INSTANCE);
 
   VLOG(2) << "Requesting session_manager to stop ARC instance";
 
-  // When the instance is not for login screen, change the |state_| in
+  // When the instance is full instance, change the |state_| in
   // ArcInstanceStopped().
   chromeos::SessionManagerClient* session_manager_client =
       chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
@@ -620,24 +771,8 @@ void ArcSessionImpl::ArcInstanceStopped(
   OnStopped(reason);
 }
 
-void ArcSessionImpl::StartForLoginScreen() {
-  DCHECK_EQ(State::NOT_STARTED, state_);
-
-  VLOG(2) << "Starting ARC session for login screen";
-  login_screen_instance_requested_ = true;
-  state_ = State::STARTING_INSTANCE;
-  SendStartArcInstanceDBusMessage(
-      true /* instance_is_for_login_screen */,
-      base::Bind(&ArcSessionImpl::OnInstanceStarted, weak_factory_.GetWeakPtr(),
-                 true /* instance_is_for_login_screen */));
-}
-
-bool ArcSessionImpl::IsForLoginScreen() {
-  return login_screen_instance_requested_;
-}
-
-bool ArcSessionImpl::IsRunning() {
-  return state_ == State::RUNNING;
+base::Optional<ArcInstanceMode> ArcSessionImpl::GetTargetMode() {
+  return target_mode_;
 }
 
 bool ArcSessionImpl::IsStopRequested() {
@@ -649,7 +784,7 @@ void ArcSessionImpl::OnStopped(ArcStopReason reason) {
   // OnStopped() should be called once per instance.
   DCHECK_NE(state_, State::STOPPED);
   VLOG(2) << "ARC session is stopped.";
-  const bool was_running = IsRunning();
+  const bool was_running = (state_ == State::RUNNING_FULL_INSTANCE);
   arc_bridge_host_.reset();
   state_ = State::STOPPED;
   for (auto& observer : observer_list_)
@@ -670,9 +805,11 @@ void ArcSessionImpl::OnShutdown() {
   // Stops the ARC instance to let it graceful shutdown.
   // Note that this may fail if ARC container is not actually running, but
   // ignore an error as described below.
-  if (state_ == State::STARTING_INSTANCE ||
-      state_ == State::RUNNING_FOR_LOGIN_SCREEN ||
-      state_ == State::CONNECTING_MOJO || state_ == State::RUNNING) {
+  if (state_ == State::STARTING_MINI_INSTANCE ||
+      state_ == State::RUNNING_MINI_INSTANCE ||
+      state_ == State::STARTING_FULL_INSTANCE ||
+      state_ == State::CONNECTING_MOJO ||
+      state_ == State::RUNNING_FULL_INSTANCE) {
     StopArcInstance();
   }
 
@@ -698,7 +835,8 @@ void ArcSession::RemoveObserver(Observer* observer) {
 // static
 std::unique_ptr<ArcSession> ArcSession::Create(
     ArcBridgeService* arc_bridge_service) {
-  return std::make_unique<ArcSessionImpl>(arc_bridge_service);
+  return std::make_unique<ArcSessionImpl>(
+      std::make_unique<ArcSessionDelegateImpl>(arc_bridge_service));
 }
 
 }  // namespace arc

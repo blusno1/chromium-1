@@ -17,10 +17,10 @@ class CORE_EXPORT RemoteSecurityContext
   USING_GARBAGE_COLLECTED_MIXIN(RemoteSecurityContext);
 
  public:
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
   static RemoteSecurityContext* Create();
-  void SetReplicatedOrigin(RefPtr<SecurityOrigin>);
+  void SetReplicatedOrigin(scoped_refptr<SecurityOrigin>);
   void ResetReplicatedContentSecurityPolicy();
 
   // FIXME: implement

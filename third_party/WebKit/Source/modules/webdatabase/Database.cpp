@@ -279,14 +279,15 @@ Database::~Database() {
   DCHECK(!opened_);
 }
 
-DEFINE_TRACE(Database) {
+void Database::Trace(blink::Visitor* visitor) {
   visitor->Trace(database_context_);
   visitor->Trace(sqlite_database_);
   visitor->Trace(database_authorizer_);
   visitor->Trace(creation_callback_);
+  ScriptWrappable::Trace(visitor);
 }
 
-DEFINE_TRACE_WRAPPERS(Database) {
+void Database::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(creation_callback_);
 }
 
@@ -858,7 +859,7 @@ void Database::CloseImmediately() {
   if (GetDatabaseContext()->DatabaseThreadAvailable() && Opened()) {
     LogErrorMessage("forcibly closing database");
     GetDatabaseContext()->GetDatabaseThread()->ScheduleTask(
-        DatabaseCloseTask::Create(this, 0));
+        DatabaseCloseTask::Create(this, nullptr));
   }
 }
 

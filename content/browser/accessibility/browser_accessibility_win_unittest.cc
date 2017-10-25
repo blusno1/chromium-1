@@ -6,6 +6,7 @@
 
 #include <objbase.h>
 #include <stdint.h>
+#include <wrl/client.h>
 
 #include <memory>
 #include <utility>
@@ -13,7 +14,6 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_bstr.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/scoped_variant.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_manager_win.h"
@@ -141,13 +141,13 @@ TEST_F(BrowserAccessibilityTest, TestChildrenChange) {
   // Query for the text IAccessible and verify that it returns "old text" as its
   // value.
   base::win::ScopedVariant one(1);
-  base::win::ScopedComPtr<IDispatch> text_dispatch;
+  Microsoft::WRL::ComPtr<IDispatch> text_dispatch;
   HRESULT hr = ToBrowserAccessibilityWin(manager->GetRoot())
                    ->GetCOM()
                    ->get_accChild(one, text_dispatch.GetAddressOf());
   ASSERT_EQ(S_OK, hr);
 
-  base::win::ScopedComPtr<IAccessible> text_accessible;
+  Microsoft::WRL::ComPtr<IAccessible> text_accessible;
   hr = text_dispatch.CopyTo(text_accessible.GetAddressOf());
   ASSERT_EQ(S_OK, hr);
 
@@ -447,7 +447,7 @@ TEST_F(BrowserAccessibilityTest, TestSimpleHypertext) {
   EXPECT_EQ(S_OK, root_obj->get_nHyperlinks(&hyperlink_count));
   EXPECT_EQ(0, hyperlink_count);
 
-  base::win::ScopedComPtr<IAccessibleHyperlink> hyperlink;
+  Microsoft::WRL::ComPtr<IAccessibleHyperlink> hyperlink;
   EXPECT_EQ(E_INVALIDARG,
             root_obj->get_hyperlink(-1, hyperlink.GetAddressOf()));
   EXPECT_EQ(E_INVALIDARG, root_obj->get_hyperlink(0, hyperlink.GetAddressOf()));
@@ -561,8 +561,8 @@ TEST_F(BrowserAccessibilityTest, TestComplexHypertext) {
   EXPECT_EQ(S_OK, root_obj->get_nHyperlinks(&hyperlink_count));
   EXPECT_EQ(4, hyperlink_count);
 
-  base::win::ScopedComPtr<IAccessibleHyperlink> hyperlink;
-  base::win::ScopedComPtr<IAccessibleText> hypertext;
+  Microsoft::WRL::ComPtr<IAccessibleHyperlink> hyperlink;
+  Microsoft::WRL::ComPtr<IAccessibleText> hypertext;
   EXPECT_EQ(E_INVALIDARG,
             root_obj->get_hyperlink(-1, hyperlink.GetAddressOf()));
   EXPECT_EQ(E_INVALIDARG, root_obj->get_hyperlink(4, hyperlink.GetAddressOf()));
@@ -1046,11 +1046,11 @@ TEST_F(BrowserAccessibilityTest, TestWordBoundariesInTextControls) {
       ToBrowserAccessibilityWin(root_accessible->PlatformGetChild(1));
   ASSERT_NE(nullptr, text_field_accessible);
 
-  base::win::ScopedComPtr<IAccessibleText> textarea_object;
+  Microsoft::WRL::ComPtr<IAccessibleText> textarea_object;
   EXPECT_HRESULT_SUCCEEDED(textarea_accessible->GetCOM()->QueryInterface(
       IID_IAccessibleText,
       reinterpret_cast<void**>(textarea_object.GetAddressOf())));
-  base::win::ScopedComPtr<IAccessibleText> text_field_object;
+  Microsoft::WRL::ComPtr<IAccessibleText> text_field_object;
   EXPECT_HRESULT_SUCCEEDED(text_field_accessible->GetCOM()->QueryInterface(
       IID_IAccessibleText,
       reinterpret_cast<void**>(text_field_object.GetAddressOf())));
@@ -1524,7 +1524,7 @@ TEST_F(BrowserAccessibilityTest, TestIAccessibleHyperlink) {
   LONG start_index = -1;
   LONG end_index = -1;
 
-  base::win::ScopedComPtr<IAccessibleHyperlink> hyperlink;
+  Microsoft::WRL::ComPtr<IAccessibleHyperlink> hyperlink;
   base::win::ScopedVariant anchor;
   base::win::ScopedVariant anchor_target;
   base::win::ScopedBstr bstr;
@@ -1671,12 +1671,10 @@ TEST_F(BrowserAccessibilityTest, TestTextAttributesInContentEditables) {
                             ui::AX_TEXT_STYLE_UNDERLINE);
 
   // The name "lnk" is misspelled.
-  std::vector<int32_t> marker_types;
-  marker_types.push_back(static_cast<int32_t>(ui::AX_MARKER_TYPE_SPELLING));
-  std::vector<int32_t> marker_starts;
-  marker_starts.push_back(0);
-  std::vector<int32_t> marker_ends;
-  marker_ends.push_back(3);
+  std::vector<int32_t> marker_types{
+      static_cast<int32_t>(ui::AX_MARKER_TYPE_SPELLING)};
+  std::vector<int32_t> marker_starts{0};
+  std::vector<int32_t> marker_ends{3};
   link_text.AddIntListAttribute(ui::AX_ATTR_MARKER_TYPES, marker_types);
   link_text.AddIntListAttribute(ui::AX_ATTR_MARKER_STARTS, marker_starts);
   link_text.AddIntListAttribute(ui::AX_ATTR_MARKER_ENDS, marker_ends);
@@ -1778,6 +1776,10 @@ TEST_F(BrowserAccessibilityTest, TestTextAttributesInContentEditables) {
   EXPECT_NE(
       base::string16::npos,
       base::string16(text_attributes).find(L"text-underline-type:single"));
+  // For compatibility with Firefox, spelling attributes should also be
+  // propagated to the parent of static text leaves.
+  EXPECT_NE(base::string16::npos,
+            base::string16(text_attributes).find(L"invalid:spelling"));
   text_attributes.Reset();
 
   hr = ax_link_text->GetCOM()->get_attributes(2, &start_offset, &end_offset,
@@ -1860,7 +1862,7 @@ TEST_F(BrowserAccessibilityTest, TestTextAttributesInContentEditables) {
   manager.reset();
 }
 
-TEST_F(BrowserAccessibilityTest, TestMisspellingsInSimpleTextFields) {
+TEST_F(BrowserAccessibilityTest, TestExistingMisspellingsInSimpleTextFields) {
   std::string value1("Testing .");
   // The word "helo" is misspelled.
   std::string value2("Helo there.");
@@ -1947,6 +1949,134 @@ TEST_F(BrowserAccessibilityTest, TestMisspellingsInSimpleTextFields) {
   }
 
   // Ensure that "helo" is marked misspelled.
+  for (LONG offset = value1_length; offset < value1_length + 4; ++offset) {
+    hr = ax_combo_box->GetCOM()->get_attributes(
+        offset, &start_offset, &end_offset, text_attributes.Receive());
+    EXPECT_EQ(S_OK, hr);
+    EXPECT_EQ(value1_length, start_offset);
+    EXPECT_EQ(value1_length + 4, end_offset);
+    EXPECT_NE(base::string16::npos,
+              base::string16(text_attributes).find(L"invalid:spelling"));
+    text_attributes.Reset();
+  }
+
+  // Ensure that the last part of the value is not marked misspelled.
+  for (LONG offset = value1_length + 4; offset < combo_box_value_length;
+       ++offset) {
+    hr = ax_combo_box->GetCOM()->get_attributes(
+        offset, &start_offset, &end_offset, text_attributes.Receive());
+    EXPECT_EQ(S_OK, hr);
+    EXPECT_EQ(value1_length + 4, start_offset);
+    EXPECT_EQ(combo_box_value_length, end_offset);
+    EXPECT_EQ(base::string16::npos,
+              base::string16(text_attributes).find(L"invalid:spelling"));
+    text_attributes.Reset();
+  }
+
+  manager.reset();
+}
+
+TEST_F(BrowserAccessibilityTest, TestNewMisspellingsInSimpleTextFields) {
+  std::string value1("Testing .");
+  // The word "helo" is misspelled.
+  std::string value2("Helo there.");
+
+  LONG value1_length = static_cast<LONG>(value1.length());
+  LONG value2_length = static_cast<LONG>(value2.length());
+  LONG combo_box_value_length = value1_length + value2_length;
+
+  ui::AXNodeData root;
+  root.id = 1;
+  root.role = ui::AX_ROLE_ROOT_WEB_AREA;
+  root.AddState(ui::AX_STATE_FOCUSABLE);
+
+  ui::AXNodeData combo_box;
+  combo_box.id = 2;
+  combo_box.role = ui::AX_ROLE_COMBO_BOX;
+  combo_box.AddState(ui::AX_STATE_EDITABLE);
+  combo_box.AddState(ui::AX_STATE_FOCUSABLE);
+  combo_box.SetValue(value1 + value2);
+
+  ui::AXNodeData combo_box_div;
+  combo_box_div.id = 3;
+  combo_box_div.role = ui::AX_ROLE_GENERIC_CONTAINER;
+  combo_box_div.AddState(ui::AX_STATE_EDITABLE);
+
+  ui::AXNodeData static_text1;
+  static_text1.id = 4;
+  static_text1.role = ui::AX_ROLE_STATIC_TEXT;
+  static_text1.AddState(ui::AX_STATE_EDITABLE);
+  static_text1.SetName(value1);
+
+  ui::AXNodeData static_text2;
+  static_text2.id = 5;
+  static_text2.role = ui::AX_ROLE_STATIC_TEXT;
+  static_text2.AddState(ui::AX_STATE_EDITABLE);
+  static_text2.SetName(value2);
+
+  root.child_ids.push_back(combo_box.id);
+  combo_box.child_ids.push_back(combo_box_div.id);
+  combo_box_div.child_ids.push_back(static_text1.id);
+  combo_box_div.child_ids.push_back(static_text2.id);
+
+  std::unique_ptr<BrowserAccessibilityManager> manager(
+      BrowserAccessibilityManager::Create(
+          MakeAXTreeUpdate(root, combo_box, combo_box_div, static_text1,
+                           static_text2),
+          nullptr, new BrowserAccessibilityFactory()));
+
+  ASSERT_NE(nullptr, manager->GetRoot());
+  BrowserAccessibilityWin* ax_root =
+      ToBrowserAccessibilityWin(manager->GetRoot());
+  ASSERT_NE(nullptr, ax_root);
+  ASSERT_EQ(1U, ax_root->PlatformChildCount());
+
+  BrowserAccessibilityWin* ax_combo_box =
+      ToBrowserAccessibilityWin(ax_root->PlatformGetChild(0));
+  ASSERT_NE(nullptr, ax_combo_box);
+  ASSERT_EQ(1U, ax_combo_box->PlatformChildCount());
+
+  HRESULT hr;
+  LONG start_offset, end_offset;
+  base::win::ScopedBstr text_attributes;
+
+  // Ensure that nothing is marked misspelled.
+  for (LONG offset = 0; offset < combo_box_value_length; ++offset) {
+    hr = ax_combo_box->GetCOM()->get_attributes(
+        offset, &start_offset, &end_offset, text_attributes.Receive());
+    EXPECT_EQ(S_OK, hr);
+    EXPECT_EQ(0, start_offset);
+    EXPECT_EQ(combo_box_value_length, end_offset);
+    EXPECT_EQ(base::string16::npos,
+              base::string16(text_attributes).find(L"invalid:spelling"));
+    text_attributes.Reset();
+  }
+
+  // Add the spelling markers on "helo".
+  std::vector<int32_t> marker_types{
+      static_cast<int32_t>(ui::AX_MARKER_TYPE_SPELLING)};
+  std::vector<int32_t> marker_starts{0};
+  std::vector<int32_t> marker_ends{4};
+  static_text2.AddIntListAttribute(ui::AX_ATTR_MARKER_TYPES, marker_types);
+  static_text2.AddIntListAttribute(ui::AX_ATTR_MARKER_STARTS, marker_starts);
+  static_text2.AddIntListAttribute(ui::AX_ATTR_MARKER_ENDS, marker_ends);
+  ui::AXTree* tree = const_cast<ui::AXTree*>(manager->ax_tree());
+  ASSERT_NE(nullptr, tree);
+  ASSERT_TRUE(tree->Unserialize(MakeAXTreeUpdate(static_text2)));
+
+  // Ensure that value1 is still not marked misspelled.
+  for (LONG offset = 0; offset < value1_length; ++offset) {
+    hr = ax_combo_box->GetCOM()->get_attributes(
+        offset, &start_offset, &end_offset, text_attributes.Receive());
+    EXPECT_EQ(S_OK, hr);
+    EXPECT_EQ(0, start_offset);
+    EXPECT_EQ(value1_length, end_offset);
+    EXPECT_EQ(base::string16::npos,
+              base::string16(text_attributes).find(L"invalid:spelling"));
+    text_attributes.Reset();
+  }
+
+  // Ensure that "helo" is now marked misspelled.
   for (LONG offset = value1_length; offset < value1_length + 4; ++offset) {
     hr = ax_combo_box->GetCOM()->get_attributes(
         offset, &start_offset, &end_offset, text_attributes.Receive());
@@ -2209,26 +2339,26 @@ TEST_F(BrowserAccessibilityTest, UniqueIdWinInvalidAfterDeletingTree) {
 
   // Trying to access the unique IDs of the old, deleted objects should fail.
   base::win::ScopedVariant old_root_variant(-root_unique_id);
-  base::win::ScopedComPtr<IDispatch> old_root_dispatch;
+  Microsoft::WRL::ComPtr<IDispatch> old_root_dispatch;
   HRESULT hr = ToBrowserAccessibilityWin(root)->GetCOM()->get_accChild(
       old_root_variant, old_root_dispatch.GetAddressOf());
   EXPECT_EQ(E_INVALIDARG, hr);
 
   base::win::ScopedVariant old_child_variant(-child_unique_id);
-  base::win::ScopedComPtr<IDispatch> old_child_dispatch;
+  Microsoft::WRL::ComPtr<IDispatch> old_child_dispatch;
   hr = ToBrowserAccessibilityWin(root)->GetCOM()->get_accChild(
       old_child_variant, old_child_dispatch.GetAddressOf());
   EXPECT_EQ(E_INVALIDARG, hr);
 
   // Trying to access the unique IDs of the new objects should succeed.
   base::win::ScopedVariant new_root_variant(-root_unique_id_2);
-  base::win::ScopedComPtr<IDispatch> new_root_dispatch;
+  Microsoft::WRL::ComPtr<IDispatch> new_root_dispatch;
   hr = ToBrowserAccessibilityWin(root)->GetCOM()->get_accChild(
       new_root_variant, new_root_dispatch.GetAddressOf());
   EXPECT_EQ(S_OK, hr);
 
   base::win::ScopedVariant new_child_variant(-child_unique_id_2);
-  base::win::ScopedComPtr<IDispatch> new_child_dispatch;
+  Microsoft::WRL::ComPtr<IDispatch> new_child_dispatch;
   hr = ToBrowserAccessibilityWin(root)->GetCOM()->get_accChild(
       new_child_variant, new_child_dispatch.GetAddressOf());
   EXPECT_EQ(S_OK, hr);
@@ -2252,7 +2382,7 @@ TEST_F(BrowserAccessibilityTest, AccChildOnlyReturnsDescendants) {
   BrowserAccessibility* child = root->PlatformGetChild(0);
 
   base::win::ScopedVariant root_unique_id_variant(-GetUniqueId(root));
-  base::win::ScopedComPtr<IDispatch> result;
+  Microsoft::WRL::ComPtr<IDispatch> result;
   EXPECT_EQ(E_INVALIDARG,
             ToBrowserAccessibilityWin(child)->GetCOM()->get_accChild(
                 root_unique_id_variant, result.GetAddressOf()));
@@ -2299,10 +2429,10 @@ TEST_F(BrowserAccessibilityTest, TestIAccessible2Relations) {
   LONG n_targets = 0;
   LONG unique_id = 0;
   base::win::ScopedBstr relation_type;
-  base::win::ScopedComPtr<IAccessibleRelation> describedby_relation;
-  base::win::ScopedComPtr<IAccessibleRelation> description_for_relation;
-  base::win::ScopedComPtr<IUnknown> target;
-  base::win::ScopedComPtr<IAccessible2> ax_target;
+  Microsoft::WRL::ComPtr<IAccessibleRelation> describedby_relation;
+  Microsoft::WRL::ComPtr<IAccessibleRelation> description_for_relation;
+  Microsoft::WRL::ComPtr<IUnknown> target;
+  Microsoft::WRL::ComPtr<IAccessible2> ax_target;
 
   EXPECT_HRESULT_SUCCEEDED(ax_root->GetCOM()->get_nRelations(&n_relations));
   EXPECT_EQ(1, n_relations);

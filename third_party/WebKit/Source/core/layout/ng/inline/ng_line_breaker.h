@@ -19,7 +19,8 @@ namespace blink {
 class Hyphenation;
 class NGInlineBreakToken;
 class NGInlineItem;
-class NGFragmentBuilder;
+class NGLineBoxFragmentBuilder;
+class NGInlineLayoutStateStack;
 
 // Represents a line breaker.
 //
@@ -31,8 +32,8 @@ class CORE_EXPORT NGLineBreaker {
  public:
   NGLineBreaker(NGInlineNode,
                 const NGConstraintSpace&,
-                NGFragmentBuilder*,
-                Vector<RefPtr<NGUnpositionedFloat>>*,
+                NGLineBoxFragmentBuilder*,
+                Vector<scoped_refptr<NGUnpositionedFloat>>*,
                 const NGInlineBreakToken* = nullptr);
   ~NGLineBreaker() {}
 
@@ -43,7 +44,8 @@ class CORE_EXPORT NGLineBreaker {
                 NGLineInfo*);
 
   // Create an NGInlineBreakToken for the last line returned by NextLine().
-  RefPtr<NGInlineBreakToken> CreateBreakToken() const;
+  scoped_refptr<NGInlineBreakToken> CreateBreakToken(
+      std::unique_ptr<const NGInlineLayoutStateStack>) const;
 
   NGExclusionSpace* ExclusionSpace() { return line_.exclusion_space.get(); }
 
@@ -141,8 +143,8 @@ class CORE_EXPORT NGLineBreaker {
   LineData line_;
   NGInlineNode node_;
   const NGConstraintSpace& constraint_space_;
-  NGFragmentBuilder* container_builder_;
-  Vector<RefPtr<NGUnpositionedFloat>>* unpositioned_floats_;
+  NGLineBoxFragmentBuilder* container_builder_;
+  Vector<scoped_refptr<NGUnpositionedFloat>>* unpositioned_floats_;
   unsigned item_index_ = 0;
   unsigned offset_ = 0;
   bool previous_line_had_forced_break_ = false;

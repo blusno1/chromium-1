@@ -24,7 +24,6 @@
 #include "media/base/channel_layout.h"
 #include "media/base/limits.h"
 
-using base::win::ScopedComPtr;
 using base::win::ScopedCOMInitializer;
 
 namespace media {
@@ -369,7 +368,7 @@ void WASAPIAudioInputStream::Run() {
   HANDLE wait_array[2] = {stop_capture_event_.Get(),
                           audio_samples_ready_event_.Get()};
 
-  base::win::ScopedComPtr<IAudioClock> audio_clock;
+  Microsoft::WRL::ComPtr<IAudioClock> audio_clock;
   audio_client_->GetService(IID_PPV_ARGS(&audio_clock));
   if (!audio_clock)
     LOG(WARNING) << "IAudioClock unavailable, capture times may be inaccurate.";
@@ -388,7 +387,8 @@ void WASAPIAudioInputStream::Run() {
         recording = false;
         break;
       case WAIT_OBJECT_0 + 1: {
-        TRACE_EVENT0("audio", "WASAPIAudioInputStream::Run_0");
+        TRACE_EVENT1("audio", "WASAPIAudioInputStream::Run_0", "sample rate",
+                     format_.nSamplesPerSec);
         // |audio_samples_ready_event_| has been set.
         BYTE* data_ptr = NULL;
         UINT32 num_frames_to_read = 0;
@@ -508,7 +508,7 @@ HRESULT WASAPIAudioInputStream::SetCaptureDevice() {
   DCHECK_EQ(OPEN_RESULT_OK, open_result_);
   DCHECK(!endpoint_device_.Get());
 
-  ScopedComPtr<IMMDeviceEnumerator> enumerator;
+  Microsoft::WRL::ComPtr<IMMDeviceEnumerator> enumerator;
   HRESULT hr =
       ::CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL,
                          CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&enumerator));

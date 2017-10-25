@@ -35,8 +35,7 @@ class CSSRuleList;
 class CSSStyleSheet;
 class StyleRuleBase;
 
-class CORE_EXPORT CSSRule : public GarbageCollectedFinalized<CSSRule>,
-                            public ScriptWrappable {
+class CORE_EXPORT CSSRule : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -66,8 +65,8 @@ class CORE_EXPORT CSSRule : public GarbageCollectedFinalized<CSSRule>,
 
   void SetParentRule(CSSRule*);
 
-  DECLARE_VIRTUAL_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   CSSStyleSheet* parentStyleSheet() const {
     if (parent_is_rule_)

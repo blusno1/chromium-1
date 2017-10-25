@@ -32,8 +32,8 @@ class ModulePendingScriptTreeClient final : public ModuleTreeClient {
 
   ModuleScript* GetModuleScript() const { return module_script_; }
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   ModulePendingScriptTreeClient();
@@ -64,8 +64,8 @@ class CORE_EXPORT ModulePendingScript : public PendingScript {
     return module_tree_client_->GetModuleScript();
   }
 
-  DECLARE_TRACE();
-  DECLARE_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
   ModulePendingScript(ScriptElementBase*,
@@ -90,7 +90,6 @@ class CORE_EXPORT ModulePendingScript : public PendingScript {
     NOTREACHED();
     return KURL();
   }
-  void RemoveFromMemoryCache() override { NOTREACHED(); }
 
   void DisposeInternal() override;
 

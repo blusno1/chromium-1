@@ -36,20 +36,6 @@ struct NGInflowChildData {
   NGBoxStrut margins;
 };
 
-// Updates the fragment's BFC offset if it's not already set.
-bool MaybeUpdateFragmentBfcOffset(const NGConstraintSpace&,
-                                  LayoutUnit bfc_block_offset,
-                                  NGFragmentBuilder* builder);
-
-// Positions pending floats starting from {@origin_block_offset} and relative
-// to container's BFC offset.
-void PositionPendingFloats(
-    const NGConstraintSpace&,
-    LayoutUnit origin_block_offset,
-    NGFragmentBuilder* container_builder,
-    Vector<RefPtr<NGUnpositionedFloat>>* unpositioned_floats,
-    NGExclusionSpace*);
-
 // A class for general block layout (e.g. a <div> with no special style).
 // Lays out the children in sequence.
 class CORE_EXPORT NGBlockLayoutAlgorithm
@@ -67,14 +53,14 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
                          NGBlockBreakToken* break_token = nullptr);
 
   Optional<MinMaxSize> ComputeMinMaxSize() const override;
-  virtual RefPtr<NGLayoutResult> Layout() override;
+  scoped_refptr<NGLayoutResult> Layout() override;
 
  private:
   NGBoxStrut CalculateMargins(NGLayoutInputNode child,
                               const NGBreakToken* child_break_token);
 
   // Creates a new constraint space for the current child.
-  RefPtr<NGConstraintSpace> CreateConstraintSpaceForChild(
+  scoped_refptr<NGConstraintSpace> CreateConstraintSpaceForChild(
       const NGLayoutInputNode child,
       const NGInflowChildData& child_data,
       const WTF::Optional<NGBfcOffset> floats_bfc_offset = WTF::nullopt,
@@ -136,13 +122,15 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   //
   // Returns false if we need to abort layout, because a previously unknown BFC
   // offset has now been resolved.
-  bool HandleNewFormattingContext(NGLayoutInputNode child,
-                                  NGBreakToken* child_break_token,
-                                  NGPreviousInflowPosition*);
+  bool HandleNewFormattingContext(
+      NGLayoutInputNode child,
+      NGBreakToken* child_break_token,
+      NGPreviousInflowPosition*,
+      RefPtr<NGBreakToken>* previous_inline_break_token);
 
   // Performs the actual layout of a new formatting context. This may be called
   // multiple times from HandleNewFormattingContext.
-  std::pair<RefPtr<NGLayoutResult>, NGLayoutOpportunity>
+  std::pair<scoped_refptr<NGLayoutResult>, NGLayoutOpportunity>
   LayoutNewFormattingContext(NGLayoutInputNode child,
                              NGBreakToken* child_break_token,
                              bool is_auto_inline_size,
@@ -154,7 +142,8 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   // offset has now been resolved. (Same as HandleNewFormattingContext).
   bool HandleInflow(NGLayoutInputNode child,
                     NGBreakToken* child_break_token,
-                    NGPreviousInflowPosition*);
+                    NGPreviousInflowPosition*,
+                    RefPtr<NGBreakToken>* previous_inline_break_token);
 
   // Return the amount of block space available in the current fragmentainer
   // for the node being laid out by this algorithm.
@@ -180,6 +169,15 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
                    const NGPhysicalFragment*,
                    LayoutUnit child_offset);
 
+  // Updates the fragment's BFC offset if it's not already set.
+  bool MaybeUpdateFragmentBfcOffset(LayoutUnit bfc_block_offset);
+
+  // Positions pending floats starting from {@origin_block_offset}.
+  void PositionPendingFloats(LayoutUnit origin_block_offset);
+
+  // Adds a set of positioned floats as children to the current fragment.
+  void AddPositionedFloats(const Vector<NGPositionedFloat>& positioned_floats);
+
   // Calculates logical offset for the current fragment using either {@code
   // intrinsic_block_size_} when the fragment doesn't know it's offset or
   // {@code known_fragment_offset} if the fragment knows it's offset
@@ -198,7 +196,7 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   bool abort_when_bfc_resolved_;
 
   std::unique_ptr<NGExclusionSpace> exclusion_space_;
-  Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats_;
+  Vector<scoped_refptr<NGUnpositionedFloat>> unpositioned_floats_;
 };
 
 }  // namespace blink

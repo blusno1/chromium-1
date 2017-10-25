@@ -21,8 +21,7 @@ namespace media_router {
 MediaRouterDesktop::~MediaRouterDesktop() {
   if (dial_media_sink_service_proxy_) {
     dial_media_sink_service_proxy_->Stop();
-    dial_media_sink_service_proxy_->ClearObserver(
-        cast_media_sink_service_.get());
+    dial_media_sink_service_proxy_->ClearObserver();
   }
   if (cast_media_sink_service_)
     cast_media_sink_service_->Stop();
@@ -46,8 +45,12 @@ void MediaRouterDesktop::OnUserGesture() {
   // Allow MRPM to intelligently update sinks and observers by passing in a
   // media source.
   UpdateMediaSinks(MediaSourceForDesktop().id());
+
+  if (dial_media_sink_service_proxy_)
+    dial_media_sink_service_proxy_->OnUserGesture();
+
   if (cast_media_sink_service_)
-    cast_media_sink_service_->ForceDiscovery();
+    cast_media_sink_service_->OnUserGesture();
 
 #if defined(OS_WIN)
   EnsureMdnsDiscoveryEnabled();
@@ -140,7 +143,7 @@ void MediaRouterDesktop::StartDiscovery() {
   if (media_router::CastDiscoveryEnabled()) {
     if (!cast_media_sink_service_) {
       cast_media_sink_service_ = base::MakeRefCounted<CastMediaSinkService>(
-          base::BindRepeating(&MediaRouterMojoImpl::ProvideSinks,
+          base::BindRepeating(&MediaRouterDesktop::ProvideSinks,
                               weak_factory_.GetWeakPtr(), "cast"),
           context(),
           content::BrowserThread::GetTaskRunnerForThread(
@@ -155,7 +158,7 @@ void MediaRouterDesktop::StartDiscovery() {
     if (!dial_media_sink_service_proxy_) {
       dial_media_sink_service_proxy_ =
           base::MakeRefCounted<DialMediaSinkServiceProxy>(
-              base::BindRepeating(&MediaRouterMojoImpl::ProvideSinks,
+              base::BindRepeating(&MediaRouterDesktop::ProvideSinks,
                                   weak_factory_.GetWeakPtr(), "dial"),
               context());
       dial_media_sink_service_proxy_->SetObserver(
@@ -165,6 +168,14 @@ void MediaRouterDesktop::StartDiscovery() {
       dial_media_sink_service_proxy_->ForceSinkDiscoveryCallback();
     }
   }
+}
+
+void MediaRouterDesktop::ProvideSinks(const std::string& provider_name,
+                                      std::vector<MediaSinkInternal> sinks) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DVLOG(1) << "Provider [" << provider_name << "] found " << sinks.size()
+           << " devices...";
+  media_route_provider_->ProvideSinks(provider_name, std::move(sinks));
 }
 
 #if defined(OS_WIN)

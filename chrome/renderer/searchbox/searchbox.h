@@ -103,7 +103,7 @@ class SearchBox : public content::RenderFrameObserver,
   // Sends PasteAndOpenDropdown to the browser.
   void Paste(const base::string16& text);
 
-  const ThemeBackgroundInfo& GetThemeBackgroundInfo();
+  const ThemeBackgroundInfo& GetThemeBackgroundInfo() const;
 
   // Sends FocusOmnibox(OMNIBOX_FOCUS_INVISIBLE) to the browser.
   void StartCapturingKeyStrokes();
@@ -123,6 +123,8 @@ class SearchBox : public content::RenderFrameObserver,
 
  private:
   // Overridden from content::RenderFrameObserver:
+  void DidCommitProvisionalLoad(bool is_new_navigation,
+                                bool is_same_document_navigation) override;
   void OnDestruct() override;
 
   // Overridden from chrome::mojom::EmbeddedSearchClient:
@@ -140,8 +142,6 @@ class SearchBox : public content::RenderFrameObserver,
 
   // Returns the URL of the Most Visited item specified by the |item_id|.
   GURL GetURLForMostVisitedItem(InstantRestrictedID item_id) const;
-
-  void Bind(chrome::mojom::EmbeddedSearchClientAssociatedRequest request);
 
   int page_seq_no_;
   bool is_focused_;

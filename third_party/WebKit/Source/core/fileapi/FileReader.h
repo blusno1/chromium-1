@@ -99,7 +99,7 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
   DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(loadend);
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  private:
   class ThrottlingController;
@@ -126,7 +126,7 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
   bool still_firing_events_;
 
   String blob_type_;
-  RefPtr<BlobDataHandle> blob_data_handle_;
+  scoped_refptr<BlobDataHandle> blob_data_handle_;
   FileReaderLoader::ReadType read_type_;
   String encoding_;
 

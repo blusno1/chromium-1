@@ -502,7 +502,7 @@ void SVGAnimateElement::ApplyResultsToTarget() {
         targetElement()->EnsureAnimatedSMILStyleProperties();
     if (property_set
             ->SetProperty(css_property_id_, animated_value_->ValueAsString(),
-                          false, 0)
+                          false, nullptr)
             .did_change) {
       targetElement()->SetNeedsStyleRecalc(
           kLocalStyleChange,
@@ -588,7 +588,7 @@ void SVGAnimateElement::ResetAnimatedPropertyType() {
   ClearTargetProperty();
 }
 
-DEFINE_TRACE(SVGAnimateElement) {
+void SVGAnimateElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(from_property_);
   visitor->Trace(to_property_);
   visitor->Trace(to_at_end_of_duration_property_);

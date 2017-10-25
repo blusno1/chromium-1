@@ -11,6 +11,7 @@
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThreadStartupData.h"
 #include "core/workers/WorkerClients.h"
+#include "core/workers/WorkerThread.h"
 #include "platform/heap/SelfKeepAlive.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Optional.h"
@@ -21,7 +22,6 @@ class ExecutionContext;
 class SourceLocation;
 class ThreadableLoadingContext;
 class WorkerInspectorProxy;
-class WorkerThread;
 struct GlobalScopeCreationParams;
 
 // The base proxy class to talk to Worker/WorkletGlobalScope on a worker thread
@@ -63,7 +63,7 @@ class CORE_EXPORT ThreadedMessagingProxyBase
   // Number of live messaging proxies, used by leak detection.
   static int ProxyCount();
 
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
  protected:
   ThreadedMessagingProxyBase(ExecutionContext*, WorkerClients*);

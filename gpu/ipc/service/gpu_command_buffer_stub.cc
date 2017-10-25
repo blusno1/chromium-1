@@ -219,24 +219,6 @@ DevToolsChannelData::CreateForChannel(GpuChannel* channel) {
 
 }  // namespace
 
-std::unique_ptr<GpuCommandBufferStub> GpuCommandBufferStub::Create(
-    GpuChannel* channel,
-    GpuCommandBufferStub* share_command_buffer_stub,
-    const GPUCreateCommandBufferConfig& init_params,
-    CommandBufferId command_buffer_id,
-    SequenceId sequence_id,
-    int32_t stream_id,
-    int32_t route_id,
-    std::unique_ptr<base::SharedMemory> shared_state_shm) {
-  std::unique_ptr<GpuCommandBufferStub> stub(
-      new GpuCommandBufferStub(channel, init_params, command_buffer_id,
-                               sequence_id, stream_id, route_id));
-  if (!stub->Initialize(share_command_buffer_stub, init_params,
-                        std::move(shared_state_shm)))
-    return nullptr;
-  return stub;
-}
-
 GpuCommandBufferStub::GpuCommandBufferStub(
     GpuChannel* channel,
     const GPUCreateCommandBufferConfig& init_params,
@@ -565,14 +547,15 @@ void GpuCommandBufferStub::Destroy() {
   command_buffer_.reset();
 }
 
-bool GpuCommandBufferStub::Initialize(
+gpu::ContextResult GpuCommandBufferStub::Initialize(
     GpuCommandBufferStub* share_command_buffer_stub,
     const GPUCreateCommandBufferConfig& init_params,
     std::unique_ptr<base::SharedMemory> shared_state_shm) {
 #if defined(OS_FUCHSIA)
   // TODO(crbug.com/707031): Implement this.
   NOTIMPLEMENTED();
-  return false;
+  LOG(ERROR) << "ContextResult::kFatalFailure: no fuchsia support";
+  return gpu::ContextResult::kFatalFailure;
 #else
   TRACE_EVENT0("gpu", "GpuCommandBufferStub::Initialize");
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
@@ -621,8 +604,9 @@ bool GpuCommandBufferStub::Initialize(
   bool offscreen = (surface_handle_ == kNullSurfaceHandle);
   gl::GLSurface* default_surface = manager->GetDefaultOffscreenSurface();
   if (!default_surface) {
-    DLOG(ERROR) << "Failed to create default offscreen surface.";
-    return false;
+    LOG(ERROR) << "ContextResult::kFatalFailure: "
+                  "Failed to create default offscreen surface.";
+    return gpu::ContextResult::kFatalFailure;
   }
   // On low-spec Android devices, the default offscreen surface is
   // RGB565, but WebGL rendering contexts still ask for RGBA8888 mode.
@@ -654,8 +638,8 @@ bool GpuCommandBufferStub::Initialize(
     use_virtualized_gl_context_ = false;
 #endif
 
-  command_buffer_.reset(new CommandBufferService(
-      this, context_group_->transfer_buffer_manager()));
+  command_buffer_ = std::make_unique<CommandBufferService>(
+      this, context_group_->transfer_buffer_manager());
   decoder_.reset(gles2::GLES2Decoder::Create(
       this, command_buffer_.get(), manager->outputter(), context_group_.get()));
 
@@ -693,8 +677,8 @@ bool GpuCommandBufferStub::Initialize(
       surface_ = gl::init::CreateOffscreenGLSurfaceWithFormat(gfx::Size(),
                                                               surface_format);
       if (!surface_) {
-        DLOG(ERROR) << "Failed to create surface.";
-        return false;
+        LOG(ERROR) << "ContextResult::kFatalFailure: Failed to create surface.";
+        return gpu::ContextResult::kFatalFailure;
       }
     } else {
       surface_ = default_surface;
@@ -717,8 +701,8 @@ bool GpuCommandBufferStub::Initialize(
         AsWeakPtr(), surface_handle_, surface_format);
     if (!surface_ || !surface_->Initialize(surface_format)) {
       surface_ = nullptr;
-      DLOG(ERROR) << "Failed to create surface.";
-      return false;
+      LOG(ERROR) << "ContextResult::kFatalFailure: Failed to create surface.";
+      return gpu::ContextResult::kFatalFailure;
     }
   }
 
@@ -743,13 +727,17 @@ bool GpuCommandBufferStub::Initialize(
   scoped_refptr<gl::GLContext> context;
   if (use_virtualized_gl_context_ && share_group_) {
     context = share_group_->GetSharedContext(surface_.get());
-    if (!context.get()) {
+    if (!context) {
       context = gl::init::CreateGLContext(
           share_group_.get(), surface_.get(),
           GenerateGLContextAttribs(init_params.attribs, context_group_.get()));
-      if (!context.get()) {
-        DLOG(ERROR) << "Failed to create shared context for virtualization.";
-        return false;
+      if (!context) {
+        // TODO(piman): This might not be fatal, we could recurse into
+        // CreateGLContext to get more info, tho it should be exceedingly
+        // rare and may not be recoverable anyway.
+        LOG(ERROR) << "ContextResult::kFatalFailure: "
+                      "Failed to create shared context for virtualization.";
+        return gpu::ContextResult::kFatalFailure;
       }
       // Ensure that context creation did not lose track of the intended share
       // group.
@@ -766,32 +754,40 @@ bool GpuCommandBufferStub::Initialize(
     DCHECK(context->GetHandle() ||
            gl::GetGLImplementation() == gl::kGLImplementationMockGL ||
            gl::GetGLImplementation() == gl::kGLImplementationStubGL);
-    context = new GLContextVirtual(share_group_.get(), context.get(),
-                                   decoder_->AsWeakPtr());
+    context = base::MakeRefCounted<GLContextVirtual>(
+        share_group_.get(), context.get(), decoder_->AsWeakPtr());
     if (!context->Initialize(surface_.get(),
                              GenerateGLContextAttribs(init_params.attribs,
                                                       context_group_.get()))) {
       // The real context created above for the default offscreen surface
       // might not be compatible with this surface.
-      context = NULL;
-      DLOG(ERROR) << "Failed to initialize virtual GL context.";
-      return false;
+      context = nullptr;
+      // TODO(piman): This might not be fatal, we could recurse into
+      // CreateGLContext to get more info, tho it should be exceedingly
+      // rare and may not be recoverable anyway.
+      LOG(ERROR) << "ContextResult::kFatalFailure: "
+                    "Failed to initialize virtual GL context.";
+      return gpu::ContextResult::kFatalFailure;
     }
   } else {
     context = gl::init::CreateGLContext(
         share_group_.get(), surface_.get(),
         GenerateGLContextAttribs(init_params.attribs, context_group_.get()));
-    if (!context.get()) {
-      DLOG(ERROR) << "Failed to create context.";
-      return false;
+    if (!context) {
+      // TODO(piman): This might not be fatal, we could recurse into
+      // CreateGLContext to get more info, tho it should be exceedingly
+      // rare and may not be recoverable anyway.
+      LOG(ERROR) << "ContextResult::kFatalFailure: Failed to create context.";
+      return gpu::ContextResult::kFatalFailure;
     }
 
     manager->gpu_feature_info().ApplyToGLContext(context.get());
   }
 
   if (!context->MakeCurrent(surface_.get())) {
-    LOG(ERROR) << "Failed to make context current.";
-    return false;
+    LOG(ERROR) << "ContextResult::kTransientFailure: "
+                  "Failed to make context current.";
+    return gpu::ContextResult::kTransientFailure;
   }
 
   if (!context->GetGLStateRestorer()) {
@@ -804,11 +800,12 @@ bool GpuCommandBufferStub::Initialize(
   }
 
   // Initialize the decoder with either the view or pbuffer GLContext.
-  if (!decoder_->Initialize(surface_, context, offscreen,
-                            gpu::gles2::DisallowedFeatures(),
-                            init_params.attribs)) {
+  auto result = decoder_->Initialize(surface_, context, offscreen,
+                                     gpu::gles2::DisallowedFeatures(),
+                                     init_params.attribs);
+  if (result != gpu::ContextResult::kSuccess) {
     DLOG(ERROR) << "Failed to initialize decoder.";
-    return false;
+    return result;
   }
 
   if (manager->gpu_preferences().enable_gpu_service_logging) {
@@ -817,8 +814,9 @@ bool GpuCommandBufferStub::Initialize(
 
   const size_t kSharedStateSize = sizeof(CommandBufferSharedState);
   if (!shared_state_shm->Map(kSharedStateSize)) {
-    DLOG(ERROR) << "Failed to map shared state buffer.";
-    return false;
+    LOG(ERROR) << "ContextResult::kFatalFailure: "
+                  "Failed to map shared state buffer.";
+    return gpu::ContextResult::kFatalFailure;
   }
   command_buffer_->SetSharedStateBuffer(MakeBackingFromSharedMemory(
       std::move(shared_state_shm), kSharedStateSize));
@@ -836,13 +834,14 @@ bool GpuCommandBufferStub::Initialize(
     // expects the context to be left current.
     context->ForceReleaseVirtuallyCurrent();
     if (!context->MakeCurrent(surface_.get())) {
-      LOG(ERROR) << "Failed to make context current after initialization.";
-      return false;
+      LOG(ERROR) << "ContextResult::kTransientFailure: "
+                    "Failed to make context current after initialization.";
+      return gpu::ContextResult::kTransientFailure;
     }
   }
 
   initialized_ = true;
-  return true;
+  return gpu::ContextResult::kSuccess;
 #endif  // defined(OS_FUCHSIA)
 }
 
@@ -924,7 +923,7 @@ void GpuCommandBufferStub::OnWaitForTokenInRange(int32_t start,
                                                       command_buffer_id_);
   }
   wait_for_token_ =
-      base::MakeUnique<WaitForCommandState>(start, end, reply_message);
+      std::make_unique<WaitForCommandState>(start, end, reply_message);
   CheckCompleteWaits();
 }
 
@@ -945,7 +944,7 @@ void GpuCommandBufferStub::OnWaitForGetOffsetInRange(
                                                       command_buffer_id_);
   }
   wait_for_get_offset_ =
-      base::MakeUnique<WaitForCommandState>(start, end, reply_message);
+      std::make_unique<WaitForCommandState>(start, end, reply_message);
   wait_set_get_buffer_count_ = set_get_buffer_count;
   CheckCompleteWaits();
 }

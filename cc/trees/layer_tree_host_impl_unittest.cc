@@ -887,60 +887,6 @@ TEST_F(LayerTreeHostImplTest, ScrollDeltaRepeatedScrolls) {
                                  scroll_delta + scroll_delta2));
 }
 
-TEST_F(LayerTreeHostImplTest, ScrollerSizeOfCCScrollingHistogramRecordingTest) {
-  const gfx::Size content_size(800, 600);
-  const gfx::Size viewport_size(500, 500);
-  CreateBasicVirtualViewportLayers(viewport_size, content_size);
-
-  LayerImpl* outer_viewport_scroll_layer =
-      host_impl_->active_tree()->OuterViewportScrollLayer();
-  int id = outer_viewport_scroll_layer->id();
-  std::unique_ptr<LayerImpl> child =
-      LayerImpl::Create(host_impl_->active_tree(), id + 2);
-
-  child->SetScrollable(gfx::Size(100, 100));
-  child->SetElementId(LayerIdToElementIdForTesting(child->id()));
-  child->SetBounds(gfx::Size(100, 400));
-  child->SetPosition(gfx::PointF());
-  child->SetDrawsContent(true);
-
-  outer_viewport_scroll_layer->test_properties()->AddChild(std::move(child));
-  host_impl_->active_tree()->BuildPropertyTreesForTesting();
-
-  base::HistogramTester histogram_tester;
-
-  // Test touch scroll.
-  InputHandler::ScrollStatus status = host_impl_->ScrollBegin(
-      BeginState(gfx::Point()).get(), InputHandler::TOUCHSCREEN);
-  EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD, status.thread);
-  EXPECT_EQ(MainThreadScrollingReason::kNotScrollingOnMain,
-            status.main_thread_scrolling_reasons);
-  host_impl_->ScrollBy(UpdateState(gfx::Point(), gfx::Vector2d(0, 10)).get());
-  host_impl_->ScrollEnd(EndState().get());
-
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnScroll_Touch",
-                                     10000, 1);
-  histogram_tester.ExpectTotalCount("Event.Scroll.ScrollerSize.OnScroll_Touch",
-                                    1);
-
-  // Scrolling root layer doesn't add to count.
-  host_impl_->ScrollBegin(BeginState(gfx::Point(450, 450)).get(),
-                          InputHandler::TOUCHSCREEN);
-  host_impl_->ScrollBy(UpdateState(gfx::Point(), gfx::Vector2d(0, 10)).get());
-  host_impl_->ScrollEnd(EndState().get());
-  histogram_tester.ExpectTotalCount("Event.Scroll.ScrollerSize.OnScroll_Touch",
-                                    1);
-
-  // Test wheel scroll.
-  host_impl_->ScrollBegin(BeginState(gfx::Point()).get(), InputHandler::WHEEL);
-  host_impl_->ScrollBy(UpdateState(gfx::Point(), gfx::Vector2d(0, 10)).get());
-  host_impl_->ScrollEnd(EndState().get());
-  histogram_tester.ExpectBucketCount("Event.Scroll.ScrollerSize.OnScroll_Wheel",
-                                     10000, 1);
-  histogram_tester.ExpectTotalCount("Event.Scroll.ScrollerSize.OnScroll_Wheel",
-                                    1);
-}
-
 TEST_F(CommitToPendingTreeLayerTreeHostImplTest,
        GPUMemoryForSmallLayerHistogramTest) {
   base::HistogramTester histogram_tester;
@@ -1095,7 +1041,7 @@ TEST_F(LayerTreeHostImplTest, ScrollBlocksOnTouchEventHandlers) {
   DrawFrame();
   LayerImpl* root = host_impl_->active_tree()->root_layer_for_testing();
 
-  LayerImpl* child = 0;
+  LayerImpl* child = nullptr;
   {
     std::unique_ptr<LayerImpl> child_layer =
         LayerImpl::Create(host_impl_->active_tree(), 6);
@@ -7317,7 +7263,6 @@ TEST_F(LayerTreeHostImplTest, OverscrollOnMainThread) {
 // Test that scrolling the inner viewport directly works, as can happen when the
 // scroll chains up to it from an sibling of the outer viewport.
 TEST_F(LayerTreeHostImplTest, ScrollFromOuterViewportSibling) {
-  const gfx::Size content_size(200, 200);
   const gfx::Size viewport_size(100, 100);
 
   LayerTreeImpl* layer_tree_impl = host_impl_->active_tree();
@@ -8125,7 +8070,7 @@ class LayerTreeHostImplViewportCoveredTest : public LayerTreeHostImplTest {
  protected:
   LayerTreeHostImplViewportCoveredTest()
       : gutter_quad_material_(viz::DrawQuad::SOLID_COLOR),
-        child_(NULL),
+        child_(nullptr),
         did_activate_pending_tree_(false) {}
 
   std::unique_ptr<LayerTreeFrameSink> CreateFakeLayerTreeFrameSink(
@@ -9578,7 +9523,7 @@ TEST_F(LayerTreeHostImplTest, LatencyInfoPassedToCompositorFrameMetadata) {
       fake_layer_tree_frame_sink->last_sent_frame()->metadata.latency_info;
   EXPECT_EQ(1u, metadata_latency_after.size());
   EXPECT_TRUE(metadata_latency_after[0].FindLatency(
-      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT, 0, NULL));
+      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT, 0, nullptr));
 }
 
 TEST_F(LayerTreeHostImplTest, SelectionBoundsPassedToCompositorFrameMetadata) {
@@ -9718,7 +9663,7 @@ TEST_F(LayerTreeHostImplTest, SimpleSwapPromiseMonitor) {
   {
     std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
         new SimpleSwapPromiseMonitor(
-            NULL, host_impl_.get(), &set_needs_commit_count,
+            nullptr, host_impl_.get(), &set_needs_commit_count,
             &set_needs_redraw_count, &forward_to_main_count));
     host_impl_->SetNeedsRedraw();
     EXPECT_EQ(0, set_needs_commit_count);
@@ -9736,7 +9681,7 @@ TEST_F(LayerTreeHostImplTest, SimpleSwapPromiseMonitor) {
   {
     std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
         new SimpleSwapPromiseMonitor(
-            NULL, host_impl_.get(), &set_needs_commit_count,
+            nullptr, host_impl_.get(), &set_needs_commit_count,
             &set_needs_redraw_count, &forward_to_main_count));
     // Redraw with damage.
     host_impl_->SetFullViewportDamage();
@@ -9749,7 +9694,7 @@ TEST_F(LayerTreeHostImplTest, SimpleSwapPromiseMonitor) {
   {
     std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
         new SimpleSwapPromiseMonitor(
-            NULL, host_impl_.get(), &set_needs_commit_count,
+            nullptr, host_impl_.get(), &set_needs_commit_count,
             &set_needs_redraw_count, &forward_to_main_count));
     // Redraw without damage.
     host_impl_->SetNeedsRedraw();
@@ -9765,7 +9710,7 @@ TEST_F(LayerTreeHostImplTest, SimpleSwapPromiseMonitor) {
   {
     std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
         new SimpleSwapPromiseMonitor(
-            NULL, host_impl_.get(), &set_needs_commit_count,
+            nullptr, host_impl_.get(), &set_needs_commit_count,
             &set_needs_redraw_count, &forward_to_main_count));
     SetupScrollAndContentsLayers(gfx::Size(100, 100));
 
@@ -12971,8 +12916,10 @@ TEST_F(LayerTreeHostImplTest, CheckerImagingTileInvalidation) {
     else
       EXPECT_FALSE(tile->HasRasterTask());
   }
-  Region expected_invalidation(
-      raster_source->GetRectForImage(checkerable_image.stable_id()));
+  const auto& expected_invalidation =
+      raster_source->GetDisplayItemList()
+          ->discardable_image_map()
+          .GetRegionForImage(checkerable_image.stable_id());
   EXPECT_EQ(expected_invalidation, *(root->GetPendingInvalidation()));
 }
 
@@ -13090,7 +13037,6 @@ TEST_F(LayerTreeHostImplTest, RasterTilePrioritizationForNonDrawingLayers) {
   root->test_properties()->AddChild(std::move(scoped_drawing_layer));
 
   gfx::Rect layer_rect(0, 0, 500, 500);
-  gfx::Rect empty_rect(0, 0, 0, 0);
   host_impl_->pending_tree()->BuildPropertyTreesForTesting();
 
   hidden_layer->tilings()->AddTiling(gfx::AxisTransform2d(), raster_source);

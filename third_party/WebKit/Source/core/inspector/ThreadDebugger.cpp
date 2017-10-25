@@ -25,7 +25,7 @@
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/V8InspectorString.h"
 #include "core/probe/CoreProbes.h"
-#include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
 
@@ -135,7 +135,7 @@ void ThreadDebugger::beginUserGesture() {
   ExecutionContext* ec = CurrentExecutionContext(isolate_);
   Document* document = ec && ec->IsDocument() ? ToDocument(ec) : nullptr;
   user_gesture_indicator_ =
-      LocalFrame::CreateUserGesture(document ? document->GetFrame() : nullptr);
+      Frame::NotifyUserActivation(document ? document->GetFrame() : nullptr);
 }
 
 void ThreadDebugger::endUserGesture() {

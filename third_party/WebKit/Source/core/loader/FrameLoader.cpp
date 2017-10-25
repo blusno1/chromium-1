@@ -80,15 +80,15 @@
 #include "core/xml/parser/XMLDocumentParser.h"
 #include "platform/Histogram.h"
 #include "platform/InstanceCounters.h"
-#include "platform/PluginScriptForbiddenScope.h"
-#include "platform/ScriptForbiddenScope.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/NetworkUtils.h"
+#include "platform/plugins/PluginScriptForbiddenScope.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -98,8 +98,8 @@
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
 #include "public/web/WebFrameLoadType.h"
 #include "public/web/WebHistoryItem.h"
@@ -212,14 +212,13 @@ ResourceRequest FrameLoader::ResourceRequestForReload(
     const KURL& override_url,
     ClientRedirectPolicy client_redirect_policy) {
   DCHECK(IsReloadLoadType(frame_load_type));
-  WebCachePolicy cache_policy =
-      frame_load_type == kFrameLoadTypeReloadBypassingCache
-          ? WebCachePolicy::kBypassingCache
-          : WebCachePolicy::kValidatingCacheData;
+  const auto cache_mode = frame_load_type == kFrameLoadTypeReloadBypassingCache
+                              ? mojom::FetchCacheMode::kBypassCache
+                              : mojom::FetchCacheMode::kValidateCache;
   if (!document_loader_ || !document_loader_->GetHistoryItem())
     return ResourceRequest();
   ResourceRequest request =
-      document_loader_->GetHistoryItem()->GenerateResourceRequest(cache_policy);
+      document_loader_->GetHistoryItem()->GenerateResourceRequest(cache_mode);
 
   // ClientRedirectPolicy is an indication that this load was triggered by some
   // direct interaction with the page. If this reload is not a client redirect,
@@ -263,7 +262,7 @@ FrameLoader::~FrameLoader() {
   DCHECK(detached_);
 }
 
-DEFINE_TRACE(FrameLoader) {
+void FrameLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(progress_tracker_);
   visitor->Trace(document_loader_);
@@ -273,7 +272,7 @@ DEFINE_TRACE(FrameLoader) {
 void FrameLoader::Init() {
   ScriptForbiddenScope forbid_scripts;
 
-  ResourceRequest initial_request(KURL(kParsedURLString, g_empty_string));
+  ResourceRequest initial_request{KURL(g_empty_string)};
   initial_request.SetRequestContext(WebURLRequest::kRequestContextInternal);
   initial_request.SetFrameType(frame_->IsMainFrame()
                                    ? WebURLRequest::kFrameTypeTopLevel
@@ -476,7 +475,7 @@ void FrameLoader::DidFinishNavigation() {
 }
 
 Frame* FrameLoader::Opener() {
-  return Client() ? Client()->Opener() : 0;
+  return Client() ? Client()->Opener() : nullptr;
 }
 
 void FrameLoader::SetOpener(LocalFrame* opener) {
@@ -500,7 +499,7 @@ bool FrameLoader::AllowPlugins(ReasonForCallingAllowPlugins reason) {
 void FrameLoader::UpdateForSameDocumentNavigation(
     const KURL& new_url,
     SameDocumentNavigationSource same_document_navigation_source,
-    RefPtr<SerializedScriptValue> data,
+    scoped_refptr<SerializedScriptValue> data,
     HistoryScrollRestorationType scroll_restoration_type,
     FrameLoadType type,
     Document* initiating_document) {
@@ -540,12 +539,13 @@ void FrameLoader::DetachDocumentLoader(Member<DocumentLoader>& loader) {
   loader = nullptr;
 }
 
-void FrameLoader::LoadInSameDocument(const KURL& url,
-                                     RefPtr<SerializedScriptValue> state_object,
-                                     FrameLoadType frame_load_type,
-                                     HistoryItem* history_item,
-                                     ClientRedirectPolicy client_redirect,
-                                     Document* initiating_document) {
+void FrameLoader::LoadInSameDocument(
+    const KURL& url,
+    scoped_refptr<SerializedScriptValue> state_object,
+    FrameLoadType frame_load_type,
+    HistoryItem* history_item,
+    ClientRedirectPolicy client_redirect,
+    Document* initiating_document) {
   // If we have a state object, we cannot also be a new navigation.
   DCHECK(!state_object || frame_load_type == kFrameLoadTypeBackForward);
 
@@ -637,11 +637,11 @@ FrameLoadType FrameLoader::DetermineFrameLoadType(
       return kFrameLoadTypeReplaceCurrentItem;
     return kFrameLoadTypeStandard;
   }
-  if (request.GetResourceRequest().GetCachePolicy() ==
-      WebCachePolicy::kValidatingCacheData)
+  if (request.GetResourceRequest().GetCacheMode() ==
+      mojom::FetchCacheMode::kValidateCache)
     return kFrameLoadTypeReload;
-  if (request.GetResourceRequest().GetCachePolicy() ==
-      WebCachePolicy::kBypassingCache)
+  if (request.GetResourceRequest().GetCacheMode() ==
+      mojom::FetchCacheMode::kBypassCache)
     return kFrameLoadTypeReloadBypassingCache;
   // From the HTML5 spec for location.assign():
   // "If the browsing context's session history contains only one Document,
@@ -895,7 +895,7 @@ void FrameLoader::Load(const FrameLoadRequest& passed_request,
   // Perform same document navigation.
   if (same_document_history_navigation || same_document_navigation) {
     DCHECK(history_item || !same_document_history_navigation);
-    RefPtr<SerializedScriptValue> state_object =
+    scoped_refptr<SerializedScriptValue> state_object =
         same_document_history_navigation ? history_item->StateObject()
                                          : nullptr;
 
@@ -1050,7 +1050,7 @@ void FrameLoader::CommitProvisionalLoad() {
   // Check if the destination page is allowed to access the previous page's
   // timing information.
   if (frame_->GetDocument()) {
-    RefPtr<SecurityOrigin> security_origin =
+    scoped_refptr<SecurityOrigin> security_origin =
         SecurityOrigin::Create(provisional_document_loader_->Url());
     provisional_document_loader_->GetTiming()
         .SetHasSameOriginAsPreviousDocument(
@@ -1233,7 +1233,7 @@ void FrameLoader::ProcessFragment(const KURL& url,
   Frame* boundary_frame =
       url.HasFragmentIdentifier()
           ? frame_->FindUnsafeParentScrollPropagationBoundary()
-          : 0;
+          : nullptr;
 
   // FIXME: Handle RemoteFrames
   if (boundary_frame && boundary_frame->IsLocalFrame()) {
@@ -1707,11 +1707,11 @@ std::unique_ptr<TracedValue> FrameLoader::ToTracedValue() const {
   traced_value->SetString("stateMachine", state_machine_.ToString());
   traced_value->SetString("provisionalDocumentLoaderURL",
                           provisional_document_loader_
-                              ? provisional_document_loader_->Url()
+                              ? provisional_document_loader_->Url().GetString()
                               : String());
-  traced_value->SetString("documentLoaderURL", document_loader_
-                                                   ? document_loader_->Url()
-                                                   : String());
+  traced_value->SetString(
+      "documentLoaderURL",
+      document_loader_ ? document_loader_->Url().GetString() : String());
   return traced_value;
 }
 

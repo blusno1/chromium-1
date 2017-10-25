@@ -36,12 +36,12 @@
 #include "core/loader/resource/ScriptResource.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "platform/http_names.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/loader/fetch/TextResourceDecoderOptions.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/network/NetworkUtils.h"
+#include "platform/network/http_names.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
@@ -119,7 +119,7 @@ void WorkerScriptLoader::LoadAsynchronously(
   // to this object, while some of the callchain assumes that the client and
   // loader wouldn't be deleted within callbacks.
   // (E.g. see crbug.com/524694 for why we can't easily remove this protect)
-  RefPtr<WorkerScriptLoader> protect(this);
+  scoped_refptr<WorkerScriptLoader> protect(this);
   need_to_cancel_ = true;
   threadable_loader_ = ThreadableLoader::Create(
       execution_context, this, options, resource_loader_options);

@@ -222,7 +222,7 @@ void ContentSecurityPolicy::ApplyPolicySideEffectsToExecutionContext() {
 
 ContentSecurityPolicy::~ContentSecurityPolicy() {}
 
-DEFINE_TRACE(ContentSecurityPolicy) {
+void ContentSecurityPolicy::Trace(blink::Visitor* visitor) {
   visitor->Trace(execution_context_);
   visitor->Trace(policies_);
   visitor->Trace(console_messages_);
@@ -293,7 +293,7 @@ bool ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
   header = header.StripWhiteSpace();
   if (header == "*")
     return true;
-  if (RefPtr<SecurityOrigin> child_origin =
+  if (scoped_refptr<SecurityOrigin> child_origin =
           SecurityOrigin::CreateFromString(header)) {
     return parent_origin->CanAccess(child_origin.get());
   }
@@ -333,7 +333,7 @@ void ContentSecurityPolicy::AddPolicyFromHeaderValue(
     Member<CSPDirectiveList> policy =
         CSPDirectiveList::Create(this, begin, position, type, source);
 
-    if (!policy->AllowEval(0,
+    if (!policy->AllowEval(nullptr,
                            SecurityViolationReportingPolicy::kSuppressReporting,
                            kWillNotThrowException, g_empty_string) &&
         disable_eval_error_message_.IsNull()) {
@@ -397,7 +397,7 @@ void ContentSecurityPolicy::SetOverrideURLForSelf(const KURL& url) {
   // before we bind to an execution context (for 'frame-ancestor' resolution,
   // for example). This CSPSource will be overwritten when we bind this object
   // to an execution context.
-  RefPtr<SecurityOrigin> origin = SecurityOrigin::Create(url);
+  scoped_refptr<SecurityOrigin> origin = SecurityOrigin::Create(url);
   self_protocol_ = origin->Protocol();
   self_source_ =
       new CSPSource(this, self_protocol_, origin->Host(), origin->Port(),
@@ -584,7 +584,7 @@ bool ContentSecurityPolicy::AllowEval(
 
 String ContentSecurityPolicy::EvalDisabledErrorMessage() const {
   for (const auto& policy : policies_) {
-    if (!policy->AllowEval(0,
+    if (!policy->AllowEval(nullptr,
                            SecurityViolationReportingPolicy::kSuppressReporting,
                            kWillNotThrowException, g_empty_string)) {
       return policy->EvalDisabledErrorMessage();
@@ -1169,7 +1169,7 @@ static void GatherSecurityPolicyViolationEventData(
   if (!source_location)
     source_location = SourceLocation::Capture(context);
   if (source_location->LineNumber()) {
-    KURL source = KURL(kParsedURLString, source_location->Url());
+    KURL source = KURL(source_location->Url());
     init.setSourceFile(StripURLForUseInReport(context, source, redirect_status,
                                               effective_type));
     init.setLineNumber(source_location->LineNumber());
@@ -1233,9 +1233,8 @@ void ContentSecurityPolicy::ReportViolation(
   // we should at least stop spamming reporting endpoints. See
   // https://crbug.com/524356 for detail.
   if (!violation_data.sourceFile().IsEmpty() &&
-      ShouldBypassContentSecurityPolicy(
-          KURL(kParsedURLString, violation_data.sourceFile()),
-          execution_context_)) {
+      ShouldBypassContentSecurityPolicy(KURL(violation_data.sourceFile()),
+                                        execution_context_)) {
     return;
   }
 
@@ -1312,7 +1311,7 @@ void ContentSecurityPolicy::PostViolationReport(
     if (!frame)
       return;
 
-    RefPtr<EncodedFormData> report =
+    scoped_refptr<EncodedFormData> report =
         EncodedFormData::Create(stringified_report.Utf8());
 
     // TODO(andypaicu): for now we can only send reports to report-uri, skip
@@ -1329,8 +1328,7 @@ void ContentSecurityPolicy::PostViolationReport(
                    DirectiveType::kFrameAncestors);
         KURL url = context_frame
                        ? frame->GetDocument()->CompleteURLWithOverride(
-                             report_endpoint, KURL(kParsedURLString,
-                                                   violation_data.blockedURI()))
+                             report_endpoint, KURL(violation_data.blockedURI()))
                        : CompleteURL(report_endpoint);
         PingLoader::SendViolationReport(
             frame, url, report,

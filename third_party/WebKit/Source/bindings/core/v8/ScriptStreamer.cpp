@@ -258,7 +258,7 @@ class SourceStream : public v8::ScriptCompiler::ExternalSourceStream {
 
     CachedMetadataHandler* cache_handler =
         streamer->GetResource()->CacheHandler();
-    RefPtr<CachedMetadata> code_cache(
+    scoped_refptr<CachedMetadata> code_cache(
         cache_handler ? cache_handler->GetCachedMetadata(
                             V8ScriptRunner::TagForCodeCache(cache_handler))
                       : nullptr);
@@ -312,7 +312,8 @@ class SourceStream : public v8::ScriptCompiler::ExternalSourceStream {
   bool cancelled_;
   bool finished_;
 
-  RefPtr<const SharedBuffer> resource_buffer_;  // Only used by the main thread.
+  scoped_refptr<const SharedBuffer>
+      resource_buffer_;  // Only used by the main thread.
 
   // The queue contains the data to be passed to the V8 thread.
   //   queueLeadPosition: data we have handed off to the V8 thread.
@@ -325,11 +326,12 @@ class SourceStream : public v8::ScriptCompiler::ExternalSourceStream {
 
 size_t ScriptStreamer::small_script_threshold_ = 30 * 1024;
 
-void ScriptStreamer::StartStreaming(ClassicPendingScript* script,
-                                    Type script_type,
-                                    Settings* settings,
-                                    ScriptState* script_state,
-                                    RefPtr<WebTaskRunner> loading_task_runner) {
+void ScriptStreamer::StartStreaming(
+    ClassicPendingScript* script,
+    Type script_type,
+    Settings* settings,
+    ScriptState* script_state,
+    scoped_refptr<WebTaskRunner> loading_task_runner) {
   // We don't yet know whether the script will really be streamed. E.g.,
   // suppressing streaming for short scripts is done later. Record only the
   // sure negative cases here.
@@ -345,7 +347,7 @@ void ScriptStreamer::StartStreamingLoadedScript(
     Type script_type,
     Settings* settings,
     ScriptState* script_state,
-    RefPtr<WebTaskRunner> loading_task_runner) {
+    scoped_refptr<WebTaskRunner> loading_task_runner) {
   DCHECK(IsMainThread());
   DCHECK(script_state->ContextIsValid());
 
@@ -445,7 +447,7 @@ void ScriptStreamer::Cancel() {
   // the control the next time. It can also be that V8 has already completed
   // its operations and streamingComplete will be called soon.
   detached_ = true;
-  resource_ = 0;
+  resource_ = nullptr;
   if (stream_)
     stream_->Cancel();
 }
@@ -536,7 +538,7 @@ void ScriptStreamer::NotifyAppendData(ScriptResource* resource) {
     if (!script_streaming_task) {
       // V8 cannot stream the script.
       SuppressStreaming();
-      stream_ = 0;
+      stream_ = nullptr;
       source_.reset();
       RecordNotStreamingReasonHistogram(script_type_, kV8CannotStream);
       RecordStartedStreamingHistogram(script_type_, 0);
@@ -577,11 +579,11 @@ ScriptStreamer::ScriptStreamer(
     Type script_type,
     ScriptState* script_state,
     v8::ScriptCompiler::CompileOptions compile_options,
-    RefPtr<WebTaskRunner> loading_task_runner)
+    scoped_refptr<WebTaskRunner> loading_task_runner)
     : pending_script_(script),
       resource_(script->GetResource()),
       detached_(false),
-      stream_(0),
+      stream_(nullptr),
       loading_finished_(false),
       parsing_finished_(false),
       have_enough_data_for_streaming_(false),
@@ -598,7 +600,7 @@ ScriptStreamer::ScriptStreamer(
 
 ScriptStreamer::~ScriptStreamer() {}
 
-DEFINE_TRACE(ScriptStreamer) {
+void ScriptStreamer::Trace(blink::Visitor* visitor) {
   visitor->Trace(pending_script_);
   visitor->Trace(resource_);
 }
@@ -641,7 +643,7 @@ bool ScriptStreamer::StartStreamingInternal(
     Type script_type,
     Settings* settings,
     ScriptState* script_state,
-    RefPtr<WebTaskRunner> loading_task_runner) {
+    scoped_refptr<WebTaskRunner> loading_task_runner) {
   DCHECK(IsMainThread());
   DCHECK(script_state->ContextIsValid());
   ScriptResource* resource = script->GetResource();

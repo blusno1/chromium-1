@@ -37,16 +37,14 @@ BoxClipper::BoxClipper(const LayoutBox& box,
     : box_(box),
       paint_info_(paint_info),
       clip_type_(DisplayItem::kUninitializedType) {
-  DCHECK(paint_info_.phase != kPaintPhaseSelfBlockBackgroundOnly &&
-         paint_info_.phase != kPaintPhaseSelfOutlineOnly);
+  DCHECK(paint_info_.phase != PaintPhase::kSelfBlockBackgroundOnly &&
+         paint_info_.phase != PaintPhase::kSelfOutlineOnly);
 
-  if (paint_info_.phase == kPaintPhaseMask)
+  if (paint_info_.phase == PaintPhase::kMask)
     return;
 
   if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
-    const auto* object_properties =
-        box_.FirstFragment() ? box_.FirstFragment()->PaintProperties()
-                             : nullptr;
+    const auto* object_properties = box_.FirstFragment().PaintProperties();
     if (object_properties && object_properties->OverflowClip()) {
       PaintChunkProperties properties(paint_info.context.GetPaintController()
                                           .CurrentPaintChunkProperties());

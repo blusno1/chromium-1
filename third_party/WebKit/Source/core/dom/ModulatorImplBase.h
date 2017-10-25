@@ -29,13 +29,13 @@ class WebTaskRunner;
 class ModulatorImplBase : public Modulator {
  public:
   virtual ~ModulatorImplBase();
-  DECLARE_TRACE();
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  void Trace(blink::Visitor*);
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   ExecutionContext* GetExecutionContext() const;
 
  protected:
-  explicit ModulatorImplBase(RefPtr<ScriptState>);
+  explicit ModulatorImplBase(scoped_refptr<ScriptState>);
 
  private:
   // Implements Modulator
@@ -63,6 +63,7 @@ class ModulatorImplBase : public Modulator {
                           const KURL&,
                           const ReferrerScriptInfo&,
                           ScriptPromiseResolver*) override;
+  ModuleImportMeta HostGetImportMetaProperties(ScriptModule) const override;
   ScriptModule CompileModule(const String& script,
                              const String& url_str,
                              AccessControlStatus,
@@ -77,8 +78,8 @@ class ModulatorImplBase : public Modulator {
   Vector<ModuleRequest> ModuleRequestsFromScriptModule(ScriptModule) override;
   ScriptValue ExecuteModule(const ModuleScript*, CaptureEvalErrorFlag) override;
 
-  RefPtr<ScriptState> script_state_;
-  RefPtr<WebTaskRunner> task_runner_;
+  scoped_refptr<ScriptState> script_state_;
+  scoped_refptr<WebTaskRunner> task_runner_;
   TraceWrapperMember<ModuleMap> map_;
   Member<ModuleScriptLoaderRegistry> loader_registry_;
   TraceWrapperMember<ModuleTreeLinkerRegistry> tree_linker_registry_;

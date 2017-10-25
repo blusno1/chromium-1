@@ -226,7 +226,7 @@ static void MaybeEncodeTextContent(const String& text_content,
 }
 
 static void MaybeEncodeTextContent(const String& text_content,
-                                   RefPtr<const SharedBuffer> buffer,
+                                   scoped_refptr<const SharedBuffer> buffer,
                                    String* result,
                                    bool* base64_encoded) {
   if (!buffer) {
@@ -240,11 +240,12 @@ static void MaybeEncodeTextContent(const String& text_content,
 }
 
 // static
-bool InspectorPageAgent::SharedBufferContent(RefPtr<const SharedBuffer> buffer,
-                                             const String& mime_type,
-                                             const String& text_encoding_name,
-                                             String* result,
-                                             bool* base64_encoded) {
+bool InspectorPageAgent::SharedBufferContent(
+    scoped_refptr<const SharedBuffer> buffer,
+    const String& mime_type,
+    const String& text_encoding_name,
+    String* result,
+    bool* base64_encoded) {
   if (!buffer)
     return false;
 
@@ -275,9 +276,9 @@ bool InspectorPageAgent::CachedResourceContent(Resource* cached_resource,
     return false;
 
   if (!HasTextContent(cached_resource)) {
-    RefPtr<const SharedBuffer> buffer = has_zero_size
-                                            ? SharedBuffer::Create()
-                                            : cached_resource->ResourceBuffer();
+    scoped_refptr<const SharedBuffer> buffer =
+        has_zero_size ? SharedBuffer::Create()
+                      : cached_resource->ResourceBuffer();
     if (!buffer)
       return false;
 
@@ -505,14 +506,6 @@ Response InspectorPageAgent::reload(
   return Response::OK();
 }
 
-Response InspectorPageAgent::navigate(const String& url,
-                                      Maybe<String> referrer,
-                                      Maybe<String> transitionType,
-                                      String* out_frame_id) {
-  *out_frame_id = IdentifiersFactory::FrameId(inspected_frames_->Root());
-  return Response::OK();
-}
-
 Response InspectorPageAgent::stopLoading() {
   return Response::OK();
 }
@@ -593,8 +586,7 @@ void InspectorPageAgent::GetResourceContentAfterResourcesContentLoaded(
   String content;
   bool base64_encoded;
   if (InspectorPageAgent::CachedResourceContent(
-          CachedResource(frame, KURL(kParsedURLString, url),
-                         inspector_resource_content_loader_),
+          CachedResource(frame, KURL(url), inspector_resource_content_loader_),
           &content, &base64_encoded))
     callback->sendSuccess(content, base64_encoded);
   else
@@ -633,8 +625,7 @@ void InspectorPageAgent::SearchContentAfterResourcesContentLoaded(
   String content;
   bool base64_encoded;
   if (!InspectorPageAgent::CachedResourceContent(
-          CachedResource(frame, KURL(kParsedURLString, url),
-                         inspector_resource_content_loader_),
+          CachedResource(frame, KURL(url), inspector_resource_content_loader_),
           &content, &base64_encoded)) {
     callback->sendFailure(Response::Error("No resource with given URL found"));
     return;
@@ -734,7 +725,7 @@ void InspectorPageAgent::WillCommitLoad(LocalFrame*, DocumentLoader* loader) {
 void InspectorPageAgent::FrameAttachedToParent(LocalFrame* frame) {
   Frame* parent_frame = frame->Tree().Parent();
   if (!parent_frame->IsLocalFrame())
-    parent_frame = 0;
+    parent_frame = nullptr;
   std::unique_ptr<SourceLocation> location =
       SourceLocation::CaptureWithFullStackTrace();
   GetFrontend()->frameAttached(
@@ -1002,14 +993,14 @@ protocol::Response InspectorPageAgent::createIsolatedWorld(
   if (!frame)
     return Response::Error("No frame for given id found");
 
-  RefPtr<DOMWrapperWorld> world =
+  scoped_refptr<DOMWrapperWorld> world =
       frame->GetScriptController().CreateNewInspectorIsolatedWorld(
           world_name.fromMaybe(""));
   if (!world)
     return Response::Error("Could not create isolated world");
 
   if (grant_universal_access.fromMaybe(false)) {
-    RefPtr<SecurityOrigin> security_origin =
+    scoped_refptr<SecurityOrigin> security_origin =
         frame->GetSecurityContext()->GetSecurityOrigin()->IsolatedCopy();
     security_origin->GrantUniversalAccess();
     DOMWrapperWorld::SetIsolatedWorldSecurityOrigin(world->GetWorldId(),
@@ -1024,7 +1015,7 @@ protocol::Response InspectorPageAgent::createIsolatedWorld(
   return Response::OK();
 }
 
-DEFINE_TRACE(InspectorPageAgent) {
+void InspectorPageAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(inspected_frames_);
   visitor->Trace(inspector_resource_content_loader_);
   InspectorBaseAgent::Trace(visitor);

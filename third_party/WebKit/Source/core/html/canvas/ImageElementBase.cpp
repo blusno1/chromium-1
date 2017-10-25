@@ -40,7 +40,7 @@ bool ImageElementBase::IsSVGSource() const {
   return CachedImage() && CachedImage()->GetImage()->IsSVGImage();
 }
 
-RefPtr<Image> ImageElementBase::GetSourceImageForCanvas(
+scoped_refptr<Image> ImageElementBase::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint,
     SnapshotReason,
@@ -55,7 +55,7 @@ RefPtr<Image> ImageElementBase::GetSourceImageForCanvas(
     return nullptr;
   }
 
-  RefPtr<Image> source_image;
+  scoped_refptr<Image> source_image;
   if (CachedImage()->GetImage()->IsSVGImage()) {
     UseCounter::Count(GetElement().GetDocument(), WebFeature::kSVGInCanvas2D);
     SVGImage* svg_image = ToSVGImage(CachedImage()->GetImage());
@@ -89,9 +89,9 @@ FloatSize ImageElementBase::ElementSize(
         ->ConcreteObjectSize(default_object_size);
   }
 
-  return FloatSize(image->ImageSize(LayoutObject::ShouldRespectImageOrientation(
-                                        GetElement().GetLayoutObject()),
-                                    1.0f));
+  return FloatSize(
+      image->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(
+          GetElement().GetLayoutObject())));
 }
 
 FloatSize ImageElementBase::DefaultDestinationSize(
@@ -105,11 +105,9 @@ FloatSize ImageElementBase::DefaultDestinationSize(
         ->ConcreteObjectSize(default_object_size);
   }
 
-  LayoutSize size;
-  size = image->ImageSize(LayoutObject::ShouldRespectImageOrientation(
-                              GetElement().GetLayoutObject()),
-                          1.0f);
-  return FloatSize(size);
+  return FloatSize(
+      image->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(
+          GetElement().GetLayoutObject())));
 }
 
 bool ImageElementBase::IsAccelerated() const {
@@ -129,12 +127,8 @@ IntSize ImageElementBase::BitmapSourceSize() const {
   ImageResourceContent* image = CachedImage();
   if (!image)
     return IntSize();
-  LayoutSize lSize =
-      image->ImageSize(LayoutObject::ShouldRespectImageOrientation(
-                           GetElement().GetLayoutObject()),
-                       1.0f);
-  DCHECK(lSize.Fraction().IsZero());
-  return IntSize(lSize.Width().ToInt(), lSize.Height().ToInt());
+  return image->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(
+      GetElement().GetLayoutObject()));
 }
 
 ScriptPromise ImageElementBase::CreateImageBitmap(
@@ -175,6 +169,24 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
       script_state, ImageBitmap::Create(
                         this, crop_rect,
                         event_target.ToLocalDOMWindow()->document(), options));
+}
+
+Image::ImageDecodingMode ImageElementBase::GetDecodingModeForPainting(
+    PaintImage::Id new_id) {
+  const bool content_transitioned =
+      last_painted_image_id_ != PaintImage::kInvalidId &&
+      new_id != PaintImage::kInvalidId && last_painted_image_id_ != new_id;
+  last_painted_image_id_ = new_id;
+
+  // If the image for the element was transitioned, and no preference has been
+  // specified by the author, prefer sync decoding to avoid flickering the
+  // element. Async decoding of this image would cause us to display
+  // intermediate frames with no image while the decode is in progress which
+  // creates a visual flicker in the transition.
+  if (content_transitioned &&
+      decoding_mode_ == Image::ImageDecodingMode::kUnspecifiedDecode)
+    return Image::ImageDecodingMode::kSyncDecode;
+  return decoding_mode_;
 }
 
 }  // namespace blink

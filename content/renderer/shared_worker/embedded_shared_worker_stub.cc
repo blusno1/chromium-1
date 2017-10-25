@@ -9,28 +9,29 @@
 
 #include "base/feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/child/appcache/appcache_dispatcher.h"
-#include "content/child/appcache/web_application_cache_host_impl.h"
-#include "content/child/request_extra_data.h"
 #include "content/child/scoped_child_process_reference.h"
-#include "content/child/service_worker/service_worker_handle_reference.h"
-#include "content/child/service_worker/service_worker_network_provider.h"
-#include "content/child/service_worker/service_worker_provider_context.h"
-#include "content/child/shared_worker_devtools_agent.h"
-#include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/appcache_info.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
+#include "content/public/renderer/child_url_loader_factory_getter.h"
+#include "content/renderer/appcache/appcache_dispatcher.h"
+#include "content/renderer/appcache/web_application_cache_host_impl.h"
 #include "content/renderer/devtools/devtools_agent.h"
+#include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
+#include "content/renderer/service_worker/service_worker_handle_reference.h"
+#include "content/renderer/service_worker/service_worker_network_provider.h"
+#include "content/renderer/service_worker/service_worker_provider_context.h"
 #include "content/renderer/service_worker/worker_fetch_context_impl.h"
+#include "content/renderer/shared_worker/shared_worker_devtools_agent.h"
 #include "ipc/ipc_message_macros.h"
 #include "third_party/WebKit/common/message_port/message_port_channel.h"
 #include "third_party/WebKit/public/platform/InterfaceProvider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/web/WebSharedWorker.h"
 #include "third_party/WebKit/public/web/WebSharedWorkerClient.h"
 #include "url/origin.h"
@@ -110,7 +111,7 @@ class WebServiceWorkerNetworkProviderForSharedWorker
   int64_t ControllerServiceWorkerID() override {
     if (provider_->context()->controller())
       return provider_->context()->controller()->version_id();
-    return kInvalidServiceWorkerVersionId;
+    return blink::mojom::kInvalidServiceWorkerVersionId;
   }
 
   ServiceWorkerNetworkProvider* provider() { return provider_.get(); }
@@ -128,6 +129,7 @@ class WebServiceWorkerNetworkProviderForSharedWorker
 EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
     mojom::SharedWorkerInfoPtr info,
     bool pause_on_start,
+    const base::UnguessableToken& devtools_worker_token,
     int route_id,
     blink::mojom::WorkerContentSettingsProxyPtr content_settings,
     mojom::SharedWorkerHostPtr host,
@@ -151,7 +153,9 @@ EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
       url_, blink::WebString::FromUTF8(name_),
       blink::WebString::FromUTF8(info->content_security_policy),
       info->content_security_policy_type, info->creation_address_space,
-      info->data_saver_enabled, content_settings.PassInterface().PassHandle(),
+      info->data_saver_enabled,
+      blink::WebString::FromUTF8(devtools_worker_token.ToString()),
+      content_settings.PassInterface().PassHandle(),
       interface_provider.PassInterface().PassHandle());
 
   // If the host drops its connection, then self-destruct.

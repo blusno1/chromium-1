@@ -181,7 +181,7 @@ const std::vector<CertVerifyProcType> kAllCertVerifiers = {
 // TODO(crbug.com/649017): Enable this everywhere. Right now this is
 // gated on having CertVerifyProcBuiltin understand the roots added
 // via TestRootCerts.
-#if defined(USE_NSS_CERTS)
+#if defined(USE_NSS_CERTS) || (defined(OS_MACOSX) && !defined(OS_IOS))
         ,
     CERT_VERIFY_PROC_BUILTIN
 #endif
@@ -286,11 +286,11 @@ class CertVerifyProcInternalTest
   }
 
   bool SupportsEV() const {
-    // TODO(crbug.com/649017): CertVerifyProcBuiltin does not support EV.
     // TODO(crbug.com/117478): Android and iOS do not support EV.
     return verify_proc_type() == CERT_VERIFY_PROC_NSS ||
            verify_proc_type() == CERT_VERIFY_PROC_WIN ||
-           verify_proc_type() == CERT_VERIFY_PROC_MAC;
+           verify_proc_type() == CERT_VERIFY_PROC_MAC ||
+           verify_proc_type() == CERT_VERIFY_PROC_BUILTIN;
   }
 
   CertVerifyProc* verify_proc() const { return verify_proc_.get(); }

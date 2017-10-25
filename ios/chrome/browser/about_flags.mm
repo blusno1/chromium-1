@@ -32,13 +32,14 @@
 #include "components/payments/core/features.h"
 #include "components/search_provider_logos/features.h"
 #include "components/security_state/core/switches.h"
-#include "components/signin/core/common/signin_switches.h"
+#include "components/signin/core/browser/signin_switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
 #include "ios/chrome/browser/ios_chrome_flag_descriptions.h"
 #include "ios/chrome/browser/ssl/captive_portal_features.h"
+#include "ios/chrome/browser/ui/external_search/features.h"
 #include "ios/chrome/browser/ui/main/main_feature_flags.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller_base_feature.h"
 #include "ios/chrome/browser/web/features.h"
@@ -60,15 +61,6 @@ using flags_ui::FeatureEntry;
 namespace {
 const FeatureEntry::Choice kMarkHttpAsChoices[] = {
     {flags_ui::kGenericExperimentChoiceDefault, "", ""},
-    {flag_descriptions::kMarkHttpAsNonSecureAfterEditing,
-     security_state::switches::kMarkHttpAs,
-     security_state::switches::kMarkHttpAsNonSecureAfterEditing},
-    {flag_descriptions::kMarkHttpAsNonSecureWhileIncognito,
-     security_state::switches::kMarkHttpAs,
-     security_state::switches::kMarkHttpAsNonSecureWhileIncognito},
-    {flag_descriptions::kMarkHttpAsNonSecureWhileIncognitoOrEditing,
-     security_state::switches::kMarkHttpAs,
-     security_state::switches::kMarkHttpAsNonSecureWhileIncognitoOrEditing},
     {flag_descriptions::kMarkHttpAsDangerous,
      security_state::switches::kMarkHttpAs,
      security_state::switches::kMarkHttpAsDangerous}};
@@ -193,7 +185,11 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"safe_area_compatible_toolbar",
      flag_descriptions::kSafeAreaCompatibleToolbarName,
      flag_descriptions::kSafeAreaCompatibleToolbarDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kSafeAreaCompatibleToolbar)}};
+     FEATURE_VALUE_TYPE(kSafeAreaCompatibleToolbar)},
+    {"external-search", flag_descriptions::kExternalSearchName,
+     flag_descriptions::kExternalSearchDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kExternalSearch)},
+};
 
 // Add all switches from experimental flags to |command_line|.
 void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
