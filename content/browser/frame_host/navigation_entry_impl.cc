@@ -34,7 +34,7 @@ namespace {
 
 // Use this to get a new unique ID for a NavigationEntry during construction.
 // The returned ID is guaranteed to be nonzero (which is the "no ID" indicator).
-int GetUniqueIDInConstructor() {
+int CreateUniqueEntryID() {
   static int unique_id_counter = 0;
   return ++unique_id_counter;
 }
@@ -74,7 +74,7 @@ void RecursivelyGenerateFrameEntries(
 
   for (const ExplodedFrameState& child_state : state.children) {
     node->children.push_back(
-        base::MakeUnique<NavigationEntryImpl::TreeNode>(node, nullptr));
+        std::make_unique<NavigationEntryImpl::TreeNode>(node, nullptr));
     RecursivelyGenerateFrameEntries(child_state, empty_file_list,
                                     node->children.back().get());
   }
@@ -255,7 +255,7 @@ NavigationEntryImpl::NavigationEntryImpl(
                                                         PageState(),
                                                         "GET",
                                                         -1))),
-      unique_id_(GetUniqueIDInConstructor()),
+      unique_id_(CreateUniqueEntryID()),
       bindings_(kInvalidBindings),
       page_type_(PAGE_TYPE_NORMAL),
       update_virtual_url_with_url_(false),
@@ -665,10 +665,13 @@ CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
   FrameMsg_UILoadMetricsReportType::Value report_type =
       FrameMsg_UILoadMetricsReportType::NO_REPORT;
   base::TimeTicks ui_timestamp = base::TimeTicks();
+  bool user_gesture = false;
+
 #if defined(OS_ANDROID)
   if (!intent_received_timestamp().is_null())
     report_type = FrameMsg_UILoadMetricsReportType::REPORT_INTENT;
   ui_timestamp = intent_received_timestamp();
+  user_gesture = has_user_gesture();
 #endif
 
   std::string method;
@@ -687,7 +690,7 @@ CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
       navigation_start, method, post_body ? post_body : post_data_,
       base::Optional<SourceLocation>(),
       CSPDisposition::CHECK /* should_check_main_world_csp */,
-      has_started_from_context_menu());
+      has_started_from_context_menu(), user_gesture);
 }
 
 StartNavigationParams NavigationEntryImpl::ConstructStartNavigationParams()
@@ -727,17 +730,13 @@ RequestNavigationParams NavigationEntryImpl::ConstructRequestNavigationParams(
     current_length_to_send = 0;
   }
 
-  bool user_gesture = false;
-#if defined(OS_ANDROID)
-  user_gesture = has_user_gesture();
-#endif
   RequestNavigationParams request_params(
       GetIsOverridingUserAgent(), redirects, original_url, original_method,
       GetCanLoadLocalResources(), frame_entry.page_state(), GetUniqueID(),
       is_history_navigation_in_new_child, subframe_unique_names,
       has_committed_real_load, intended_as_new_entry, pending_offset_to_send,
       current_offset_to_send, current_length_to_send, IsViewSourceMode(),
-      should_clear_history_list(), user_gesture);
+      should_clear_history_list());
 #if defined(OS_ANDROID)
   if (GetDataURLAsString() &&
       GetDataURLAsString()->size() <= kMaxLengthOfDataURLString) {
@@ -864,7 +863,7 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
       site_instance, std::move(source_site_instance), url, referrer,
       redirect_chain, page_state, method, post_id);
   parent_node->children.push_back(
-      base::MakeUnique<NavigationEntryImpl::TreeNode>(parent_node,
+      std::make_unique<NavigationEntryImpl::TreeNode>(parent_node,
                                                       frame_entry));
 }
 

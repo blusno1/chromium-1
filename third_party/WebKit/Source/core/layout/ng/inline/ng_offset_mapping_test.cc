@@ -5,27 +5,22 @@
 #include "core/layout/ng/inline/ng_offset_mapping.h"
 
 #include "core/dom/FirstLetterPseudoElement.h"
-#include "core/layout/LayoutTestHelper.h"
+#include "core/editing/Position.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
+#include "core/layout/ng/ng_layout_test.h"
 #include "core/style/ComputedStyle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
-class NGOffsetMappingTest : public RenderingTest {
+class NGOffsetMappingTest : public NGLayoutTest {
  protected:
   void SetUp() override {
-    RenderingTest::SetUp();
-    RuntimeEnabledFeatures::SetLayoutNGEnabled(true);
+    NGLayoutTest::SetUp();
     style_ = ComputedStyle::Create();
     style_->GetFont().Update(nullptr);
-  }
-
-  void TearDown() override {
-    RuntimeEnabledFeatures::SetLayoutNGEnabled(false);
-    RenderingTest::TearDown();
   }
 
   void SetupHtml(const char* id, String html) {
@@ -36,7 +31,10 @@ class NGOffsetMappingTest : public RenderingTest {
   }
 
   const NGOffsetMapping& GetOffsetMapping() const {
-    return NGInlineNode(layout_block_flow_).ComputeOffsetMappingIfNeeded();
+    const NGOffsetMapping* map =
+        NGInlineNode(layout_block_flow_).ComputeOffsetMappingIfNeeded();
+    CHECK(map);
+    return *map;
   }
 
   bool IsOffsetMappingStored() const {
@@ -48,32 +46,37 @@ class NGOffsetMappingTest : public RenderingTest {
     return ToLayoutText(parent->firstChild()->GetLayoutObject());
   }
 
-  const NGOffsetMappingUnit* GetUnitForDOMOffset(const Node& node,
-                                                 unsigned offset) const {
-    return GetOffsetMapping().GetMappingUnitForDOMOffset(node, offset);
+  const NGOffsetMappingUnit* GetUnitForPosition(
+      const Position& position) const {
+    return GetOffsetMapping().GetMappingUnitForPosition(position);
   }
 
-  Optional<unsigned> GetTextContentOffset(const Node& node,
-                                          unsigned offset) const {
-    return GetOffsetMapping().GetTextContentOffset(node, offset);
+  Optional<unsigned> GetTextContentOffset(const Position& position) const {
+    return GetOffsetMapping().GetTextContentOffset(position);
   }
 
-  Optional<unsigned> StartOfNextNonCollapsedCharacter(const Node& node,
-                                                      unsigned offset) const {
-    return GetOffsetMapping().StartOfNextNonCollapsedCharacter(node, offset);
+  Position StartOfNextNonCollapsedContent(const Position& position) const {
+    return GetOffsetMapping().StartOfNextNonCollapsedContent(position);
   }
 
-  Optional<unsigned> EndOfLastNonCollapsedCharacter(const Node& node,
-                                                    unsigned offset) const {
-    return GetOffsetMapping().EndOfLastNonCollapsedCharacter(node, offset);
+  Position EndOfLastNonCollapsedContent(const Position& position) const {
+    return GetOffsetMapping().EndOfLastNonCollapsedContent(position);
   }
 
-  bool IsBeforeNonCollapsedCharacter(const Node& node, unsigned offset) const {
-    return GetOffsetMapping().IsBeforeNonCollapsedCharacter(node, offset);
+  bool IsBeforeNonCollapsedContent(const Position& position) const {
+    return GetOffsetMapping().IsBeforeNonCollapsedContent(position);
   }
 
-  bool IsAfterNonCollapsedCharacter(const Node& node, unsigned offset) const {
-    return GetOffsetMapping().IsAfterNonCollapsedCharacter(node, offset);
+  bool IsAfterNonCollapsedContent(const Position& position) const {
+    return GetOffsetMapping().IsAfterNonCollapsedContent(position);
+  }
+
+  Position GetFirstPosition(unsigned offset) const {
+    return GetOffsetMapping().GetFirstPosition(offset);
+  }
+
+  Position GetLastPosition(unsigned offset) const {
+    return GetOffsetMapping().GetLastPosition(offset);
   }
 
   scoped_refptr<const ComputedStyle> style_;
@@ -103,24 +106,6 @@ TEST_F(NGOffsetMappingTest, StoredResult) {
   EXPECT_TRUE(IsOffsetMappingStored());
 }
 
-TEST_F(NGOffsetMappingTest, GetNGInlineNodeForText) {
-  SetupHtml("t", "<div id=t>foo</div>");
-  Element* div = GetDocument().getElementById("t");
-  Node* text = div->firstChild();
-
-  Optional<NGInlineNode> inline_node = GetNGInlineNodeFor(*text);
-  ASSERT_TRUE(inline_node.has_value());
-  EXPECT_EQ(layout_block_flow_, inline_node->GetLayoutBlockFlow());
-}
-
-TEST_F(NGOffsetMappingTest, CantGetNGInlineNodeForBody) {
-  SetupHtml("t", "<div id=t>foo</div>");
-  Element* div = GetDocument().getElementById("t");
-
-  Optional<NGInlineNode> inline_node = GetNGInlineNodeFor(*div);
-  EXPECT_FALSE(inline_node.has_value());
-}
-
 TEST_F(NGOffsetMappingTest, OneTextNode) {
   SetupHtml("t", "<div id=t>foo</div>");
   const Node* foo_node = layout_object_->GetNode();
@@ -135,37 +120,53 @@ TEST_F(NGOffsetMappingTest, OneTextNode) {
   ASSERT_EQ(1u, result.GetRanges().size());
   TEST_RANGE(result.GetRanges(), foo_node, 0u, 1u);
 
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 0));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 1));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 2));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 3));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 3)));
 
-  EXPECT_EQ(0u, *GetTextContentOffset(*foo_node, 0));
-  EXPECT_EQ(1u, *GetTextContentOffset(*foo_node, 1));
-  EXPECT_EQ(2u, *GetTextContentOffset(*foo_node, 2));
-  EXPECT_EQ(3u, *GetTextContentOffset(*foo_node, 3));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(foo_node, 0)));
+  EXPECT_EQ(1u, *GetTextContentOffset(Position(foo_node, 1)));
+  EXPECT_EQ(2u, *GetTextContentOffset(Position(foo_node, 2)));
+  EXPECT_EQ(3u, *GetTextContentOffset(Position(foo_node, 3)));
 
-  EXPECT_EQ(0u, *StartOfNextNonCollapsedCharacter(*foo_node, 0));
-  EXPECT_EQ(1u, *StartOfNextNonCollapsedCharacter(*foo_node, 1));
-  EXPECT_EQ(2u, *StartOfNextNonCollapsedCharacter(*foo_node, 2));
-  EXPECT_FALSE(StartOfNextNonCollapsedCharacter(*foo_node, 3));
+  EXPECT_EQ(Position(foo_node, 0), GetFirstPosition(0));
+  EXPECT_EQ(Position(foo_node, 1), GetFirstPosition(1));
+  EXPECT_EQ(Position(foo_node, 2), GetFirstPosition(2));
+  EXPECT_EQ(Position(foo_node, 3), GetFirstPosition(3));
 
-  EXPECT_FALSE(EndOfLastNonCollapsedCharacter(*foo_node, 0));
-  EXPECT_EQ(1u, *EndOfLastNonCollapsedCharacter(*foo_node, 1));
-  EXPECT_EQ(2u, *EndOfLastNonCollapsedCharacter(*foo_node, 2));
-  EXPECT_EQ(3u, *EndOfLastNonCollapsedCharacter(*foo_node, 3));
+  EXPECT_EQ(Position(foo_node, 0), GetLastPosition(0));
+  EXPECT_EQ(Position(foo_node, 1), GetLastPosition(1));
+  EXPECT_EQ(Position(foo_node, 2), GetLastPosition(2));
+  EXPECT_EQ(Position(foo_node, 3), GetLastPosition(3));
 
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*foo_node, 0));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*foo_node, 1));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*foo_node, 2));
+  EXPECT_EQ(Position(foo_node, 0),
+            StartOfNextNonCollapsedContent(Position(foo_node, 0)));
+  EXPECT_EQ(Position(foo_node, 1),
+            StartOfNextNonCollapsedContent(Position(foo_node, 1)));
+  EXPECT_EQ(Position(foo_node, 2),
+            StartOfNextNonCollapsedContent(Position(foo_node, 2)));
+  EXPECT_TRUE(StartOfNextNonCollapsedContent(Position(foo_node, 3)).IsNull());
+
+  EXPECT_TRUE(EndOfLastNonCollapsedContent(Position(foo_node, 0)).IsNull());
+  EXPECT_EQ(Position(foo_node, 1),
+            EndOfLastNonCollapsedContent(Position(foo_node, 1)));
+  EXPECT_EQ(Position(foo_node, 2),
+            EndOfLastNonCollapsedContent(Position(foo_node, 2)));
+  EXPECT_EQ(Position(foo_node, 3),
+            EndOfLastNonCollapsedContent(Position(foo_node, 3)));
+
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(foo_node, 0)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(foo_node, 1)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(foo_node, 2)));
   EXPECT_FALSE(
-      IsBeforeNonCollapsedCharacter(*foo_node, 3));  // false at node end
+      IsBeforeNonCollapsedContent(Position(foo_node, 3)));  // false at node end
 
   // false at node start
-  EXPECT_FALSE(IsAfterNonCollapsedCharacter(*foo_node, 0));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*foo_node, 1));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*foo_node, 2));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*foo_node, 3));
+  EXPECT_FALSE(IsAfterNonCollapsedContent(Position(foo_node, 0)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(foo_node, 1)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(foo_node, 2)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(foo_node, 3)));
 }
 
 TEST_F(NGOffsetMappingTest, TwoTextNodes) {
@@ -188,47 +189,50 @@ TEST_F(NGOffsetMappingTest, TwoTextNodes) {
   TEST_RANGE(result.GetRanges(), foo_node, 0u, 1u);
   TEST_RANGE(result.GetRanges(), bar_node, 1u, 2u);
 
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 0));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 1));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 2));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 3));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*bar_node, 0));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*bar_node, 1));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*bar_node, 2));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*bar_node, 3));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 3)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(bar_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(bar_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(bar_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(bar_node, 3)));
 
-  EXPECT_EQ(0u, *GetTextContentOffset(*foo_node, 0));
-  EXPECT_EQ(1u, *GetTextContentOffset(*foo_node, 1));
-  EXPECT_EQ(2u, *GetTextContentOffset(*foo_node, 2));
-  EXPECT_EQ(3u, *GetTextContentOffset(*foo_node, 3));
-  EXPECT_EQ(3u, *GetTextContentOffset(*bar_node, 0));
-  EXPECT_EQ(4u, *GetTextContentOffset(*bar_node, 1));
-  EXPECT_EQ(5u, *GetTextContentOffset(*bar_node, 2));
-  EXPECT_EQ(6u, *GetTextContentOffset(*bar_node, 3));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(foo_node, 0)));
+  EXPECT_EQ(1u, *GetTextContentOffset(Position(foo_node, 1)));
+  EXPECT_EQ(2u, *GetTextContentOffset(Position(foo_node, 2)));
+  EXPECT_EQ(3u, *GetTextContentOffset(Position(foo_node, 3)));
+  EXPECT_EQ(3u, *GetTextContentOffset(Position(bar_node, 0)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position(bar_node, 1)));
+  EXPECT_EQ(5u, *GetTextContentOffset(Position(bar_node, 2)));
+  EXPECT_EQ(6u, *GetTextContentOffset(Position(bar_node, 3)));
 
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*foo_node, 0));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*foo_node, 1));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*foo_node, 2));
+  EXPECT_EQ(Position(foo_node, 3), GetFirstPosition(3));
+  EXPECT_EQ(Position(bar_node, 0), GetLastPosition(3));
+
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(foo_node, 0)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(foo_node, 1)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(foo_node, 2)));
   EXPECT_FALSE(
-      IsBeforeNonCollapsedCharacter(*foo_node, 3));  // false at node end
+      IsBeforeNonCollapsedContent(Position(foo_node, 3)));  // false at node end
 
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*bar_node, 0));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*bar_node, 1));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*bar_node, 2));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(bar_node, 0)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(bar_node, 1)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(bar_node, 2)));
   EXPECT_FALSE(
-      IsBeforeNonCollapsedCharacter(*bar_node, 3));  // false at node end
+      IsBeforeNonCollapsedContent(Position(bar_node, 3)));  // false at node end
 
   // false at node start
-  EXPECT_FALSE(IsAfterNonCollapsedCharacter(*foo_node, 0));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*foo_node, 1));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*foo_node, 2));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*foo_node, 3));
+  EXPECT_FALSE(IsAfterNonCollapsedContent(Position(foo_node, 0)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(foo_node, 1)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(foo_node, 2)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(foo_node, 3)));
 
   // false at node start
-  EXPECT_FALSE(IsAfterNonCollapsedCharacter(*bar_node, 0));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*bar_node, 1));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*bar_node, 2));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*bar_node, 3));
+  EXPECT_FALSE(IsAfterNonCollapsedContent(Position(bar_node, 0)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(bar_node, 1)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(bar_node, 2)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(bar_node, 3)));
 }
 
 TEST_F(NGOffsetMappingTest, BRBetweenTextNodes) {
@@ -256,29 +260,34 @@ TEST_F(NGOffsetMappingTest, BRBetweenTextNodes) {
   TEST_RANGE(result.GetRanges(), br_node, 1u, 2u);
   TEST_RANGE(result.GetRanges(), bar_node, 2u, 3u);
 
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 0));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 1));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 2));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 3));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 3)));
+  EXPECT_EQ(&result.GetUnits()[1],
+            GetUnitForPosition(Position::BeforeNode(*br_node)));
+  EXPECT_EQ(&result.GetUnits()[1],
+            GetUnitForPosition(Position::AfterNode(*br_node)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 3)));
 
-  // TODO(xiaochengh): Add test cases for BR@BeforeNode and BR@AfterNode
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(foo_node, 0)));
+  EXPECT_EQ(1u, *GetTextContentOffset(Position(foo_node, 1)));
+  EXPECT_EQ(2u, *GetTextContentOffset(Position(foo_node, 2)));
+  EXPECT_EQ(3u, *GetTextContentOffset(Position(foo_node, 3)));
+  EXPECT_EQ(3u, *GetTextContentOffset(Position::BeforeNode(*br_node)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position::AfterNode(*br_node)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position(bar_node, 0)));
+  EXPECT_EQ(5u, *GetTextContentOffset(Position(bar_node, 1)));
+  EXPECT_EQ(6u, *GetTextContentOffset(Position(bar_node, 2)));
+  EXPECT_EQ(7u, *GetTextContentOffset(Position(bar_node, 3)));
 
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 0));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 1));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 2));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 3));
-
-  EXPECT_EQ(0u, *GetTextContentOffset(*foo_node, 0));
-  EXPECT_EQ(1u, *GetTextContentOffset(*foo_node, 1));
-  EXPECT_EQ(2u, *GetTextContentOffset(*foo_node, 2));
-  EXPECT_EQ(3u, *GetTextContentOffset(*foo_node, 3));
-
-  // TODO(xiaochengh): Add test cases for BR@BeforeNode and BR@AfterNode
-
-  EXPECT_EQ(4u, *GetTextContentOffset(*bar_node, 0));
-  EXPECT_EQ(5u, *GetTextContentOffset(*bar_node, 1));
-  EXPECT_EQ(6u, *GetTextContentOffset(*bar_node, 2));
-  EXPECT_EQ(7u, *GetTextContentOffset(*bar_node, 3));
+  EXPECT_EQ(Position(foo_node, 3), GetFirstPosition(3));
+  EXPECT_EQ(Position::BeforeNode(*br_node), GetLastPosition(3));
+  EXPECT_EQ(Position::AfterNode(*br_node), GetFirstPosition(4));
+  EXPECT_EQ(Position(bar_node, 0), GetLastPosition(4));
 }
 
 TEST_F(NGOffsetMappingTest, OneTextNodeWithCollapsedSpace) {
@@ -299,53 +308,59 @@ TEST_F(NGOffsetMappingTest, OneTextNodeWithCollapsedSpace) {
   ASSERT_EQ(1u, result.GetRanges().size());
   TEST_RANGE(result.GetRanges(), node, 0u, 3u);
 
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*node, 0));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*node, 1));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*node, 2));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*node, 3));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*node, 4));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*node, 5));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*node, 6));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*node, 7));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*node, 8));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(node, 0)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(node, 1)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(node, 2)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(node, 3)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(node, 4)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(node, 5)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(node, 6)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(node, 7)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(node, 8)));
 
-  EXPECT_EQ(0u, *GetTextContentOffset(*node, 0));
-  EXPECT_EQ(1u, *GetTextContentOffset(*node, 1));
-  EXPECT_EQ(2u, *GetTextContentOffset(*node, 2));
-  EXPECT_EQ(3u, *GetTextContentOffset(*node, 3));
-  EXPECT_EQ(4u, *GetTextContentOffset(*node, 4));
-  EXPECT_EQ(4u, *GetTextContentOffset(*node, 5));
-  EXPECT_EQ(5u, *GetTextContentOffset(*node, 6));
-  EXPECT_EQ(6u, *GetTextContentOffset(*node, 7));
-  EXPECT_EQ(7u, *GetTextContentOffset(*node, 8));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(node, 0)));
+  EXPECT_EQ(1u, *GetTextContentOffset(Position(node, 1)));
+  EXPECT_EQ(2u, *GetTextContentOffset(Position(node, 2)));
+  EXPECT_EQ(3u, *GetTextContentOffset(Position(node, 3)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position(node, 4)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position(node, 5)));
+  EXPECT_EQ(5u, *GetTextContentOffset(Position(node, 6)));
+  EXPECT_EQ(6u, *GetTextContentOffset(Position(node, 7)));
+  EXPECT_EQ(7u, *GetTextContentOffset(Position(node, 8)));
 
-  EXPECT_EQ(3u, *StartOfNextNonCollapsedCharacter(*node, 3));
-  EXPECT_EQ(5u, *StartOfNextNonCollapsedCharacter(*node, 4));
-  EXPECT_EQ(5u, *StartOfNextNonCollapsedCharacter(*node, 5));
+  EXPECT_EQ(Position(node, 4), GetFirstPosition(4));
+  EXPECT_EQ(Position(node, 5), GetLastPosition(4));
 
-  EXPECT_EQ(3u, *EndOfLastNonCollapsedCharacter(*node, 3));
-  EXPECT_EQ(4u, *EndOfLastNonCollapsedCharacter(*node, 4));
-  EXPECT_EQ(4u, *EndOfLastNonCollapsedCharacter(*node, 5));
+  EXPECT_EQ(Position(node, 3),
+            StartOfNextNonCollapsedContent(Position(node, 3)));
+  EXPECT_EQ(Position(node, 5),
+            StartOfNextNonCollapsedContent(Position(node, 4)));
+  EXPECT_EQ(Position(node, 5),
+            StartOfNextNonCollapsedContent(Position(node, 5)));
 
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*node, 0));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*node, 1));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*node, 2));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*node, 3));
-  EXPECT_FALSE(IsBeforeNonCollapsedCharacter(*node, 4));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*node, 5));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*node, 6));
-  EXPECT_TRUE(IsBeforeNonCollapsedCharacter(*node, 7));
-  EXPECT_FALSE(IsBeforeNonCollapsedCharacter(*node, 8));
+  EXPECT_EQ(Position(node, 3), EndOfLastNonCollapsedContent(Position(node, 3)));
+  EXPECT_EQ(Position(node, 4), EndOfLastNonCollapsedContent(Position(node, 4)));
+  EXPECT_EQ(Position(node, 4), EndOfLastNonCollapsedContent(Position(node, 5)));
 
-  EXPECT_FALSE(IsAfterNonCollapsedCharacter(*node, 0));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*node, 1));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*node, 2));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*node, 3));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*node, 4));
-  EXPECT_FALSE(IsAfterNonCollapsedCharacter(*node, 5));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*node, 6));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*node, 7));
-  EXPECT_TRUE(IsAfterNonCollapsedCharacter(*node, 8));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(node, 0)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(node, 1)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(node, 2)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(node, 3)));
+  EXPECT_FALSE(IsBeforeNonCollapsedContent(Position(node, 4)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(node, 5)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(node, 6)));
+  EXPECT_TRUE(IsBeforeNonCollapsedContent(Position(node, 7)));
+  EXPECT_FALSE(IsBeforeNonCollapsedContent(Position(node, 8)));
+
+  EXPECT_FALSE(IsAfterNonCollapsedContent(Position(node, 0)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(node, 1)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(node, 2)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(node, 3)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(node, 4)));
+  EXPECT_FALSE(IsAfterNonCollapsedContent(Position(node, 5)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(node, 6)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(node, 7)));
+  EXPECT_TRUE(IsAfterNonCollapsedContent(Position(node, 8)));
 }
 
 TEST_F(NGOffsetMappingTest, FullyCollapsedWhiteSpaceNode) {
@@ -378,32 +393,36 @@ TEST_F(NGOffsetMappingTest, FullyCollapsedWhiteSpaceNode) {
   TEST_RANGE(result.GetRanges(), space_node, 1u, 2u);
   TEST_RANGE(result.GetRanges(), bar_node, 2u, 3u);
 
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 0));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 1));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 2));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 3));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 4));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*space_node, 0));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*space_node, 1));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 0));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 1));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 2));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 3));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 3)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 4)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(space_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(space_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 3)));
 
-  EXPECT_EQ(0u, *GetTextContentOffset(*foo_node, 0));
-  EXPECT_EQ(1u, *GetTextContentOffset(*foo_node, 1));
-  EXPECT_EQ(2u, *GetTextContentOffset(*foo_node, 2));
-  EXPECT_EQ(3u, *GetTextContentOffset(*foo_node, 3));
-  EXPECT_EQ(4u, *GetTextContentOffset(*foo_node, 4));
-  EXPECT_EQ(4u, *GetTextContentOffset(*space_node, 0));
-  EXPECT_EQ(4u, *GetTextContentOffset(*space_node, 1));
-  EXPECT_EQ(4u, *GetTextContentOffset(*bar_node, 0));
-  EXPECT_EQ(5u, *GetTextContentOffset(*bar_node, 1));
-  EXPECT_EQ(6u, *GetTextContentOffset(*bar_node, 2));
-  EXPECT_EQ(7u, *GetTextContentOffset(*bar_node, 3));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(foo_node, 0)));
+  EXPECT_EQ(1u, *GetTextContentOffset(Position(foo_node, 1)));
+  EXPECT_EQ(2u, *GetTextContentOffset(Position(foo_node, 2)));
+  EXPECT_EQ(3u, *GetTextContentOffset(Position(foo_node, 3)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position(foo_node, 4)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position(space_node, 0)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position(space_node, 1)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position(bar_node, 0)));
+  EXPECT_EQ(5u, *GetTextContentOffset(Position(bar_node, 1)));
+  EXPECT_EQ(6u, *GetTextContentOffset(Position(bar_node, 2)));
+  EXPECT_EQ(7u, *GetTextContentOffset(Position(bar_node, 3)));
 
-  EXPECT_FALSE(EndOfLastNonCollapsedCharacter(*space_node, 1u));
-  EXPECT_FALSE(StartOfNextNonCollapsedCharacter(*space_node, 0u));
+  EXPECT_EQ(Position(foo_node, 4), GetFirstPosition(4));
+  EXPECT_EQ(Position(bar_node, 0), GetLastPosition(4));
+
+  EXPECT_TRUE(EndOfLastNonCollapsedContent(Position(space_node, 1u)).IsNull());
+  EXPECT_TRUE(
+      StartOfNextNonCollapsedContent(Position(space_node, 0u)).IsNull());
 }
 
 TEST_F(NGOffsetMappingTest, ReplacedElement) {
@@ -429,39 +448,38 @@ TEST_F(NGOffsetMappingTest, ReplacedElement) {
   TEST_RANGE(result.GetRanges(), img_node, 1u, 2u);
   TEST_RANGE(result.GetRanges(), bar_node, 2u, 3u);
 
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 0));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 1));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 2));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 3));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 4));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 3)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 4)));
+  EXPECT_EQ(&result.GetUnits()[1],
+            GetUnitForPosition(Position::BeforeNode(*img_node)));
+  EXPECT_EQ(&result.GetUnits()[1],
+            GetUnitForPosition(Position::AfterNode(*img_node)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 3)));
+  EXPECT_EQ(&result.GetUnits()[2], GetUnitForPosition(Position(bar_node, 4)));
 
-  // TODO(xiaochengh): Pass positions IMG@BeforeNode and IMG@AfterNode instead
-  // of (node, offset) pairs.
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*img_node, 0));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*img_node, 1));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(foo_node, 0)));
+  EXPECT_EQ(1u, *GetTextContentOffset(Position(foo_node, 1)));
+  EXPECT_EQ(2u, *GetTextContentOffset(Position(foo_node, 2)));
+  EXPECT_EQ(3u, *GetTextContentOffset(Position(foo_node, 3)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position(foo_node, 4)));
+  EXPECT_EQ(4u, *GetTextContentOffset(Position::BeforeNode(*img_node)));
+  EXPECT_EQ(5u, *GetTextContentOffset(Position::AfterNode(*img_node)));
+  EXPECT_EQ(5u, *GetTextContentOffset(Position(bar_node, 0)));
+  EXPECT_EQ(6u, *GetTextContentOffset(Position(bar_node, 1)));
+  EXPECT_EQ(7u, *GetTextContentOffset(Position(bar_node, 2)));
+  EXPECT_EQ(8u, *GetTextContentOffset(Position(bar_node, 3)));
+  EXPECT_EQ(9u, *GetTextContentOffset(Position(bar_node, 4)));
 
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 0));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 1));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 2));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 3));
-  EXPECT_EQ(&result.GetUnits()[2], GetUnitForDOMOffset(*bar_node, 4));
-
-  EXPECT_EQ(0u, *GetTextContentOffset(*foo_node, 0));
-  EXPECT_EQ(1u, *GetTextContentOffset(*foo_node, 1));
-  EXPECT_EQ(2u, *GetTextContentOffset(*foo_node, 2));
-  EXPECT_EQ(3u, *GetTextContentOffset(*foo_node, 3));
-  EXPECT_EQ(4u, *GetTextContentOffset(*foo_node, 4));
-
-  // TODO(xiaochengh): Pass positions IMG@BeforeNode and IMG@AfterNode instead
-  // of (node, offset) pairs.
-  EXPECT_EQ(4u, *GetTextContentOffset(*img_node, 0));
-  EXPECT_EQ(5u, *GetTextContentOffset(*img_node, 1));
-
-  EXPECT_EQ(5u, *GetTextContentOffset(*bar_node, 0));
-  EXPECT_EQ(6u, *GetTextContentOffset(*bar_node, 1));
-  EXPECT_EQ(7u, *GetTextContentOffset(*bar_node, 2));
-  EXPECT_EQ(8u, *GetTextContentOffset(*bar_node, 3));
-  EXPECT_EQ(9u, *GetTextContentOffset(*bar_node, 4));
+  EXPECT_EQ(Position(foo_node, 4), GetFirstPosition(4));
+  EXPECT_EQ(Position::BeforeNode(*img_node), GetLastPosition(4));
+  EXPECT_EQ(Position::AfterNode(*img_node), GetFirstPosition(5));
+  EXPECT_EQ(Position(bar_node, 0), GetLastPosition(5));
 }
 
 TEST_F(NGOffsetMappingTest, FirstLetter) {
@@ -479,13 +497,16 @@ TEST_F(NGOffsetMappingTest, FirstLetter) {
   ASSERT_EQ(1u, result.GetRanges().size());
   TEST_RANGE(result.GetRanges(), foo_node, 0u, 1u);
 
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 0));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 1));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 2));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 2)));
 
-  EXPECT_EQ(0u, *GetTextContentOffset(*foo_node, 0));
-  EXPECT_EQ(1u, *GetTextContentOffset(*foo_node, 1));
-  EXPECT_EQ(2u, *GetTextContentOffset(*foo_node, 2));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(foo_node, 0)));
+  EXPECT_EQ(1u, *GetTextContentOffset(Position(foo_node, 1)));
+  EXPECT_EQ(2u, *GetTextContentOffset(Position(foo_node, 2)));
+
+  EXPECT_EQ(Position(foo_node, 1), GetFirstPosition(1));
+  EXPECT_EQ(Position(foo_node, 1), GetLastPosition(1));
 }
 
 TEST_F(NGOffsetMappingTest, FirstLetterWithLeadingSpace) {
@@ -505,17 +526,20 @@ TEST_F(NGOffsetMappingTest, FirstLetterWithLeadingSpace) {
   ASSERT_EQ(1u, result.GetRanges().size());
   TEST_RANGE(result.GetRanges(), foo_node, 0u, 2u);
 
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 0));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*foo_node, 1));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*foo_node, 2));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*foo_node, 3));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*foo_node, 4));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(foo_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(foo_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(foo_node, 3)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(foo_node, 4)));
 
-  EXPECT_EQ(0u, *GetTextContentOffset(*foo_node, 0));
-  EXPECT_EQ(0u, *GetTextContentOffset(*foo_node, 1));
-  EXPECT_EQ(0u, *GetTextContentOffset(*foo_node, 2));
-  EXPECT_EQ(1u, *GetTextContentOffset(*foo_node, 3));
-  EXPECT_EQ(2u, *GetTextContentOffset(*foo_node, 4));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(foo_node, 0)));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(foo_node, 1)));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(foo_node, 2)));
+  EXPECT_EQ(1u, *GetTextContentOffset(Position(foo_node, 3)));
+  EXPECT_EQ(2u, *GetTextContentOffset(Position(foo_node, 4)));
+
+  EXPECT_EQ(Position(foo_node, 0), GetFirstPosition(0));
+  EXPECT_EQ(Position(foo_node, 2), GetLastPosition(0));
 }
 
 TEST_F(NGOffsetMappingTest, FirstLetterWithoutRemainingText) {
@@ -535,15 +559,18 @@ TEST_F(NGOffsetMappingTest, FirstLetterWithoutRemainingText) {
   ASSERT_EQ(1u, result.GetRanges().size());
   TEST_RANGE(result.GetRanges(), text_node, 0u, 2u);
 
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*text_node, 0));
-  EXPECT_EQ(&result.GetUnits()[0], GetUnitForDOMOffset(*text_node, 1));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*text_node, 2));
-  EXPECT_EQ(&result.GetUnits()[1], GetUnitForDOMOffset(*text_node, 3));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(text_node, 0)));
+  EXPECT_EQ(&result.GetUnits()[0], GetUnitForPosition(Position(text_node, 1)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(text_node, 2)));
+  EXPECT_EQ(&result.GetUnits()[1], GetUnitForPosition(Position(text_node, 3)));
 
-  EXPECT_EQ(0u, *GetTextContentOffset(*text_node, 0));
-  EXPECT_EQ(0u, *GetTextContentOffset(*text_node, 1));
-  EXPECT_EQ(0u, *GetTextContentOffset(*text_node, 2));
-  EXPECT_EQ(1u, *GetTextContentOffset(*text_node, 3));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(text_node, 0)));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(text_node, 1)));
+  EXPECT_EQ(0u, *GetTextContentOffset(Position(text_node, 2)));
+  EXPECT_EQ(1u, *GetTextContentOffset(Position(text_node, 3)));
+
+  EXPECT_EQ(Position(text_node, 0), GetFirstPosition(0));
+  EXPECT_EQ(Position(text_node, 2), GetLastPosition(0));
 }
 
 TEST_F(NGOffsetMappingTest, FirstLetterInDifferentBlock) {
@@ -552,54 +579,62 @@ TEST_F(NGOffsetMappingTest, FirstLetterInDifferentBlock) {
   Element* div = GetDocument().getElementById("t");
   const Node* text_node = div->firstChild();
 
-  Optional<NGInlineNode> inline_node0 = GetNGInlineNodeFor(*text_node, 0);
-  Optional<NGInlineNode> inline_node1 = GetNGInlineNodeFor(*text_node, 1);
-  Optional<NGInlineNode> inline_node2 = GetNGInlineNodeFor(*text_node, 2);
-  Optional<NGInlineNode> inline_node3 = GetNGInlineNodeFor(*text_node, 3);
+  auto* mapping0 = NGOffsetMapping::GetFor(Position(text_node, 0));
+  auto* mapping1 = NGOffsetMapping::GetFor(Position(text_node, 1));
+  auto* mapping2 = NGOffsetMapping::GetFor(Position(text_node, 2));
+  auto* mapping3 = NGOffsetMapping::GetFor(Position(text_node, 3));
 
-  ASSERT_TRUE(inline_node0.has_value());
-  ASSERT_TRUE(inline_node1.has_value());
-  ASSERT_TRUE(inline_node2.has_value());
-  ASSERT_TRUE(inline_node3.has_value());
+  ASSERT_TRUE(mapping0);
+  ASSERT_TRUE(mapping1);
+  ASSERT_TRUE(mapping2);
+  ASSERT_TRUE(mapping3);
 
-  // GetNGInlineNodeFor() returns different inline nodes for offset 0 and other
+  // GetNGOffsetmappingFor() returns different mappings for offset 0 and other
   // offsets, because first-letter is laid out in a different block.
-  EXPECT_NE(inline_node0->GetLayoutBlockFlow(),
-            inline_node1->GetLayoutBlockFlow());
-  EXPECT_EQ(inline_node1->GetLayoutBlockFlow(),
-            inline_node2->GetLayoutBlockFlow());
-  EXPECT_EQ(inline_node2->GetLayoutBlockFlow(),
-            inline_node3->GetLayoutBlockFlow());
+  EXPECT_NE(mapping0, mapping1);
+  EXPECT_EQ(mapping1, mapping2);
+  EXPECT_EQ(mapping2, mapping3);
 
-  const NGOffsetMapping& first_letter_result =
-      inline_node0->ComputeOffsetMappingIfNeeded();
+  const NGOffsetMapping& first_letter_result = *mapping0;
   ASSERT_EQ(1u, first_letter_result.GetUnits().size());
   TEST_UNIT(first_letter_result.GetUnits()[0],
             NGOffsetMappingUnitType::kIdentity, text_node, 0u, 1u, 0u, 1u);
   ASSERT_EQ(1u, first_letter_result.GetRanges().size());
   TEST_RANGE(first_letter_result.GetRanges(), text_node, 0u, 1u);
 
-  const NGOffsetMapping& remaining_text_result =
-      inline_node1->ComputeOffsetMappingIfNeeded();
+  const NGOffsetMapping& remaining_text_result = *mapping1;
   ASSERT_EQ(1u, remaining_text_result.GetUnits().size());
   TEST_UNIT(remaining_text_result.GetUnits()[0],
             NGOffsetMappingUnitType::kIdentity, text_node, 1u, 3u, 1u, 3u);
   ASSERT_EQ(1u, remaining_text_result.GetRanges().size());
   TEST_RANGE(remaining_text_result.GetRanges(), text_node, 0u, 1u);
 
-  EXPECT_EQ(&first_letter_result.GetUnits()[0],
-            first_letter_result.GetMappingUnitForDOMOffset(*text_node, 0));
-  EXPECT_EQ(&remaining_text_result.GetUnits()[0],
-            remaining_text_result.GetMappingUnitForDOMOffset(*text_node, 1));
-  EXPECT_EQ(&remaining_text_result.GetUnits()[0],
-            remaining_text_result.GetMappingUnitForDOMOffset(*text_node, 2));
-  EXPECT_EQ(&remaining_text_result.GetUnits()[0],
-            remaining_text_result.GetMappingUnitForDOMOffset(*text_node, 3));
+  EXPECT_EQ(
+      &first_letter_result.GetUnits()[0],
+      first_letter_result.GetMappingUnitForPosition(Position(text_node, 0)));
+  EXPECT_EQ(
+      &remaining_text_result.GetUnits()[0],
+      remaining_text_result.GetMappingUnitForPosition(Position(text_node, 1)));
+  EXPECT_EQ(
+      &remaining_text_result.GetUnits()[0],
+      remaining_text_result.GetMappingUnitForPosition(Position(text_node, 2)));
+  EXPECT_EQ(
+      &remaining_text_result.GetUnits()[0],
+      remaining_text_result.GetMappingUnitForPosition(Position(text_node, 3)));
 
-  EXPECT_EQ(0u, *first_letter_result.GetTextContentOffset(*text_node, 0));
-  EXPECT_EQ(1u, *remaining_text_result.GetTextContentOffset(*text_node, 1));
-  EXPECT_EQ(2u, *remaining_text_result.GetTextContentOffset(*text_node, 2));
-  EXPECT_EQ(3u, *remaining_text_result.GetTextContentOffset(*text_node, 3));
+  EXPECT_EQ(0u,
+            *first_letter_result.GetTextContentOffset(Position(text_node, 0)));
+  EXPECT_EQ(
+      1u, *remaining_text_result.GetTextContentOffset(Position(text_node, 1)));
+  EXPECT_EQ(
+      2u, *remaining_text_result.GetTextContentOffset(Position(text_node, 2)));
+  EXPECT_EQ(
+      3u, *remaining_text_result.GetTextContentOffset(Position(text_node, 3)));
+
+  EXPECT_EQ(Position(text_node, 1), first_letter_result.GetFirstPosition(1));
+  EXPECT_EQ(Position(text_node, 1), first_letter_result.GetLastPosition(1));
+  EXPECT_EQ(Position(text_node, 1), remaining_text_result.GetFirstPosition(1));
+  EXPECT_EQ(Position(text_node, 1), remaining_text_result.GetLastPosition(1));
 }
 
 TEST_F(NGOffsetMappingTest, WhiteSpaceTextNodeWithoutLayoutText) {
@@ -607,8 +642,8 @@ TEST_F(NGOffsetMappingTest, WhiteSpaceTextNodeWithoutLayoutText) {
   Element* div = GetDocument().getElementById("t");
   const Node* text_node = div->firstChild();
 
-  EXPECT_FALSE(EndOfLastNonCollapsedCharacter(*text_node, 1u));
-  EXPECT_FALSE(StartOfNextNonCollapsedCharacter(*text_node, 0u));
+  EXPECT_TRUE(EndOfLastNonCollapsedContent(Position(text_node, 1u)).IsNull());
+  EXPECT_TRUE(StartOfNextNonCollapsedContent(Position(text_node, 0u)).IsNull());
 }
 
 }  // namespace blink

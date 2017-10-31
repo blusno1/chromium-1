@@ -632,7 +632,7 @@ For example, some websites may respond to this request by showing you ads that a
       <message name="IDS_CLEAR_BROWSING_DATA_HISTORY_DIALOG_DATA_TEXT" desc="Text of the dialog that is shown after the deletion of browsing history items finished, indicating that the selected data has been removed, but there may be other forms of browsing history still present in user's Google account.">
         The selected data has been removed from Chrome and your synced devices.
 
-Your Google account may have other forms of browsing history like searches and activity from other Google services at <ph name="BEGIN_LINK">&lt;link&gt;</ph>history.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
+Your Google account may have other forms of browsing history like searches and activity from other Google services at <ph name="BEGIN_LINK">&lt;link&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_CLEAR_CACHE_TITLE" desc="Title for Clear Cache in Clear Browsing Data dialog">
         Cached images and files
@@ -728,9 +728,6 @@ Your Google account may have other forms of browsing history like searches and a
         Basic
       </message>
       <message name="IDS_ANDROID_HISTORY_OTHER_FORMS_OF_HISTORY" desc="The notification at the top of the history page indicating that deleting Chrome browsing history will not delete other forms of history stored at Google My Activity.">
-        Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;link&gt;</ph>history.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
-      </message>
-      <message name="IDS_ANDROID_HISTORY_OTHER_FORMS_OF_HISTORY_NEW" desc="The notification at the top of the history page indicating that deleting Chrome browsing history will not delete other forms of history stored at Google My Activity.">
         Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;link&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_ANDROID_HISTORY_BLOCKED_SITE" desc="The text displayed in the history page indicating that a visit to a web site was blocked due to an administrator policy.">
@@ -760,11 +757,11 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_FORCE_ENABLE_ZOOM_SUMMARY" desc="Summary of preference that allows the user to zoom in on any webpage, even if the page tries to disable zooming.">
         Override a website’s request to prevent zooming in
       </message>
-      <message name="IDS_READER_FOR_ACCESSIBILITY_TITLE" desc="Title of preference that allows the user to use Simplified View on any articles, even if the page is mobile-friendly. Simplified View is the new user-facing name for Reader Mode, which extracts the content of an article and removes clutter from a web page and puts the result in a easier-to-read format.">
-        Simplified View
+      <message name="IDS_READER_FOR_ACCESSIBILITY_TITLE" desc="Title of preference that allows the user to use simplified view on any articles, even if the page is mobile-friendly. Simplified view is the new user-facing name for Reader Mode, which extracts the content of an article and removes clutter from a web page and puts the result in a easier-to-read format.">
+        Simplified view
       </message>
-      <message name="IDS_READER_FOR_ACCESSIBILITY_SUMMARY" desc="Summary of preference that allows the user to use Simplified View on any articles, even if the page is mobile-friendly.">
-        Enable Simplified View on all articles
+      <message name="IDS_READER_FOR_ACCESSIBILITY_SUMMARY" desc="Summary of preference that allows the user to use simplified view on any articles, even if the page is mobile-friendly.">
+        Enable simplified view on all articles
       </message>
 
       <!-- Site settings -->
@@ -2439,6 +2436,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_NTP_SUGGESTIONS_FETCH_FAILED" desc="Snackbar text shown when the user presses the More button to get more suggestions, but this fails (eg, no internet connectivity).">
         Can’t get suggestions
       </message>
+      <message name="IDS_NTP_SUGGESTIONS_FETCH_NO_NEW_SUGGESTIONS" desc="Snackbar text shown when the user presses the More button to get more suggestions, the fetch succeeds but provides no new suggestions.">
+        No new suggestions
+      </message>
       <message name="IDS_NTP_ALL_DISMISSED_REFRESH" desc="Text label for button to refresh the New Tab Page when all suggested content has been dismissed. [CHAR-LIMIT=20]">
         Refresh
       </message>
@@ -2678,7 +2678,7 @@ To obtain new licenses, connect to the internet and play your downloaded content
         Make page mobile-friendly
       </message>
       <message name="IDS_READER_VIEW_TEXT_ALT" desc='Message shown on the reader mode button bar, to invite the user to tap to open a reader mode. Reader mode extracts content and removes clutter from a web page and puts the result in a panel making it easier to read. This is used when "Reader Mode for Accessibility" is available.'>
-        Simplify page
+        Show simplified view
       </message>
       <message name="IDS_CONTENT_PROVIDER_SEARCH_DESCRIPTION" desc="Description for Chrome's entry in QSB's list of search suggestion providers [CHAR-LIMIT=32]">
         Bookmarks and web history
@@ -3211,7 +3211,7 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       <message name="IDS_BOTTOM_SHEET_ACCESSIBILITY_EXPAND_BUTTON_HELP_BUBBLE_MESSAGE" desc="Text displayed in a help bubble above the toolbar expand button prompting users to tap the button to see their bookmarks and other content when accessibility is enabled.">
         Tap to see downloads, bookmarks, and history
       </message>
-      <message name="IDS_BOTTOM_SHEET_EXPAND_BUTTON_ACCESSIBILITY" desc="Part of the accessibility string read when the expand button is tapped informing users that tapping button will show downloads, bookmarks, and history. 'access' is a noun. 'Downloads', 'Bookmarks', and 'History' should use the same translations as in Chrome settings and menu items. TalkBack will read 'Expand navigation panel button. Double tap to access downloads, bookmarks, and history'.">
+      <message name="IDS_BOTTOM_SHEET_EXPAND_BUTTON_ACCESSIBILITY" desc="Part of the accessibility string read when the expand button is tapped informing users that tapping button will show downloads, bookmarks, and history. 'access' is a verb. 'Downloads', 'Bookmarks', and 'History' should use the same translations as in Chrome settings and menu items. TalkBack will read 'Expand navigation panel button. Double tap to access downloads, bookmarks, and history'.">
         access downloads, bookmarks, and history.
       </message>
      <message name="IDS_BOTTOM_SHEET_ACCESSIBILITY_DESCRIPTION" desc="Accessibility string read when the navigation panel is focused informing the user that the panel can be closed by swiping down.">
@@ -3277,6 +3277,14 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       <!-- Migration strings -->
       <message name="IDS_UPDATING_CHROME" desc="String that indicates that Chrome is updating">
         Updating Chrome...
+      </message>
+
+      <!-- Interventions -->
+      <message name="IDS_NEAR_OOM_INTERVENTION_MESSAGE" desc="The message stating that the browser intervened to stop the page using too much memory.">
+         This page uses too much memory, so Chrome paused it.
+      </message>
+      <message name="IDS_NEAR_OOM_INTERVENTION_DECLINE" desc="The text of the button letting the user decline the browser's intervention, so that the page can resume what it was doing.">
+         Resume
       </message>
     </messages>
   </release>

@@ -337,7 +337,7 @@ void ShellDevToolsBindings::OnURLFetchComplete(const net::URLFetcher* source) {
   DCHECK(it != pending_requests_.end());
 
   base::DictionaryValue response;
-  auto headers = base::MakeUnique<base::DictionaryValue>();
+  auto headers = std::make_unique<base::DictionaryValue>();
   net::HttpResponseHeaders* rh = source->GetResponseHeaders();
   response.SetInteger("statusCode", rh ? rh->response_code() : 200);
 
@@ -382,8 +382,7 @@ void ShellDevToolsBindings::SendMessageAck(int request_id,
   CallClientFunction("DevToolsAPI.embedderMessageAck", &id_value, arg, nullptr);
 }
 
-void ShellDevToolsBindings::AgentHostClosed(DevToolsAgentHost* agent_host,
-                                            bool replaced) {
+void ShellDevToolsBindings::AgentHostClosed(DevToolsAgentHost* agent_host) {
   agent_host_ = nullptr;
   if (delegate_)
     delegate_->Close();

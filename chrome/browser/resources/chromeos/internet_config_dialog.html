@@ -1,3 +1,11 @@
+<!doctype html>
+<html i18n-values="dir:textdirection;lang:language">
+
+<head>
+
+<meta charset="utf-8">
+<title>$i18n{title}</title>
+
 <link rel="import" href="chrome://resources/html/polymer.html">
 
 <link rel="import" href="chrome://resources/cr_components/chromeos/network/network_config.html">
@@ -10,20 +18,24 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
 
+<script src="chrome://internet-config-dialog/strings.js"></script>
+
+</head>
+
+<body>
+
 <dom-module id="internet-config-dialog">
   <template>
     <style include="network-shared iron-flex">
       .button-strip {
+        border-top: var(--cr-separator-line);
         justify-content: flex-end;
       }
 
       .section {
         @apply(--cr-section);
-        margin-bottom: 10px;
-      }
-
-      .section.first {
         border-top: none;
+        margin-bottom: 10px;
       }
 
       .section.single-column {
@@ -42,15 +54,18 @@
         font-size: 107.69%;  /* 14px / 13px */
         font-weight: 500;
       }
+
+      network-config {
+        /* Give the network-config section some extra padding for the dialog. */
+        -webkit-padding-start: 20px;
+      }
     </style>
 
     <!-- Title section: Icon + name. -->
-    <div class="section first">
-      <div class="start layout horizontal center">
-        <cr-network-icon network-state="[[networkProperties_]]" is-list-item>
-        </cr-network-icon>
-        <div class="title">[[getTitle_(networkProperties_.*)]]</div>
-      </div>
+    <div class="section layout horizontal center">
+      <cr-network-icon network-state="[[networkProperties_]]" is-list-item>
+      </cr-network-icon>
+      <div class="title">[[getDialogTitle_(networkProperties_)]]</div>
     </div>
 
     <div class="section single-column">
@@ -77,9 +92,8 @@
   <script src="internet_config_dialog.js"></script>
 </dom-module>
 
-<html i18n-values="dir:textdirection;lang:language">
-  <script src="chrome://internet-config-dialog/strings.js"></script>
-  <body>
-    <internet-config-dialog></internet-config-dialog>
-  </body>
+<internet-config-dialog></internet-config-dialog>
+
+</body>
+
 </html>

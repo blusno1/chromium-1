@@ -183,8 +183,9 @@ InlineSigninHelper::InlineSigninHelper(
         auth_code, signin_scoped_device_id);
   } else {
     DCHECK(!session_index_.empty());
-    gaia_auth_fetcher_.StartCookieForOAuthLoginTokenExchangeWithDeviceId(
-        session_index_, signin_scoped_device_id);
+    gaia_auth_fetcher_
+        .DeprecatedStartCookieForOAuthLoginTokenExchangeWithDeviceId(
+            session_index_, signin_scoped_device_id);
   }
 }
 
@@ -565,6 +566,8 @@ void InlineLoginHandlerImpl::SetExtraInitParams(base::DictionaryValue& params) {
 
   content::WebContentsObserver::Observe(contents);
   LogHistogramValue(signin_metrics::HISTOGRAM_SHOWN);
+  UMA_HISTOGRAM_BOOLEAN("Signin.UseDeprecatedGaiaSigninEndpoint",
+                        is_constrained == "1");
 }
 
 void InlineLoginHandlerImpl::CompleteLogin(const base::ListValue* args) {

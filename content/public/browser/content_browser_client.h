@@ -147,6 +147,11 @@ namespace mojom {
 class NetworkContext;
 }
 
+CONTENT_EXPORT void OverrideOnBindInterface(
+    const service_manager::BindSourceInfo& remote_info,
+    const std::string& name,
+    mojo::ScopedMessagePipeHandle* handle);
+
 // Embedder API (or SPI) for participating in browser logic, to be implemented
 // by the client of the content browser. See ChromeContentBrowserClient for the
 // principal implementation. The methods are assumed to be called on the UI
@@ -262,6 +267,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns whether a URL should be allowed to open from a specific context.
   // This also applies in cases where the new URL will open in another process.
   virtual bool ShouldAllowOpenURL(SiteInstance* site_instance, const GURL& url);
+
+  // Returns whether a URL can be displayed within a WebUI for a given
+  // BrowserContext. Temporary workaround while crbug.com/768526 is resolved.
+  // Note: This is used by an internal Cast implementation of this class.
+  virtual bool IsURLAcceptableForWebUI(BrowserContext* browser_context,
+                                       const GURL& url);
 
   // Allows the embedder to override parameters when navigating. Called for both
   // opening new URLs and when transferring URLs across processes.
@@ -712,6 +723,15 @@ class CONTENT_EXPORT ContentBrowserClient {
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle* handle);
 
+  // Content was unable to bind a request for this interface, so the embedder
+  // should try. This is called for interface requests from dedicated, shared
+  // and service workers.
+  virtual void BindInterfaceRequestFromWorker(
+      RenderProcessHost* render_process_host,
+      const url::Origin& origin,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle interface_pipe) {}
+
   // (Currently called only from GPUProcessHost, move somewhere more central).
   // Called when a request to bind |interface_name| on |interface_pipe| is
   // received from |source_info.identity|. If the request is bound,
@@ -727,6 +747,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Registers services to be loaded in the browser process by the Service
   // Manager.
   virtual void RegisterInProcessServices(StaticServiceMap* services) {}
+
+  virtual void OverrideOnBindInterface(
+      const service_manager::BindSourceInfo& remote_info,
+      const std::string& name,
+      mojo::ScopedMessagePipeHandle* handle) {}
 
   using OutOfProcessServiceMap = std::map<std::string, base::string16>;
 

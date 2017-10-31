@@ -35,6 +35,7 @@
 #include "WebCommon.h"
 #include "WebHTTPBody.h"
 #include "WebReferrerPolicy.h"
+#include "services/network/public/interfaces/fetch_api.mojom-shared.h"
 
 namespace blink {
 
@@ -106,30 +107,6 @@ class WebURLRequest {
     kFrameTypeNested,
     kFrameTypeNone,
     kFrameTypeTopLevel
-  };
-
-  // Corresponds to Fetch request's "mode" and "use-CORS-preflight flag":
-  // https://fetch.spec.whatwg.org/#concept-request-mode
-  enum FetchRequestMode : uint8_t {
-    kFetchRequestModeSameOrigin,
-    kFetchRequestModeNoCORS,
-    kFetchRequestModeCORS,
-    kFetchRequestModeCORSWithForcedPreflight,
-    kFetchRequestModeNavigate
-  };
-
-  // Corresponds to Fetch request's "credentials mode":
-  // https://fetch.spec.whatwg.org/#concept-request-credentials-mode
-  enum FetchCredentialsMode : uint8_t {
-    kFetchCredentialsModeOmit,
-    kFetchCredentialsModeSameOrigin,
-    kFetchCredentialsModeInclude,
-
-    // "password" mode is not defined in the Fetch spec, but can be seen in
-    // an example code for the Credential Management Level 1.
-    // https://w3c.github.io/webappsec-credential-management/#passwords
-    // TODO(battre): Remove kFetchCredentialsModePassword.
-    kFetchCredentialsModePassword
   };
 
   // Corresponds to Fetch request's "redirect mode":
@@ -309,12 +286,16 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT void SetShouldResetAppCache(bool);
 
   // The request mode which will be passed to the ServiceWorker.
-  BLINK_PLATFORM_EXPORT FetchRequestMode GetFetchRequestMode() const;
-  BLINK_PLATFORM_EXPORT void SetFetchRequestMode(FetchRequestMode);
+  BLINK_PLATFORM_EXPORT network::mojom::FetchRequestMode GetFetchRequestMode()
+      const;
+  BLINK_PLATFORM_EXPORT void SetFetchRequestMode(
+      network::mojom::FetchRequestMode);
 
   // The credentials mode which will be passed to the ServiceWorker.
-  BLINK_PLATFORM_EXPORT FetchCredentialsMode GetFetchCredentialsMode() const;
-  BLINK_PLATFORM_EXPORT void SetFetchCredentialsMode(FetchCredentialsMode);
+  BLINK_PLATFORM_EXPORT network::mojom::FetchCredentialsMode
+  GetFetchCredentialsMode() const;
+  BLINK_PLATFORM_EXPORT void SetFetchCredentialsMode(
+      network::mojom::FetchCredentialsMode);
 
   // The redirect mode which is used in Fetch API.
   BLINK_PLATFORM_EXPORT FetchRedirectMode GetFetchRedirectMode() const;

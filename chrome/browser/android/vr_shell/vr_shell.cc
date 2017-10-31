@@ -37,6 +37,7 @@
 #include "chrome/browser/vr/ui_scene_manager.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/browser/vr/web_contents_event_forwarder.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/util.h"
@@ -49,7 +50,6 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/url_constants.h"
@@ -729,7 +729,7 @@ void VrShell::SetVoiceSearchActive(bool active) {
     Profile* profile = ProfileManager::GetActiveUserProfile();
     std::string profile_locale = g_browser_process->GetApplicationLocale();
     speech_recognizer_.reset(new vr::SpeechRecognizer(
-        this, profile->GetRequestContext(), profile_locale));
+        this, ui_, profile->GetRequestContext(), profile_locale));
   }
   if (active) {
     speech_recognizer_->Start();

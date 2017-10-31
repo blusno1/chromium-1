@@ -2221,9 +2221,10 @@ TEST_F(NavigationControllerTest, NewSubframe) {
   // Prereq: add a subframe with an initial auto-subframe navigation.
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
-      process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
-      std::string(), unique_name, base::UnguessableToken::Create(),
-      FramePolicy(), FrameOwnerProperties());
+      process()->GetNextRoutingID(),
+      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      blink::WebTreeScopeType::kDocument, std::string(), unique_name,
+      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL subframe_url("http://foo1/subframe");
@@ -2297,9 +2298,10 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   // Add a subframe and navigate it.
   std::string unique_name0("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
-      process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
-      std::string(), unique_name0, base::UnguessableToken::Create(),
-      FramePolicy(), FrameOwnerProperties());
+      process()->GetNextRoutingID(),
+      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      blink::WebTreeScopeType::kDocument, std::string(), unique_name0,
+      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL url2("http://foo/2");
@@ -2341,9 +2343,10 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   // Add a second subframe and navigate.
   std::string unique_name1("uniqueName1");
   main_test_rfh()->OnCreateChildFrame(
-      process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
-      std::string(), unique_name1, base::UnguessableToken::Create(),
-      FramePolicy(), FrameOwnerProperties());
+      process()->GetNextRoutingID(),
+      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      blink::WebTreeScopeType::kDocument, std::string(), unique_name1,
+      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
   TestRenderFrameHost* subframe2 = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(1)->current_frame_host());
   const GURL url3("http://foo/3");
@@ -2385,9 +2388,10 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   // Add a nested subframe and navigate.
   std::string unique_name2("uniqueName2");
   subframe->OnCreateChildFrame(
-      process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
-      std::string(), unique_name2, base::UnguessableToken::Create(),
-      FramePolicy(), FrameOwnerProperties());
+      process()->GetNextRoutingID(),
+      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      blink::WebTreeScopeType::kDocument, std::string(), unique_name2,
+      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
   TestRenderFrameHost* subframe3 =
       static_cast<TestRenderFrameHost*>(contents()
                                             ->GetFrameTree()
@@ -2447,9 +2451,10 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   // Prereq: add a subframe with an initial auto-subframe navigation.
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
-      process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
-      std::string(), unique_name, base::UnguessableToken::Create(),
-      FramePolicy(), FrameOwnerProperties());
+      process()->GetNextRoutingID(),
+      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      blink::WebTreeScopeType::kDocument, std::string(), unique_name,
+      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL subframe_url("http://foo1/subframe");
@@ -3850,9 +3855,10 @@ TEST_F(NavigationControllerTest, SameSubframe) {
   // Add and navigate a subframe that would normally count as in-page.
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
-      process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
-      std::string(), unique_name, base::UnguessableToken::Create(),
-      FramePolicy(), FrameOwnerProperties());
+      process()->GetNextRoutingID(),
+      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      blink::WebTreeScopeType::kDocument, std::string(), unique_name,
+      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL subframe_url("http://www.google.com/#");
@@ -4024,9 +4030,10 @@ TEST_F(NavigationControllerTest, SubframeWhilePending) {
   // automatically loaded. Auto subframes don't increment the page ID.
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
-      process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
-      std::string(), unique_name, base::UnguessableToken::Create(),
-      FramePolicy(), FrameOwnerProperties());
+      process()->GetNextRoutingID(),
+      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      blink::WebTreeScopeType::kDocument, std::string(), unique_name,
+      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL url1_sub("http://foo/subframe");
@@ -4532,7 +4539,8 @@ TEST_F(NavigationControllerTest, HistoryNavigate) {
   EXPECT_EQ(0, controller.GetPendingEntryIndex());
   // The actual cross-navigation is suspended until the current RVH tells us
   // it unloaded, simulate that.
-  contents()->ProceedWithCrossSiteNavigation();
+  if (!IsBrowserSideNavigationEnabled())
+    contents()->GetMainFrame()->PrepareForCommitIfNecessary();
   // Also make sure we told the page to navigate.
   GURL nav_url = GetLastNavigationURL();
   EXPECT_EQ(url1, nav_url);
@@ -4544,7 +4552,8 @@ TEST_F(NavigationControllerTest, HistoryNavigate) {
   EXPECT_EQ(2, controller.GetPendingEntryIndex());
   // The actual cross-navigation is suspended until the current RVH tells us
   // it unloaded, simulate that.
-  contents()->ProceedWithCrossSiteNavigation();
+  if (!IsBrowserSideNavigationEnabled())
+    contents()->GetMainFrame()->PrepareForCommitIfNecessary();
   nav_url = GetLastNavigationURL();
   EXPECT_EQ(url3, nav_url);
   contents()->CommitPendingNavigation();

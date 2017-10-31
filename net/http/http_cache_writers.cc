@@ -117,10 +117,10 @@ void HttpCache::Writers::AddTransaction(Transaction* transaction,
   should_keep_entry_ =
       IsValidResponseForWriter(info.partial != nullptr, &(info.response_info));
 
-  if (info.partial && !info.truncated)
+  if (info.partial && !info.truncated) {
+    DCHECK(!partial_do_not_truncate_);
     partial_do_not_truncate_ = true;
-  else
-    partial_do_not_truncate_ = false;
+  }
 
   std::pair<Transaction*, TransactionInfo> writer(transaction, info);
   all_writers_.insert(writer);
@@ -261,19 +261,7 @@ bool HttpCache::Writers::InitiateTruncateEntry() {
     return true;
   }
 
-  // Don't set the flag for sparse entries or for entries that cannot be
-  // resumed.
-  if (!should_keep_entry_ || partial_do_not_truncate_)
-    return false;
-
-  if (!CanResume()) {
-    should_keep_entry_ = false;
-    return false;
-  }
-
-  int current_size = entry_->disk_entry->GetDataSize(kResponseContentIndex);
-  int64_t body_size = response_info_truncation_.headers->GetContentLength();
-  if (body_size >= 0 && body_size <= current_size)
+  if (!ShouldTruncate())
     return false;
 
   next_state_ = State::CACHE_WRITE_TRUNCATED_RESPONSE;
@@ -283,19 +271,34 @@ bool HttpCache::Writers::InitiateTruncateEntry() {
   return true;
 }
 
-bool HttpCache::Writers::CanResume() const {
-  // Double check that there is something worth keeping.
-  if (!entry_->disk_entry->GetDataSize(kResponseContentIndex))
+bool HttpCache::Writers::ShouldTruncate() {
+  // Don't set the flag for sparse entries or for entries that cannot be
+  // resumed.
+  if (!should_keep_entry_ || partial_do_not_truncate_)
     return false;
 
+  // Check the response headers for strong validators.
   // Note that if this is a 206, content-length was already fixed after calling
   // PartialData::ResponseHeadersOK().
   if (response_info_truncation_.headers->GetContentLength() <= 0 ||
       response_info_truncation_.headers->HasHeaderValue("Accept-Ranges",
                                                         "none") ||
       !response_info_truncation_.headers->HasStrongValidators()) {
+    should_keep_entry_ = false;
     return false;
   }
+
+  // Double check that there is something worth keeping.
+  int current_size = entry_->disk_entry->GetDataSize(kResponseContentIndex);
+  if (!current_size) {
+    should_keep_entry_ = false;
+    return false;
+  }
+
+  int64_t content_length =
+      response_info_truncation_.headers->GetContentLength();
+  if (content_length >= 0 && content_length <= current_size)
+    return false;
 
   return true;
 }
@@ -377,6 +380,7 @@ int HttpCache::Writers::DoLoop(int result) {
       DCHECK(cache_callback_);
       network_transaction_.reset();
     }
+
     if (cache_callback_)
       std::move(cache_callback_).Run();
     // |this| may have been destroyed in the cache_callback_.
@@ -473,9 +477,13 @@ int HttpCache::Writers::DoCacheWriteDataComplete(int result) {
 int HttpCache::Writers::DoAsyncOpCompletePreTruncate(int result) {
   DCHECK(all_writers_.empty() && !active_transaction_);
 
-  // Even if cache write was a failure, it should be ok to still attempt to mark
-  // the response as trucated.
-  next_state_ = State::CACHE_WRITE_TRUNCATED_RESPONSE;
+  if (ShouldTruncate()) {
+    next_state_ = State::CACHE_WRITE_TRUNCATED_RESPONSE;
+  } else {
+    next_state_ = State::NONE;
+    SetCacheCallback(false, TransactionSet());
+  }
+
   return OK;
 }
 
@@ -545,11 +553,9 @@ void HttpCache::Writers::OnDataReceived(int result) {
     // Invoke entry processing.
     DCHECK(ContainsOnlyIdleWriters());
     TransactionSet make_readers;
-    for (auto& writer : all_writers_) {
+    for (auto& writer : all_writers_)
       make_readers.insert(writer.first);
-    }
     all_writers_.clear();
-    network_transaction_.reset();
     SetCacheCallback(true, make_readers);
     return;
   }
@@ -599,7 +605,7 @@ void HttpCache::Writers::ProcessWaitingForReadTransactions(int result) {
     it = waiting_for_read_.erase(it);
 
     // If its response completion or failure, this transaction needs to be
-    // removed.
+    // removed from writers.
     if (result <= 0)
       EraseTransaction(transaction, result);
   }

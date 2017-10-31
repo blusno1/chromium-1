@@ -18,12 +18,11 @@
 #include "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/image_util.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller+protected.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller_base_feature.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_resource_macros.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/tools_menu_button_observer_bridge.h"
@@ -116,17 +115,6 @@ using ios::material::TimingFunction;
 @synthesize style = style_;
 @synthesize heightConstraint = heightConstraint_;
 @synthesize dispatcher = dispatcher_;
-
-- (CGFloat)preferredToolbarHeightWhenAlignedToTopOfScreen {
-  DCHECK(base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar));
-  InterfaceIdiom idiom = IsIPadIdiom() ? IPAD_IDIOM : IPHONE_IDIOM;
-  CGRect frame = kToolbarFrame[idiom];
-  if (idiom == IPHONE_IDIOM) {
-    CGFloat statusBarOffset = [self statusBarOffset];
-    frame.size.height += statusBarOffset;
-  }
-  return frame.size.height;
-}
 
 - (NSLayoutConstraint*)heightConstraint {
   if (!heightConstraint_) {
@@ -306,7 +294,7 @@ using ios::material::TimingFunction;
 
 #pragma mark - Public API
 
-- (void)safeAreaInsetsDidChange {
+- (void)viewSafeAreaInsetsDidChange {
 }
 
 - (void)applicationDidEnterBackground:(NSNotification*)notify {

@@ -62,6 +62,7 @@
 #include "services/shape_detection/public/interfaces/constants.mojom.h"
 #include "services/video_capture/public/cpp/constants.h"
 #include "services/video_capture/public/interfaces/constants.mojom.h"
+#include "services/viz/public/interfaces/constants.mojom.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_android.h"
@@ -71,6 +72,10 @@
 
 #if defined(OS_WIN)
 #include "content/browser/renderer_host/dwrite_font_proxy_message_filter_win.h"
+#endif
+
+#if defined(USE_AURA)
+#include "ui/aura/env.h"
 #endif
 
 namespace content {
@@ -96,7 +101,7 @@ void StartServiceInUtilityProcess(
   UtilityProcessHostImpl* process_host =
       new UtilityProcessHostImpl(nullptr, nullptr);
 #if defined(OS_WIN)
-  if (sandbox_type == service_manager::SANDBOX_TYPE_PPAPI)
+  if (sandbox_type == service_manager::SANDBOX_TYPE_PDF_COMPOSITOR)
     process_host->AddFilter(new DWriteFontProxyMessageFilter());
 #endif
   process_host->SetName(process_name);
@@ -215,6 +220,16 @@ void GetGeolocationRequestContextFromContentClient(
       std::move(callback));
 }
 
+bool ShouldEnableVizService() {
+#if defined(USE_AURA)
+  // aura::Env can be null in tests.
+  return aura::Env::GetInstanceDontCreate() &&
+         aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS;
+#else
+  return false;
+#endif
+}
+
 }  // namespace
 
 // State which lives on the IO thread and drives the ServiceManager.
@@ -251,8 +266,8 @@ class ServiceManagerContext::InProcessServiceManagerContext
       std::unique_ptr<BuiltinManifestProvider> manifest_provider,
       service_manager::mojom::ServicePtrInfo packaged_services_service_info) {
     manifest_provider_ = std::move(manifest_provider);
-    service_manager_ = base::MakeUnique<service_manager::ServiceManager>(
-        base::MakeUnique<NullServiceProcessLauncherFactory>(), nullptr,
+    service_manager_ = std::make_unique<service_manager::ServiceManager>(
+        std::make_unique<NullServiceProcessLauncherFactory>(), nullptr,
         manifest_provider_.get());
 
     service_manager::mojom::ServicePtr packaged_services_service;
@@ -302,7 +317,7 @@ ServiceManagerContext::ServiceManagerContext() {
         service_manager::GetServiceRequestFromCommandLine(invitation.get());
   } else {
     std::unique_ptr<BuiltinManifestProvider> manifest_provider =
-        base::MakeUnique<BuiltinManifestProvider>();
+        std::make_unique<BuiltinManifestProvider>();
 
     static const struct ManifestInfo {
       const char* name;
@@ -440,6 +455,11 @@ ServiceManagerContext::ServiceManagerContext() {
   out_of_process_services[media::mojom::kCdmServiceName] =
       base::ASCIIToUTF16("Content Decryption Module Service");
 #endif
+
+  if (ShouldEnableVizService()) {
+    out_of_process_services[viz::mojom::kVizServiceName] =
+        base::ASCIIToUTF16("Visuals Service");
+  }
 
   for (const auto& service : out_of_process_services) {
     packaged_services_connection_->AddServiceRequestHandler(

@@ -89,19 +89,20 @@ class CONTENT_EXPORT ServiceWorkerProviderContext
   // SetRegistrationForServiceWorkerGlobalScope() is called during the setup for
   // service worker startup, so it is guaranteed to be called before
   // TakeRegistrationForServiceWorkerGlobalScope().
+  // |sender| is to initialize ServiceWorkerHandleReference which still needs to
+  // send legacy Incre/Decre IPCs, will disappear together with class
+  // ServiceWorkerHandleReference once ServiceWorkerObjectInfo starts to retain
+  // reference to ServiceWorkerHandle in the browser process.
   void SetRegistrationForServiceWorkerGlobalScope(
       blink::mojom::ServiceWorkerRegistrationObjectInfoPtr registration,
-      std::unique_ptr<ServiceWorkerHandleReference> installing,
-      std::unique_ptr<ServiceWorkerHandleReference> waiting,
-      std::unique_ptr<ServiceWorkerHandleReference> active);
+      scoped_refptr<ThreadSafeSender> sender);
 
   // For service worker execution contexts. Used for initializing
   // ServiceWorkerGlobalScope#registration. Called on the worker thread.
   // This takes ServiceWorkerRegistrationObjectHost ptr info from
   // ControllerState::registration.
-  void TakeRegistrationForServiceWorkerGlobalScope(
-      blink::mojom::ServiceWorkerRegistrationObjectInfoPtr* info,
-      ServiceWorkerVersionAttributes* attrs);
+  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
+  TakeRegistrationForServiceWorkerGlobalScope();
 
   // For service worker clients. The controller for
   // ServiceWorkerContainer#controller.
@@ -133,6 +134,14 @@ class CONTENT_EXPORT ServiceWorkerProviderContext
   // fetch context calls CreateWorkerClientRequest() on its own
   // ServiceWorkerProviderContext.
   mojom::ServiceWorkerWorkerClientRequest CreateWorkerClientRequest();
+
+  // S13nServiceWorker:
+  // For service worker clients. Creates a ServiceWorkerContainerHostPtrInfo
+  // which can be bound to a ServiceWorkerContainerHostPtr in a (dedicated or
+  // shared) worker thread. WorkerFetchContextImpl will use the host pointer to
+  // get the controller service worker by GetControllerServiceWorker() and send
+  // FetchEvents to the service worker.
+  mojom::ServiceWorkerContainerHostPtrInfo CloneContainerHostPtrInfo();
 
   // Called when ServiceWorkerNetworkProvider is destructed. This function
   // severs the Mojo binding to the browser-side ServiceWorkerProviderHost. The
@@ -170,6 +179,10 @@ class CONTENT_EXPORT ServiceWorkerProviderContext
   void SetController(blink::mojom::ServiceWorkerObjectInfoPtr controller,
                      const std::vector<blink::mojom::WebFeature>& used_features,
                      bool should_notify_controllerchange) override;
+  void PostMessageToClient(
+      blink::mojom::ServiceWorkerObjectInfoPtr source,
+      const base::string16& message,
+      std::vector<mojo::ScopedMessagePipeHandle> message_pipes) override;
 
   const ServiceWorkerProviderType provider_type_;
   const int provider_id_;

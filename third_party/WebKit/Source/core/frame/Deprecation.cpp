@@ -22,6 +22,20 @@
 
 namespace {
 
+const char chromeLoadTimesNavigationTiming[] =
+    "chrome.loadTimes() is deprecated, instead use standardized API: "
+    "Navigation Timing 2. "
+    "https://www.chromestatus.com/features/5637885046816768.";
+const char chromeLoadTimesNextHopProtocol[] =
+    "chrome.loadTimes() is deprecated, instead use standardized API: "
+    "nextHopProtocol in Navigation Timing 2. "
+    "https://www.chromestatus.com/features/5637885046816768.";
+
+const char chromeLoadTimesPaintTiming[] =
+    "chrome.loadTimes() is deprecated, instead use standardized API: "
+    "Paint Timing. "
+    "https://www.chromestatus.com/features/5637885046816768.";
+
 enum Milestone {
   M60,
   M61,
@@ -97,6 +111,15 @@ String DeprecatedWebAudioDezippering(const char* audio_param_name) {
       "See https://www.chromestatus.com/features/5287995770929152 for more "
       "details.",
       audio_param_name, milestoneString(M64));
+}
+
+String DeprecatedWebAudioValueSetterBehavior() {
+  return String::Format(
+      "AudioParam value setter will become equivalent to "
+      "AudioParam.setValueAtTime() in %s  "
+      "See https://webaudio.github.io/web-audio-api/#dom-audioparam-value for "
+      "more details.",
+      milestoneString(M65));
 }
 
 }  // anonymous namespace
@@ -465,12 +488,6 @@ String Deprecation::DeprecationMessage(WebFeature feature) {
           "https://www.chromestatus.com/feature/6451284559265792 for more "
           "details.");
 
-    case WebFeature::kElementCreateShadowRootMultiple:
-      return willBeRemoved(
-          "Calling Element.createShadowRoot() for an element "
-          "which already hosts a shadow root",
-          M63, "4668884095336448");
-
     case WebFeature::kCSSDeepCombinator:
       return "/deep/ combinator is no longer supported in CSS dynamic profile."
              "It is now effectively no-op, acting as if it were a descendant "
@@ -612,6 +629,35 @@ String Deprecation::DeprecationMessage(WebFeature feature) {
       return DeprecatedWebAudioDezippering("BiquadFilterNode.Q");
     case WebFeature::kWebAudioDezipperBiquadFilterNodeGain:
       return DeprecatedWebAudioDezippering("BiquadFilterNode.gain");
+    case WebFeature::kWebAudioValueSetterIsSetValue:
+      return DeprecatedWebAudioValueSetterBehavior();
+
+    case WebFeature::kChromeLoadTimesRequestTime:
+      return chromeLoadTimesNavigationTiming;
+    case WebFeature::kChromeLoadTimesStartLoadTime:
+      return chromeLoadTimesNavigationTiming;
+    case WebFeature::kChromeLoadTimesCommitLoadTime:
+      return chromeLoadTimesNavigationTiming;
+    case WebFeature::kChromeLoadTimesFinishDocumentLoadTime:
+      return chromeLoadTimesNavigationTiming;
+    case WebFeature::kChromeLoadTimesFinishLoadTime:
+      return chromeLoadTimesNavigationTiming;
+    case WebFeature::kChromeLoadTimesFirstPaintTime:
+      return chromeLoadTimesPaintTiming;
+    case WebFeature::kChromeLoadTimesFirstPaintAfterLoadTime:
+      return chromeLoadTimesPaintTiming;
+    case WebFeature::kChromeLoadTimesNavigationType:
+      return chromeLoadTimesNavigationTiming;
+    case WebFeature::kChromeLoadTimesWasFetchedViaSpdy:
+      return chromeLoadTimesNextHopProtocol;
+    case WebFeature::kChromeLoadTimesWasNpnNegotiated:
+      return chromeLoadTimesNextHopProtocol;
+    case WebFeature::kChromeLoadTimesNpnNegotiatedProtocol:
+      return chromeLoadTimesNextHopProtocol;
+    case WebFeature::kChromeLoadTimesWasAlternateProtocolAvailable:
+      return chromeLoadTimesNextHopProtocol;
+    case WebFeature::kChromeLoadTimesConnectionInfo:
+      return chromeLoadTimesNavigationTiming;
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

@@ -69,9 +69,9 @@ void NGLineBoxFragmentBuilder::SetMetrics(const NGLineHeightMetrics& metrics) {
   metrics_ = metrics;
 }
 
-void NGLineBoxFragmentBuilder::AddPositionedFloat(
-    const NGPositionedFloat& positioned_float) {
-  positioned_floats_.push_back(positioned_float);
+void NGLineBoxFragmentBuilder::SwapPositionedFloats(
+    Vector<NGPositionedFloat>* positioned_floats) {
+  positioned_floats_.swap(*positioned_floats);
 }
 
 void NGLineBoxFragmentBuilder::SetBreakToken(
@@ -88,8 +88,7 @@ void NGLineBoxFragmentBuilder::AddChildren(ChildList& children) {
       DCHECK(!child.fragment);
       AddChild(std::move(child.layout_result), child.offset);
       DCHECK(!child.layout_result);
-    } else {
-      DCHECK(child.fragment);
+    } else if (child.fragment) {
       AddChild(std::move(child.fragment), child.offset);
       DCHECK(!child.fragment);
     }

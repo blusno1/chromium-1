@@ -40,13 +40,6 @@ enable_built_in_dns = !is_ios && !is_proto_quic
 # Unix sockets are not supported on iOS, Fuchsia or NaCl.
 enable_unix_sockets = is_posix && !is_ios && !is_fuchsia && !is_nacl
 
-# True if certificates are represented with DER byte buffers. This can be true
-# in addition to use_nss_certs, in that case byte certs are used internally but
-# NSS is used for certificate verification.
-# TODO(mattm): crbug.com/671420: Implement and enable this for all platforms.
-use_byte_certs = is_mac || is_android || is_nacl || is_ios || is_win ||
-                 is_fuchsia || is_linux
-
 # Android and Fuchsia can't run testserver.py directly, so they use remote
 # test server.
 use_remote_test_server = is_android || is_fuchsia
@@ -63,7 +56,6 @@ buildflag_header("features") {
     "ENABLE_MDNS=$enable_mdns",
     "ENABLE_REPORTING=$enable_reporting",
     "ENABLE_WEBSOCKETS=$enable_websockets",
-    "USE_BYTE_CERTS=$use_byte_certs",
     "INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST=$include_transport_security_state_preload_list",
   ]
 }
@@ -261,7 +253,6 @@ component("net") {
     "cert/x509_cert_types.h",
     "cert/x509_certificate.cc",
     "cert/x509_certificate.h",
-    "cert/x509_certificate_bytes.cc",
     "cert/x509_certificate_net_log_param.cc",
     "cert/x509_certificate_net_log_param.h",
     "cert/x509_util.cc",
@@ -604,7 +595,6 @@ component("net") {
       "cert/test_root_certs_nss.cc",
       "cert/test_root_certs_win.cc",
       "cert/x509_certificate_known_roots_win.h",
-      "cert/x509_certificate_nss.cc",
       "cert/x509_util_android.cc",
       "cert/x509_util_ios.cc",
       "cert/x509_util_ios.h",
@@ -708,6 +698,8 @@ component("net") {
       "disk_cache/simple/simple_entry_operation.h",
       "disk_cache/simple/simple_experiment.cc",
       "disk_cache/simple/simple_experiment.h",
+      "disk_cache/simple/simple_file_tracker.cc",
+      "disk_cache/simple/simple_file_tracker.h",
       "disk_cache/simple/simple_histogram_macros.h",
       "disk_cache/simple/simple_index.cc",
       "disk_cache/simple/simple_index.h",
@@ -1321,7 +1313,6 @@ component("net") {
       "quic/core/quic_header_list.h",
       "quic/core/quic_headers_stream.cc",
       "quic/core/quic_headers_stream.h",
-      "quic/core/quic_iovector.h",
       "quic/core/quic_one_block_arena.h",
       "quic/core/quic_packet_creator.cc",
       "quic/core/quic_packet_creator.h",
@@ -1821,14 +1812,6 @@ component("net") {
       ]
     }
 
-    if (use_byte_certs) {
-      if (use_nss_certs) {
-        sources -= [ "cert/x509_certificate_nss.cc" ]
-      }
-    } else {
-      sources -= [ "cert/x509_certificate_bytes.cc" ]
-    }
-
     if (!use_kerberos || is_android) {
       sources -= [
         "http/http_auth_gssapi_posix.cc",
@@ -1864,7 +1847,6 @@ component("net") {
         "cert/known_roots_nss.h",
         "cert/nss_cert_database.cc",
         "cert/nss_cert_database.h",
-        "cert/x509_certificate_nss.cc",
         "ssl/client_cert_store_nss.cc",
         "ssl/client_cert_store_nss.h",
         "third_party/mozilla_security_manager/nsNSSCertificateDB.cpp",
@@ -4738,6 +4720,7 @@ test("net_unittests") {
     "disk_cache/cache_util_unittest.cc",
     "disk_cache/entry_unittest.cc",
     "disk_cache/simple/simple_experiment_unittest.cc",
+    "disk_cache/simple/simple_file_tracker_unittest.cc",
     "disk_cache/simple/simple_index_file_unittest.cc",
     "disk_cache/simple/simple_index_unittest.cc",
     "disk_cache/simple/simple_test_util.cc",

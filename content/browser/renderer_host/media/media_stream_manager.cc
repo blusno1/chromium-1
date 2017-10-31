@@ -438,8 +438,8 @@ MediaStreamManager::MediaStreamManager(
     device_task_runner = video_capture_thread_.task_runner();
 #endif
     if (base::FeatureList::IsEnabled(video_capture::kMojoVideoCapture)) {
-      video_capture_provider = base::MakeUnique<VideoCaptureProviderSwitcher>(
-          base::MakeUnique<ServiceVideoCaptureProvider>(
+      video_capture_provider = std::make_unique<VideoCaptureProviderSwitcher>(
+          std::make_unique<ServiceVideoCaptureProvider>(
               base::BindRepeating(&SendVideoCaptureLogMessage)),
           InProcessVideoCaptureProvider::CreateInstanceForNonDeviceCapture(
               std::move(device_task_runner),
@@ -448,7 +448,7 @@ MediaStreamManager::MediaStreamManager(
       video_capture::uma::LogVideoCaptureServiceEvent(
           video_capture::uma::BROWSER_USING_LEGACY_CAPTURE);
       video_capture_provider = InProcessVideoCaptureProvider::CreateInstance(
-          base::MakeUnique<media::VideoCaptureSystemImpl>(
+          std::make_unique<media::VideoCaptureSystemImpl>(
               media::VideoCaptureDeviceFactory::CreateFactory(
                   BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
                   BrowserGpuMemoryBufferManager::current())),
@@ -1584,7 +1584,6 @@ void MediaStreamManager::StopMediaStreamFromBrowser(const std::string& label) {
 void MediaStreamManager::WillDestroyCurrentMessageLoop() {
   DVLOG(3) << "MediaStreamManager::WillDestroyCurrentMessageLoop()";
   DCHECK(CalledOnIOThread());
-  DCHECK(requests_.empty());
   if (media_devices_manager_)
     media_devices_manager_->StopMonitoring();
   if (video_capture_manager_)
@@ -1596,6 +1595,7 @@ void MediaStreamManager::WillDestroyCurrentMessageLoop() {
   video_capture_manager_ = nullptr;
   media_devices_manager_ = nullptr;
   g_media_stream_manager_tls_ptr.Pointer()->Set(nullptr);
+  requests_.clear();
 }
 
 void MediaStreamManager::NotifyDevicesChanged(

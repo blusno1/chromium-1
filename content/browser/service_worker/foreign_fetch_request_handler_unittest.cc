@@ -86,7 +86,7 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
 
     // Fix the time for testing to kNowTimestamp
     std::unique_ptr<base::SimpleTestClock> clock =
-        base::MakeUnique<base::SimpleTestClock>();
+        std::make_unique<base::SimpleTestClock>();
     clock->SetNow(base::Time::FromDoubleT(kNowTimestamp));
     version_->SetClockForTesting(std::move(clock));
 
@@ -139,7 +139,7 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
 
   static std::unique_ptr<net::HttpResponseInfo> CreateTestHttpResponseInfo() {
     std::unique_ptr<net::HttpResponseInfo> http_info(
-        base::MakeUnique<net::HttpResponseInfo>());
+        std::make_unique<net::HttpResponseInfo>());
     http_info->ssl_info.cert =
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
     DCHECK(http_info->ssl_info.is_valid());
@@ -161,10 +161,11 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
     ForeignFetchRequestHandler::InitializeHandler(
         request_.get(), context_wrapper(), &blob_storage_context_,
         helper_->mock_render_process_id(), provider_host()->provider_id(),
-        ServiceWorkerMode::ALL, FETCH_REQUEST_MODE_CORS,
-        FETCH_CREDENTIALS_MODE_OMIT, FetchRedirectMode::FOLLOW_MODE,
-        std::string() /* integrity */, resource_type,
-        REQUEST_CONTEXT_TYPE_FETCH, REQUEST_CONTEXT_FRAME_TYPE_NONE, nullptr,
+        ServiceWorkerMode::ALL, network::mojom::FetchRequestMode::kCORS,
+        network::mojom::FetchCredentialsMode::kOmit,
+        FetchRedirectMode::FOLLOW_MODE, std::string() /* integrity */,
+        false /* keepalive */, resource_type, REQUEST_CONTEXT_TYPE_FETCH,
+        REQUEST_CONTEXT_FRAME_TYPE_NONE, nullptr,
         true /* initiated_in_secure_context */);
 
     return ForeignFetchRequestHandler::GetHandler(request_.get());

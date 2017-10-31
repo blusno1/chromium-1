@@ -37,13 +37,11 @@ void ThreadedWorkletMessagingProxy::Initialize() {
   ContentSecurityPolicy* csp = document->GetContentSecurityPolicy();
   DCHECK(csp);
 
-  // TODO(nhiroki): Inherit a referrer policy from owner's document.
-  // (https://crbug.com/773921)
   auto global_scope_creation_params =
       std::make_unique<GlobalScopeCreationParams>(
           document->Url(), document->UserAgent(), String() /* source_code */,
           nullptr /* cached_meta_data */, csp->Headers().get(),
-          String() /* referrer_policy */, document->GetSecurityOrigin(),
+          document->GetReferrerPolicy(), document->GetSecurityOrigin(),
           ReleaseWorkerClients(), document->AddressSpace(),
           OriginTrialContext::GetTokens(document).get(),
           std::make_unique<WorkerSettings>(document->GetSettings()),
@@ -62,7 +60,7 @@ void ThreadedWorkletMessagingProxy::Trace(blink::Visitor* visitor) {
 void ThreadedWorkletMessagingProxy::FetchAndInvokeScript(
     const KURL& module_url_record,
     WorkletModuleResponsesMap* module_responses_map,
-    WebURLRequest::FetchCredentialsMode credentials_mode,
+    network::mojom::FetchCredentialsMode credentials_mode,
     scoped_refptr<WebTaskRunner> outside_settings_task_runner,
     WorkletPendingTasks* pending_tasks) {
   DCHECK(IsMainThread());

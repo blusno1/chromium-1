@@ -321,10 +321,11 @@ ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
     const std::string& client_id,
     base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
     const ResourceContext* resource_context,
-    FetchRequestMode request_mode,
-    FetchCredentialsMode credentials_mode,
+    network::mojom::FetchRequestMode request_mode,
+    network::mojom::FetchCredentialsMode credentials_mode,
     FetchRedirectMode redirect_mode,
     const std::string& integrity,
+    bool keepalive,
     ResourceType resource_type,
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
@@ -344,6 +345,7 @@ ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
       credentials_mode_(credentials_mode),
       redirect_mode_(redirect_mode),
       integrity_(integrity),
+      keepalive_(keepalive),
       resource_type_(resource_type),
       request_context_type_(request_context_type),
       frame_type_(frame_type),
@@ -561,8 +563,7 @@ ServiceWorkerURLRequestJob::CreateFetchRequest() {
   uint64_t blob_size = 0;
   if (HasRequestBody())
     CreateRequestBodyBlob(&blob_uuid, &blob_size);
-  std::unique_ptr<ServiceWorkerFetchRequest> request(
-      new ServiceWorkerFetchRequest());
+  auto request = std::make_unique<ServiceWorkerFetchRequest>();
   request->mode = request_mode_;
   request->is_main_resource_load = IsMainResourceLoad();
   request->request_context_type = request_context_type_;
@@ -579,8 +580,11 @@ ServiceWorkerURLRequestJob::CreateFetchRequest() {
   request->blob_size = blob_size;
   request->blob = request_body_blob_handle_;
   request->credentials_mode = credentials_mode_;
+  request->cache_mode = ServiceWorkerFetchRequest::GetCacheModeFromLoadFlags(
+      request_->load_flags());
   request->redirect_mode = redirect_mode_;
   request->integrity = integrity_;
+  request->keepalive = keepalive_;
   request->client_id = client_id_;
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request_);
   if (info) {
@@ -614,7 +618,7 @@ void ServiceWorkerURLRequestJob::CreateRequestBodyBlob(std::string* blob_uuid,
 
   if (features::IsMojoBlobsEnabled()) {
     blink::mojom::BlobPtr blob_ptr;
-    storage::BlobImpl::Create(base::MakeUnique<storage::BlobDataHandle>(
+    storage::BlobImpl::Create(std::make_unique<storage::BlobDataHandle>(
                                   *request_body_blob_data_handle_),
                               MakeRequest(&blob_ptr));
     request_body_blob_handle_ =
@@ -867,8 +871,9 @@ bool ServiceWorkerURLRequestJob::IsFallbackToRendererNeeded() const {
   // fallback to the network directly.
   return !IsMainResourceLoad() &&
          fetch_type_ != ServiceWorkerFetchType::FOREIGN_FETCH &&
-         (request_mode_ == FETCH_REQUEST_MODE_CORS ||
-          request_mode_ == FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT) &&
+         (request_mode_ == network::mojom::FetchRequestMode::kCORS ||
+          request_mode_ ==
+              network::mojom::FetchRequestMode::kCORSWithForcedPreflight) &&
          (!request()->initiator().has_value() ||
           !request()->initiator()->IsSameOriginWith(
               url::Origin::Create(request()->url())));
@@ -1003,7 +1008,7 @@ void ServiceWorkerURLRequestJob::RequestBodyFileSizesResolved(bool success) {
       base::Bind(&ServiceWorkerURLRequestJob::DidDispatchFetchEvent,
                  weak_factory_.GetWeakPtr())));
   worker_start_time_ = base::TimeTicks::Now();
-  nav_preload_metrics_ = base::MakeUnique<NavigationPreloadMetrics>(this);
+  nav_preload_metrics_ = std::make_unique<NavigationPreloadMetrics>(this);
   if (simulate_navigation_preload_for_test_) {
     did_navigation_preload_ = true;
   } else {

@@ -6,11 +6,12 @@
       "provides": {
         "browser": [
           "content::mojom::Child",
+          "content::mojom::ChildControl",
           "content::mojom::ChildHistogramFetcher",
           "content::mojom::ChildHistogramFetcherFactory",
           "IPC::mojom::ChannelBootstrap",
           "service_manager::mojom::ServiceFactory",
-          "ui::mojom::GpuMain"
+          "viz::mojom::VizMain"
         ],
         "service_manager:service_factory": [
           "service_manager::mojom::ServiceFactory"

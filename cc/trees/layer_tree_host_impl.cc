@@ -87,6 +87,7 @@
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -917,6 +918,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
   int num_incomplete_tiles = 0;
   int64_t checkerboarded_no_recording_content_area = 0;
   int64_t checkerboarded_needs_raster_content_area = 0;
+  int64_t total_visible_area = 0;
   bool have_copy_request =
       active_tree()->property_trees()->effect_tree.HasCopyRequests();
   bool have_missing_animated_tiles = false;
@@ -980,6 +982,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
           append_quads_data.checkerboarded_no_recording_content_area;
       checkerboarded_needs_raster_content_area +=
           append_quads_data.checkerboarded_needs_raster_content_area;
+      total_visible_area += append_quads_data.visible_layer_area;
       if (append_quads_data.num_missing_tiles > 0) {
         have_missing_animated_tiles |=
             layer->screen_space_transform_is_animating();
@@ -1042,6 +1045,13 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
 
     // Draw properties depend on copy requests.
     active_tree()->set_needs_update_draw_properties();
+  }
+
+  if (ukm_manager_) {
+    ukm_manager_->AddCheckerboardStatsForFrame(
+        checkerboarded_no_recording_content_area +
+            checkerboarded_needs_raster_content_area,
+        num_missing_tiles, total_visible_area);
   }
 
   if (active_tree_->has_ever_been_drawn()) {
@@ -1583,6 +1593,13 @@ void LayerTreeHostImpl::DidReceiveCompositorFrameAck() {
   client_->DidReceiveCompositorFrameAckOnImplThread();
 }
 
+void LayerTreeHostImpl::DidPresentCompositorFrame(uint32_t presentation_token,
+                                                  base::TimeTicks time,
+                                                  base::TimeDelta refresh,
+                                                  uint32_t flags) {}
+void LayerTreeHostImpl::DidDiscardCompositorFrame(uint32_t presentation_token) {
+}
+
 void LayerTreeHostImpl::ReclaimResources(
     const std::vector<viz::ReturnedResource>& resources) {
   // TODO(piman): We may need to do some validation on this ack before
@@ -1839,8 +1856,7 @@ bool LayerTreeHostImpl::DrawLayers(FrameData* frame) {
   active_tree_->set_has_ever_been_drawn(true);
   devtools_instrumentation::DidDrawFrame(id_);
   benchmark_instrumentation::IssueImplThreadRenderingStatsEvent(
-      rendering_stats_instrumentation_->impl_thread_rendering_stats());
-  rendering_stats_instrumentation_->AccumulateAndClearImplThreadStats();
+      rendering_stats_instrumentation_->TakeImplThreadRenderingStats());
   return true;
 }
 
@@ -2511,9 +2527,8 @@ LayerImpl* LayerTreeHostImpl::ViewportMainScrollLayer() {
   return viewport()->MainScrollLayer();
 }
 
-void LayerTreeHostImpl::QueueImageDecode(
-    const PaintImage& image,
-    const base::Callback<void(bool)>& embedder_callback) {
+void LayerTreeHostImpl::QueueImageDecode(int request_id,
+                                         const PaintImage& image) {
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "LayerTreeHostImpl::QueueImageDecode", "frame_key",
                image.GetKeyForFrame(image.frame_index()).ToString());
@@ -2522,24 +2537,22 @@ void LayerTreeHostImpl::QueueImageDecode(
   decoded_image_tracker_.QueueImageDecode(
       image, GetRasterColorSpace(),
       base::Bind(&LayerTreeHostImpl::ImageDecodeFinished,
-                 base::Unretained(this), embedder_callback));
+                 base::Unretained(this), request_id));
   tile_manager_.checker_image_tracker().DisallowCheckeringForImage(image);
 }
 
-void LayerTreeHostImpl::ImageDecodeFinished(
-    const base::Callback<void(bool)>& embedder_callback,
-    bool decode_succeeded) {
+void LayerTreeHostImpl::ImageDecodeFinished(int request_id,
+                                            bool decode_succeeded) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "LayerTreeHostImpl::ImageDecodeFinished");
-  completed_image_decode_callbacks_.emplace_back(
-      base::Bind(embedder_callback, decode_succeeded));
+  completed_image_decode_requests_.emplace_back(request_id, decode_succeeded);
   client_->NotifyImageDecodeRequestFinished();
 }
 
-std::vector<base::Closure>
-LayerTreeHostImpl::TakeCompletedImageDecodeCallbacks() {
-  auto result = std::move(completed_image_decode_callbacks_);
-  completed_image_decode_callbacks_.clear();
+std::vector<std::pair<int, bool>>
+LayerTreeHostImpl::TakeCompletedImageDecodeRequests() {
+  auto result = std::move(completed_image_decode_requests_);
+  completed_image_decode_requests_.clear();
   return result;
 }
 
@@ -4569,6 +4582,12 @@ void LayerTreeHostImpl::RequestInvalidationForAnimatedImages() {
   // before a new tree is activated.
   bool needs_first_draw_on_activation = true;
   client_->NeedsImplSideInvalidation(needs_first_draw_on_activation);
+}
+
+void LayerTreeHostImpl::InitializeUkm(
+    std::unique_ptr<ukm::UkmRecorder> recorder) {
+  DCHECK(!ukm_manager_);
+  ukm_manager_ = std::make_unique<UkmManager>(std::move(recorder));
 }
 
 }  // namespace cc

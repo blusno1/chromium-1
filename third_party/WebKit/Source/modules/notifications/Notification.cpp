@@ -37,7 +37,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ScopedWindowFocusAllowedIndicator.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/Deprecation.h"
@@ -57,6 +56,7 @@
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Functional.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/modules/notifications/WebNotificationAction.h"
 #include "public/platform/modules/notifications/WebNotificationConstants.h"
@@ -126,9 +126,7 @@ Notification* Notification::Create(ExecutionContext* context,
   if (document && document->GetFrame()) {
     if (auto* frame_resource_coordinator =
             document->GetFrame()->GetFrameResourceCoordinator()) {
-      frame_resource_coordinator->SendEvent(
-          resource_coordinator::mojom::Event::
-              kNonPersistentNotificationCreated);
+      frame_resource_coordinator->OnNonPersistentNotificationCreated();
     }
   }
 
@@ -206,7 +204,8 @@ void Notification::close() {
   // Schedule the "close" event to be fired for non-persistent notifications.
   // Persistent notifications won't get such events for programmatic closes.
   if (type_ == Type::kNonPersistent) {
-    TaskRunnerHelper::Get(TaskType::kUserInteraction, GetExecutionContext())
+    GetExecutionContext()
+        ->GetTaskRunner(TaskType::kUserInteraction)
         ->PostTask(BLINK_FROM_HERE, WTF::Bind(&Notification::DispatchCloseEvent,
                                               WrapPersistent(this)));
     state_ = State::kClosing;
@@ -401,9 +400,10 @@ ScriptPromise Notification::requestPermission(
     ScriptState* script_state,
     NotificationPermissionCallback* deprecated_callback) {
   ExecutionContext* context = ExecutionContext::From(script_state);
+  Document* doc = ToDocumentOrNull(context);
 
   probe::breakableLocation(context, "Notification.requestPermission");
-  if (!UserGestureIndicator::ProcessingUserGesture()) {
+  if (!Frame::HasTransientUserActivation(doc ? doc->GetFrame() : nullptr)) {
     PerformanceMonitor::ReportGenericViolation(
         context, PerformanceMonitor::kDiscouragedAPIUse,
         "Only request notification permission in response to a user gesture.",

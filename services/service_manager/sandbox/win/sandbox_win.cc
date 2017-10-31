@@ -436,7 +436,7 @@ sandbox::ResultCode AddPolicyForSandboxedProcess(
 
 // This code is test only, and attempts to catch unsafe uses of
 // DuplicateHandle() that copy privileged handles into sandboxed processes.
-#ifndef OFFICIAL_BUILD
+#if !defined(OFFICIAL_BUILD) && !defined(COMPONENT_BUILD)
 base::win::IATPatchFunction g_iat_patch_duplicate_handle;
 
 typedef BOOL(WINAPI* DuplicateHandleFunctionPtr)(HANDLE source_process_handle,
@@ -661,8 +661,10 @@ bool SandboxWin::InitBrokerServices(sandbox::BrokerServices* broker_services) {
   sandbox::ResultCode result = broker_services->Init();
   g_broker_services = broker_services;
 
-// In non-official builds warn about dangerous uses of DuplicateHandle.
-#ifndef OFFICIAL_BUILD
+// In non-official builds warn about dangerous uses of DuplicateHandle. This
+// isn't useful under a component build, since there will be multiple modules,
+// each of which may have a slot to patch (if the symbol is even present).
+#if !defined(OFFICIAL_BUILD) && !defined(COMPONENT_BUILD)
   BOOL is_in_job = FALSE;
   CHECK(::IsProcessInJob(::GetCurrentProcess(), NULL, &is_in_job));
   // In a Syzygy-profiled binary, instrumented for import profiling, this

@@ -47,6 +47,7 @@
 #include "content/public/common/referrer.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_response.h"
+#include "content/public/common/screen_info.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/three_d_api_types.h"
 #include "ipc/ipc_message_macros.h"
@@ -167,7 +168,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::ContextMenuParams)
   IPC_STRUCT_TRAITS_MEMBER(page_url)
   IPC_STRUCT_TRAITS_MEMBER(keyword_url)
   IPC_STRUCT_TRAITS_MEMBER(frame_url)
-  IPC_STRUCT_TRAITS_MEMBER(frame_page_state)
   IPC_STRUCT_TRAITS_MEMBER(media_flags)
   IPC_STRUCT_TRAITS_MEMBER(selection_text)
   IPC_STRUCT_TRAITS_MEMBER(title_text)
@@ -247,6 +247,19 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
   IPC_STRUCT_TRAITS_MEMBER(should_update_history)
   IPC_STRUCT_TRAITS_MEMBER(contents_mime_type)
   IPC_STRUCT_TRAITS_MEMBER(socket_address)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(content::ScreenInfo)
+  IPC_STRUCT_TRAITS_MEMBER(device_scale_factor)
+  IPC_STRUCT_TRAITS_MEMBER(color_space)
+  IPC_STRUCT_TRAITS_MEMBER(icc_profile)
+  IPC_STRUCT_TRAITS_MEMBER(depth)
+  IPC_STRUCT_TRAITS_MEMBER(depth_per_component)
+  IPC_STRUCT_TRAITS_MEMBER(is_monochrome)
+  IPC_STRUCT_TRAITS_MEMBER(rect)
+  IPC_STRUCT_TRAITS_MEMBER(available_rect)
+  IPC_STRUCT_TRAITS_MEMBER(orientation_type)
+  IPC_STRUCT_TRAITS_MEMBER(orientation_angle)
 IPC_STRUCT_TRAITS_END()
 
 // Parameters structure for mojom::FrameHost::DidCommitProvisionalLoad.
@@ -388,12 +401,12 @@ IPC_STRUCT_TRAITS_BEGIN(content::CommonNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(post_data)
   IPC_STRUCT_TRAITS_MEMBER(source_location)
   IPC_STRUCT_TRAITS_MEMBER(should_check_main_world_csp)
+  IPC_STRUCT_TRAITS_MEMBER(has_user_gesture)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::BeginNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(headers)
   IPC_STRUCT_TRAITS_MEMBER(load_flags)
-  IPC_STRUCT_TRAITS_MEMBER(has_user_gesture)
   IPC_STRUCT_TRAITS_MEMBER(skip_service_worker)
   IPC_STRUCT_TRAITS_MEMBER(request_context_type)
   IPC_STRUCT_TRAITS_MEMBER(mixed_content_context_type)
@@ -440,7 +453,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::RequestNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(navigation_timing)
   IPC_STRUCT_TRAITS_MEMBER(service_worker_provider_id)
   IPC_STRUCT_TRAITS_MEMBER(appcache_host_id)
-  IPC_STRUCT_TRAITS_MEMBER(has_user_gesture)
 #if defined(OS_ANDROID)
   IPC_STRUCT_TRAITS_MEMBER(data_url_as_string)
 #endif
@@ -1095,12 +1107,15 @@ IPC_MESSAGE_ROUTED4(FrameHostMsg_DidAddMessageToConsole,
 //
 // Each of these messages will have a corresponding FrameHostMsg_Detach message
 // sent when the frame is detached from the DOM.
-// Note that |new_render_frame_id| and |devtools_frame_token| are out
-// parameters. Browser process defines them for the renderer process.
-IPC_SYNC_MESSAGE_CONTROL1_2(FrameHostMsg_CreateChildFrame,
-                            FrameHostMsg_CreateChildFrame_Params,
-                            int32_t /* new_routing_id */,
-                            base::UnguessableToken /* devtools_frame_token */)
+// Note that |new_render_frame_id|, |new_interface_provider|, and
+// |devtools_frame_token| are out parameters. Browser process defines them for
+// the renderer process.
+IPC_SYNC_MESSAGE_CONTROL1_3(
+    FrameHostMsg_CreateChildFrame,
+    FrameHostMsg_CreateChildFrame_Params,
+    int32_t,                 /* new_routing_id */
+    mojo::MessagePipeHandle, /* new_interface_provider */
+    base::UnguessableToken /* devtools_frame_token */)
 
 // Sent by the renderer to the parent RenderFrameHost when a child frame is
 // detached from the DOM.
@@ -1447,10 +1462,10 @@ IPC_MESSAGE_ROUTED3(FrameHostMsg_BeforeUnload_ACK,
 // Indicates that the current frame has swapped out, after a SwapOut message.
 IPC_MESSAGE_ROUTED0(FrameHostMsg_SwapOut_ACK)
 
-// Tells the parent that a child's frame rect has changed (or the rect/scroll
-// position of a child's ancestor has changed).
-IPC_MESSAGE_ROUTED2(FrameHostMsg_FrameRectChanged,
+// Tells the browser that a child's resize parameters have changed.
+IPC_MESSAGE_ROUTED3(FrameHostMsg_UpdateResizeParams,
                     gfx::Rect /* frame_rect */,
+                    content::ScreenInfo /* screen_info */,
                     viz::LocalSurfaceId /* local_surface_id */)
 
 // Sent by a parent frame to update its child's viewport intersection rect for

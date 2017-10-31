@@ -458,6 +458,9 @@
       status: "stable",
     },
     {
+      name: "GetMatchedCSSRules",
+    },
+    {
       name: "HeapCompaction",
       status: "stable",
     },
@@ -487,7 +490,6 @@
     },
     {
       name: "IncrementalShadowDOM",
-      status: "test",
     },
     {
       name: "InertAttribute",
@@ -814,7 +816,7 @@
     },
     {
       name: "PreloadDefaultIsMetadata",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "Presentation",
@@ -954,9 +956,6 @@
       status: "experimental",
     },
     {
-      name: "SlimmingPaintStrictCullRectClipping",
-    },
-    {
       name: "SlimmingPaintV175",
       implied_by: ["SlimmingPaintV2"],
     },
@@ -1051,10 +1050,6 @@
     },
     {
       name: "V8IdleTasks",
-    },
-    {
-      name: "ValidationBubbleInRenderer",
-      status: "stable",
     },
     {
       name: "VibrateRequiresUserGesture",

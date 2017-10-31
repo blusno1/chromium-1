@@ -122,7 +122,6 @@ class NetworkServiceTestWithService
  public:
   NetworkServiceTestWithService()
       : ServiceTest("content_unittests",
-                    false,
                     base::test::ScopedTaskEnvironment::MainThreadType::IO) {}
   ~NetworkServiceTestWithService() override {}
 
@@ -155,7 +154,7 @@ class NetworkServiceTestWithService
 
  private:
   std::unique_ptr<service_manager::Service> CreateService() override {
-    return base::MakeUnique<ServiceTestClient>(this);
+    return std::make_unique<ServiceTestClient>(this);
   }
 
   void SetUp() override {
@@ -379,7 +378,6 @@ class NetworkServiceNetworkChangeTest
  public:
   NetworkServiceNetworkChangeTest()
       : ServiceTest("content_unittests",
-                    false,
                     base::test::ScopedTaskEnvironment::MainThreadType::IO) {}
   ~NetworkServiceNetworkChangeTest() override {}
 

@@ -42,6 +42,7 @@
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -69,8 +70,8 @@ class CORE_EXPORT WorkerScriptLoader final
   void LoadAsynchronously(ExecutionContext&,
                           const KURL&,
                           WebURLRequest::RequestContext,
-                          WebURLRequest::FetchRequestMode,
-                          WebURLRequest::FetchCredentialsMode,
+                          network::mojom::FetchRequestMode,
+                          network::mojom::FetchCredentialsMode,
                           WebAddressSpace,
                           WTF::Closure response_callback,
                           WTF::Closure finished_callback);
@@ -99,7 +100,7 @@ class CORE_EXPORT WorkerScriptLoader final
     return content_security_policy_.Release();
   }
 
-  String GetReferrerPolicy() { return referrer_policy_; }
+  const String& GetReferrerPolicy() const { return referrer_policy_; }
 
   WebAddressSpace ResponseAddressSpace() const {
     return response_address_space_;

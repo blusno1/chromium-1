@@ -676,9 +676,9 @@ class RendererSchedulerImplTest : public ::testing::Test {
         RendererSchedulerImpl::kEndIdleWhenHiddenDelayMillis);
   }
 
-  static base::TimeDelta stop_when_backgrounded_delay() {
+  static base::TimeDelta delay_for_background_tab_stopping() {
     return base::TimeDelta::FromMilliseconds(
-        RendererSchedulerImpl::kStopWhenBackgroundedDelayMillis);
+        RendererSchedulerImpl::kDelayForBackgroundTabStoppingMillis);
   }
 
   static base::TimeDelta rails_response_time() {
@@ -705,6 +705,16 @@ class RendererSchedulerImplTest : public ::testing::Test {
         RendererSchedulerImpl::UseCase::FIRST_USE_CASE,
         RendererSchedulerImpl::UseCase::USE_CASE_COUNT,
         &RendererSchedulerImpl::UseCaseToString);
+  }
+
+  static scoped_refptr<TaskQueue> ThrottableTaskQueue(
+      WebFrameSchedulerImpl* scheduler) {
+    return scheduler->ThrottleableTaskQueue();
+  }
+
+  static scoped_refptr<TaskQueue> LoadingTaskQueue(
+      WebFrameSchedulerImpl* scheduler) {
+    return scheduler->LoadingTaskQueue();
   }
 
   std::unique_ptr<base::SimpleTestTickClock> clock_;
@@ -2528,7 +2538,7 @@ TEST_F(RendererSchedulerImplTest, TestRendererBackgroundedTimerSuspension) {
   EXPECT_THAT(run_order, ::testing::ElementsAre(std::string("T3")));
 
   // Advance the time until after the scheduled timer queue suspension.
-  now = base::TimeTicks() + stop_when_backgrounded_delay() +
+  now = base::TimeTicks() + delay_for_background_tab_stopping() +
         base::TimeDelta::FromMilliseconds(10);
   run_order.clear();
   clock_->SetNowTicks(now);
@@ -2582,7 +2592,7 @@ TEST_F(RendererSchedulerImplTest, TestRendererBackgroundedLoadingSuspension) {
   EXPECT_THAT(run_order, ::testing::ElementsAre(std::string("L3")));
 
   // Advance the time until after the scheduled loading queue suspension.
-  now = base::TimeTicks() + stop_when_backgrounded_delay() +
+  now = base::TimeTicks() + delay_for_background_tab_stopping() +
         base::TimeDelta::FromMilliseconds(10);
   run_order.clear();
   clock_->SetNowTicks(now);
@@ -3828,10 +3838,7 @@ TEST_F(RendererSchedulerImplTest, EnableVirtualTimeAfterThrottling) {
       web_view_scheduler->CreateWebFrameSchedulerImpl(
           nullptr, WebFrameScheduler::FrameType::kSubframe);
 
-  scoped_refptr<WebTaskRunner> timer_wtr =
-      web_frame_scheduler->ThrottleableTaskRunner();
-  TaskQueue* timer_tq =
-      static_cast<WebTaskRunnerImpl*>(timer_wtr.get())->GetTaskQueue();
+  TaskQueue* timer_tq = ThrottableTaskQueue(web_frame_scheduler.get()).get();
 
   web_frame_scheduler->SetCrossOrigin(true);
   web_frame_scheduler->SetFrameVisible(false);
@@ -3892,8 +3899,7 @@ TEST_F(RendererSchedulerImplTest, Tracing) {
 
   scheduler_->TimerTaskQueue()->PostTask(FROM_HERE, base::Bind(NullTask));
 
-  web_frame_scheduler->LoadingTaskRunner()
-      ->ToSingleThreadTaskRunner()
+  LoadingTaskQueue(web_frame_scheduler.get())
       ->PostDelayedTask(FROM_HERE, base::Bind(NullTask),
                         TimeDelta::FromMilliseconds(10));
 

@@ -87,12 +87,11 @@ void WebFont::DrawText(WebCanvas* canvas,
   TextRunPaintInfo run_info(text_run);
   run_info.bounds = text_clip_rect;
 
-  IntRect int_rect(clip);
-  PaintRecordBuilder builder(int_rect);
+  PaintRecordBuilder builder;
   GraphicsContext& context = builder.Context();
 
   {
-    DrawingRecorder recorder(context, builder, DisplayItem::kWebFont, int_rect);
+    DrawingRecorder recorder(context, builder, DisplayItem::kWebFont);
     context.Save();
     context.SetFillColor(color);
     context.Clip(text_clip_rect);

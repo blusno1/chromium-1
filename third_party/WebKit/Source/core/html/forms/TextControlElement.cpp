@@ -46,6 +46,7 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLDivElement.h"
+#include "core/html/forms/TextControlInnerElements.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/html_names.h"
@@ -997,18 +998,24 @@ void TextControlElement::SetSuggestedValue(const String& value) {
 
   // Change the pseudo-id to set the style for suggested values or reset the
   // placeholder style depending on if there is a suggested value.
-  placeholder->SetShadowPseudoId(AtomicString(suggested_value_.IsEmpty()
-                                                  ? "-webkit-input-placeholder"
-                                                  : "-webkit-input-suggested"));
+  placeholder->SetShadowPseudoId(
+      AtomicString(suggested_value_.IsEmpty() ? "-webkit-input-placeholder"
+                                              : "-internal-input-suggested"));
+}
+
+HTMLElement* TextControlElement::CreateInnerEditorElement() {
+  DCHECK(!inner_editor_);
+  inner_editor_ = TextControlInnerEditorElement::Create(GetDocument());
+  return inner_editor_;
 }
 
 const String& TextControlElement::SuggestedValue() const {
   return suggested_value_;
 }
 
-HTMLElement* TextControlElement::InnerEditorElement() const {
-  return ToHTMLElementOrDie(
-      UserAgentShadowRoot()->getElementById(ShadowElementNames::InnerEditor()));
+void TextControlElement::Trace(Visitor* visitor) {
+  visitor->Trace(inner_editor_);
+  HTMLFormControlElementWithState::Trace(visitor);
 }
 
 void TextControlElement::CopyNonAttributePropertiesFromElement(

@@ -5,8 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_CONTROLLER_PROTECTED_H_
 #define IOS_CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_CONTROLLER_PROTECTED_H_
 
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller_constants.h"
 
 @interface ToolbarController (Protected)
 
@@ -19,10 +19,6 @@ extern NSString* const kToolbarTransitionAnimationKey;
 
 // Update share button visibility and |standardButtons_| array.
 - (void)updateStandardButtons;
-
-// Height and Y offset to account for the status bar. Overridden by subclasses
-// if the toolbar shouldn't extend through the status bar.
-- (CGFloat)statusBarOffset;
 
 // Called when buttons are pressed. Records action metrics.
 // Subclasses must call |super| if they override this method.

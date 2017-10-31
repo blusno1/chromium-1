@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -392,7 +394,10 @@ GLRenderer::GLRenderer(const RendererSettings* settings,
       shared_geometry_quad_(QuadVertexRect()),
       gl_(output_surface->context_provider()->ContextGL()),
       context_support_(output_surface->context_provider()->ContextSupport()),
-      copier_(output_surface->context_provider(), texture_mailbox_deleter),
+      copier_(output_surface->context_provider(),
+              texture_mailbox_deleter,
+              base::BindRepeating(&GLRenderer::MoveFromDrawToWindowSpace,
+                                  base::Unretained(this))),
       gl_composited_overlay_candidate_quad_border_(
           settings->gl_composited_overlay_candidate_quad_border),
       bound_geometry_(NO_BINDING),
@@ -2641,20 +2646,9 @@ void GLRenderer::CopyDrawnRenderPass(
     std::unique_ptr<CopyOutputRequest> request) {
   TRACE_EVENT0("cc", "GLRenderer::CopyDrawnRenderPass");
 
-  // Finalize the source rect, either as the entire RenderPass's output rect, or
-  // the client-provided area clamped to the output rect.
-  if (request->has_area()) {
-    gfx::Rect clamped_area = request->area();
-    clamped_area.Intersect(current_frame()->current_render_pass->output_rect);
-    request->set_area(clamped_area);
-  } else {
-    request->set_area(current_frame()->current_render_pass->output_rect);
-  }
-
   if (overdraw_feedback_)
-    FlushOverdrawFeedback(request->area());
+    FlushOverdrawFeedback(current_frame()->current_render_pass->output_rect);
 
-  const gfx::Rect copy_rect = MoveFromDrawToWindowSpace(request->area());
   GLuint framebuffer_texture = 0;
   gfx::Size framebuffer_texture_size;
   if (current_framebuffer_lock_) {
@@ -2662,8 +2656,9 @@ void GLRenderer::CopyDrawnRenderPass(
     framebuffer_texture_size = current_framebuffer_lock_->size();
   }
   copier_.CopyFromTextureOrFramebuffer(
-      std::move(request), copy_rect, GetFramebufferCopyTextureFormat(),
-      framebuffer_texture, framebuffer_texture_size,
+      std::move(request), current_frame()->current_render_pass->output_rect,
+      GetFramebufferCopyTextureFormat(), framebuffer_texture,
+      framebuffer_texture_size,
       current_frame()->current_render_pass->color_space);
 }
 
@@ -3220,7 +3215,7 @@ void GLRenderer::ScheduleDCLayers() {
           z_order, transform);
     }
     if (ids_to_send > 0) {
-      gl_->SetColorSpaceForScanoutCHROMIUM(
+      gl_->SetColorSpaceMetadataCHROMIUM(
           texture_ids[0],
           reinterpret_cast<GLColorSpace>(&dc_layer_overlay.color_space));
     }
@@ -3405,11 +3400,11 @@ void GLRenderer::ScheduleRenderPassDrawQuad(
   DCHECK(ca_layer_overlay->rpdq);
 
   if (!overlay_resource_pool_) {
-    overlay_resource_pool_ =
-        cc::ResourcePool::CreateForGpuMemoryBufferResources(
-            resource_provider_, base::ThreadTaskRunnerHandle::Get().get(),
-            gfx::BufferUsage::SCANOUT, base::TimeDelta::FromSeconds(3),
-            settings_->disallow_non_exact_resource_reuse);
+    overlay_resource_pool_ = cc::ResourcePool::Create(
+        resource_provider_, base::ThreadTaskRunnerHandle::Get().get(),
+        cc::ResourceProvider::TEXTURE_HINT_OVERLAY,
+        base::TimeDelta::FromSeconds(3),
+        settings_->disallow_non_exact_resource_reuse);
   }
 
   cc::Resource* resource = nullptr;

@@ -181,14 +181,13 @@ public class BottomSheetContentController
                 return;
             }
 
-            if (mBottomSheet.getSheetState() == BottomSheet.SHEET_STATE_PEEK) {
-                clearBottomSheetContents(mBottomSheet.getCurrentSheetContent() == null);
+            // If the home content is showing and the sheet is closed, destroy sheet contents that
+            // are no longer needed.
+            if (mBottomSheet.getSheetState() == BottomSheet.SHEET_STATE_PEEK
+                    && (newContent == null
+                               || newContent == mBottomSheetContents.get(getHomeContentId()))) {
+                clearBottomSheetContents(newContent == null);
             }
-        }
-
-        @Override
-        public void onSheetLayout(int windowHeight, int containerHeight) {
-            setTranslationY(containerHeight - windowHeight);
         }
     };
 
@@ -353,8 +352,6 @@ public class BottomSheetContentController
         ViewGroup snackbarContainer =
                 (ViewGroup) mActivity.findViewById(R.id.bottom_sheet_snackbar_container);
         ((MarginLayoutParams) snackbarContainer.getLayoutParams()).bottomMargin = mBottomNavHeight;
-
-        setMenuBackgroundColor(mTabModelSelector.isIncognitoSelected());
     }
 
     /**
@@ -470,6 +467,11 @@ public class BottomSheetContentController
         if (content != null) return content;
 
         return createAndCacheContentForId(navItemId);
+    }
+
+    private int getHomeContentId() {
+        if (mTabModelSelector.isIncognitoSelected()) return INCOGNITO_HOME_ID;
+        return R.id.action_home;
     }
 
     /**

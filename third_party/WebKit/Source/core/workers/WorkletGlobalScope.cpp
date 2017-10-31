@@ -9,7 +9,6 @@
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Modulator.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/modulescript/ModuleScriptFetchRequest.h"
 #include "core/probe/CoreProbes.h"
@@ -19,6 +18,7 @@
 #include "core/workers/WorkletModuleTreeClient.h"
 #include "core/workers/WorkletPendingTasks.h"
 #include "platform/bindings/TraceWrapperMember.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -101,7 +101,7 @@ bool WorkletGlobalScope::IsSecureContext(String& error_message) const {
 void WorkletGlobalScope::FetchAndInvokeScript(
     const KURL& module_url_record,
     WorkletModuleResponsesMap* module_responses_map,
-    WebURLRequest::FetchCredentialsMode credentials_mode,
+    network::mojom::FetchCredentialsMode credentials_mode,
     scoped_refptr<WebTaskRunner> outside_settings_task_runner,
     WorkletPendingTasks* pending_tasks) {
   DCHECK(IsContextThread());
@@ -110,7 +110,7 @@ void WorkletGlobalScope::FetchAndInvokeScript(
     // loading and this usage is not explicitly spec'ed.
     module_responses_map_proxy_ = WorkletModuleResponsesMapProxy::Create(
         module_responses_map, outside_settings_task_runner,
-        TaskRunnerHelper::Get(TaskType::kUnspecedLoading, this));
+        GetTaskRunner(TaskType::kUnspecedLoading));
   }
 
   // Step 1: "Let insideSettings be the workletGlobalScope's associated
@@ -118,11 +118,23 @@ void WorkletGlobalScope::FetchAndInvokeScript(
   // Step 2: "Let script by the result of fetch a worklet script given
   // moduleURLRecord, moduleResponsesMap, credentialOptions, outsideSettings,
   // and insideSettings when it asynchronously completes."
+
+  // [FMWST]
+  // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-module-worker-script-tree
+  // [FMWST] Step 2: "Let options be a script fetch options whose cryptographic
+  // nonce is the empty string,
   String nonce;
+  // integrity metadata is the empty string,
+  String integrity_attribute;
+  // parser metadata is "not-parser-inserted",
   ParserDisposition parser_state = kNotParserInserted;
+  // and credentials mode is credentials mode.
+  ScriptFetchOptions options(nonce, IntegrityMetadataSet(), integrity_attribute,
+                             parser_state, credentials_mode);
+
   Modulator* modulator = Modulator::From(ScriptController()->GetScriptState());
-  // TODO(nhiroki, ikilpatrick): Update spec to use #script-fetch-options.
-  ScriptFetchOptions options(nonce, parser_state, credentials_mode);
+  // [FMWST] Step 3. "Perform the internal module script graph fetching
+  // procedure ..."
   ModuleScriptFetchRequest module_request(module_url_record, options);
 
   // Step 3 to 5 are implemented in

@@ -201,21 +201,31 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   // whitespace) output.
   bool HasTextBoxes() const { return FirstTextBox(); }
 
+  // Returns the Position in DOM that corresponds to the given offset in the
+  // |text_| string.
+  // TODO(layout-dev): Fix it when text-transform changes text length.
+  virtual Position PositionForCaretOffset(unsigned) const;
+
+  // Returns the offset in the |text_| string that corresponds to the given
+  // position in DOM; Returns nullopt is the position is not in this LayoutText.
+  // TODO(layout-dev): Fix it when text-transform changes text length.
+  virtual Optional<unsigned> CaretOffsetForPosition(const Position&) const;
+
   // Returns true if the offset (0-based in the |text_| string) is next to a
   // non-collapsed non-linebreak character, or before a forced linebreak (<br>,
   // or segment break in node with style white-space: pre/pre-line/pre-wrap).
   // TODO(editing-dev): The behavior is introduced by crrev.com/e3eb4e in
   // InlineTextBox::ContainsCaretOffset(). Try to understand it.
-  virtual bool ContainsCaretOffset(int) const;
+  bool ContainsCaretOffset(int) const;
 
   // Return true if the offset (0-based in the |text_| string) is before/after a
   // non-collapsed character in this LayoutText, respectively.
-  virtual bool IsBeforeNonCollapsedCharacter(unsigned) const;
-  virtual bool IsAfterNonCollapsedCharacter(unsigned) const;
+  bool IsBeforeNonCollapsedCharacter(unsigned) const;
+  bool IsAfterNonCollapsedCharacter(unsigned) const;
 
   int CaretMinOffset() const override;
   int CaretMaxOffset() const override;
-  virtual unsigned ResolvedTextLength() const;
+  unsigned ResolvedTextLength() const;
 
   // True if any character remains after CSS white-space collapsing.
   bool HasNonCollapsedText() const;
@@ -264,8 +274,11 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   void InvalidateDisplayItemClients(PaintInvalidationReason) const override;
 
-  bool ShouldUseNGAlternatives() const;
-  const NGOffsetMapping& GetNGOffsetMapping() const;
+  // Returns the NGOffsetMapping object when the current text is laid out with
+  // LayoutNG, and flag LayoutNGPaintFragments is set.
+  // Note that the text can be in legacy layout even when LayoutNG is enabled,
+  // so we can't simply check the RuntimeEnabledFeature.
+  const NGOffsetMapping* GetNGOffsetMapping() const;
 
   bool CanBeSelectionLeafInternal() const final { return true; }
 

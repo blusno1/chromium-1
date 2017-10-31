@@ -67,20 +67,23 @@ class BLINK_PLATFORM_EXPORT WebServiceWorkerRequest {
   WebURL ReferrerUrl() const;
   WebReferrerPolicy GetReferrerPolicy() const;
 
-  void SetMode(WebURLRequest::FetchRequestMode);
-  WebURLRequest::FetchRequestMode Mode() const;
+  void SetMode(network::mojom::FetchRequestMode);
+  network::mojom::FetchRequestMode Mode() const;
 
   void SetIsMainResourceLoad(bool);
   bool IsMainResourceLoad() const;
 
-  void SetCredentialsMode(WebURLRequest::FetchCredentialsMode);
-  WebURLRequest::FetchCredentialsMode CredentialsMode() const;
+  void SetCredentialsMode(network::mojom::FetchCredentialsMode);
+  network::mojom::FetchCredentialsMode CredentialsMode() const;
 
   void SetIntegrity(const WebString&);
   const WebString& Integrity() const;
 
   void SetCacheMode(mojom::FetchCacheMode);
   mojom::FetchCacheMode CacheMode() const;
+
+  void SetKeepalive(bool);
+  bool Keepalive() const;
 
   void SetRedirectMode(WebURLRequest::FetchRedirectMode);
   WebURLRequest::FetchRedirectMode RedirectMode() const;

@@ -34,8 +34,6 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/TaskRunnerHelper.h"
-#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/Settings.h"
 #include "core/html/media/AutoplayPolicy.h"
 #include "core/html/media/HTMLMediaElement.h"
@@ -80,6 +78,7 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -208,6 +207,9 @@ void BaseAudioContext::Uninitialize() {
   listener_->WaitForHRTFDatabaseLoaderThreadCompletion();
 
   RecordAutoplayStatus();
+
+  // TODO(crbug.com/764396): Remove this when fixed.
+  RecordValueSetterStatistics();
 
   Clear();
 }
@@ -697,7 +699,8 @@ void BaseAudioContext::SetContextState(AudioContextState new_state) {
 
   // Notify context that state changed
   if (GetExecutionContext())
-    TaskRunnerHelper::Get(TaskType::kMediaElementEvent, GetExecutionContext())
+    GetExecutionContext()
+        ->GetTaskRunner(TaskType::kMediaElementEvent)
         ->PostTask(BLINK_FROM_HERE,
                    WTF::Bind(&BaseAudioContext::NotifyStateChange,
                              WrapPersistent(this)));
@@ -732,7 +735,8 @@ bool BaseAudioContext::AreAutoplayRequirementsFulfilled() const {
       return true;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      return UserGestureIndicator::ProcessingUserGesture();
+      return Frame::HasTransientUserActivation(
+          GetDocument() ? GetDocument()->GetFrame() : nullptr);
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
       return AutoplayPolicy::IsDocumentAllowedToPlay(*GetDocument());
   }

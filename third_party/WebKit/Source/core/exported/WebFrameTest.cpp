@@ -9710,7 +9710,7 @@ TEST_P(ParameterizedWebFrameTest, LoaderOriginAccess) {
   KURL resource_url("chrome://test.pdf");
   ResourceRequest request(resource_url);
   request.SetRequestContext(WebURLRequest::kRequestContextObject);
-  request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+  request.SetFetchCredentialsMode(network::mojom::FetchCredentialsMode::kOmit);
   RegisterMockedChromeURLLoad("test.pdf");
 
   LocalFrame* frame(
@@ -9720,7 +9720,7 @@ TEST_P(ParameterizedWebFrameTest, LoaderOriginAccess) {
   ThreadableLoaderOptions options;
 
   // First try to load the request with regular access. Should fail.
-  request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeCORS);
+  request.SetFetchRequestMode(network::mojom::FetchRequestMode::kCORS);
   ResourceLoaderOptions resource_loader_options;
   DocumentThreadableLoader::LoadResourceSynchronously(
       *frame->GetDocument(), request, client, options, resource_loader_options);
@@ -9728,7 +9728,7 @@ TEST_P(ParameterizedWebFrameTest, LoaderOriginAccess) {
 
   client.Reset();
   // Try to load the request with cross origin access. Should succeed.
-  request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeNoCORS);
+  request.SetFetchRequestMode(network::mojom::FetchRequestMode::kNoCORS);
   DocumentThreadableLoader::LoadResourceSynchronously(
       *frame->GetDocument(), request, client, options, resource_loader_options);
   EXPECT_FALSE(client.Failed());
@@ -10399,7 +10399,7 @@ TEST_P(WebFrameOverscrollTest, ScrollBoundaryBehaviorAffectsDidOverscroll) {
       web_view_helper.WebView()->MainFrame()->ToWebLocalFrame();
   mainFrame->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
-                                "'scroll-boundary-behavior: auto;'")));
+                                "'overscroll-behavior: auto;'")));
 
   ScrollBegin(&web_view_helper, 100, 116);
   EXPECT_CALL(
@@ -10414,7 +10414,7 @@ TEST_P(WebFrameOverscrollTest, ScrollBoundaryBehaviorAffectsDidOverscroll) {
 
   mainFrame->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
-                                "'scroll-boundary-behavior: contain;'")));
+                                "'overscroll-behavior: contain;'")));
 
   ScrollBegin(&web_view_helper, 100, 116);
   EXPECT_CALL(
@@ -10429,7 +10429,7 @@ TEST_P(WebFrameOverscrollTest, ScrollBoundaryBehaviorAffectsDidOverscroll) {
 
   mainFrame->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
-                                "'scroll-boundary-behavior: none;'")));
+                                "'overscroll-behavior: none;'")));
 
   ScrollBegin(&web_view_helper, 100, 116);
   EXPECT_CALL(
@@ -10457,12 +10457,12 @@ TEST_P(WebFrameOverscrollTest, OnlyMainFrameScrollBoundaryBehaviorHasEffect) {
       web_view_helper.WebView()->MainFrame()->ToWebLocalFrame();
   mainFrame->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
-                                "'scroll-boundary-behavior: auto;'")));
+                                "'overscroll-behavior: auto;'")));
   WebLocalFrame* subframe =
       web_view_helper.WebView()->MainFrame()->FirstChild()->ToWebLocalFrame();
   subframe->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
-                                "'scroll-boundary-behavior: none;'")));
+                                "'overscroll-behavior: none;'")));
 
   ScrollBegin(&web_view_helper, 100, 116);
   EXPECT_CALL(
@@ -10477,7 +10477,7 @@ TEST_P(WebFrameOverscrollTest, OnlyMainFrameScrollBoundaryBehaviorHasEffect) {
 
   mainFrame->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
-                                "'scroll-boundary-behavior: contain;'")));
+                                "'overscroll-behavior: contain;'")));
 
   EXPECT_CALL(
       client,
@@ -11344,12 +11344,13 @@ TEST_P(WebFrameSimTest, ScrollOriginChangeUpdatesLayerPositions) {
   SimRequest main_resource("https://example.com/test.html", "text/html");
 
   LoadURL("https://example.com/test.html");
-  main_resource.Complete(
-      "<!DOCTYPE html>"
-      "<body dir='rtl'>"
-      "  <div style='width:1px; height:1px; position:absolute; left:-10000px'>"
-      "  </div>"
-      "</body>");
+  main_resource.Complete(R"HTML(
+    <!DOCTYPE html>
+    <body dir='rtl'>
+      <div style='width:1px; height:1px; position:absolute; left:-10000px'>
+      </div>
+    </body>
+  )HTML");
 
   Compositor().BeginFrame();
   ScrollableArea* area = GetDocument().View()->LayoutViewportScrollableArea();

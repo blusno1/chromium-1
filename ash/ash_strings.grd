@@ -467,7 +467,7 @@ This file contains the strings for ash.
         These are your stylus tools
       </message>
       <message name="IDS_ASH_STYLUS_WARM_WELCOME_BUBBLE_DESCRIPTION" desc="The description of the bubble that pops up the first time a user uses a stylus. Describes what tools exist in the palette tray.">
-        Tap the stylus button on the shelf to take a note, screenshot, use the assistant, laser pointer, or magnifying glass.
+        Tap the stylus button on the shelf to take a note, screenshot, use the Google Assistant, laser pointer, or magnifying glass.
       </message>
       <message name="IDS_ASH_PALETTE_SETTINGS" desc="The label on the setting button used to open palette setting page.">
         Stylus settings
@@ -879,6 +879,12 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_INITIALIZING_CELLULAR" desc="Message for the status area when initializing the cellular device.">
         Initializing...
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_SIM_CARD_MISSING" desc="Message for the status area when a SIM card is missing.">
+        Missing SIM card
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_SIM_CARD_LOCKED" desc="Message for the status area when a SIM card is locked.">
+        SIM card is locked
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_NETWORK_ACTIVATING" desc="Message for the network tray tooltip and network list when activating a network.">
         Activating <ph name="NAME">$1<ex>YBH Cellular</ex></ph>
       </message>
@@ -1175,6 +1181,9 @@ Subsequent notifications, windows and dialogs may be split between desktops.
       </message>
       <message name="IDS_ASH_MESSAGE_CENTER_SETTINGS_BUTTON_TOOLTIP" desc="The tooltip text for visiting the appropriate settings page in the footer of the message center.">
         Settings
+      </message>
+      <message name="IDS_ASH_MESSAGE_CENTER_COLLAPSE_BUTTON_TOOLTIP" desc="The tooltip text for closing notifier settings.">
+        Close settings
       </message>
       <message name="IDS_ASH_MESSAGE_CENTER_SETTINGS_TITLE" desc="The title for the message center's list of checkboxes that allows a user to enable/disable notifications from various sources.">
         Settings

@@ -243,8 +243,11 @@ android_library("chrome_java") {
     "//third_party/android_media:android_media_java",
     "//third_party/android_protobuf:protobuf_nano_javalib",
     "//third_party/android_swipe_refresh:android_swipe_refresh_java",
+    "//third_party/android_tools:android_arch_lifecycle_common_java",
+    "//third_party/android_tools:android_arch_lifecycle_runtime_java",
     "//third_party/android_tools:android_gcm_java",
     "//third_party/android_tools:android_support_annotations_java",
+    "//third_party/android_tools:android_support_compat_java",
     "//third_party/android_tools:android_support_design_java",
     "//third_party/android_tools:android_support_transition_java",
     "//third_party/android_tools:android_support_v13_java",
@@ -284,6 +287,7 @@ android_library("chrome_java") {
     "//chrome:signin_metrics_enum_javagen",
     "//components/browsing_data/core:browsing_data_utils_java",
     "//components/browsing_data/core:clear_browsing_data_tab_java",
+    "//components/favicon_base:favicon_base_enums_java",
     "//components/infobars/core:infobar_enums_java",
     "//components/ntp_snippets:ntp_snippets_java_enums_srcjar",
     "//components/ntp_tiles:ntp_tiles_enums_java",
@@ -421,6 +425,7 @@ junit_binary("chrome_junit_tests") {
     "//third_party/WebKit/public:android_mojo_bindings_java",
     "//third_party/WebKit/public:blink_headers_java",
     "//third_party/android_protobuf:protobuf_nano_javalib",
+    "//third_party/android_tools:android_arch_lifecycle_common_java",
     "//third_party/android_tools:android_support_annotations_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
     "//third_party/android_tools:android_support_v7_mediarouter_java",
@@ -530,6 +535,7 @@ android_library("chrome_test_java") {
     "//third_party/android_protobuf:protobuf_nano_javalib",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/android_tools:android_arch_lifecycle_common_java",
     "//third_party/android_tools:android_support_annotations_java",
     "//third_party/android_tools:android_support_design_java",
     "//third_party/android_tools:android_support_transition_java",
@@ -631,6 +637,7 @@ if (enable_vr) {
       "//third_party/android_protobuf:protobuf_nano_javalib",
       "//third_party/android_support_test_runner:rules_java",
       "//third_party/android_support_test_runner:runner_java",
+      "//third_party/android_tools:android_arch_lifecycle_common_java",
       "//third_party/android_tools:android_support_v7_appcompat_java",
       "//third_party/android_tools:android_support_v7_recyclerview_java",
       "//third_party/custom_tabs_client:custom_tabs_support_java",
@@ -740,7 +747,12 @@ shared_library("libchrome") {
     ldflags = [ "-Wl,--long-plt" ]
   }
 
+  if (chromium_linker_supported && use_lld) {
+    configs += [ "//build/config/android:lld_pack_relocations" ]
+  }
+
   public_configs = extra_chrome_shared_library_configs
+  deps += extra_chrome_shared_library_deps
 }
 
 # Ensure that .pak files are built only once (build them in the default
@@ -908,11 +920,15 @@ if (!android_64bit_target_cpu ||
 
     configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
     configs += [ "//build/config/android:hide_all_but_jni" ]
+    if (use_lld) {
+      configs += [ "//build/config/android:lld_pack_relocations" ]
+    }
     if (is_android && use_order_profiling) {
       deps += [ "//tools/cygprofile" ]
     }
 
     public_configs = extra_chrome_shared_library_configs
+    deps += extra_chrome_shared_library_deps
   }
 } else {
   group("monochrome_secondary_abi_lib") {
@@ -940,6 +956,9 @@ shared_library("chrome_sync_shell") {
     # See https://crbug.com/704305 for details.
     libs =
         [ "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a" ]
+  }
+  if (use_lld) {
+    configs += [ "//build/config/android:lld_pack_relocations" ]
   }
 }
 
@@ -1164,6 +1183,7 @@ instrumentation_test_apk("chrome_sync_shell_test_apk") {
     "//content/public/test/android:content_java_test_support",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/android_tools:android_arch_lifecycle_common_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
     "//third_party/junit",
     "//ui/android:ui_java",

@@ -38,7 +38,8 @@ sk_sp<PaintRecord> SVGFilterRecordingContext::EndContent(
   context_->BeginRecording(bounds);
   paint_controller_->CommitNewDisplayItems();
 
-  paint_controller_->GetPaintArtifact().Replay(*context_);
+  paint_controller_->GetPaintArtifact().Replay(*context_,
+                                               PropertyTreeState::Root());
 
   sk_sp<PaintRecord> content = context_->EndRecording();
   // Content is cached by the source graphic so temporaries can be freed.
@@ -61,7 +62,7 @@ static void PaintFilteredContent(GraphicsContext& context,
                                                   DisplayItem::kSVGFilter))
     return;
 
-  DrawingRecorder recorder(context, object, DisplayItem::kSVGFilter, bounds);
+  DrawingRecorder recorder(context, object, DisplayItem::kSVGFilter);
   sk_sp<SkImageFilter> image_filter =
       SkiaImageFilterBuilder::Build(effect, kInterpolationSpaceSRGB);
   context.Save();

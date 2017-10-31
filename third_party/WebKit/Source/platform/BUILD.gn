@@ -308,6 +308,7 @@ jumbo_component("platform") {
     "ResolutionUnits.h",
     "ScopedOrientationChangeIndicator.cpp",
     "ScopedOrientationChangeIndicator.h",
+    "ScopedVirtualTimePauser.h",
     "SecureTextInput.cpp",
     "SecureTextInput.h",
     "SerializedResource.h",
@@ -1814,6 +1815,7 @@ jumbo_source_set("blink_platform_unittests_sources") {
     "graphics/paint/PaintControllerTest.cpp",
     "graphics/paint/PaintControllerTest.h",
     "graphics/paint/PaintPropertyNodeTest.cpp",
+    "graphics/paint/PaintRecordBuilderTest.cpp",
     "graphics/paint/PropertyTreeStateTest.cpp",
     "image-decoders/FastSharedBufferReaderTest.cpp",
     "image-decoders/ImageDecoderTest.cpp",
@@ -2163,6 +2165,7 @@ jumbo_source_set("unit_tests") {
     "graphics/test/FakeWebGraphicsContext3DProvider.h",
     "graphics/test/MockImageDecoder.h",
     "graphics/test/MockPaintCanvas.h",
+    "graphics/test/StubImage.h",
 
     # Tests migrated from the web/tests directory.
     "TimerPerfTest.cpp",

@@ -69,9 +69,7 @@ static void PaintInternal(Page& page,
   if (rect.IsEmpty())
     return;
 
-  IntRect int_rect(rect);
-  // TODO(enne): intRect is not correct: http://crbug.com/703231
-  PaintRecordBuilder builder(int_rect);
+  PaintRecordBuilder builder;
   {
     GraphicsContext& paint_context = builder.Context();
 
@@ -96,7 +94,7 @@ static void PaintInternal(Page& page,
     } else {
       DrawingRecorder recorder(
           paint_context, builder,
-          DisplayItem::kPageWidgetDelegateBackgroundFallback, dirty_rect);
+          DisplayItem::kPageWidgetDelegateBackgroundFallback);
       paint_context.FillRect(dirty_rect, Color::kWhite);
     }
   }

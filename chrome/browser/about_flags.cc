@@ -9,6 +9,7 @@
 #include <set>
 #include <utility>
 
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -151,6 +152,7 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
+#include "chrome/browser/ui/tabs/tab_features.h"
 #endif  // OS_WIN
 
 using flags_ui::FeatureEntry;
@@ -371,6 +373,8 @@ const FeatureEntry::Choice kChromeHomeSwipeLogicChoices[] = {
     {flags_ui::kGenericExperimentChoiceDefault, "", ""},
     {flag_descriptions::kChromeHomeSwipeLogicRestrictArea,
      switches::kChromeHomeSwipeLogicType, "restrict-area"},
+    {flag_descriptions::kChromeHomeSwipeLogicVelocity,
+     switches::kChromeHomeSwipeLogicType, "velocity"},
 };
 
 #endif  // OS_ANDROID
@@ -1510,12 +1514,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEasyUnlockPromotionsDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(features::kEasyUnlockPromotions)},
     {
-        "enable-fullscreen-app-list",
-        flag_descriptions::kEnableFullscreenAppListName,
-        flag_descriptions::kEnableFullscreenAppListDescription, kOsCrOS,
-        FEATURE_VALUE_TYPE(app_list::features::kEnableFullscreenAppList),
-    },
-    {
         "enable-pinch", flag_descriptions::kPinchScaleName,
         flag_descriptions::kPinchScaleDescription, kOsLinux | kOsWin | kOsCrOS,
         ENABLE_DISABLE_VALUE_TYPE(switches::kEnablePinch,
@@ -1758,10 +1756,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kExperimentalInputViewFeaturesDescription, kOsCrOS,
      SINGLE_VALUE_TYPE(
          keyboard::switches::kEnableExperimentalInputViewFeatures)},
-    {"floating-virtual-keyboard",
-     flag_descriptions::kFloatingVirtualKeyboardName,
-     flag_descriptions::kFloatingVirtualKeyboardDescription, kOsCrOS,
-     SINGLE_VALUE_TYPE(keyboard::switches::kEnableFloatingVirtualKeyboard)},
     {"gesture-typing", flag_descriptions::kGestureTypingName,
      flag_descriptions::kGestureTypingDescription, kOsCrOS,
      SINGLE_DISABLE_VALUE_TYPE(keyboard::switches::kDisableGestureTyping)},
@@ -2057,6 +2051,9 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-http-form-warning", flag_descriptions::kEnableHttpFormWarningName,
      flag_descriptions::kEnableHttpFormWarningDescription, kOsAll,
      FEATURE_VALUE_TYPE(security_state::kHttpFormWarningFeature)},
+    {"committed-interstitials", flag_descriptions::kCommittedInterstitialsName,
+     flag_descriptions::kCommittedInterstitialsDescription, kOsAll,
+     SINGLE_VALUE_TYPE(switches::kCommittedInterstitials)},
     {"enable-site-per-process", flag_descriptions::kSitePerProcessName,
      flag_descriptions::kSitePerProcessDescription, kOsAll,
      SINGLE_VALUE_TYPE(switches::kSitePerProcess)},
@@ -2238,6 +2235,13 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kVrCustomTabBrowsingName,
      flag_descriptions::kVrCustomTabBrowsingDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kVrCustomTabBrowsing)},
+    {"vr-shell-experimental-rendering",
+     flag_descriptions::kVrShellExperimentalRenderingName,
+     flag_descriptions::kVrShellExperimentalRenderingDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(features::kVrShellExperimentalRendering)},
+    {"enable-vr-launch-intent", flag_descriptions::kVrLaunchIntentName,
+     flag_descriptions::kVrLaunchIntentDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kVrLaunchIntent)},
     {"enable-webvr-autopresent", flag_descriptions::kWebVrAutopresentName,
      flag_descriptions::kWebVrAutopresentDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kWebVrAutopresent)},
@@ -2370,14 +2374,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kCrosRegionsModeDescription, kOsCrOS,
      MULTI_VALUE_TYPE(kCrosRegionsModeChoices)},
 #endif  // OS_CHROMEOS
-#if defined(OS_ANDROID)
-    {"enable-web-notification-custom-layouts",
-     flag_descriptions::kEnableWebNotificationCustomLayoutsName,
-     flag_descriptions::kEnableWebNotificationCustomLayoutsDescription,
-     kOsAndroid,
-     ENABLE_DISABLE_VALUE_TYPE(switches::kEnableWebNotificationCustomLayouts,
-                               switches::kDisableWebNotificationCustomLayouts)},
-#endif  // OS_ANDROID
 #if defined(OS_WIN)
     {"enable-appcontainer", flag_descriptions::kEnableAppcontainerName,
      flag_descriptions::kEnableAppcontainerDescription, kOsWin,
@@ -3452,6 +3448,14 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kManualPasswordSavingDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(password_manager::features::kEnableManualSaving)},
 
+#if !defined(OS_ANDROID)
+    {"remove-deprecared-gaia-signin-endpoint",
+     flag_descriptions::kRemoveUsageOfDeprecatedGaiaSigninEndpointName,
+     flag_descriptions::kRemoveUsageOfDeprecatedGaiaSigninEndpointDescription,
+     kOsWin | kOsMac | kOsLinux,
+     FEATURE_VALUE_TYPE(features::kRemoveUsageOfDeprecatedGaiaSigninEndpoint)},
+#endif
+
 #if defined(OS_ANDROID)
     {"third-party-doodles", flag_descriptions::kThirdPartyDoodlesName,
      flag_descriptions::kThirdPartyDoodlesDescription, kOsAndroid,
@@ -3590,6 +3594,18 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kModuleScriptsImportMetaUrlName,
      flag_descriptions::kModuleScriptsImportMetaUrlDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kModuleScriptsImportMetaUrl)},
+
+    {"stop-loading-in-background",
+     flag_descriptions::kStopLoadingInBackgroundName,
+     flag_descriptions::kStopLoadingInBackgroundDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kStopLoadingInBackground)},
+
+#if defined(OS_WIN)
+    {"experimental-tab-controller",
+     flag_descriptions::kExperimentalTabControllerName,
+     flag_descriptions::kExperimentalTabControllerDescription, kOsWin,
+     FEATURE_VALUE_TYPE(kExperimentalTabControllerFeature)},
+#endif  // defined(OS_WIN)
 
     // NOTE: Adding a new flag requires adding a corresponding entry to enum
     // "LoginCustomFlags" in tools/metrics/histograms/enums.xml. See "Flag
@@ -3780,8 +3796,7 @@ void SetFeatureEntryEnabled(flags_ui::FlagsStorage* flags_storage,
       flags_storage, internal_name, enable);
 }
 
-void RemoveFlagsSwitches(
-    std::map<std::string, base::CommandLine::StringType>* switch_list) {
+void RemoveFlagsSwitches(base::CommandLine::SwitchMap* switch_list) {
   FlagsStateSingleton::GetFlagsState()->RemoveFlagsSwitches(switch_list);
 }
 

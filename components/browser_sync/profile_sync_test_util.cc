@@ -12,12 +12,14 @@
 #include "components/history/core/browser/history_model_worker.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/signin_manager_wrapper.h"
 #include "components/sync/engine/passive_model_worker.h"
 #include "components/sync/engine/sequenced_model_worker.h"
 #include "components/sync/engine/ui_model_worker.h"
+#include "components/sync/model/model_type_store_test_util.h"
 #include "net/url_request/url_request_test_util.h"
 
 namespace browser_sync {
@@ -173,6 +175,7 @@ void RegisterPrefsForProfileSyncService(
   AccountTrackerService::RegisterPrefs(registry);
   SigninManagerBase::RegisterProfilePrefs(registry);
   SigninManagerBase::RegisterPrefs(registry);
+  signin::RegisterAccountConsistencyProfilePrefs(registry);
 }
 
 ProfileSyncServiceBundle::SyncClientBuilder::~SyncClientBuilder() = default;
@@ -262,6 +265,8 @@ ProfileSyncService::InitParams ProfileSyncServiceBundle::CreateBasicInitParams(
   init_params.url_request_context = url_request_context();
   init_params.debug_identifier = "dummyDebugName";
   init_params.channel = version_info::Channel::UNKNOWN;
+  init_params.model_type_store_factory =
+      syncer::ModelTypeStoreTestUtil::FactoryForInMemoryStoreForTest();
 
   return init_params;
 }

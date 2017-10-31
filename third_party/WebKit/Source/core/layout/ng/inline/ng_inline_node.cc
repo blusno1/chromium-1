@@ -216,6 +216,7 @@ unsigned PlaceInlineBoxChildren(
 template <typename OffsetMappingBuilder>
 void ClearNeedsLayoutIfUpdatingLayout(LayoutObject* node) {
   node->ClearNeedsLayout();
+  node->ClearNeedsCollectInlines();
 }
 
 template <>
@@ -271,12 +272,11 @@ String GetTextForInlineCollection<NGOffsetMappingBuilder>(
 // There are also performance considerations, since template saves the overhead
 // for condition checking and branching.
 template <typename OffsetMappingBuilder>
-LayoutBox* CollectInlinesInternal(
+void CollectInlinesInternal(
     LayoutBlockFlow* block,
     NGInlineItemsBuilderTemplate<OffsetMappingBuilder>* builder) {
   builder->EnterBlock(block->Style());
   LayoutObject* node = GetLayoutObjectForFirstChildNode(block);
-  LayoutBox* next_box = nullptr;
   while (node) {
     if (node->IsText()) {
       LayoutText* layout_text = ToLayoutText(node);
@@ -314,12 +314,12 @@ LayoutBox* CollectInlinesInternal(
         builder->AppendAtomicInline(node->Style(), node);
       }
 
-    } else if (!node->IsInline()) {
-      // A block box found. End inline and transit to block layout.
-      next_box = ToLayoutBox(node);
-      break;
-
     } else {
+      // Because we're collecting from LayoutObject tree, block-level children
+      // should not appear. LayoutObject tree should have created an anonymous
+      // box to prevent having inline/block-mixed children.
+      DCHECK(node->IsInline());
+
       builder->EnterInline(node);
 
       // Traverse to children if they exist.
@@ -353,7 +353,6 @@ LayoutBox* CollectInlinesInternal(
     }
   }
   builder->ExitBlock();
-  return next_box;
 }
 
 }  // namespace
@@ -364,6 +363,21 @@ NGInlineNode::NGInlineNode(LayoutBlockFlow* block)
   DCHECK(block->IsLayoutNGMixin());
   if (!block->HasNGInlineNodeData())
     block->ResetNGInlineNodeData();
+}
+
+NGInlineNodeData* NGInlineNode::MutableData() {
+  return ToLayoutBlockFlow(box_)->GetNGInlineNodeData();
+}
+
+bool NGInlineNode::IsPrepareLayoutFinished() const {
+  const NGInlineNodeData* data = ToLayoutBlockFlow(box_)->GetNGInlineNodeData();
+  return data && !data->text_content_.IsNull();
+}
+
+const NGInlineNodeData& NGInlineNode::Data() const {
+  DCHECK(IsPrepareLayoutFinished() &&
+         !GetLayoutBlockFlow()->NeedsCollectInlines());
+  return *ToLayoutBlockFlow(box_)->GetNGInlineNodeData();
 }
 
 const Vector<NGInlineItem>& NGInlineNode::Items(bool is_first_line) const {
@@ -382,15 +396,33 @@ void NGInlineNode::InvalidatePrepareLayout() {
   DCHECK(!IsPrepareLayoutFinished());
 }
 
-void NGInlineNode::PrepareLayout() {
+void NGInlineNode::PrepareLayoutIfNeeded() {
+  LayoutBlockFlow* block_flow = GetLayoutBlockFlow();
+  if (IsPrepareLayoutFinished()) {
+    if (!block_flow->NeedsCollectInlines())
+      return;
+
+    block_flow->ResetNGInlineNodeData();
+  }
+
   // Scan list of siblings collecting all in-flow non-atomic inlines. A single
   // NGInlineNode represent a collection of adjacent non-atomic inlines.
-  CollectInlines();
-  SegmentText();
-  ShapeText();
+  NGInlineNodeData* data = MutableData();
+  DCHECK(data);
+  CollectInlines(data);
+  SegmentText(data);
+  ShapeText(data);
+  DCHECK_EQ(data, MutableData());
+
+  block_flow->ClearNeedsCollectInlines();
 }
 
-const NGOffsetMapping& NGInlineNode::ComputeOffsetMappingIfNeeded() {
+const NGInlineNodeData& NGInlineNode::EnsureData() {
+  PrepareLayoutIfNeeded();
+  return Data();
+}
+
+const NGOffsetMapping* NGInlineNode::ComputeOffsetMappingIfNeeded() {
   DCHECK(!GetLayoutBlockFlow()->GetDocument().NeedsLayoutTreeUpdate());
 
   if (!Data().offset_mapping_) {
@@ -411,30 +443,28 @@ const NGOffsetMapping& NGInlineNode::ComputeOffsetMappingIfNeeded() {
         WTF::MakeUnique<NGOffsetMapping>(mapping_builder.Build());
   }
 
-  return *Data().offset_mapping_;
+  return Data().offset_mapping_.get();
 }
 
 // Depth-first-scan of all LayoutInline and LayoutText nodes that make up this
 // NGInlineNode object. Collects LayoutText items, merging them up into the
 // parent LayoutInline where possible, and joining all text content in a single
 // string to allow bidi resolution and shaping of the entire block.
-void NGInlineNode::CollectInlines() {
-  DCHECK(Data().text_content_.IsNull());
-  DCHECK(Data().items_.IsEmpty());
+void NGInlineNode::CollectInlines(NGInlineNodeData* data) {
+  DCHECK(data->text_content_.IsNull());
+  DCHECK(data->items_.IsEmpty());
   LayoutBlockFlow* block = GetLayoutBlockFlow();
   block->WillCollectInlines();
-  NGInlineNodeData* data = MutableData();
   NGInlineItemsBuilder builder(&data->items_);
-  data->next_sibling_ = CollectInlinesInternal(block, &builder);
+  CollectInlinesInternal(block, &builder);
   data->text_content_ = builder.ToString();
   data->is_bidi_enabled_ =
-      !Data().text_content_.IsEmpty() &&
-      !(Data().text_content_.Is8Bit() && !builder.HasBidiControls());
+      !data->text_content_.IsEmpty() &&
+      !(data->text_content_.Is8Bit() && !builder.HasBidiControls());
   data->is_empty_inline_ = builder.IsEmptyInline();
 }
 
-void NGInlineNode::SegmentText() {
-  NGInlineNodeData* data = MutableData();
+void NGInlineNode::SegmentText(NGInlineNodeData* data) {
   if (!data->is_bidi_enabled_) {
     data->SetBaseDirection(TextDirection::kLtr);
     return;
@@ -477,13 +507,12 @@ void NGInlineNode::SegmentText() {
 #endif
 }
 
-void NGInlineNode::ShapeText() {
+void NGInlineNode::ShapeText(NGInlineNodeData* data) {
   // TODO(eae): Add support for shaping latin-1 text?
-  NGInlineNodeData* data = MutableData();
   data->text_content_.Ensure16Bit();
   ShapeText(data->text_content_, &data->items_);
 
-  ShapeTextForFirstLineIfNeeded();
+  ShapeTextForFirstLineIfNeeded(data);
 }
 
 void NGInlineNode::ShapeText(const String& text_content,
@@ -507,9 +536,8 @@ void NGInlineNode::ShapeText(const String& text_content,
 }
 
 // Create Vector<NGInlineItem> with :first-line rules applied if needed.
-void NGInlineNode::ShapeTextForFirstLineIfNeeded() {
+void NGInlineNode::ShapeTextForFirstLineIfNeeded(NGInlineNodeData* data) {
   // First check if the document has any :first-line rules.
-  NGInlineNodeData* data = MutableData();
   DCHECK(!data->first_line_items_);
   LayoutObject* layout_object = GetLayoutObject();
   if (!layout_object->GetDocument().GetStyleEngine().UsesFirstLineRules())
@@ -543,6 +571,8 @@ void NGInlineNode::ShapeTextForFirstLineIfNeeded() {
 scoped_refptr<NGLayoutResult> NGInlineNode::Layout(
     const NGConstraintSpace& constraint_space,
     NGBreakToken* break_token) {
+  PrepareLayoutIfNeeded();
+
   NGInlineLayoutAlgorithm algorithm(*this, constraint_space,
                                     ToNGInlineBreakToken(break_token));
   return algorithm.Layout();
@@ -561,10 +591,7 @@ static LayoutUnit ComputeContentSize(NGInlineNode node,
           .SetAvailableSize({available_inline_size, NGSizeIndefinite})
           .ToConstraintSpace(writing_mode);
 
-  NGLineBoxFragmentBuilder container_builder(
-      node, &node.Style(), space->WritingMode(), TextDirection::kLtr);
-  container_builder.SetBfcOffset(NGBfcOffset{LayoutUnit(), LayoutUnit()});
-
+  Vector<NGPositionedFloat> positioned_floats;
   Vector<scoped_refptr<NGUnpositionedFloat>> unpositioned_floats;
 
   scoped_refptr<NGInlineBreakToken> break_token;
@@ -572,10 +599,9 @@ static LayoutUnit ComputeContentSize(NGInlineNode node,
   NGExclusionSpace empty_exclusion_space;
   LayoutUnit result;
   while (!break_token || !break_token->IsFinished()) {
-    NGLineBreaker line_breaker(node, *space, &container_builder,
+    NGLineBreaker line_breaker(node, *space, &positioned_floats,
                                &unpositioned_floats, break_token.get());
-    if (!line_breaker.NextLine(NGLogicalOffset(), empty_exclusion_space,
-                               &line_info))
+    if (!line_breaker.NextLine(empty_exclusion_space, &line_info))
       break;
 
     break_token = line_breaker.CreateBreakToken(nullptr);
@@ -589,6 +615,8 @@ static LayoutUnit ComputeContentSize(NGInlineNode node,
 }
 
 MinMaxSize NGInlineNode::ComputeMinMaxSize() {
+  PrepareLayoutIfNeeded();
+
   // Run line breaking with 0 and indefinite available width.
 
   // TODO(kojii): There are several ways to make this more efficient and faster
@@ -610,10 +638,6 @@ MinMaxSize NGInlineNode::ComputeMinMaxSize() {
   sizes.min_size = std::min(sizes.min_size, sizes.max_size);
 
   return sizes;
-}
-
-NGLayoutInputNode NGInlineNode::NextSibling() {
-  return NGBlockNode(Data().next_sibling_);
 }
 
 void NGInlineNode::CopyFragmentDataToLayoutBox(
@@ -746,23 +770,6 @@ void NGInlineNode::CheckConsistency() const {
 
 String NGInlineNode::ToString() const {
   return String::Format("NGInlineNode");
-}
-
-// static
-Optional<NGInlineNode> GetNGInlineNodeFor(const Node& node) {
-  return GetNGInlineNodeFor(node, 0);
-}
-
-// static
-Optional<NGInlineNode> GetNGInlineNodeFor(const Node& node, unsigned offset) {
-  const LayoutObject* layout_object = AssociatedLayoutObjectOf(node, offset);
-  if (!layout_object || !layout_object->IsInline())
-    return WTF::nullopt;
-  LayoutBlockFlow* block_flow = layout_object->EnclosingNGBlockFlow();
-  if (!block_flow)
-    return WTF::nullopt;
-  DCHECK(block_flow->ChildrenInline());
-  return NGInlineNode(block_flow);
 }
 
 }  // namespace blink

@@ -373,9 +373,15 @@ CompositorAnimations::CheckCanStartElementOnCompositor(
         target_element.GetLayoutObject() &&
         target_element.GetLayoutObject()->GetCompositingState() ==
             kPaintsIntoOwnBacking;
+    // This function is called in CheckCanStartAnimationOnCompositor(), after
+    // CheckCanStartEffectOnCompositor returns code.Ok(), which means that we
+    // know this animation could be accelerated. If |!paints_into_own_backing|,
+    // then we know that the animation is not composited due to certain check,
+    // such as the ComputedStyle::ShouldCompositeForCurrentAnimations(), for
+    // a running experiment.
     if (!paints_into_own_backing) {
-      return FailureCode::NonActionable(
-          "Element does not paint into own backing");
+      return FailureCode::NotPaintIntoOwnBacking(
+          "Acceleratable animation not accelerated due to an experiment");
     }
   }
 
@@ -440,12 +446,13 @@ void CompositorAnimations::StartAnimationOnCompositor(
     double start_time,
     double time_offset,
     const Timing& timing,
-    const Animation& animation,
+    const Animation* animation,
+    CompositorAnimationPlayer& compositor_player,
     const EffectModel& effect,
     Vector<int>& started_animation_ids,
     double animation_playback_rate) {
   DCHECK(started_animation_ids.IsEmpty());
-  DCHECK(CheckCanStartAnimationOnCompositor(timing, element, &animation, effect,
+  DCHECK(CheckCanStartAnimationOnCompositor(timing, element, animation, effect,
                                             animation_playback_rate)
              .Ok());
 
@@ -459,9 +466,7 @@ void CompositorAnimations::StartAnimationOnCompositor(
   DCHECK(!animations.IsEmpty());
   for (auto& compositor_animation : animations) {
     int id = compositor_animation->Id();
-    CompositorAnimationPlayer* compositor_player = animation.CompositorPlayer();
-    DCHECK(compositor_player);
-    compositor_player->AddAnimation(std::move(compositor_animation));
+    compositor_player.AddAnimation(std::move(compositor_animation));
     started_animation_ids.push_back(id);
   }
   DCHECK(!started_animation_ids.IsEmpty());
@@ -500,9 +505,10 @@ void CompositorAnimations::PauseAnimationForTestingOnCompositor(
   compositor_player->PauseAnimation(id, pause_time);
 }
 
-void CompositorAnimations::AttachCompositedLayers(Element& element,
-                                                  const Animation& animation) {
-  if (!animation.CompositorPlayer())
+void CompositorAnimations::AttachCompositedLayers(
+    Element& element,
+    CompositorAnimationPlayer* compositor_player) {
+  if (!compositor_player)
     return;
 
   if (!element.GetLayoutObject() ||
@@ -526,7 +532,6 @@ void CompositorAnimations::AttachCompositedLayers(Element& element,
       return;
   }
 
-  CompositorAnimationPlayer* compositor_player = animation.CompositorPlayer();
   compositor_player->AttachElement(CompositorElementIdFromUniqueObjectId(
       element.GetLayoutObject()->UniqueId(),
       CompositorElementIdNamespace::kPrimary));

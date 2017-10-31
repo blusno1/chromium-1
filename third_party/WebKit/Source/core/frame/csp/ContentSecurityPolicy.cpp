@@ -31,7 +31,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/SandboxFlags.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/EventQueue.h"
 #include "core/events/SecurityPolicyViolationEvent.h"
 #include "core/frame/FrameClient.h"
@@ -59,6 +58,7 @@
 #include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/KnownPorts.h"
+#include "platform/weborigin/ReportingServiceProxyPtrHolder.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/NotFound.h"
 #include "platform/wtf/PtrUtil.h"
@@ -67,6 +67,7 @@
 #include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/StringUTF8Adaptor.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
 
@@ -1244,7 +1245,7 @@ void ContentSecurityPolicy::ReportViolation(
   // Fire a violation event if we're working within an execution context (e.g.
   // we're not processing 'frame-ancestors').
   if (execution_context_) {
-    TaskRunnerHelper::Get(TaskType::kNetworking, execution_context_)
+    execution_context_->GetTaskRunner(TaskType::kNetworking)
         ->PostTask(BLINK_FROM_HERE,
                    WTF::Bind(&ContentSecurityPolicy::DispatchViolationEvents,
                              WrapPersistent(this), violation_data,
@@ -1314,10 +1315,14 @@ void ContentSecurityPolicy::PostViolationReport(
     scoped_refptr<EncodedFormData> report =
         EncodedFormData::Create(stringified_report.Utf8());
 
-    // TODO(andypaicu): for now we can only send reports to report-uri, skip
-    // report-to
-    if (!use_reporting_api) {
-      for (const auto& report_endpoint : report_endpoints) {
+    DEFINE_STATIC_LOCAL(ReportingServiceProxyPtrHolder,
+                        reporting_service_proxy_holder, ());
+
+    for (const auto& report_endpoint : report_endpoints) {
+      if (use_reporting_api) {
+        reporting_service_proxy_holder.QueueCspViolationReport(
+            document->Url(), report_endpoint, violation_data);
+      } else {
         // If we have a context frame we're dealing with 'frame-ancestors' and
         // we don't have our own execution context. Use the frame's document to
         // complete the endpoint URL, overriding its URL with the blocked

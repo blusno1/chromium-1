@@ -131,7 +131,7 @@ class WebServiceWorkerNetworkProviderForFrame
     // S13nServiceWorker:
     // Create our own SubresourceLoader to route the request
     // to the controller ServiceWorker.
-    return base::MakeUnique<WebURLLoaderImpl>(
+    return std::make_unique<WebURLLoaderImpl>(
         RenderThreadImpl::current()->resource_dispatcher(),
         std::move(task_runner),
         provider_->context()->subresource_loader_factory());
@@ -200,7 +200,7 @@ ServiceWorkerNetworkProvider::CreateForNavigation(
   } else {
     network_provider = base::WrapUnique(new ServiceWorkerNetworkProvider());
   }
-  return base::MakeUnique<WebServiceWorkerNetworkProviderForFrame>(
+  return std::make_unique<WebServiceWorkerNetworkProviderForFrame>(
       std::move(network_provider));
 }
 
@@ -313,15 +313,8 @@ ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
       info->provider_id, SERVICE_WORKER_PROVIDER_FOR_CONTROLLER,
       std::move(info->client_request), std::move(info->host_ptr_info),
       dispatcher, nullptr /* loader_factory_getter */);
-  std::unique_ptr<ServiceWorkerHandleReference> installing =
-      ServiceWorkerHandleReference::Adopt(info->attributes.installing, sender);
-  std::unique_ptr<ServiceWorkerHandleReference> waiting =
-      ServiceWorkerHandleReference::Adopt(info->attributes.waiting, sender);
-  std::unique_ptr<ServiceWorkerHandleReference> active =
-      ServiceWorkerHandleReference::Adopt(info->attributes.active, sender);
   context_->SetRegistrationForServiceWorkerGlobalScope(
-      std::move(info->registration), std::move(installing), std::move(waiting),
-      std::move(active));
+      std::move(info->registration), sender);
 
   if (info->script_loader_factory_ptr_info.is_valid()) {
     script_loader_factory_.Bind(

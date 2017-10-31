@@ -18,7 +18,7 @@ namespace blink {
 
 scoped_refptr<WebTaskRunner> TaskRunnerHelper::Get(TaskType type,
                                                    LocalFrame* frame) {
-  return frame->FrameScheduler()->GetTaskRunner(type);
+  return frame->GetTaskRunner(type);
 }
 
 scoped_refptr<WebTaskRunner> TaskRunnerHelper::Get(TaskType type,
@@ -30,11 +30,6 @@ scoped_refptr<WebTaskRunner> TaskRunnerHelper::Get(
     TaskType type,
     ExecutionContext* execution_context) {
   return execution_context->GetTaskRunner(type);
-}
-
-scoped_refptr<WebTaskRunner> TaskRunnerHelper::Get(TaskType type,
-                                                   ScriptState* script_state) {
-  return ExecutionContext::From(script_state)->GetTaskRunner(type);
 }
 
 scoped_refptr<WebTaskRunner> TaskRunnerHelper::Get(

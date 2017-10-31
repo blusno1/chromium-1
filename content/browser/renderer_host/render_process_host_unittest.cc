@@ -67,7 +67,7 @@ TEST_F(RenderProcessHostUnitTest, RendererProcessLimit) {
   ASSERT_NE(0u, kMaxRendererProcessCount);
   std::vector<std::unique_ptr<MockRenderProcessHost>> hosts;
   for (size_t i = 0; i < kMaxRendererProcessCount; ++i) {
-    hosts.push_back(base::MakeUnique<MockRenderProcessHost>(browser_context()));
+    hosts.push_back(std::make_unique<MockRenderProcessHost>(browser_context()));
   }
 
   // Verify that the renderer sharing will happen.
@@ -78,7 +78,7 @@ TEST_F(RenderProcessHostUnitTest, RendererProcessLimit) {
 #endif
 
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
-TEST_F(RenderProcessHostUnitTest, NoRendererProcessLimitOnAndroid) {
+TEST_F(RenderProcessHostUnitTest, NoRendererProcessLimitOnAndroidOrChromeOS) {
   // Disable any overrides.
   RenderProcessHostImpl::SetMaxRendererProcessCount(0);
 
@@ -86,7 +86,7 @@ TEST_F(RenderProcessHostUnitTest, NoRendererProcessLimitOnAndroid) {
   ASSERT_NE(0u, kMaxRendererProcessCount);
   std::vector<std::unique_ptr<MockRenderProcessHost>> hosts;
   for (size_t i = 0; i < kMaxRendererProcessCount; ++i) {
-    hosts.push_back(base::MakeUnique<MockRenderProcessHost>(browser_context()));
+    hosts.push_back(std::make_unique<MockRenderProcessHost>(browser_context()));
   }
 
   // Verify that the renderer sharing still won't happen.
@@ -130,9 +130,10 @@ TEST_F(RenderProcessHostUnitTest, ReuseCommittedSite) {
   // return the process of the subframe RFH.
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
-      process()->GetNextRoutingID(), blink::WebTreeScopeType::kDocument,
-      std::string(), unique_name, base::UnguessableToken::Create(),
-      FramePolicy(), FrameOwnerProperties());
+      process()->GetNextRoutingID(),
+      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      blink::WebTreeScopeType::kDocument, std::string(), unique_name,
+      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   subframe = static_cast<TestRenderFrameHost*>(

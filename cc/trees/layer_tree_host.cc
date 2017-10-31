@@ -55,11 +55,14 @@
 #include "cc/trees/swap_promise_manager.h"
 #include "cc/trees/transform_node.h"
 #include "cc/trees/tree_synchronizer.h"
+#include "cc/trees/ukm_manager.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
 namespace {
 static base::AtomicSequenceNumber s_layer_tree_host_sequence_number;
+static base::AtomicSequenceNumber s_image_decode_sequence_number;
 }
 
 namespace cc {
@@ -74,6 +77,7 @@ std::unique_ptr<LayerTreeHost> LayerTreeHost::CreateThreaded(
   DCHECK(params->main_task_runner.get());
   DCHECK(impl_task_runner.get());
   DCHECK(params->settings);
+  DCHECK(params->ukm_recorder_factory);
   std::unique_ptr<LayerTreeHost> layer_tree_host(
       new LayerTreeHost(params, CompositorMode::THREADED));
   layer_tree_host->InitializeThreaded(params->main_task_runner,
@@ -96,6 +100,7 @@ LayerTreeHost::CreateSingleThreaded(
 LayerTreeHost::LayerTreeHost(InitParams* params, CompositorMode mode)
     : micro_benchmark_controller_(this),
       image_worker_task_runner_(params->image_worker_task_runner),
+      ukm_recorder_factory_(std::move(params->ukm_recorder_factory)),
       compositor_mode_(mode),
       ui_resource_manager_(std::make_unique<UIResourceManager>()),
       client_(params->client),
@@ -184,6 +189,10 @@ LayerTreeHost::~LayerTreeHost() {
     // outlive them, and we must make good.
     root_layer_ = nullptr;
   }
+
+  // Fail any pending image decodes.
+  for (auto& pair : pending_image_decodes_)
+    pair.second.Run(false);
 
   if (proxy_) {
     DCHECK(task_runner_provider_->IsMainThread());
@@ -365,12 +374,26 @@ void LayerTreeHost::FinishCommitOnImplThread(
   }
 
   // Transfer image decode requests to the impl thread.
-  for (auto& request : queued_image_decodes_)
-    host_impl->QueueImageDecode(std::move(request.first), request.second);
+  for (auto& request : queued_image_decodes_) {
+    int next_id = s_image_decode_sequence_number.GetNext();
+    pending_image_decodes_[next_id] = std::move(request.second);
+    host_impl->QueueImageDecode(next_id, std::move(request.first));
+  }
   queued_image_decodes_.clear();
 
   micro_benchmark_controller_.ScheduleImplBenchmarks(host_impl);
   property_trees_.ResetAllChangeTracking();
+}
+
+void LayerTreeHost::ImageDecodesFinished(
+    const std::vector<std::pair<int, bool>>& results) {
+  // Issue stored callbacks and remove them from the pending list.
+  for (const auto& pair : results) {
+    auto it = pending_image_decodes_.find(pair.first);
+    DCHECK(it != pending_image_decodes_.end());
+    it->second.Run(pair.second);
+    pending_image_decodes_.erase(it);
+  }
 }
 
 void LayerTreeHost::PushPropertyTreesTo(LayerTreeImpl* tree_impl) {
@@ -466,6 +489,11 @@ LayerTreeHost::CreateLayerTreeHostImpl(
       settings_, client, task_runner_provider_.get(),
       rendering_stats_instrumentation_.get(), task_graph_runner_,
       std::move(mutator_host_impl), id_, std::move(image_worker_task_runner_));
+  if (ukm_recorder_factory_) {
+    host_impl->InitializeUkm(ukm_recorder_factory_->CreateRecorder());
+    ukm_recorder_factory_.reset();
+  }
+
   host_impl->SetHasGpuRasterizationTrigger(has_gpu_rasterization_trigger_);
   host_impl->SetContentHasSlowPaths(content_has_slow_paths_);
   host_impl->SetContentHasNonAAPaint(content_has_non_aa_paint_);
@@ -1494,6 +1522,10 @@ void LayerTreeHost::SetHasCopyRequest(bool has_copy_request) {
 
 void LayerTreeHost::RequestBeginMainFrameNotExpected(bool new_state) {
   proxy_->RequestBeginMainFrameNotExpected(new_state);
+}
+
+void LayerTreeHost::SetURLForUkm(const GURL& url) {
+  proxy_->SetURLForUkm(url);
 }
 
 }  // namespace cc

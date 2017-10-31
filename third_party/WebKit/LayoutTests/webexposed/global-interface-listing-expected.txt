@@ -638,6 +638,32 @@ interface CSSKeywordValue : CSSStyleValue
     getter value
     method constructor
     setter value
+interface CSSMathInvert : CSSMathValue
+    attribute @@toStringTag
+    getter value
+    method constructor
+    setter value
+interface CSSMathMax : CSSMathValue
+    attribute @@toStringTag
+    method constructor
+interface CSSMathMin : CSSMathValue
+    attribute @@toStringTag
+    method constructor
+interface CSSMathNegate : CSSMathValue
+    attribute @@toStringTag
+    getter value
+    method constructor
+    setter value
+interface CSSMathProduct : CSSMathValue
+    attribute @@toStringTag
+    method constructor
+interface CSSMathSum : CSSMathValue
+    attribute @@toStringTag
+    method constructor
+interface CSSMathValue : CSSNumericValue
+    attribute @@toStringTag
+    getter operator
+    method constructor
 interface CSSMatrixComponent : CSSTransformComponent
     attribute @@toStringTag
     getter matrix
@@ -2028,6 +2054,7 @@ interface Gamepad
     getter mapping
     getter pose
     getter timestamp
+    getter vibrationActuator
     method constructor
 interface GamepadButton
     attribute @@toStringTag
@@ -2039,6 +2066,12 @@ interface GamepadEvent : Event
     attribute @@toStringTag
     getter gamepad
     method constructor
+interface GamepadHapticActuator
+    attribute @@toStringTag
+    getter type
+    method constructor
+    method playEffect
+    method reset
 interface GamepadPose
     attribute @@toStringTag
     getter angularAcceleration
@@ -6591,7 +6624,6 @@ interface ShadowRoot : DocumentFragment
     getter host
     getter innerHTML
     getter mode
-    getter olderShadowRoot
     getter pointerLockElement
     getter styleSheets
     method constructor
@@ -7148,6 +7180,11 @@ interface VRDeviceEvent : Event
     attribute @@toStringTag
     getter device
     method constructor
+interface VRDevicePose
+    attribute @@toStringTag
+    getter poseModelMatrix
+    method constructor
+    method getViewMatrix
 interface VRDisplay : EventTarget
     attribute @@toStringTag
     getter capabilities
@@ -7208,6 +7245,12 @@ interface VRPose
     getter orientation
     getter position
     method constructor
+interface VRPresentationFrame
+    attribute @@toStringTag
+    getter session
+    getter views
+    method constructor
+    method getDevicePose
 interface VRSession : EventTarget
     attribute @@toStringTag
     getter depthFar
@@ -7247,6 +7290,11 @@ interface VRStageParameters
     getter sittingToStandingTransform
     getter sizeX
     getter sizeZ
+    method constructor
+interface VRView
+    attribute @@toStringTag
+    getter eye
+    getter projectionMatrix
     method constructor
 interface VTTCue : TextTrackCue
     attribute @@toStringTag
@@ -9234,7 +9282,6 @@ interface webkitURL
     method gc
     method getComputedStyle
     method getComputedStyleMap
-    method getMatchedCSSRules
     method getSelection
     method matchMedia
     method moveBy

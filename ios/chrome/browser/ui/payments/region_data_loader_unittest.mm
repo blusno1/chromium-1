@@ -46,10 +46,14 @@ TEST_F(PaymentRequestRegionDataLoaderTest, SourceSuccess) {
                                                         id value) {
         NSArray<RegionData*>* data =
             base::mac::ObjCCastStrict<NSArray<RegionData*>>(value);
-        return data[0].regionCode == base::SysUTF8ToNSString(kQuebecCode) &&
-               data[0].regionName == base::SysUTF8ToNSString(kQuebec) &&
-               data[1].regionCode == base::SysUTF8ToNSString(kOntarioCode) &&
-               data[1].regionName == base::SysUTF8ToNSString(kOntario);
+        return [data[0].regionCode
+                   isEqualToString:base::SysUTF8ToNSString(kQuebecCode)] &&
+               [data[0].regionName
+                   isEqualToString:base::SysUTF8ToNSString(kQuebec)] &&
+               [data[1].regionCode
+                   isEqualToString:base::SysUTF8ToNSString(kOntarioCode)] &&
+               [data[1].regionName
+                   isEqualToString:base::SysUTF8ToNSString(kOntario)];
       }]];
 
   RegionDataLoader region_data_loader(consumer);

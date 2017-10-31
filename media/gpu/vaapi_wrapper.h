@@ -155,13 +155,6 @@ class MEDIA_GPU_EXPORT VaapiWrapper
                             gfx::Size dest_size);
 #endif  // USE_X11
 
-  // Get a VAImage from a VASurface and map it into memory. The size and format
-  // are derived from the surface. Use GetVaImage() instead if |format| or
-  // |size| are different from surface internal representation. The VAImage
-  // should be released using the ReturnVaImage function. Returns true when
-  // successful.
-  bool GetDerivedVaImage(VASurfaceID va_surface_id, VAImage* image, void** mem);
-
   // Get a VAImage from a VASurface |va_surface_id| and map it into memory with
   // given |format| and |size|. The output is |image| and the mapped memory is
   // |mem|. If |format| doesn't equal to the internal format, the underlying
@@ -176,7 +169,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
                   void** mem);
 
   // Release the VAImage (and the associated memory mapping) obtained from
-  // GetVaImage() or GetDerivedVaImage().
+  // GetVaImage().
   void ReturnVaImage(VAImage* image);
 
   // Upload contents of |frame| into |va_surface_id| for encode.
@@ -231,46 +224,6 @@ class MEDIA_GPU_EXPORT VaapiWrapper
 
    private:
     std::vector<ProfileInfo> supported_profiles_[kCodecModeMax];
-  };
-
-  class VADisplayState {
-   public:
-    VADisplayState();
-    ~VADisplayState();
-
-    // |va_lock_| must be held on entry.
-    bool Initialize();
-    void Deinitialize(VAStatus* status);
-
-    base::Lock* va_lock() { return &va_lock_; }
-    VADisplay va_display() const { return va_display_; }
-
-#if defined(USE_OZONE)
-    void SetDrmFd(base::PlatformFile fd);
-#endif  // USE_OZONE
-
-   private:
-    // Protected by |va_lock_|.
-    int refcount_;
-
-    // Libva is not thread safe, so we have to do locking for it ourselves.
-    // This lock is to be taken for the duration of all VA-API calls and for
-    // the entire job submission sequence in ExecuteAndDestroyPendingBuffers().
-    base::Lock va_lock_;
-
-#if defined(USE_OZONE)
-    // Drm fd used to obtain access to the driver interface by VA.
-    base::ScopedFD drm_fd_;
-#endif  // USE_OZONE
-
-    // The VADisplay handle.
-    VADisplay va_display_;
-
-    // The VAAPI version.
-    int major_version_, minor_version_;
-
-    // True if vaInitialize has been called successfully.
-    bool va_initialized_;
   };
 
   VaapiWrapper();
@@ -337,7 +290,6 @@ class MEDIA_GPU_EXPORT VaapiWrapper
                                       CodecMode mode);
 
   // Singleton accessors.
-  static VADisplayState* GetDisplayState();
   static LazyProfileInfos* GetProfileInfos();
 
   // Pointer to VADisplayState's member |va_lock_|. Guaranteed to be valid for

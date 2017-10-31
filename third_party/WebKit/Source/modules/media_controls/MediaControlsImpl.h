@@ -36,6 +36,7 @@
 namespace blink {
 
 class Event;
+class HTMLVideoElement;
 class MediaControlsMediaEventListener;
 class MediaControlsOrientationLockDelegate;
 class MediaControlsRotateToFullscreenDelegate;
@@ -71,6 +72,9 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
  public:
   static MediaControlsImpl* Create(HTMLMediaElement&, ShadowRoot&);
   ~MediaControlsImpl() = default;
+
+  // Returns whether the ModernMediaControlsEnabled runtime flag is on.
+  static bool IsModern();
 
   // Node override.
   Node::InsertionNotificationRequest InsertedInto(ContainerNode*) override;
@@ -159,6 +163,10 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   // Update the CSS class when we think the state has updated.
   void UpdateCSSClassFromState();
 
+  // Get the HTMLVideoElement that the controls are attached to. The caller must
+  // check that the element is a video element first.
+  HTMLVideoElement& VideoElement();
+
   // Track the state of the controls.
   enum ControlsState {
     // There is no video source.
@@ -219,6 +227,9 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   // current.
   void ComputeWhichControlsFit();
 
+  void UpdateOverflowMenuWanted() const;
+  void MaybeRecordElementsDisplayed() const;
+
   // Takes a popup menu (caption, overflow) and position on the screen. This is
   // used because these menus use a fixed position in order to appear over all
   // content.
@@ -253,6 +264,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   void OnMediaKeyboardEvent(Event* event) { DefaultEventHandler(event); }
   void OnWaiting();
   void OnLoadingProgress();
+  void OnLoadedData();
 
   // Media control elements.
   Member<MediaControlOverlayEnclosureElement> overlay_enclosure_;

@@ -112,23 +112,26 @@ class ServiceWorkerDispatcherTest : public testing::Test {
     dispatcher_.reset(new ServiceWorkerDispatcher(sender_.get(), nullptr));
   }
 
-  void CreateObjectInfoAndVersionAttributes(
-      blink::mojom::ServiceWorkerRegistrationObjectInfoPtr* info,
-      ServiceWorkerVersionAttributes* attrs) {
-    *info = blink::mojom::ServiceWorkerRegistrationObjectInfo::New();
-    (*info)->handle_id = 10;
-    (*info)->registration_id = 20;
+  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
+  CreateServiceWorkerRegistrationObjectInfo() {
+    auto info = blink::mojom::ServiceWorkerRegistrationObjectInfo::New();
+    info->handle_id = 10;
+    info->registration_id = 20;
     remote_registration_object_host_.AddBinding(
-        mojo::MakeRequest(&(*info)->host_ptr_info));
-    (*info)->request =
+        mojo::MakeRequest(&info->host_ptr_info));
+    info->request =
         remote_registration_object_host_.CreateRegistrationObjectRequest();
 
-    attrs->active.handle_id = 100;
-    attrs->active.version_id = 200;
-    attrs->waiting.handle_id = 101;
-    attrs->waiting.version_id = 201;
-    attrs->installing.handle_id = 102;
-    attrs->installing.version_id = 202;
+    info->active = blink::mojom::ServiceWorkerObjectInfo::New();
+    info->active->handle_id = 100;
+    info->active->version_id = 200;
+    info->waiting = blink::mojom::ServiceWorkerObjectInfo::New();
+    info->waiting->handle_id = 101;
+    info->waiting->version_id = 201;
+    info->installing = blink::mojom::ServiceWorkerObjectInfo::New();
+    info->installing->handle_id = 102;
+    info->installing->version_id = 202;
+    return info;
   }
 
   bool ContainsServiceWorker(int handle_id) {
@@ -139,13 +142,9 @@ class ServiceWorkerDispatcherTest : public testing::Test {
     return ContainsKey(dispatcher_->registrations_, registration_handle_id);
   }
 
-  void OnPostMessage(const ServiceWorkerMsg_MessageToDocument_Params& params) {
-    dispatcher_->OnPostMessage(params);
-  }
-
   std::unique_ptr<ServiceWorkerHandleReference> Adopt(
-      const blink::mojom::ServiceWorkerObjectInfo& info) {
-    return dispatcher_->Adopt(info);
+      blink::mojom::ServiceWorkerObjectInfoPtr info) {
+    return dispatcher_->Adopt(std::move(info));
   }
 
   ServiceWorkerDispatcher* dispatcher() { return dispatcher_.get(); }
@@ -185,78 +184,33 @@ class MockWebServiceWorkerProviderClientImpl
   void DispatchMessageEvent(
       std::unique_ptr<blink::WebServiceWorker::Handle> handle,
       const blink::WebString& message,
-      blink::WebVector<blink::MessagePortChannel> ports) override {
-    // WebPassOwnPtr cannot be owned in Chromium, so drop the handle here.
-    // The destruction releases ServiceWorkerHandleReference.
-    is_dispatch_message_event_called_ = true;
-  }
+      blink::WebVector<blink::MessagePortChannel> ports) override {}
 
   void CountFeature(uint32_t feature) override {
     used_features_.insert(feature);
   }
 
-  bool is_dispatch_message_event_called() const {
-    return is_dispatch_message_event_called_;
-  }
-
  private:
   const int provider_id_;
-  bool is_dispatch_message_event_called_ = false;
   ServiceWorkerDispatcher* dispatcher_;
   std::set<uint32_t> used_features_;
 };
 
-TEST_F(ServiceWorkerDispatcherTest, OnPostMessage) {
-  const int kProviderId = 10;
-
-  // Assume that these objects are passed from the browser process and own
-  // references to browser-side registration/worker representations.
-  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info;
-  ServiceWorkerVersionAttributes attrs;
-  CreateObjectInfoAndVersionAttributes(&info, &attrs);
-
-  ServiceWorkerMsg_MessageToDocument_Params params;
-  params.thread_id = kDocumentMainThreadId;
-  params.provider_id = kProviderId;
-  params.service_worker_info = attrs.active;
-
-  // The passed reference should be adopted but immediately released because
-  // there is no provider client.
-  OnPostMessage(params);
-  ASSERT_EQ(1UL, ipc_sink()->message_count());
-  EXPECT_EQ(ServiceWorkerHostMsg_DecrementServiceWorkerRefCount::ID,
-            ipc_sink()->GetMessageAt(0)->type());
-  ipc_sink()->ClearMessages();
-
-  std::unique_ptr<MockWebServiceWorkerProviderClientImpl> provider_client(
-      new MockWebServiceWorkerProviderClientImpl(kProviderId, dispatcher()));
-  ASSERT_FALSE(provider_client->is_dispatch_message_event_called());
-
-  // The passed reference should be owned by the provider client (but the
-  // reference is immediately released due to limitation of the mock provider
-  // client. See the comment on dispatchMessageEvent() of the mock).
-  OnPostMessage(params);
-  EXPECT_TRUE(provider_client->is_dispatch_message_event_called());
-  ASSERT_EQ(1UL, ipc_sink()->message_count());
-  EXPECT_EQ(ServiceWorkerHostMsg_DecrementServiceWorkerRefCount::ID,
-            ipc_sink()->GetMessageAt(0)->type());
-}
-
 TEST_F(ServiceWorkerDispatcherTest, GetServiceWorker) {
-  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info;
-  ServiceWorkerVersionAttributes attrs;
-  CreateObjectInfoAndVersionAttributes(&info, &attrs);
+  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info =
+      CreateServiceWorkerRegistrationObjectInfo();
 
   // Should return a worker object newly created with the given reference.
   scoped_refptr<WebServiceWorkerImpl> worker(
-      dispatcher()->GetOrCreateServiceWorker(Adopt(attrs.installing)));
+      dispatcher()->GetOrCreateServiceWorker(Adopt(info->installing->Clone())));
   EXPECT_TRUE(worker);
-  EXPECT_TRUE(ContainsServiceWorker(attrs.installing.handle_id));
+  EXPECT_TRUE(ContainsServiceWorker(info->installing->handle_id));
   EXPECT_EQ(0UL, ipc_sink()->message_count());
 
   // Should return the same worker object and release the given reference.
   scoped_refptr<WebServiceWorkerImpl> existing_worker =
-      dispatcher()->GetOrCreateServiceWorker(Adopt(attrs.installing));
+      dispatcher()->GetOrCreateServiceWorker(
+          Adopt(std::move(info->installing)));
   EXPECT_EQ(worker, existing_worker);
   ASSERT_EQ(1UL, ipc_sink()->message_count());
   EXPECT_EQ(ServiceWorkerHostMsg_DecrementServiceWorkerRefCount::ID,
@@ -266,7 +220,7 @@ TEST_F(ServiceWorkerDispatcherTest, GetServiceWorker) {
   // Should return nullptr when a given object is invalid.
   scoped_refptr<WebServiceWorkerImpl> invalid_worker =
       dispatcher()->GetOrCreateServiceWorker(
-          Adopt(blink::mojom::ServiceWorkerObjectInfo()));
+          Adopt(blink::mojom::ServiceWorkerObjectInfo::New()));
   EXPECT_FALSE(invalid_worker);
   EXPECT_EQ(0UL, ipc_sink()->message_count());
 }
@@ -276,9 +230,8 @@ TEST_F(ServiceWorkerDispatcherTest, GetOrCreateRegistration) {
   scoped_refptr<WebServiceWorkerRegistrationImpl> registration2;
 
   {
-    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info;
-    ServiceWorkerVersionAttributes attrs;
-    CreateObjectInfoAndVersionAttributes(&info, &attrs);
+    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info =
+        CreateServiceWorkerRegistrationObjectInfo();
     int64_t registration_id = info->registration_id;
     int32_t handle_id = info->handle_id;
     // The 1st ServiceWorkerRegistrationObjectHost Mojo connection has been
@@ -289,7 +242,7 @@ TEST_F(ServiceWorkerDispatcherTest, GetOrCreateRegistration) {
     // the refcounts.
     registration1 =
         dispatcher()->GetOrCreateRegistrationForServiceWorkerGlobalScope(
-            std::move(info), attrs, base::ThreadTaskRunnerHandle::Get());
+            std::move(info), base::ThreadTaskRunnerHandle::Get());
     EXPECT_TRUE(registration1);
     EXPECT_TRUE(ContainsRegistration(handle_id));
     EXPECT_EQ(registration_id, registration1->RegistrationId());
@@ -306,16 +259,15 @@ TEST_F(ServiceWorkerDispatcherTest, GetOrCreateRegistration) {
   ipc_sink()->ClearMessages();
 
   {
-    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info;
-    ServiceWorkerVersionAttributes attrs;
-    CreateObjectInfoAndVersionAttributes(&info, &attrs);
+    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info =
+        CreateServiceWorkerRegistrationObjectInfo();
     // The 2nd Mojo connection has been added.
     ASSERT_EQ(2, remote_registration_object_host().GetBindingCount());
     // Should return the same registration object without incrementing the
     // refcounts.
     registration2 =
         dispatcher()->GetOrCreateRegistrationForServiceWorkerGlobalScope(
-            std::move(info), attrs, base::ThreadTaskRunnerHandle::Get());
+            std::move(info), base::ThreadTaskRunnerHandle::Get());
     EXPECT_TRUE(registration2);
     EXPECT_EQ(registration1, registration2);
     // The 2nd Mojo connection has been dropped.
@@ -346,9 +298,8 @@ TEST_F(ServiceWorkerDispatcherTest, GetOrAdoptRegistration) {
   scoped_refptr<WebServiceWorkerRegistrationImpl> registration2;
 
   {
-    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info;
-    ServiceWorkerVersionAttributes attrs;
-    CreateObjectInfoAndVersionAttributes(&info, &attrs);
+    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info =
+        CreateServiceWorkerRegistrationObjectInfo();
     int64_t registration_id = info->registration_id;
     int32_t handle_id = info->handle_id;
     // The 1st ServiceWorkerRegistrationObjectHost Mojo connection has been
@@ -358,7 +309,7 @@ TEST_F(ServiceWorkerDispatcherTest, GetOrAdoptRegistration) {
     // Should return a registration object newly created with adopting the
     // refcounts.
     registration1 = dispatcher()->GetOrCreateRegistrationForServiceWorkerClient(
-        std::move(info), attrs);
+        std::move(info));
     EXPECT_TRUE(registration1);
     EXPECT_TRUE(ContainsRegistration(handle_id));
     EXPECT_EQ(registration_id, registration1->RegistrationId());
@@ -369,15 +320,14 @@ TEST_F(ServiceWorkerDispatcherTest, GetOrAdoptRegistration) {
   ipc_sink()->ClearMessages();
 
   {
-    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info;
-    ServiceWorkerVersionAttributes attrs;
-    CreateObjectInfoAndVersionAttributes(&info, &attrs);
+    blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info =
+        CreateServiceWorkerRegistrationObjectInfo();
     // The 2nd Mojo connection has been added.
     ASSERT_EQ(2, remote_registration_object_host().GetBindingCount());
     // Should return the same registration object without incrementing the
     // refcounts.
     registration2 = dispatcher()->GetOrCreateRegistrationForServiceWorkerClient(
-        std::move(info), attrs);
+        std::move(info));
     EXPECT_TRUE(registration2);
     EXPECT_EQ(registration1, registration2);
     // The 2nd Mojo connection has been dropped.

@@ -116,8 +116,13 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 @property(nonatomic, weak) id<IOSCaptivePortalBlockingPageDelegate>
     iOSCaptivePortalBlockingPageDelegate;
+
+// The delegate to use for the legacy fullscreen controller.  It should not be
+// set if the new fullscreen is enabled.
+// TODO(crbug.com/778823): Remove this property.
 @property(nonatomic, weak) id<FullScreenControllerDelegate>
     fullScreenControllerDelegate;
+
 @property(nonatomic, readonly)
     OverscrollActionsController* overscrollActionsController;
 @property(nonatomic, weak) id<OverscrollActionsControllerDelegate>
@@ -130,7 +135,9 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // TODO(crbug.com/661663): Should this property abstract away the concept of
 // prerendering?  Maybe this can move to the TabDelegate interface.
 @property(nonatomic, assign) BOOL isPrerenderTab;
-@property(nonatomic, assign) BOOL isVoiceSearchResultsTab;
+
+// Whether this tab is displaying a voice search result.
+@property(nonatomic, readonly) BOOL isVoiceSearchResultsTab;
 
 // |YES| if the tab has finished loading.
 @property(nonatomic, readonly) BOOL loadFinished;
@@ -186,6 +193,7 @@ extern NSString* const kProxyPassthroughHeaderValue;
 - (void)reloadWithUserAgentType:(web::UserAgentType)userAgentType;
 
 // Ensures the toolbar visibility matches |visible|.
+// TODO(crbug.com/778823): Remove this code.
 - (void)updateFullscreenWithToolbarVisible:(BOOL)visible;
 
 // Returns a snapshot of the current page, backed by disk so it can be purged

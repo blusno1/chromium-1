@@ -137,7 +137,6 @@ split_static_library("ui") {
     "page_info/page_info_ui.h",
     "passwords/account_avatar_fetcher.cc",
     "passwords/account_avatar_fetcher.h",
-    "passwords/credential_provider_interface.h",
     "passwords/manage_passwords_state.cc",
     "passwords/manage_passwords_state.h",
     "passwords/manage_passwords_view_utils.cc",
@@ -208,7 +207,6 @@ split_static_library("ui") {
     "translate/translate_bubble_view_state_transition.cc",
     "translate/translate_bubble_view_state_transition.h",
     "uninstall_browser_prompt.h",
-    "validation_message_bubble.h",
     "view_ids.h",
     "web_contents_sizer.h",
     "webui/about_ui.cc",
@@ -601,6 +599,8 @@ split_static_library("ui") {
       "android/infobars/infobar_container_android.h",
       "android/infobars/instant_apps_infobar.cc",
       "android/infobars/instant_apps_infobar.h",
+      "android/infobars/near_oom_infobar.cc",
+      "android/infobars/near_oom_infobar.h",
       "android/infobars/permission_infobar.cc",
       "android/infobars/permission_infobar.h",
       "android/infobars/previews_infobar.cc",
@@ -897,11 +897,15 @@ split_static_library("ui") {
       "tabs/pinned_tab_service.h",
       "tabs/pinned_tab_service_factory.cc",
       "tabs/pinned_tab_service_factory.h",
+      "tabs/tab_features.cc",
+      "tabs/tab_features.h",
       "tabs/tab_menu_model.cc",
       "tabs/tab_menu_model.h",
       "tabs/tab_strip_model.cc",
       "tabs/tab_strip_model.h",
       "tabs/tab_strip_model_delegate.h",
+      "tabs/tab_strip_model_impl.cc",
+      "tabs/tab_strip_model_impl.h",
       "tabs/tab_strip_model_observer.cc",
       "tabs/tab_strip_model_observer.h",
       "tabs/tab_strip_model_order_controller.cc",
@@ -1437,8 +1441,6 @@ split_static_library("ui") {
       "webui/chromeos/power_ui.h",
       "webui/chromeos/set_time_ui.cc",
       "webui/chromeos/set_time_ui.h",
-      "webui/chromeos/sim_unlock_ui.cc",
-      "webui/chromeos/sim_unlock_ui.h",
       "webui/chromeos/slow_trace_ui.cc",
       "webui/chromeos/slow_trace_ui.h",
       "webui/chromeos/slow_ui.cc",
@@ -2379,9 +2381,6 @@ split_static_library("ui") {
         "cocoa/translate/translate_bubble_controller.mm",
         "cocoa/url_drop_target.h",
         "cocoa/url_drop_target.mm",
-        "cocoa/validation_message_bubble_cocoa.h",
-        "cocoa/validation_message_bubble_cocoa.mm",
-        "cocoa/validation_message_bubble_controller.h",
         "cocoa/vertical_gradient_view.h",
         "cocoa/vertical_gradient_view.mm",
         "cocoa/view_id_util.h",
@@ -2425,6 +2424,8 @@ split_static_library("ui") {
       "network_profile_bubble.cc",
       "network_profile_bubble.h",
       "startup/default_browser_prompt_win.cc",
+      "tabs/tab_strip_model_experimental.cc",
+      "tabs/tab_strip_model_experimental.h",
       "views/certificate_viewer_win.cc",
       "views/chrome_cleaner_dialog_win.cc",
       "views/chrome_cleaner_dialog_win.h",
@@ -2915,6 +2916,8 @@ split_static_library("ui") {
         "views/frame/contents_layout_manager.h",
         "views/frame/contents_web_view.cc",
         "views/frame/contents_web_view.h",
+        "views/frame/hosted_app_button_container.cc",
+        "views/frame/hosted_app_button_container.h",
         "views/frame/immersive_mode_controller.cc",
         "views/frame/immersive_mode_controller.h",
         "views/frame/immersive_mode_controller_factory_views.cc",
@@ -3047,8 +3050,6 @@ split_static_library("ui") {
         "views/touch_uma/touch_uma.h",
         "views/translate/translate_icon_view.cc",
         "views/translate/translate_icon_view.h",
-        "views/validation_message_bubble_view.cc",
-        "views/validation_message_bubble_view.h",
         "views/webshare/webshare_target_picker_view.cc",
         "views/webshare/webshare_target_picker_view.h",
       ]
@@ -3486,7 +3487,10 @@ split_static_library("ui") {
   }
 
   if (enable_basic_printing || enable_print_preview) {
-    deps += [ "//printing" ]
+    deps += [
+      "//components/printing/browser",
+      "//printing",
+    ]
     if (use_cups) {
       configs += [ "//printing:cups" ]
     }
@@ -3603,6 +3607,8 @@ static_library("test_support") {
     "find_bar/find_bar_host_unittest_util.h",
     "login/login_handler_test_utils.cc",
     "login/login_handler_test_utils.h",
+    "passwords/password_ui_view_mock.cc",
+    "passwords/password_ui_view_mock.h",
     "toolbar/test_toolbar_action_view_controller.cc",
     "toolbar/test_toolbar_action_view_controller.h",
   ]

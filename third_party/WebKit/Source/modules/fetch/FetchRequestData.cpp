@@ -49,6 +49,7 @@ FetchRequestData* FetchRequestData::Create(
   request->SetRedirect(web_request.RedirectMode());
   request->SetMIMEType(request->header_list_->ExtractMIMEType());
   request->SetIntegrity(web_request.Integrity());
+  request->SetKeepalive(web_request.Keepalive());
   return request;
 }
 
@@ -103,17 +104,17 @@ FetchRequestData::FetchRequestData()
       context_(WebURLRequest::kRequestContextUnspecified),
       same_origin_data_url_flag_(false),
       referrer_(Referrer(ClientReferrerString(), kReferrerPolicyDefault)),
-      mode_(WebURLRequest::kFetchRequestModeNoCORS),
-      credentials_(WebURLRequest::kFetchCredentialsModeOmit),
+      mode_(network::mojom::FetchRequestMode::kNoCORS),
+      credentials_(network::mojom::FetchCredentialsMode::kOmit),
       cache_mode_(mojom::FetchCacheMode::kDefault),
       redirect_(WebURLRequest::kFetchRedirectModeFollow),
       response_tainting_(kBasicTainting),
       keepalive_(false) {}
 
 void FetchRequestData::SetCredentials(
-    WebURLRequest::FetchCredentialsMode credentials) {
+    network::mojom::FetchCredentialsMode credentials) {
   credentials_ = credentials;
-  if (credentials_ != WebURLRequest::kFetchCredentialsModePassword)
+  if (credentials_ != network::mojom::FetchCredentialsMode::kPassword)
     attached_credential_ = nullptr;
 }
 

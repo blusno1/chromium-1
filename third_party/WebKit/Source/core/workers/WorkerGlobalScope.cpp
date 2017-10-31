@@ -377,7 +377,7 @@ WorkerGlobalScope::WorkerGlobalScope(
       v8_cache_options_(creation_params->v8_cache_options),
       thread_(thread),
       event_queue_(WorkerEventQueue::Create(this)),
-      timers_(TaskRunnerHelper::Get(TaskType::kJavascriptTimer, this)),
+      timers_(GetTaskRunner(TaskType::kJavascriptTimer)),
       time_origin_(time_origin),
       font_selector_(OffscreenFontSelector::Create(this)) {
   InstanceCounters::IncrementCounter(
@@ -390,8 +390,7 @@ WorkerGlobalScope::WorkerGlobalScope(
   ApplyContentSecurityPolicyFromVector(
       *creation_params->content_security_policy_parsed_headers);
   SetWorkerSettings(std::move(creation_params->worker_settings));
-  if (!creation_params->referrer_policy.IsNull())
-    ParseAndSetReferrerPolicy(creation_params->referrer_policy);
+  SetReferrerPolicy(creation_params->referrer_policy);
   SetAddressSpace(creation_params->address_space);
   OriginTrialContext::AddTokens(this,
                                 creation_params->origin_trial_tokens.get());

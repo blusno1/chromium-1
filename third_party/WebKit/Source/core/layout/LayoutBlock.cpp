@@ -964,6 +964,12 @@ void LayoutBlock::RemovePositionedObject(LayoutBox* o) {
     g_positioned_descendants_map->erase(container);
     container->has_positioned_objects_ = false;
   }
+
+  // Need to clear the anchor of the positioned object in its container box.
+  // The anchors are created in the logical container box, not in the CSS
+  // containing block.
+  if (LayoutObject* parent = o->Parent())
+    parent->MarkContainerNeedsCollectInlines();
 }
 
 PaintInvalidationReason LayoutBlock::InvalidatePaint(
@@ -1414,6 +1420,11 @@ void LayoutBlock::ComputePreferredLogicalWidths() {
                      LayoutUnit(style_to_use.LogicalMinWidth().Value())));
   }
 
+  LayoutUnit border_and_padding = BorderAndPaddingLogicalWidth();
+  DCHECK_GE(border_and_padding, LayoutUnit());
+  min_preferred_logical_width_ += border_and_padding;
+  max_preferred_logical_width_ += border_and_padding;
+
   // Table layout uses integers, ceil the preferred widths to ensure that they
   // can contain the contents.
   if (IsTableCell()) {
@@ -1422,11 +1433,6 @@ void LayoutBlock::ComputePreferredLogicalWidths() {
     max_preferred_logical_width_ =
         LayoutUnit(max_preferred_logical_width_.Ceil());
   }
-
-  LayoutUnit border_and_padding = BorderAndPaddingLogicalWidth();
-  DCHECK_GE(border_and_padding, LayoutUnit());
-  min_preferred_logical_width_ += border_and_padding;
-  max_preferred_logical_width_ += border_and_padding;
 
   ClearPreferredLogicalWidthsDirty();
 }

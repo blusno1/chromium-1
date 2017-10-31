@@ -77,6 +77,10 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
 
   void CloseAllBindings() { bindings_.CloseAllBindings(); }
 
+  // Tells this controller to abort the fetch event without a response.
+  // i.e., simulate the service worker failing to handle the fetch event.
+  void AbortEventWithNoResponse() { response_mode_ = ResponseMode::kAbort; }
+
   // Tells this controller to respond to fetch events with network fallback.
   // i.e., simulate the service worker not calling respondWith().
   void RespondWithFallback() {
@@ -114,17 +118,21 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
         std::move(callback).Run(
             blink::mojom::ServiceWorkerEventStatus::COMPLETED, base::Time());
         break;
+      case ResponseMode::kAbort:
+        std::move(callback).Run(blink::mojom::ServiceWorkerEventStatus::ABORTED,
+                                base::Time());
+        break;
       case ResponseMode::kStream:
         response_callback->OnResponseStream(
             ServiceWorkerResponse(
-                base::MakeUnique<std::vector<GURL>>(), 200, "OK",
+                std::make_unique<std::vector<GURL>>(), 200, "OK",
                 network::mojom::FetchResponseType::kDefault,
-                base::MakeUnique<ServiceWorkerHeaderMap>(), "" /* blob_uuid */,
+                std::make_unique<ServiceWorkerHeaderMap>(), "" /* blob_uuid */,
                 0 /* blob_size */, nullptr /* blob */,
                 blink::kWebServiceWorkerResponseErrorUnknown, base::Time(),
                 false /* response_is_in_cache_storage */,
                 std::string() /* response_cache_storage_cache_name */,
-                base::MakeUnique<
+                std::make_unique<
                     ServiceWorkerHeaderList>() /* cors_exposed_header_names */),
             std::move(stream_handle_), base::Time::Now());
         std::move(callback).Run(
@@ -139,15 +147,15 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
       case ResponseMode::kErrorResponse:
         response_callback->OnResponse(
             ServiceWorkerResponse(
-                base::MakeUnique<std::vector<GURL>>(), 0 /* status_code */,
+                std::make_unique<std::vector<GURL>>(), 0 /* status_code */,
                 "" /* status_text */,
                 network::mojom::FetchResponseType::kDefault,
-                base::MakeUnique<ServiceWorkerHeaderMap>(), "" /* blob_uuid */,
+                std::make_unique<ServiceWorkerHeaderMap>(), "" /* blob_uuid */,
                 0 /* blob_size */, nullptr /* blob */,
                 blink::kWebServiceWorkerResponseErrorPromiseRejected,
                 base::Time(), false /* response_is_in_cache_storage */,
                 std::string() /* response_cache_storage_cache_name */,
-                base::MakeUnique<
+                std::make_unique<
                     ServiceWorkerHeaderList>() /* cors_exposed_header_names */),
             base::Time::Now());
         std::move(callback).Run(
@@ -155,17 +163,17 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
             base::Time::Now());
         break;
       case ResponseMode::kRedirectResponse: {
-        auto headers = base::MakeUnique<ServiceWorkerHeaderMap>();
+        auto headers = std::make_unique<ServiceWorkerHeaderMap>();
         (*headers)["Location"] = redirect_location_header_;
         response_callback->OnResponse(
             ServiceWorkerResponse(
-                base::MakeUnique<std::vector<GURL>>(), 302, "Found",
+                std::make_unique<std::vector<GURL>>(), 302, "Found",
                 network::mojom::FetchResponseType::kDefault, std::move(headers),
                 "" /* blob_uuid */, 0 /* blob_size */, nullptr /* blob */,
                 blink::kWebServiceWorkerResponseErrorUnknown, base::Time(),
                 false /* response_is_in_cache_storage */,
                 std::string() /* response_cache_storage_cache_name */,
-                base::MakeUnique<
+                std::make_unique<
                     ServiceWorkerHeaderList>() /* cors_exposed_header_names */),
             base::Time::Now());
         std::move(callback).Run(
@@ -194,6 +202,7 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
  private:
   enum class ResponseMode {
     kDefault,
+    kAbort,
     kStream,
     kFallbackResponse,
     kErrorResponse,
@@ -225,6 +234,10 @@ class FakeServiceWorkerContainerHost
 
   ~FakeServiceWorkerContainerHost() override = default;
 
+  void set_fake_controller(FakeControllerServiceWorker* new_fake_controller) {
+    fake_controller_ = new_fake_controller;
+  }
+
   int get_controller_service_worker_count() const {
     return get_controller_service_worker_count_;
   }
@@ -250,7 +263,13 @@ class FakeServiceWorkerContainerHost
   void GetControllerServiceWorker(
       mojom::ControllerServiceWorkerRequest request) override {
     get_controller_service_worker_count_++;
+    if (!fake_controller_)
+      return;
     fake_controller_->Clone(std::move(request));
+  }
+  void CloneForWorker(
+      mojom::ServiceWorkerContainerHostRequest request) override {
+    NOTIMPLEMENTED();
   }
 
   int get_controller_service_worker_count_ = 0;
@@ -271,7 +290,7 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
     feature_list_.InitAndEnableFeature(features::kNetworkService);
 
     mojom::URLLoaderFactoryPtr fake_loader_factory;
-    mojo::MakeStrongBinding(base::MakeUnique<FakeNetworkURLLoaderFactory>(),
+    mojo::MakeStrongBinding(std::make_unique<FakeNetworkURLLoaderFactory>(),
                             MakeRequest(&fake_loader_factory));
     loader_factory_getter_ =
         base::MakeRefCounted<ChildURLLoaderFactoryGetterImpl>(
@@ -338,6 +357,24 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, Basic) {
   EXPECT_EQ(1, fake_container_host_.get_controller_service_worker_count());
 }
 
+TEST_F(ServiceWorkerSubresourceLoaderTest, Abort) {
+  fake_controller_.AbortEventWithNoResponse();
+
+  const GURL kScope("https://www.example.com/");
+  std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
+      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+
+  // Perform the request.
+  ResourceRequest request =
+      CreateRequest(GURL("https://www.example.com/foo.png"));
+  mojom::URLLoaderPtr loader;
+  std::unique_ptr<TestURLLoaderClient> client;
+  StartRequest(factory.get(), request, &loader, &client);
+  client->RunUntilComplete();
+
+  EXPECT_EQ(net::ERR_FAILED, client->completion_status().error_code);
+}
+
 TEST_F(ServiceWorkerSubresourceLoaderTest, DropController) {
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
@@ -356,6 +393,9 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, DropController) {
     EXPECT_EQ(1, fake_container_host_.get_controller_service_worker_count());
   }
 
+  // Loading another resource reuses the existing connection to the
+  // ControllerServiceWorker (i.e. it doesn't increase the get controller
+  // service worker count).
   {
     ResourceRequest request =
         CreateRequest(GURL("https://www.example.com/foo2.png"));
@@ -388,6 +428,83 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, DropController) {
     EXPECT_EQ(3, fake_controller_.fetch_event_count());
     EXPECT_EQ(2, fake_container_host_.get_controller_service_worker_count());
   }
+}
+
+TEST_F(ServiceWorkerSubresourceLoaderTest, DropController_RestartFetchEvent) {
+  const GURL kScope("https://www.example.com/");
+  std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
+      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+
+  {
+    ResourceRequest request =
+        CreateRequest(GURL("https://www.example.com/foo.png"));
+    mojom::URLLoaderPtr loader;
+    std::unique_ptr<TestURLLoaderClient> client;
+    StartRequest(factory.get(), request, &loader, &client);
+    fake_controller_.RunUntilFetchEvent();
+
+    EXPECT_EQ(request.url, fake_controller_.fetch_event_request().url);
+    EXPECT_EQ(request.method, fake_controller_.fetch_event_request().method);
+    EXPECT_EQ(1, fake_controller_.fetch_event_count());
+    EXPECT_EQ(1, fake_container_host_.get_controller_service_worker_count());
+  }
+
+  // Loading another resource reuses the existing connection to the
+  // ControllerServiceWorker (i.e. it doesn't increase the get controller
+  // service worker count).
+  {
+    ResourceRequest request =
+        CreateRequest(GURL("https://www.example.com/foo2.png"));
+    mojom::URLLoaderPtr loader;
+    std::unique_ptr<TestURLLoaderClient> client;
+    StartRequest(factory.get(), request, &loader, &client);
+    fake_controller_.RunUntilFetchEvent();
+
+    EXPECT_EQ(request.url, fake_controller_.fetch_event_request().url);
+    EXPECT_EQ(request.method, fake_controller_.fetch_event_request().method);
+    EXPECT_EQ(2, fake_controller_.fetch_event_count());
+    EXPECT_EQ(1, fake_container_host_.get_controller_service_worker_count());
+  }
+
+  ResourceRequest request =
+      CreateRequest(GURL("https://www.example.com/foo3.png"));
+  mojom::URLLoaderPtr loader;
+  std::unique_ptr<TestURLLoaderClient> client;
+  StartRequest(factory.get(), request, &loader, &client);
+
+  // Drop the connection to the ControllerServiceWorker.
+  fake_controller_.CloseAllBindings();
+  base::RunLoop().RunUntilIdle();
+
+  // If connection is closed during fetch event, it's restarted and successfully
+  // finishes.
+  EXPECT_EQ(request.url, fake_controller_.fetch_event_request().url);
+  EXPECT_EQ(request.method, fake_controller_.fetch_event_request().method);
+  EXPECT_EQ(3, fake_controller_.fetch_event_count());
+  EXPECT_EQ(2, fake_container_host_.get_controller_service_worker_count());
+}
+
+TEST_F(ServiceWorkerSubresourceLoaderTest, DropController_TooManyRestart) {
+  // Simulate the container host fails to start a service worker.
+  fake_container_host_.set_fake_controller(nullptr);
+
+  const GURL kScope("https://www.example.com/");
+  std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
+      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+  ResourceRequest request =
+      CreateRequest(GURL("https://www.example.com/foo.png"));
+  mojom::URLLoaderPtr loader;
+  std::unique_ptr<TestURLLoaderClient> client;
+  StartRequest(factory.get(), request, &loader, &client);
+
+  // Try to dispatch fetch event to the bad worker.
+  base::RunLoop().RunUntilIdle();
+
+  // The request should be failed instead of infinite loop to restart the
+  // inflight fetch event.
+  EXPECT_EQ(2, fake_container_host_.get_controller_service_worker_count());
+  EXPECT_TRUE(client->has_received_completion());
+  EXPECT_EQ(net::ERR_FAILED, client->completion_status().error_code);
 }
 
 TEST_F(ServiceWorkerSubresourceLoaderTest, StreamResponse) {
@@ -614,36 +731,40 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, CORSFallbackResponse) {
       CreateSubresourceLoaderFactory(kScope.GetOrigin());
 
   struct TestCase {
-    FetchRequestMode fetch_request_mode;
+    network::mojom::FetchRequestMode fetch_request_mode;
     base::Optional<url::Origin> request_initiator;
     bool expected_was_fallback_required_by_service_worker;
   };
   const TestCase kTests[] = {
-      {FETCH_REQUEST_MODE_SAME_ORIGIN, base::Optional<url::Origin>(), false},
-      {FETCH_REQUEST_MODE_NO_CORS, base::Optional<url::Origin>(), false},
-      {FETCH_REQUEST_MODE_CORS, base::Optional<url::Origin>(), true},
-      {FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT,
+      {network::mojom::FetchRequestMode::kSameOrigin,
+       base::Optional<url::Origin>(), false},
+      {network::mojom::FetchRequestMode::kNoCORS, base::Optional<url::Origin>(),
+       false},
+      {network::mojom::FetchRequestMode::kCORS, base::Optional<url::Origin>(),
+       true},
+      {network::mojom::FetchRequestMode::kCORSWithForcedPreflight,
        base::Optional<url::Origin>(), true},
-      {FETCH_REQUEST_MODE_NAVIGATE, base::Optional<url::Origin>(), false},
-      {FETCH_REQUEST_MODE_SAME_ORIGIN,
+      {network::mojom::FetchRequestMode::kNavigate,
+       base::Optional<url::Origin>(), false},
+      {network::mojom::FetchRequestMode::kSameOrigin,
        url::Origin::Create(GURL("https://www.example.com/")), false},
-      {FETCH_REQUEST_MODE_NO_CORS,
+      {network::mojom::FetchRequestMode::kNoCORS,
        url::Origin::Create(GURL("https://www.example.com/")), false},
-      {FETCH_REQUEST_MODE_CORS,
+      {network::mojom::FetchRequestMode::kCORS,
        url::Origin::Create(GURL("https://www.example.com/")), false},
-      {FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT,
+      {network::mojom::FetchRequestMode::kCORSWithForcedPreflight,
        url::Origin::Create(GURL("https://www.example.com/")), false},
-      {FETCH_REQUEST_MODE_NAVIGATE,
+      {network::mojom::FetchRequestMode::kNavigate,
        url::Origin::Create(GURL("https://other.example.com/")), false},
-      {FETCH_REQUEST_MODE_SAME_ORIGIN,
+      {network::mojom::FetchRequestMode::kSameOrigin,
        url::Origin::Create(GURL("https://other.example.com/")), false},
-      {FETCH_REQUEST_MODE_NO_CORS,
+      {network::mojom::FetchRequestMode::kNoCORS,
        url::Origin::Create(GURL("https://other.example.com/")), false},
-      {FETCH_REQUEST_MODE_CORS,
+      {network::mojom::FetchRequestMode::kCORS,
        url::Origin::Create(GURL("https://other.example.com/")), true},
-      {FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT,
+      {network::mojom::FetchRequestMode::kCORSWithForcedPreflight,
        url::Origin::Create(GURL("https://other.example.com/")), true},
-      {FETCH_REQUEST_MODE_NAVIGATE,
+      {network::mojom::FetchRequestMode::kNavigate,
        url::Origin::Create(GURL("https://other.example.com/")), false}};
 
   for (const auto& test : kTests) {

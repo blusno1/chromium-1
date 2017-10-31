@@ -12,6 +12,7 @@
 #include "base/timer/timer.h"
 #include "remoting/base/leaky_bucket.h"
 #include "remoting/base/running_samples.h"
+#include "remoting/codec/frame_processing_time_estimator.h"
 #include "remoting/protocol/video_channel_state_observer.h"
 
 namespace remoting {
@@ -41,6 +42,9 @@ class WebrtcFrameSchedulerSimple : public VideoChannelStateObserver,
   void OnFrameEncoded(const WebrtcVideoEncoder::EncodedFrame* encoded_frame,
                       HostFrameStats* frame_stats) override;
 
+  // Allows unit-tests to fake the current time.
+  void SetCurrentTimeForTest(base::TimeTicks now);
+
  private:
   // Helper class used to calculate target encoder bitrate.
   class EncoderBitrateFilter {
@@ -62,8 +66,15 @@ class WebrtcFrameSchedulerSimple : public VideoChannelStateObserver,
     int current_target_bitrate_ = 0;
   };
 
-  void ScheduleNextFrame(base::TimeTicks now);
+  void ScheduleNextFrame();
   void CaptureNextFrame();
+
+  // Returns the current time according to base::TimeTicks::Now(),
+  // or a fake time provided by a unit-test.
+  base::TimeTicks Now();
+
+  // Non-null if a fake current time is set by unit-test.
+  base::TimeTicks fake_now_for_test_;
 
   base::Closure capture_callback_;
   bool paused_ = false;
@@ -93,8 +104,9 @@ class WebrtcFrameSchedulerSimple : public VideoChannelStateObserver,
   // Set to true when encoding unchanged frames for top-off.
   bool top_off_is_active_ = false;
 
-  // Accumulator for capture and encoder delay history.
-  RunningSamples frame_processing_delay_us_;
+  // Accumulator for capture and encoder delay history, as well as the transit
+  // time.
+  FrameProcessingTimeEstimator processing_time_estimator_;
 
   // Accumulator for updated region area in the previously encoded frames.
   RunningSamples updated_region_area_;

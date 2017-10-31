@@ -23,9 +23,13 @@
 namespace blink {
 
 ModuleScriptLoader::ModuleScriptLoader(Modulator* modulator,
+                                       const ScriptFetchOptions& options,
                                        ModuleScriptLoaderRegistry* registry,
                                        ModuleScriptLoaderClient* client)
-    : modulator_(modulator), registry_(registry), client_(client) {
+    : modulator_(modulator),
+      options_(options),
+      registry_(registry),
+      client_(client) {
   DCHECK(modulator);
   DCHECK(registry);
   DCHECK(client);
@@ -78,9 +82,6 @@ void ModuleScriptLoader::Fetch(const ModuleScriptFetchRequest& module_request,
                                ModuleGraphLevel level) {
   // https://html.spec.whatwg.org/#fetch-a-single-module-script
 
-  // Save "options" for its use in Step 8-.
-  options_ = module_request.Options();
-
   // Step 4. "Set moduleMap[url] to "fetching"." [spec text]
   AdvanceState(State::kFetching);
 
@@ -99,10 +100,6 @@ void ModuleScriptLoader::Fetch(const ModuleScriptFetchRequest& module_request,
   // [SMSR]
   // https://html.spec.whatwg.org/multipage/webappapis.html#set-up-the-module-script-request
 
-  // [SMSR] "... its integrity metadata to options's integrity metadata, ..."
-  // [spec text]
-  // TODO(kouhei): Implement.
-
   // [SMSR] "... its parser metadata to options's parser metadata, ..."
   // [spec text]
   options.parser_disposition = options_.ParserState();
@@ -120,6 +117,12 @@ void ModuleScriptLoader::Fetch(const ModuleScriptFetchRequest& module_request,
 
   // Note: |options| should not be modified after here.
   FetchParameters fetch_params(resource_request, options);
+
+  // [SMSR] "... its integrity metadata to options's integrity metadata, ..."
+  // [spec text]
+  fetch_params.SetIntegrityMetadata(options_.GetIntegrityMetadata());
+  fetch_params.MutableResourceRequest().SetFetchIntegrity(
+      options_.GetIntegrityAttributeValue());
 
   // [SMSR] "Set request's cryptographic nonce metadata to options's
   // cryptographic nonce, ..." [spec text]
@@ -171,7 +174,7 @@ void ModuleScriptLoader::Fetch(const ModuleScriptFetchRequest& module_request,
 
 void ModuleScriptLoader::NotifyFetchFinished(
     const WTF::Optional<ModuleScriptCreationParams>& params,
-    ConsoleMessage* error_message) {
+    const HeapVector<Member<ConsoleMessage>>& error_messages) {
   // [nospec] Abort the steps if the browsing context is discarded.
   if (!modulator_->HasValidContext()) {
     AdvanceState(State::kFinished);
@@ -184,7 +187,7 @@ void ModuleScriptLoader::NotifyFetchFinished(
   // null, asynchronously complete this algorithm with null, and abort these
   // steps." [spec text]
   if (!params.has_value()) {
-    if (error_message) {
+    for (ConsoleMessage* error_message : error_messages) {
       ExecutionContext::From(modulator_->GetScriptState())
           ->AddConsoleMessage(error_message);
     }

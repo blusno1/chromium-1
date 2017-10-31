@@ -2,8 +2,7 @@
   {
     "prefix": "color_space",
     "base": "fast/canvas/color-space",
-    "args": ["--enable-blink-features=ColorCanvasExtensions",
-             "--force-color-profile=srgb"]
+    "args": ["--force-color-profile=srgb"]
   },
   {
     "prefix": "gpu",
@@ -28,7 +27,7 @@
   },
   {
     "prefix": "threaded",
-    "base": "fast/compositorworker",
+    "base": "fast/animationworklet",
     "args": ["--enable-threaded-compositing"]
   },
   {
@@ -112,11 +111,6 @@
     "prefix": "stable",
     "base": "svg/transforms/stable",
     "args": ["--stable-release-mode"]
-  },
-  {
-    "prefix": "feature-policy-permissions",
-    "base": "http/tests/webmidi",
-    "args": ["--enable-features=UseFeaturePolicyForPermissions"]
   },
   {
     "prefix": "feature-policy-permissions",
@@ -524,32 +518,32 @@
   {
     "prefix": "mojo-blobs",
     "base": "external/wpt/FileAPI",
-    "args": ["--enable-features=MojoBlobs"]
+    "args": ["--disable-features=MojoBlobs"]
   },
   {
     "prefix": "mojo-blobs",
     "base": "external/wpt/IndexedDB",
-    "args": ["--enable-features=MojoBlobs"]
+    "args": ["--disable-features=MojoBlobs"]
   },
   {
     "prefix": "mojo-blobs",
     "base": "external/wpt/fetch",
-    "args": ["--enable-features=MojoBlobs"]
+    "args": ["--disable-features=MojoBlobs"]
   },
   {
     "prefix": "mojo-blobs",
     "base": "external/wpt/service-workers",
-    "args": ["--enable-features=MojoBlobs"]
+    "args": ["--disable-features=MojoBlobs"]
   },
   {
     "prefix": "mojo-blobs",
     "base": "external/wpt/webmessaging",
-    "args": ["--enable-features=MojoBlobs"]
+    "args": ["--disable-features=MojoBlobs"]
   },
   {
     "prefix": "mojo-blobs",
     "base": "fast/files",
-    "args": ["--enable-features=MojoBlobs"]
+    "args": ["--disable-features=MojoBlobs"]
   },
   {
     "prefix": "longtask-v2",
@@ -575,5 +569,10 @@
     "prefix": "import-meta-url",
     "base": "external/wpt/html/semantics/scripting-1/the-script-element/module/import-meta",
     "args": ["--enable-features=ModuleScriptsImportMetaUrl"]
+  },
+  {
+    "prefix": "reporting",
+    "base": "external/wpt/content-security-policy/reporting",
+    "args": ["--enable-features=Reporting"]
   }
 ]

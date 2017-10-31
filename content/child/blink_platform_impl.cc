@@ -196,6 +196,8 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_OTHER_WEEK_LABEL;
     case WebLocalizedString::kOverflowMenuCaptions:
       return IDS_MEDIA_OVERFLOW_MENU_CLOSED_CAPTIONS;
+    case WebLocalizedString::kOverflowMenuCaptionsSubmenuTitle:
+      return IDS_MEDIA_OVERFLOW_MENU_CLOSED_CAPTIONS_SUBMENU_TITLE;
     case WebLocalizedString::kOverflowMenuCast:
       return IDS_MEDIA_OVERFLOW_MENU_CAST;
     case WebLocalizedString::kOverflowMenuEnterFullscreen:
@@ -311,13 +313,14 @@ static int ToMessageID(WebLocalizedString::Name name) {
 BlinkPlatformImpl::BlinkPlatformImpl()
     : BlinkPlatformImpl(base::ThreadTaskRunnerHandle::IsSet()
                             ? base::ThreadTaskRunnerHandle::Get()
-                            : nullptr) {
-}
+                            : nullptr,
+                        nullptr) {}
 
 BlinkPlatformImpl::BlinkPlatformImpl(
-    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner)
-    : main_thread_task_runner_(main_thread_task_runner) {
-}
+    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner)
+    : main_thread_task_runner_(std::move(main_thread_task_runner)),
+      io_thread_task_runner_(std::move(io_thread_task_runner)) {}
 
 void BlinkPlatformImpl::WaitUntilWebThreadTLSUpdate(
     blink::scheduler::WebThreadBase* thread) {
@@ -748,6 +751,11 @@ BlinkPlatformImpl::DuplicateFeaturePolicyWithOrigin(
     const blink::WebSecurityOrigin& new_origin) {
   return FeaturePolicy::CreateFromPolicyWithOrigin(
       static_cast<const FeaturePolicy&>(policy), url::Origin(new_origin));
+}
+
+scoped_refptr<base::SingleThreadTaskRunner> BlinkPlatformImpl::GetIOTaskRunner()
+    const {
+  return io_thread_task_runner_;
 }
 
 }  // namespace content

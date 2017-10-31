@@ -31,16 +31,6 @@ std::string GetProductNameAndVersion() {
 Options::Options(int argc, const char** argv)
     : argc(argc),
       argv(argv),
-#if defined(OS_WIN)
-      instance(0),
-      sandbox_info(nullptr),
-#endif
-      devtools_endpoint(),
-      devtools_socket_fd(0),
-      message_pump(nullptr),
-      single_process_mode(false),
-      disable_sandbox(false),
-      enable_resource_scheduler(true),
 #if defined(USE_OZONE)
       // TODO(skyostil): Implement SwiftShader backend for headless ozone.
       gl_implementation("osmesa"),
@@ -54,10 +44,7 @@ Options::Options(int argc, const char** argv)
 #endif
       product_name_and_version(GetProductNameAndVersion()),
       user_agent(content::BuildUserAgentFromProduct(product_name_and_version)),
-      window_size(kDefaultWindowSize),
-      incognito_mode(true),
-      allow_cookies(true),
-      enable_crash_reporter(false) {
+      window_size(kDefaultWindowSize) {
 }
 
 Options::Options(Options&& options) = default;
@@ -143,6 +130,12 @@ Builder& Builder::AddMojoServiceName(const std::string& mojo_service_name) {
   return *this;
 }
 
+Builder& Builder::SetAppendCommandLineFlagsCallback(
+    const Options::AppendCommandLineFlagsCallback& callback) {
+  options_.append_command_line_flags_callback = callback;
+  return *this;
+}
+
 #if defined(OS_WIN)
 Builder& Builder::SetInstance(HINSTANCE instance) {
   options_.instance = instance;
@@ -171,7 +164,7 @@ Builder& Builder::SetIncognitoMode(bool incognito_mode) {
 }
 
 Builder& Builder::SetOverrideWebPreferencesCallback(
-    base::Callback<void(WebPreferences*)> callback) {
+    const base::Callback<void(WebPreferences*)>& callback) {
   options_.override_web_preferences_callback = callback;
   return *this;
 }

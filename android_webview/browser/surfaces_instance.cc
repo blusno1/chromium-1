@@ -163,6 +163,7 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
 
   display_->Resize(viewport);
   display_->DrawAndSwap();
+  display_->DidReceiveSwapBuffersAck();
 }
 
 void SurfacesInstance::AddChildId(const viz::SurfaceId& child_id) {
@@ -210,6 +211,13 @@ void SurfacesInstance::DidReceiveCompositorFrameAck(
     const std::vector<viz::ReturnedResource>& resources) {
   ReclaimResources(resources);
 }
+
+void SurfacesInstance::DidPresentCompositorFrame(uint32_t presentation_token,
+                                                 base::TimeTicks time,
+                                                 base::TimeDelta refresh,
+                                                 uint32_t flags) {}
+
+void SurfacesInstance::DidDiscardCompositorFrame(uint32_t presentation_token) {}
 
 void SurfacesInstance::OnBeginFrame(const viz::BeginFrameArgs& args) {}
 

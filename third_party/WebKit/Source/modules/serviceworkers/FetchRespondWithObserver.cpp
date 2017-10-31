@@ -16,6 +16,7 @@
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
 #include "modules/serviceworkers/WaitUntilObserver.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 namespace {
@@ -145,7 +146,7 @@ FetchRespondWithObserver* FetchRespondWithObserver::Create(
     ExecutionContext* context,
     int fetch_event_id,
     const KURL& request_url,
-    WebURLRequest::FetchRequestMode request_mode,
+    network::mojom::FetchRequestMode request_mode,
     WebURLRequest::FetchRedirectMode redirect_mode,
     WebURLRequest::FrameType frame_type,
     WebURLRequest::RequestContext request_context,
@@ -184,14 +185,14 @@ void FetchRespondWithObserver::OnResponseFulfilled(const ScriptValue& value) {
   //   - |request|'s mode is not |no-cors| and response's type is |opaque|.
   //   - |request| is a client request and |response|'s type is neither
   //     |basic| nor |default|."
-  const FetchResponseData::Type response_type =
+  const network::mojom::FetchResponseType response_type =
       response->GetResponse()->GetType();
-  if (response_type == FetchResponseData::kErrorType) {
+  if (response_type == network::mojom::FetchResponseType::kError) {
     OnResponseRejected(kWebServiceWorkerResponseErrorResponseTypeError);
     return;
   }
-  if (response_type == FetchResponseData::kOpaqueType) {
-    if (request_mode_ != WebURLRequest::kFetchRequestModeNoCORS) {
+  if (response_type == network::mojom::FetchResponseType::kOpaque) {
+    if (request_mode_ != network::mojom::FetchRequestMode::kNoCORS) {
       OnResponseRejected(kWebServiceWorkerResponseErrorResponseTypeOpaque);
       return;
     }
@@ -208,7 +209,7 @@ void FetchRespondWithObserver::OnResponseFulfilled(const ScriptValue& value) {
     }
   }
   if (redirect_mode_ != WebURLRequest::kFetchRedirectModeManual &&
-      response_type == FetchResponseData::kOpaqueRedirectType) {
+      response_type == network::mojom::FetchResponseType::kOpaqueRedirect) {
     OnResponseRejected(
         kWebServiceWorkerResponseErrorResponseTypeOpaqueRedirect);
     return;
@@ -278,7 +279,7 @@ FetchRespondWithObserver::FetchRespondWithObserver(
     ExecutionContext* context,
     int fetch_event_id,
     const KURL& request_url,
-    WebURLRequest::FetchRequestMode request_mode,
+    network::mojom::FetchRequestMode request_mode,
     WebURLRequest::FetchRedirectMode redirect_mode,
     WebURLRequest::FrameType frame_type,
     WebURLRequest::RequestContext request_context,

@@ -44,12 +44,6 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
 
-#if defined(OS_WIN)
-#include "chrome/browser/password_manager/password_manager_util_win.h"
-#elif defined(OS_MACOSX)
-#include "chrome/browser/password_manager/password_manager_util_mac.h"
-#endif
-
 #if !defined(OS_ANDROID)
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_utils.h"
 #endif
@@ -215,11 +209,7 @@ PasswordManagerPresenter::PasswordManagerPresenter(
     PasswordUIView* password_view)
     : populater_(this),
       exception_populater_(this),
-      password_view_(password_view),
-      password_manager_porter_(this),
-      password_access_authenticator_(
-          base::BindRepeating(&PasswordManagerPresenter::OsReauthCall,
-                              base::Unretained(this))) {
+      password_view_(password_view) {
   DCHECK(password_view_);
 }
 
@@ -313,10 +303,6 @@ void PasswordManagerPresenter::RequestShowPassword(size_t index) {
     return;
   }
 
-  if (!password_access_authenticator_.EnsureUserIsAuthenticated()) {
-    return;
-  }
-
   syncer::SyncService* sync_service = nullptr;
   if (ProfileSyncServiceFactory::HasProfileSyncService(
           password_view_->GetProfile())) {
@@ -343,19 +329,7 @@ void PasswordManagerPresenter::RequestShowPassword(size_t index) {
 
 std::vector<std::unique_ptr<autofill::PasswordForm>>
 PasswordManagerPresenter::GetAllPasswords() {
-#if !defined(OS_ANDROID)  // Reauthentication is handled differently on Android.
-  if (!password_access_authenticator_.EnsureUserIsAuthenticated()) {
-    return std::vector<std::unique_ptr<autofill::PasswordForm>>();
-  }
-#endif  // !defined(OS_ANDROID)
-
-  std::vector<std::unique_ptr<autofill::PasswordForm>> ret_val;
-
-  for (const auto& form : password_list_) {
-    ret_val.push_back(base::MakeUnique<autofill::PasswordForm>(*form));
-  }
-
-  return ret_val;
+  return std::vector<std::unique_ptr<autofill::PasswordForm>>();
 }
 
 const autofill::PasswordForm* PasswordManagerPresenter::GetPassword(
@@ -422,18 +396,6 @@ void PasswordManagerPresenter::SortEntriesAndHideDuplicates(
   }
 }
 
-void PasswordManagerPresenter::ImportPasswords(
-    content::WebContents* web_contents) {
-  password_manager_porter_.PresentFileSelector(
-      web_contents, PasswordManagerPorter::Type::PASSWORD_IMPORT);
-}
-
-void PasswordManagerPresenter::ExportPasswords(
-    content::WebContents* web_contents) {
-  password_manager_porter_.PresentFileSelector(
-      web_contents, PasswordManagerPorter::Type::PASSWORD_EXPORT);
-}
-
 void PasswordManagerPresenter::AddLogin(const autofill::PasswordForm& form) {
   PasswordStore* store = GetPasswordStore();
   if (!store)
@@ -452,26 +414,6 @@ void PasswordManagerPresenter::RemoveLogin(const autofill::PasswordForm& form) {
   undo_manager_.AddUndoOperation(
       std::make_unique<RemovePasswordOperation>(this, form));
   store->RemoveLogin(form);
-}
-
-void PasswordManagerPresenter::SetOsReauthCallForTesting(
-    base::RepeatingCallback<bool()> os_reauth_call) {
-  password_access_authenticator_.SetOsReauthCallForTesting(
-      std::move(os_reauth_call));
-}
-
-bool PasswordManagerPresenter::OsReauthCall() {
-#if defined(OS_ANDROID)
-  NOTREACHED();
-  return true;
-#elif defined(OS_WIN)
-  return password_manager_util_win::AuthenticateUser(
-      password_view_->GetNativeWindow());
-#elif defined(OS_MACOSX)
-  return password_manager_util_mac::AuthenticateUser();
-#else
-  return true;
-#endif
 }
 
 PasswordManagerPresenter::ListPopulater::ListPopulater(

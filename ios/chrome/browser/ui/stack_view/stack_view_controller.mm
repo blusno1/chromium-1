@@ -49,8 +49,9 @@
 #import "ios/chrome/browser/ui/stack_view/stack_view_toolbar_controller.h"
 #import "ios/chrome/browser/ui/stack_view/title_label.h"
 #import "ios/chrome/browser/ui/toolbar/new_tab_button.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller_base_feature.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_item.h"
@@ -764,7 +765,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
         constraintEqualToAnchor:self.view.topAnchor]
         .active = YES;
     [_toolbarController heightConstraint].constant =
-        [_toolbarController preferredToolbarHeightWhenAlignedToTopOfScreen];
+        ToolbarHeightWithTopOfScreenOffset(
+            [_toolbarController statusBarOffset]);
     [_toolbarController heightConstraint].active = YES;
   }
 
@@ -789,8 +791,22 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
     }
   }
   [self.view addSubview:_scrollView];
-  [_scrollView setAutoresizingMask:(UIViewAutoresizingFlexibleHeight |
-                                    UIViewAutoresizingFlexibleWidth)];
+
+  if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
+    [_scrollView setTranslatesAutoresizingMaskIntoConstraints:NO];
+    [NSLayoutConstraint activateConstraints:@[
+      [_scrollView.topAnchor
+          constraintEqualToAnchor:[_toolbarController view].bottomAnchor],
+      [_scrollView.leadingAnchor
+          constraintEqualToAnchor:self.view.leadingAnchor],
+      [_scrollView.trailingAnchor
+          constraintEqualToAnchor:self.view.trailingAnchor],
+      [_scrollView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+  } else {
+    [_scrollView setAutoresizingMask:(UIViewAutoresizingFlexibleHeight |
+                                      UIViewAutoresizingFlexibleWidth)];
+  }
   [_scrollView setBounces:NO];
   [_scrollView setScrollsToTop:NO];
   [_scrollView setClipsToBounds:NO];
@@ -807,7 +823,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   [super viewSafeAreaInsetsDidChange];
   if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
     [_toolbarController heightConstraint].constant =
-        [_toolbarController preferredToolbarHeightWhenAlignedToTopOfScreen];
+        ToolbarHeightWithTopOfScreenOffset(
+            [_toolbarController statusBarOffset]);
     [[_toolbarController view] setNeedsLayout];
   }
 }
@@ -1611,6 +1628,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
     [_animationDelegate tabSwitcherPresentationAnimationDidEnd:self];
     [_delegate tabSwitcherPresentationTransitionDidEnd:self];
   } else {
+    [_animationDelegate tabSwitcherDismissalAnimationDidEnd:self];
     [_delegate tabSwitcherDismissTransitionDidEnd:self];
   }
 }
@@ -1658,6 +1676,12 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
     currentCardLayout = _activeCardSet.currentCard.layout;
   CGRect currentCardFrame =
       AlignRectOriginAndSizeToPixels(LayoutRectGetRect(currentCardLayout));
+
+  if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
+    // Forces a layout because the views may not yet be positioned correctly
+    // due to a screen rotation.
+    [self.view layoutIfNeeded];
+  }
 
   // Animate the dummy toolbar background view.
   [self animateDummyToolbarForCardFrame:currentCardFrame
@@ -2128,6 +2152,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   void (^completionBlock)(void) = ^{
     [newCard removeFromSuperview];
     [[_scrollView layer] setShouldRasterize:NO];
+    [_animationDelegate tabSwitcherDismissalAnimationDidEnd:self];
     [_delegate tabSwitcherDismissTransitionDidEnd:self];
     double duration = [NSDate timeIntervalSinceReferenceDate] - startTime;
     if (_activeCardSet.tabModel.isOffTheRecord) {

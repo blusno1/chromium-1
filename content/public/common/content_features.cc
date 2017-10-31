@@ -138,14 +138,8 @@ const base::Feature kLazyParseCSS{"LazyParseCSS",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use Mojo IPC for resource loading.
-const base::Feature kLoadingWithMojo {
-  "LoadingWithMojo",
-#if defined(OS_ANDROID)
-      base::FEATURE_DISABLED_BY_DEFAULT
-#else
-      base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-};
+const base::Feature kLoadingWithMojo{"LoadingWithMojo",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables the memory coordinator.
 // WARNING:
@@ -168,7 +162,7 @@ const base::Feature kMainThreadBusyScrollIntervention{
     "MainThreadBusyScrollIntervention", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Blob mojofication.
-const base::Feature kMojoBlobs{"MojoBlobs", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kMojoBlobs{"MojoBlobs", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Mojo-based Input Event routing.
 const base::Feature kMojoInputMessages{"MojoInputMessages",
@@ -188,7 +182,7 @@ const base::Feature kModuleScriptsDynamicImport{
 
 // ES6 Modules import.meta.url.
 const base::Feature kModuleScriptsImportMetaUrl{
-    "ModuleScriptsImportMetaUrl", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ModuleScriptsImportMetaUrl", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Resource fetch optimizations for workers. See crbug.com/443374
 const base::Feature kOffMainThreadFetch{"OffMainThreadFetch",
@@ -292,6 +286,11 @@ const base::Feature kSitePerProcess{"site-per-process",
 const base::Feature kSlimmingPaintInvalidation{
     "SlimmingPaintInvalidation", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Stop loading tasks and loading of resources in background, on Android,
+// after allowed grace time. Launch bug: https://crbug.com/775761.
+const base::Feature kStopLoadingInBackground{"stop-loading-in-background",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Throttle Blink timers in out-of-view cross origin frames.
 const base::Feature kTimerThrottlingForHiddenFrames{
     "TimerThrottlingForHiddenFrames", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -330,16 +329,6 @@ const base::Feature kUseMojoAudioOutputStreamFactory{
 // Controls whether vibrate requires user gesture.
 const base::Feature kVibrateRequiresUserGesture{
     "VibrateRequiresUserGesture", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables VR UI.
-const base::Feature kVrShell {
-  "VrShell",
-#if defined(OS_ANDROID)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-};
 
 // Enable WebAssembly structured cloning.
 // http://webassembly.org/

@@ -13,6 +13,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/ui/passwords/password_ui_view.h"
+#include "chrome/browser/ui/passwords/password_ui_view_mock.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
@@ -37,40 +38,6 @@ struct SortEntry {
 };
 
 }  // namespace
-
-class MockPasswordUIView : public PasswordUIView {
- public:
-  explicit MockPasswordUIView(Profile* profile)
-      : profile_(profile), password_manager_presenter_(this) {
-    password_manager_presenter_.Initialize();
-  }
-  ~MockPasswordUIView() override {}
-  Profile* GetProfile() override;
-#if !defined(OS_ANDROID)
-  gfx::NativeWindow GetNativeWindow() const override;
-#endif
-  MOCK_METHOD2(ShowPassword, void(size_t, const base::string16&));
-  MOCK_METHOD1(
-      SetPasswordList,
-      void(const std::vector<std::unique_ptr<autofill::PasswordForm>>&));
-  MOCK_METHOD1(
-      SetPasswordExceptionList,
-      void(const std::vector<std::unique_ptr<autofill::PasswordForm>>&));
-  PasswordManagerPresenter* GetPasswordManagerPresenter() {
-    return &password_manager_presenter_;
-  }
-
- private:
-  Profile* profile_;
-  PasswordManagerPresenter password_manager_presenter_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockPasswordUIView);
-};
-
-#if !defined(OS_ANDROID)
-gfx::NativeWindow MockPasswordUIView::GetNativeWindow() const { return NULL; }
-#endif
-Profile* MockPasswordUIView::GetProfile() { return profile_; }
 
 class PasswordManagerPresenterTest : public testing::Test {
  protected:
@@ -347,66 +314,5 @@ TEST_F(PasswordManagerPresenterTest, Sorting_SpecialCharacters) {
   SortAndCheckPositions(test_cases, arraysize(test_cases),
                         PasswordEntryType::SAVED);
 }
-
-#if !defined(OS_ANDROID)  // Reauthentication is handled differently on Android.
-enum class ReauthResult { PASS, FAIL };
-bool FakeOsReauthCall(bool* reauth_called, ReauthResult result) {
-  *reauth_called = true;
-  return result == ReauthResult::PASS;
-}
-
-TEST_F(PasswordManagerPresenterTest, TestPassedReauthOnView) {
-  bool reauth_called = false;
-  GetUIController()->GetPasswordManagerPresenter()->SetOsReauthCallForTesting(
-      base::BindRepeating(&FakeOsReauthCall, &reauth_called,
-                          ReauthResult::PASS));
-
-  AddPasswordEntry(GURL("http://abc1.com"), "test@gmail.com", "test");
-  EXPECT_CALL(*GetUIController(), ShowPassword(0, base::ASCIIToUTF16("test")));
-  GetUIController()->GetPasswordManagerPresenter()->RequestShowPassword(0);
-  EXPECT_TRUE(reauth_called);
-}
-
-TEST_F(PasswordManagerPresenterTest, TestFailedReauthOnView) {
-  bool reauth_called = false;
-  GetUIController()->GetPasswordManagerPresenter()->SetOsReauthCallForTesting(
-      base::BindRepeating(&FakeOsReauthCall, &reauth_called,
-                          ReauthResult::FAIL));
-
-  AddPasswordEntry(GURL("http://abc1.com"), "test@gmail.com", "test");
-  EXPECT_CALL(*GetUIController(), ShowPassword(_, _)).Times(0);
-  GetUIController()->GetPasswordManagerPresenter()->RequestShowPassword(0);
-  EXPECT_TRUE(reauth_called);
-}
-
-TEST_F(PasswordManagerPresenterTest, TestPassedReauthOnGetAll) {
-  bool reauth_called = false;
-  GetUIController()->GetPasswordManagerPresenter()->SetOsReauthCallForTesting(
-      base::BindRepeating(&FakeOsReauthCall, &reauth_called,
-                          ReauthResult::PASS));
-
-  AddPasswordEntry(GURL("http://abc1.com"), "test@gmail.com", "test");
-  std::vector<std::unique_ptr<autofill::PasswordForm>> passwords =
-      GetUIController()->GetPasswordManagerPresenter()->GetAllPasswords();
-  EXPECT_TRUE(reauth_called);
-  EXPECT_EQ(1u, passwords.size());
-  EXPECT_EQ(base::ASCIIToUTF16("test@gmail.com"), passwords[0]->username_value);
-  EXPECT_EQ(base::ASCIIToUTF16("test"), passwords[0]->password_value);
-  EXPECT_EQ(GURL("http://abc1.com"), passwords[0]->origin);
-}
-
-TEST_F(PasswordManagerPresenterTest, TestFailedReauthOnGetAll) {
-  bool reauth_called = false;
-  GetUIController()->GetPasswordManagerPresenter()->SetOsReauthCallForTesting(
-      base::BindRepeating(&FakeOsReauthCall, &reauth_called,
-                          ReauthResult::FAIL));
-
-  AddPasswordEntry(GURL("http://abc1.com"), "test@gmail.com", "test");
-  EXPECT_THAT(
-      GetUIController()->GetPasswordManagerPresenter()->GetAllPasswords(),
-      testing::IsEmpty());
-  EXPECT_TRUE(reauth_called);
-}
-#endif  // !defined(OS_ANDROID)
 
 }  // namespace

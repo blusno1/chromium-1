@@ -588,7 +588,7 @@ bool GpuProcessHost::Init() {
   // May be null during test execution.
   if (ServiceManagerConnection::GetForProcess()) {
     ServiceManagerConnection::GetForProcess()->AddConnectionFilter(
-        base::MakeUnique<ConnectionFilterImpl>());
+        std::make_unique<ConnectionFilterImpl>());
   }
 
   process_->GetHost()->CreateChannelMojo();
@@ -867,10 +867,8 @@ void GpuProcessHost::DidInitialize(
 
   GpuDataManagerImpl* gpu_data_manager = GpuDataManagerImpl::GetInstance();
   if (!gpu_data_manager->ShouldUseSwiftShader()) {
-    // UpdateGpuFeatureInfo() needs to be called before UpdateGpuInfo() because
-    // the latter will trigger registered callbacks waiting for the update.
-    gpu_data_manager->UpdateGpuFeatureInfo(gpu_feature_info);
     gpu_data_manager->UpdateGpuInfo(gpu_info);
+    gpu_data_manager->UpdateGpuFeatureInfo(gpu_feature_info);
   }
   RunRequestGPUInfoCallbacks(gpu_data_manager->GetGPUInfo());
 }
@@ -1018,7 +1016,7 @@ bool GpuProcessHost::LaunchGpuProcess() {
   // at startup with EACCES. As a workaround ignore this here, since the
   // executable name is actually not used or useful anyways.
   std::unique_ptr<base::CommandLine> cmd_line =
-      base::MakeUnique<base::CommandLine>(base::CommandLine::NO_PROGRAM);
+      std::make_unique<base::CommandLine>(base::CommandLine::NO_PROGRAM);
 #else
 #if defined(OS_LINUX)
   int child_flags = gpu_launcher.empty() ? ChildProcessHost::CHILD_ALLOW_SELF :
@@ -1032,7 +1030,7 @@ bool GpuProcessHost::LaunchGpuProcess() {
     return false;
 
   std::unique_ptr<base::CommandLine> cmd_line =
-      base::MakeUnique<base::CommandLine>(exe_path);
+      std::make_unique<base::CommandLine>(exe_path);
 #endif
 
   cmd_line->AppendSwitchASCII(switches::kProcessType, switches::kGpuProcess);
@@ -1085,7 +1083,7 @@ bool GpuProcessHost::LaunchGpuProcess() {
     cmd_line->PrependWrapper(gpu_launcher);
 
   std::unique_ptr<GpuSandboxedProcessLauncherDelegate> delegate =
-      base::MakeUnique<GpuSandboxedProcessLauncherDelegate>(*cmd_line);
+      std::make_unique<GpuSandboxedProcessLauncherDelegate>(*cmd_line);
   process_->Launch(std::move(delegate), std::move(cmd_line), true);
   process_launched_ = true;
 

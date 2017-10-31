@@ -5702,7 +5702,6 @@ interface ShadowRoot : DocumentFragment
     getter host
     getter innerHTML
     getter mode
-    getter olderShadowRoot
     getter pointerLockElement
     getter styleSheets
     method constructor
@@ -8076,7 +8075,6 @@ interface webkitURL
     method focus
     method gc
     method getComputedStyle
-    method getMatchedCSSRules
     method getSelection
     method matchMedia
     method moveBy

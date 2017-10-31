@@ -148,9 +148,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
 
   ContextType context_type() const { return context_type_; }
 
-  const std::string& extensions() const {
-    return extensions_;
-  }
+  const gl::ExtensionSet& extensions() const { return extensions_; }
 
   const FeatureFlags& feature_flags() const {
     return feature_flags_;
@@ -187,6 +185,10 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     return ext_color_buffer_float_available_;
   }
 
+  bool ext_color_buffer_half_float_available() const {
+    return ext_color_buffer_half_float_available_;
+  }
+
   bool oes_texture_float_linear_available() const {
     return oes_texture_float_linear_available_;
   }
@@ -197,7 +199,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
 
   ~FeatureInfo();
 
-  void AddExtensionString(const char* s);
+  void AddExtensionString(const base::StringPiece& s);
   void InitializeBasicState(const base::CommandLine* command_line);
   void InitializeFeatures();
   void InitializeFloatAndHalfFloatFeatures(const gl::ExtensionSet& extensions);
@@ -208,8 +210,8 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
 
   ContextType context_type_ = CONTEXT_TYPE_OPENGLES2;
 
-  // The extensions string returned by glGetString(GL_EXTENSIONS);
-  std::string extensions_;
+  // The set of extensions returned by glGetString(GL_EXTENSIONS);
+  gl::ExtensionSet extensions_;
 
   // Flags for some features
   FeatureFlags feature_flags_;
@@ -218,6 +220,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   const GpuDriverBugWorkarounds workarounds_;
 
   bool ext_color_buffer_float_available_ = false;
+  bool ext_color_buffer_half_float_available_ = false;
   bool oes_texture_float_linear_available_ = false;
   bool oes_texture_half_float_linear_available_ = false;
 

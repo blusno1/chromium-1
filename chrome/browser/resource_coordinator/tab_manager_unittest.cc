@@ -26,7 +26,7 @@
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
 #include "chrome/browser/resource_coordinator/tab_stats.h"
 #include "chrome/browser/sessions/tab_loader.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_impl.h"
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
@@ -388,7 +388,7 @@ TEST_F(TabManagerTest, DiscardWebContentsAt) {
 
   // Create a tab strip in a visible and active window.
   TabStripDummyDelegate delegate;
-  TabStripModel tabstrip(&delegate, profile());
+  TabStripModelImpl tabstrip(&delegate, profile());
   tabstrip.AddObserver(&tab_manager);
 
   BrowserInfo browser_info;
@@ -454,7 +454,7 @@ TEST_F(TabManagerTest, ReloadDiscardedTabContextMenu) {
   // (which observes the web content).
   TabManager tab_manager;
   TabStripDummyDelegate delegate;
-  TabStripModel tabstrip(&delegate, profile());
+  TabStripModelImpl tabstrip(&delegate, profile());
 
   // Create 2 tabs because the active tab cannot be discarded.
   tabstrip.AppendWebContents(CreateWebContents(), true);
@@ -484,7 +484,7 @@ TEST_F(TabManagerTest, ReloadDiscardedTabContextMenu) {
 TEST_F(TabManagerTest, DiscardedTabKeepsLastActiveTime) {
   TabManager tab_manager;
   TabStripDummyDelegate delegate;
-  TabStripModel tabstrip(&delegate, profile());
+  TabStripModelImpl tabstrip(&delegate, profile());
   tabstrip.AddObserver(&tab_manager);
 
   tabstrip.AppendWebContents(CreateWebContents(), true);
@@ -572,7 +572,7 @@ TEST_F(TabManagerTest, DefaultTimeToPurgeInCorrectRange) {
 TEST_F(TabManagerTest, ShouldPurgeAtDefaultTime) {
   TabManager tab_manager;
   TabStripDummyDelegate delegate;
-  TabStripModel tabstrip(&delegate, profile());
+  TabStripModelImpl tabstrip(&delegate, profile());
   tabstrip.AddObserver(&tab_manager);
 
   WebContents* test_contents = CreateWebContents();
@@ -610,7 +610,7 @@ TEST_F(TabManagerTest, ShouldPurgeAtDefaultTime) {
 TEST_F(TabManagerTest, ActivateTabResetPurgeState) {
   TabManager tab_manager;
   TabStripDummyDelegate delegate;
-  TabStripModel tabstrip(&delegate, profile());
+  TabStripModelImpl tabstrip(&delegate, profile());
   tabstrip.AddObserver(&tab_manager);
 
   BrowserInfo browser_info;
@@ -664,11 +664,11 @@ TEST_F(TabManagerTest, GetUnsortedTabStatsIsInVisibleWindow) {
   WebContents* web_contents2b = CreateWebContents();
 
   // Create 2 TabStripModels.
-  TabStripModel tab_strip1(&delegate, profile());
+  TabStripModelImpl tab_strip1(&delegate, profile());
   tab_strip1.AppendWebContents(web_contents1a, true);
   tab_strip1.AppendWebContents(web_contents1b, false);
 
-  TabStripModel tab_strip2(&delegate, profile());
+  TabStripModelImpl tab_strip2(&delegate, profile());
   tab_strip2.AppendWebContents(web_contents2a, true);
   tab_strip2.AppendWebContents(web_contents2b, false);
 
@@ -721,11 +721,11 @@ TEST_F(TabManagerTest, DiscardTabWithNonVisibleTabs) {
   TabStripDummyDelegate delegate;
 
   // Create 2 TabStripModels.
-  TabStripModel tab_strip1(&delegate, profile());
+  TabStripModelImpl tab_strip1(&delegate, profile());
   tab_strip1.AppendWebContents(CreateWebContents(), true);
   tab_strip1.AppendWebContents(CreateWebContents(), false);
 
-  TabStripModel tab_strip2(&delegate, profile());
+  TabStripModelImpl tab_strip2(&delegate, profile());
   tab_strip2.AppendWebContents(CreateWebContents(), true);
   tab_strip2.AppendWebContents(CreateWebContents(), false);
 
@@ -942,10 +942,8 @@ TEST_F(TabManagerTest, BackgroundTabLoadingMode) {
   EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
   EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
 
-  // Simulate memory pressure getting high. TabManager pause loading pending
-  // background tabs.
-  tab_manager->OnMemoryPressure(
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE);
+  // TabManager pauses loading pending background tabs.
+  tab_manager->PauseBackgroundTabOpeningIfNeeded();
   EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kPaused,
             tab_manager->background_tab_loading_mode_);
 
@@ -968,10 +966,8 @@ TEST_F(TabManagerTest, BackgroundTabLoadingMode) {
   EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
   EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
 
-  // Simulate memory pressure is relieved. TabManager will reset the loading
-  // mode and try to load the next tab.
-  tab_manager->OnMemoryPressure(
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE);
+  // TabManager resumes loading pending background tabs.
+  tab_manager->ResumeBackgroundTabOpeningIfNeeded();
   EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kStaggered,
             tab_manager->background_tab_loading_mode_);
 
@@ -1059,10 +1055,8 @@ TEST_F(TabManagerTest, PauseAndResumeBackgroundTabOpening) {
   EXPECT_TRUE(
       tab_manager->stats_collector()->is_in_background_tab_opening_session());
 
-  // Simulate memory pressure getting high. TabManager pause loading pending
-  // background tabs, and ends the background tab opening session.
-  tab_manager->OnMemoryPressure(
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE);
+  // TabManager pauses loading pending background tabs.
+  tab_manager->PauseBackgroundTabOpeningIfNeeded();
   EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kPaused,
             tab_manager->background_tab_loading_mode_);
   EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
@@ -1082,11 +1076,8 @@ TEST_F(TabManagerTest, PauseAndResumeBackgroundTabOpening) {
   EXPECT_FALSE(
       tab_manager->stats_collector()->is_in_background_tab_opening_session());
 
-  // Simulate memory pressure is relieved. TabManager will reset the loading
-  // mode and try to load the next tab. If there is pending tab, TabManager
-  // starts a new BackgroundTabOpening session.
-  tab_manager->OnMemoryPressure(
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE);
+  // TabManager resumes loading pending background tabs.
+  tab_manager->ResumeBackgroundTabOpeningIfNeeded();
   EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kStaggered,
             tab_manager->background_tab_loading_mode_);
   EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());

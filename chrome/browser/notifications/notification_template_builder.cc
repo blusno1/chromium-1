@@ -4,10 +4,13 @@
 
 #include "chrome/browser/notifications/notification_template_builder.h"
 
+#include "base/i18n/time_formatting.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "components/url_formatter/elide_url.h"
 #include "third_party/libxml/chromium/libxml_utils.h"
 #include "ui/message_center/notification.h"
@@ -20,6 +23,8 @@ const char kActionElement[] = "action";
 const char kActionsElement[] = "actions";
 const char kActivationType[] = "activationType";
 const char kArguments[] = "arguments";
+const char kAttribution[] = "attribution";
+const char kAudioElement[] = "audio";
 const char kBindingElement[] = "binding";
 const char kBindingElementTemplateAttribute[] = "template";
 const char kButtonIndex[] = "buttonIndex=";
@@ -29,11 +34,15 @@ const char kInputElement[] = "input";
 const char kInputId[] = "id";
 const char kInputType[] = "type";
 const char kPlaceholderContent[] = "placeHolderContent";
+const char kPlacement[] = "placement";
+const char kSilent[] = "silent";
 const char kText[] = "text";
+const char kTrue[] = "true";
 const char kUserResponse[] = "userResponse";
 const char kTextElement[] = "text";
 const char kToastElement[] = "toast";
 const char kToastElementLaunchAttribute[] = "launch";
+const char kToastElementDisplayTimestamp[] = "displayTimestamp";
 const char kVisualElement[] = "visual";
 
 // Name of the template used for default Chrome notifications.
@@ -53,22 +62,28 @@ std::unique_ptr<NotificationTemplateBuilder> NotificationTemplateBuilder::Build(
 
   // TODO(finnur): Can we set <toast scenario="reminder"> for notifications
   // that have set the never_timeout() flag?
-  builder->StartToastElement(notification_id);
+  builder->StartToastElement(notification_id, notification.timestamp());
   builder->StartVisualElement();
 
   // TODO(finnur): Set the correct binding template based on the |notification|.
   builder->StartBindingElement(kDefaultTemplate);
 
   // Content for the toast template.
-  builder->WriteTextElement("1", base::UTF16ToUTF8(notification.title()));
-  builder->WriteTextElement("2", base::UTF16ToUTF8(notification.message()));
+  builder->WriteTextElement("1", base::UTF16ToUTF8(notification.title()),
+                            TextType::NORMAL);
+  builder->WriteTextElement("2", base::UTF16ToUTF8(notification.message()),
+                            TextType::NORMAL);
   builder->WriteTextElement("3",
-                            builder->FormatOrigin(notification.origin_url()));
+                            builder->FormatOrigin(notification.origin_url()),
+                            TextType::ATTRIBUTION);
 
   builder->EndBindingElement();
   builder->EndVisualElement();
 
   builder->AddActions(notification.buttons());
+
+  if (notification.silent())
+    builder->WriteAudioSilentElement();
 
   builder->EndToastElement();
 
@@ -103,9 +118,20 @@ std::string NotificationTemplateBuilder::FormatOrigin(
 }
 
 void NotificationTemplateBuilder::StartToastElement(
-    const std::string& notification_id) {
+    const std::string& notification_id,
+    const base::Time& timestamp) {
   xml_writer_->StartElement(kToastElement);
   xml_writer_->AddAttribute(kToastElementLaunchAttribute, notification_id);
+
+  if (!timestamp.is_null()) {
+    base::Time::Exploded exploded;
+    timestamp.UTCExplode(&exploded);
+    xml_writer_->AddAttribute(
+        kToastElementDisplayTimestamp,
+        base::StringPrintf("%04d-%02d-%02dT%02d:%02d:%02dZ", exploded.year,
+                           exploded.month, exploded.day_of_month, exploded.hour,
+                           exploded.minute, exploded.second));
+  }
 }
 
 void NotificationTemplateBuilder::EndToastElement() {
@@ -132,8 +158,11 @@ void NotificationTemplateBuilder::EndBindingElement() {
 }
 
 void NotificationTemplateBuilder::WriteTextElement(const std::string& id,
-                                                   const std::string& content) {
+                                                   const std::string& content,
+                                                   TextType text_type) {
   xml_writer_->StartElement(kTextElement);
+  if (text_type == TextType::ATTRIBUTION)
+    xml_writer_->AddAttribute(kPlacement, kAttribution);
   xml_writer_->AppendElementContent(content);
   xml_writer_->EndElement();
 }
@@ -177,6 +206,12 @@ void NotificationTemplateBuilder::StartActionsElement() {
 }
 
 void NotificationTemplateBuilder::EndActionsElement() {
+  xml_writer_->EndElement();
+}
+
+void NotificationTemplateBuilder::WriteAudioSilentElement() {
+  xml_writer_->StartElement(kAudioElement);
+  xml_writer_->AddAttribute(kSilent, kTrue);
   xml_writer_->EndElement();
 }
 

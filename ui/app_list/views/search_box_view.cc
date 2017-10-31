@@ -557,7 +557,9 @@ void SearchBoxView::SetSearchBoxActive(bool active) {
   UpdateSearchIcon();
   UpdateBackgroundColor(background_color_);
   search_box_->set_placeholder_text_draw_flags(
-      active ? gfx::Canvas::TEXT_ALIGN_LEFT : gfx::Canvas::TEXT_ALIGN_CENTER);
+      active ? (base::i18n::IsRTL() ? gfx::Canvas::TEXT_ALIGN_RIGHT
+                                    : gfx::Canvas::TEXT_ALIGN_LEFT)
+             : gfx::Canvas::TEXT_ALIGN_CENTER);
   search_box_->set_placeholder_text_color(active ? kZeroQuerySearchboxColor
                                                  : search_box_color_);
   search_box_->SetCursorEnabled(active);
@@ -676,6 +678,18 @@ void SearchBoxView::OnKeyEvent(ui::KeyEvent* event) {
   if (v)
     v->RequestFocus();
   event->SetHandled();
+}
+
+ui::AXRole SearchBoxView::GetAccessibleWindowRole() const {
+  // Default role of root view is AX_ROLE_WINDOW which traps ChromeVox focus
+  // within the root view. Assign AX_ROLE_GROUP here to allow the focus to move
+  // from elements in search box to app list view.
+  return ui::AX_ROLE_GROUP;
+}
+
+bool SearchBoxView::ShouldAdvanceFocusToTopLevelWidget() const {
+  // Focus should be able to move from search box to items in app list view.
+  return true;
 }
 
 void SearchBoxView::ButtonPressed(views::Button* sender,

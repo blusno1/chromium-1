@@ -14,7 +14,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
 #include "ui/display/display_observer.h"
-#include "ui/display/manager/chromeos/touchscreen_util.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -80,8 +79,7 @@ TEST_F(OobeDisplayChooserTest, PreferTouchAsPrimary) {
 
   // Associate touchscreen device with display
   display_info[1].AddTouchDevice(
-      display::TouchCalibrationData::GenerateTouchDeviceIdentifier(
-          touchscreen));
+      display::TouchDeviceIdentifier::FromDevice(touchscreen));
   display_manager()->OnNativeDisplaysChanged(display_info);
   base::RunLoop().RunUntilIdle();
 
@@ -116,8 +114,7 @@ TEST_F(OobeDisplayChooserTest, DontSwitchFromTouch) {
 
   // Associate touchscreen device with display
   display_info[1].AddTouchDevice(
-      display::TouchCalibrationData::GenerateTouchDeviceIdentifier(
-          touchscreen));
+      display::TouchDeviceIdentifier::FromDevice(touchscreen));
   display_manager()->OnNativeDisplaysChanged(display_info);
   base::RunLoop().RunUntilIdle();
 

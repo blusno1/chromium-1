@@ -17,6 +17,7 @@
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_model.h"
@@ -35,6 +36,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -185,6 +187,19 @@ class AppListEventTargeter : public aura::WindowTargeter {
   DISALLOW_COPY_AND_ASSIGN(AppListEventTargeter);
 };
 
+class StateAnimationMetricsReporter : public ui::AnimationMetricsReporter {
+ public:
+  StateAnimationMetricsReporter() = default;
+  ~StateAnimationMetricsReporter() override = default;
+
+  void Report(int value) override {
+    UMA_HISTOGRAM_PERCENTAGE("Apps.StateTransition.AnimationSmoothness", value);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(StateAnimationMetricsReporter);
+};
+
 }  // namespace
 
 // An animation observer to hide the view at the end of the animation.
@@ -237,7 +252,9 @@ AppListView::AppListView(AppListViewDelegate* delegate)
       display_observer_(this),
       animation_observer_(new HideViewAnimationObserver()),
       previous_arrow_key_traversal_enabled_(
-          views::FocusManager::arrow_key_traversal_enabled()) {
+          views::FocusManager::arrow_key_traversal_enabled()),
+      state_animation_metrics_reporter_(
+          std::make_unique<StateAnimationMetricsReporter>()) {
   CHECK(delegate);
   delegate_->GetSpeechUI()->AddObserver(this);
 
@@ -467,13 +484,19 @@ void AppListView::InitChildWidgets() {
   search_box_widget_params.opacity =
       views::Widget::InitParams::TRANSLUCENT_WINDOW;
   search_box_widget_params.name = "SearchBoxView";
+  search_box_widget_params.delegate = search_box_view_;
 
   // Create a widget for the SearchBoxView to live in. This allows the
   // SearchBoxView to be on top of the custom launcher page's WebContents
   // (otherwise the search box events will be captured by the WebContents).
   search_box_widget_ = new views::Widget;
   search_box_widget_->Init(search_box_widget_params);
-  search_box_widget_->SetContentsView(search_box_view_);
+
+  // Assign an accessibility role to the native window of search box widget, so
+  // that hitting search+right could move ChromeVox focus across search box to
+  // other elements in app list view.
+  search_box_widget_->GetNativeWindow()->SetProperty(
+      ui::kAXRoleOverride, static_cast<ui::AXRole>(ui::AX_ROLE_GROUP));
 
   // The search box will not naturally receive focus by itself (because it is in
   // a separate widget). Create this SearchBoxFocusHost in the main widget to
@@ -1045,6 +1068,13 @@ void AppListView::OnWidgetVisibilityChanged(views::Widget* widget,
     app_list_main_view_->ResetForShow();
 }
 
+ui::AXRole AppListView::GetAccessibleWindowRole() const {
+  // Default role of root view is AX_ROLE_WINDOW which traps ChromeVox focus
+  // within the root view. Assign AX_ROLE_GROUP here to allow the focus to move
+  // from elements in app list view to search box.
+  return ui::AX_ROLE_GROUP;
+}
+
 bool AppListView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   DCHECK_EQ(ui::VKEY_ESCAPE, accelerator.key_code());
 
@@ -1259,8 +1289,11 @@ void AppListView::StartAnimationForState(AppListState target_state) {
   animator->set_preemption_strategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
   animator->StopAnimating();
-  animator->ScheduleAnimation(
-      new ui::LayerAnimationSequence(std::move(bounds_animation_element)));
+  ui::LayerAnimationSequence* animation_sequence =
+      new ui::LayerAnimationSequence(std::move(bounds_animation_element));
+  animation_sequence->SetAnimationMetricsReporter(
+      state_animation_metrics_reporter_.get());
+  animator->ScheduleAnimation(animation_sequence);
 }
 
 void AppListView::StartCloseAnimation(base::TimeDelta animation_duration) {

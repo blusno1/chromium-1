@@ -40,7 +40,6 @@
 #include "core/dom/IdTargetObserver.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/SyncReattachContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/V0InsertionPoint.h"
 #include "core/dom/events/ScopedEventQueue.h"
 #include "core/editing/FrameSelection.h"
@@ -74,6 +73,7 @@
 #include "platform/runtime_enabled_features.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/wtf/MathExtras.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -400,6 +400,7 @@ void HTMLInputElement::UpdateType() {
   bool could_be_successful_submit_button = CanBeSuccessfulSubmitButton();
 
   input_type_view_->DestroyShadowSubtree();
+  DropInnerEditorElement();
   LazyReattachIfAttached();
 
   if (input_type_->SupportsRequired() != new_type->SupportsRequired() &&
@@ -1286,7 +1287,8 @@ void HTMLInputElement::DefaultEventHandler(Event* evt) {
   if (input_type_view_->ShouldSubmitImplicitly(evt)) {
     // FIXME: Remove type check.
     if (type() == InputTypeNames::search) {
-      TaskRunnerHelper::Get(TaskType::kUserInteraction, &GetDocument())
+      GetDocument()
+          .GetTaskRunner(TaskType::kUserInteraction)
           ->PostTask(BLINK_FROM_HERE, WTF::Bind(&HTMLInputElement::OnSearch,
                                                 WrapPersistent(this)));
     }

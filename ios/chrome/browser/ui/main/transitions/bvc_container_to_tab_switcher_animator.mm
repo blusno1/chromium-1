@@ -66,8 +66,9 @@
 #pragma mark - TabSwitcherAnimationDelegate
 
 - (void)tabSwitcherPresentationAnimationDidEnd:(id<TabSwitcher>)tabSwitcher {
-  // Calling |completeTransition:| seems to deallocate |self|, so save any
-  // needed variables here.
+  // Calling |completeTransition:| seems to deallocate |self|, so make any
+  // necessary changes to |self| here, and be sure not to access |self| after
+  // the call to |completeTransition:|.
   id<UIViewControllerContextTransitioning> transitionContext =
       self.transitionContext;
   self.tabSwitcher = nil;
@@ -76,6 +77,12 @@
   tabSwitcher.animationDelegate = nil;
   BOOL wasCancelled = [transitionContext transitionWasCancelled];
   [transitionContext completeTransition:!wasCancelled];
+}
+
+- (void)tabSwitcherDismissalAnimationDidEnd:(id<TabSwitcher>)tabSwitcher {
+  // This animator does not expect to participate in dismissal animations, so it
+  // is an error if this method ever gets called.
+  NOTREACHED();
 }
 
 @end

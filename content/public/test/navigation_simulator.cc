@@ -422,6 +422,7 @@ void NavigationSimulator::Commit() {
   params.nav_entry_id = handle_->pending_nav_entry_id();
   params.url = navigation_url_;
   params.origin = url::Origin::Create(navigation_url_);
+  params.referrer = referrer_;
   params.transition = transition_;
   params.should_update_history = true;
   params.did_create_new_entry =
@@ -548,6 +549,7 @@ void NavigationSimulator::CommitErrorPage() {
                                     ui::PAGE_TRANSITION_AUTO_SUBFRAME) &&
       reload_type_ == ReloadType::NONE;
   params.url = navigation_url_;
+  params.referrer = referrer_;
   params.transition = transition_;
   params.was_within_same_document = false;
   params.url_is_unreachable = true;
@@ -592,6 +594,7 @@ void NavigationSimulator::CommitSameDocument() {
   params.nav_entry_id = 0;
   params.url = navigation_url_;
   params.origin = url::Origin::Create(navigation_url_);
+  params.referrer = referrer_;
   params.transition = transition_;
   params.should_update_history = true;
   params.did_create_new_entry = false;
@@ -709,7 +712,7 @@ void NavigationSimulator::DidStartNavigation(
 
   // Add a throttle to count NavigationThrottle calls count.
   handle->RegisterThrottleForTesting(
-      base::MakeUnique<NavigationThrottleCallbackRunner>(
+      std::make_unique<NavigationThrottleCallbackRunner>(
           handle,
           base::Bind(&NavigationSimulator::OnWillStartRequest,
                      weak_factory_.GetWeakPtr()),
@@ -839,8 +842,8 @@ bool NavigationSimulator::SimulateBrowserInitiatedStart() {
 bool NavigationSimulator::SimulateRendererInitiatedStart() {
   if (IsBrowserSideNavigationEnabled()) {
     BeginNavigationParams begin_params(
-        std::string(), net::LOAD_NORMAL, has_user_gesture_,
-        false /* skip_service_worker */, REQUEST_CONTEXT_TYPE_HYPERLINK,
+        std::string(), net::LOAD_NORMAL, false /* skip_service_worker */,
+        REQUEST_CONTEXT_TYPE_HYPERLINK,
         blink::WebMixedContentContextType::kBlockable,
         false,  // is_form_submission
         url::Origin());
@@ -852,6 +855,7 @@ bool NavigationSimulator::SimulateRendererInitiatedStart() {
         PageTransitionCoreTypeIs(transition_, ui::PAGE_TRANSITION_RELOAD)
             ? FrameMsg_Navigate_Type::RELOAD
             : FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT;
+    common_params.has_user_gesture = has_user_gesture_;
     render_frame_host_->OnMessageReceived(FrameHostMsg_BeginNavigation(
         render_frame_host_->GetRoutingID(), common_params, begin_params));
     NavigationRequest* request =

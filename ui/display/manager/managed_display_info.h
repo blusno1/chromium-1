@@ -21,48 +21,11 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 
-namespace ui {
-struct TouchscreenDevice;
-}  // namespace ui
+#if defined(OS_CHROMEOS)
+#include "ui/display/manager/chromeos/touch_device_manager.h"
+#endif
 
 namespace display {
-
-// A struct that represents all the data required for touch calibration for the
-// display.
-struct DISPLAY_MANAGER_EXPORT TouchCalibrationData {
-  // CalibrationPointPair.first -> display point
-  // CalibrationPointPair.second -> touch point
-  using CalibrationPointPair = std::pair<gfx::Point, gfx::Point>;
-  using CalibrationPointPairQuad = std::array<CalibrationPointPair, 4>;
-  TouchCalibrationData();
-  TouchCalibrationData(const CalibrationPointPairQuad& point_pairs,
-                       const gfx::Size& bounds);
-  TouchCalibrationData(const TouchCalibrationData& calibration_data);
-
-  static bool CalibrationPointPairCompare(const CalibrationPointPair& pair_1,
-                                          const CalibrationPointPair& pair_2) {
-    return pair_1.first.y() < pair_2.first.y()
-               ? true
-               : pair_1.first.x() < pair_2.first.x();
-  }
-
-  // Returns a hash that can be used as a key for storing display preferences
-  // for a display associated with a touch device.
-  static uint32_t GenerateTouchDeviceIdentifier(
-      const ui::TouchscreenDevice& device);
-
-  // Returns a touch device identifier used as a default or a fallback option.
-  static uint32_t GetFallbackTouchDeviceIdentifier();
-
-  bool operator==(TouchCalibrationData other) const;
-
-  // Calibration point pairs used during calibration. Each point pair contains a
-  // display point and the corresponding touch point.
-  CalibrationPointPairQuad point_pairs;
-
-  // Bounds of the touch display when the calibration was performed.
-  gfx::Size bounds;
-};
 
 // A class that represents the display's mode info.
 class DISPLAY_MANAGER_EXPORT ManagedDisplayMode {
@@ -186,22 +149,23 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
     touch_support_ = support;
   }
   Display::TouchSupport touch_support() const { return touch_support_; }
-
+#if defined(OS_CHROMEOS)
   // Associate the touch device with identifier |touch_device_identifier| to
   // this display.
-  void AddTouchDevice(uint32_t touch_device_identifier);
+  void AddTouchDevice(const TouchDeviceIdentifier& identifier);
 
   // Clear the list of touch devices associated with this display.
   void ClearTouchDevices();
 
   // Returns true if the touch device with identifer |touch_device_identifier|
   // is associated with this display.
-  bool HasTouchDevice(uint32_t touch_device_identifier) const;
+  bool HasTouchDevice(const TouchDeviceIdentifier& identifier) const;
 
   // The identifiers of touch devices that are associated with this display.
-  std::set<uint32_t> touch_device_identifiers() const {
+  std::set<TouchDeviceIdentifier> touch_device_identifiers() const {
     return touch_device_identifiers_;
   }
+#endif
 
   // Gets/Sets the device scale factor of the display.
   float device_scale_factor() const { return device_scale_factor_; }
@@ -290,23 +254,30 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   // display.
   void SetManagedDisplayModes(const ManagedDisplayModeList& display_modes);
 
-  void SetTouchCalibrationData(uint32_t touch_device_identifier,
+#if defined(OS_CHROMEOS)
+  void SetTouchCalibrationData(const TouchDeviceIdentifier& identifier,
                                const TouchCalibrationData& calibration_data);
   const TouchCalibrationData& GetTouchCalibrationData(
-      uint32_t touch_device_identifier) const;
-  const std::map<uint32_t, TouchCalibrationData>& touch_calibration_data_map()
-      const {
+      const TouchDeviceIdentifier& touch_device_identifier) const;
+  const std::map<TouchDeviceIdentifier, TouchCalibrationData>&
+  touch_calibration_data_map() const {
     return touch_calibration_data_map_;
   }
   void SetTouchCalibrationDataMap(
-      const std::map<uint32_t, TouchCalibrationData>& data_map);
-  bool HasTouchCalibrationData(uint32_t touch_device_identifier) const;
-  void ClearTouchCalibrationData(uint32_t touch_device_identifier);
+      const std::map<TouchDeviceIdentifier, TouchCalibrationData>& data_map);
+  bool HasTouchCalibrationData(const TouchDeviceIdentifier& identifier) const;
+  void ClearTouchCalibrationData(const TouchDeviceIdentifier& identifier);
   void ClearAllTouchCalibrationData();
+#endif
 
   // Returns the native mode size. If a native mode is not present, return an
   // empty size.
   gfx::Size GetNativeModeSize() const;
+
+  const gfx::ColorSpace& color_space() const { return color_space_; }
+  void set_color_space(const gfx::ColorSpace& color_space) {
+    color_space_ = color_space;
+  }
 
   bool is_aspect_preserving_scaling() const {
     return is_aspect_preserving_scaling_;
@@ -339,8 +310,10 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   Display::RotationSource active_rotation_source_;
   Display::TouchSupport touch_support_;
 
+#if defined(OS_CHROMEOS)
   // Identifiers for touch devices that are associated with this display.
-  std::set<uint32_t> touch_device_identifiers_;
+  std::set<TouchDeviceIdentifier> touch_device_identifiers_;
+#endif
 
   // This specifies the device's pixel density. (For example, a display whose
   // DPI is higher than the threshold is considered to have device_scale_factor
@@ -382,10 +355,17 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   // Maximum cursor size.
   gfx::Size maximum_cursor_size_;
 
+#if defined(OS_CHROMEOS)
   // Information associated to touch calibration for the display. Stores a
   // mapping of each touch device, identified by its unique touch device
   // identifier, with the touch calibration data associated with the display.
-  std::map<uint32_t, TouchCalibrationData> touch_calibration_data_map_;
+  std::map<TouchDeviceIdentifier, TouchCalibrationData>
+      touch_calibration_data_map_;
+#endif
+
+  // Colorimetry information of the Display (if IsValid()), including e.g.
+  // transfer and primaries information, retrieved from its EDID.
+  gfx::ColorSpace color_space_;
 
   // If you add a new member, you need to update Copy().
 };

@@ -8,7 +8,6 @@ Input before setting suggested values:
 |   this.value="initial value"
 |   <shadow:root>
 |     <div>
-|       id="inner-editor"
 |       "initial value"
 | <br>
 | "
@@ -26,7 +25,6 @@ Input before setting suggested values:
 |       shadow:pseudoId="-webkit-input-placeholder"
 |       "initial placeholder"
 |     <div>
-|       id="inner-editor"
 | <br>
 | "
 "
@@ -36,7 +34,6 @@ Input before setting suggested values:
 |   "initial value"
 |   <shadow:root>
 |     <div>
-|       id="inner-editor"
 |       "initial value"
 | <br>
 | "
@@ -53,7 +50,6 @@ Input before setting suggested values:
 |       shadow:pseudoId="-webkit-input-placeholder"
 |       "initial placeholder"
 |     <div>
-|       id="inner-editor"
 | <br>
 | "
 "
@@ -90,12 +86,11 @@ Input after setting suggestedValue:
 |   <shadow:root>
 |     <div>
 |       id="placeholder"
-|       pseudo="-webkit-input-suggested"
-|       style="display: none !important;"
-|       shadow:pseudoId="-webkit-input-suggested"
+|       pseudo="-internal-input-suggested"
+|       style="display: block !important;"
+|       shadow:pseudoId="-internal-input-suggested"
 |       "suggested value"
 |     <div>
-|       id="inner-editor"
 | <br>
 | "
 "
@@ -107,12 +102,11 @@ Input after setting suggestedValue:
 |   <shadow:root>
 |     <div>
 |       id="placeholder"
-|       pseudo="-webkit-input-suggested"
+|       pseudo="-internal-input-suggested"
 |       style="display: block !important; text-overflow: clip;"
-|       shadow:pseudoId="-webkit-input-suggested"
+|       shadow:pseudoId="-internal-input-suggested"
 |       "suggested value"
 |     <div>
-|       id="inner-editor"
 | <br>
 | "
 "
@@ -123,12 +117,11 @@ Input after setting suggestedValue:
 |   <shadow:root>
 |     <div>
 |       id="placeholder"
-|       pseudo="-webkit-input-suggested"
+|       pseudo="-internal-input-suggested"
 |       style="display: none !important;"
-|       shadow:pseudoId="-webkit-input-suggested"
+|       shadow:pseudoId="-internal-input-suggested"
 |       "suggested value"
 |     <div>
-|       id="inner-editor"
 | <br>
 | "
 "
@@ -139,12 +132,11 @@ Input after setting suggestedValue:
 |   <shadow:root>
 |     <div>
 |       id="placeholder"
-|       pseudo="-webkit-input-suggested"
+|       pseudo="-internal-input-suggested"
 |       style="display: block !important;"
-|       shadow:pseudoId="-webkit-input-suggested"
+|       shadow:pseudoId="-internal-input-suggested"
 |       "suggested value"
 |     <div>
-|       id="inner-editor"
 | <br>
 | "
 "
@@ -190,7 +182,6 @@ After resetting suggestedValue value:
 |   this.value="initial value"
 |   <shadow:root>
 |     <div>
-|       id="inner-editor"
 |       "initial value"
 | <br>
 | "
@@ -208,7 +199,6 @@ After resetting suggestedValue value:
 |       shadow:pseudoId="-webkit-input-placeholder"
 |       "initial placeholder"
 |     <div>
-|       id="inner-editor"
 | <br>
 | "
 "
@@ -218,7 +208,6 @@ After resetting suggestedValue value:
 |   "initial value"
 |   <shadow:root>
 |     <div>
-|       id="inner-editor"
 |       "initial value"
 | <br>
 | "
@@ -235,7 +224,6 @@ After resetting suggestedValue value:
 |       shadow:pseudoId="-webkit-input-placeholder"
 |       "initial placeholder"
 |     <div>
-|       id="inner-editor"
 | <br>
 | "
 "

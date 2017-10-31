@@ -32,7 +32,6 @@
 #include "core/dom/DocumentParser.h"
 #include "core/dom/FlatTreeTraversal.h"
 #include "core/dom/NodeTraversal.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
@@ -340,11 +339,10 @@ void SVGImage::DrawPatternForContainer(GraphicsContext& context,
   FloatRect spaced_tile(tile);
   spaced_tile.Expand(FloatSize(repeat_spacing));
 
-  PaintRecordBuilder builder(spaced_tile, nullptr, &context);
-
+  PaintRecordBuilder builder(nullptr, &context);
   {
     DrawingRecorder recorder(builder.Context(), builder,
-                             DisplayItem::Type::kSVGImage, spaced_tile);
+                             DisplayItem::Type::kSVGImage);
     // When generating an expanded tile, make sure we don't draw into the
     // spacing area.
     if (tile != spaced_tile)
@@ -493,7 +491,7 @@ sk_sp<PaintRecord> SVGImage::PaintRecordForCurrentFrame(const IntRect& bounds,
   // avoid setting timers from the latter.
   FlushPendingTimelineRewind();
 
-  PaintRecordBuilder builder(bounds, nullptr, nullptr, paint_controller_.get());
+  PaintRecordBuilder builder(nullptr, nullptr, paint_controller_.get());
 
   view->UpdateAllLifecyclePhasesExceptPaint();
   view->PaintWithLifecycleUpdate(builder.Context(), kGlobalPaintNormalPhase,
@@ -692,8 +690,8 @@ void SVGImage::LoadCompleted() {
       // Document::ImplicitClose(), we defer AsyncLoadCompleted() to avoid
       // potential bugs and timing dependencies around ImplicitClose() and
       // to make LoadEventFinished() true when AsyncLoadCompleted() is called.
-      TaskRunnerHelper::Get(TaskType::kUnspecedLoading,
-                            ToLocalFrame(page_->MainFrame()))
+      ToLocalFrame(page_->MainFrame())
+          ->GetTaskRunner(TaskType::kUnspecedLoading)
           ->PostTask(BLINK_FROM_HERE,
                      WTF::Bind(&SVGImage::NotifyAsyncLoadCompleted,
                                scoped_refptr<SVGImage>(this)));

@@ -1787,7 +1787,9 @@ void LayoutBox::PaintMask(const PaintInfo& paint_info,
   BoxPainter(*this).PaintMask(paint_info, paint_offset);
 }
 
-void LayoutBox::ImageChanged(WrappedImagePtr image, const IntRect*) {
+void LayoutBox::ImageChanged(WrappedImagePtr image,
+                             CanDeferInvalidation defer,
+                             const IntRect*) {
   // TODO(chrishtr): support PaintInvalidationReason::kDelayedFull for animated
   // border images.
   if ((StyleRef().BorderImage().GetImage() &&
@@ -1818,7 +1820,7 @@ void LayoutBox::ImageChanged(WrappedImagePtr image, const IntRect*) {
             layer->GetImage()->CachedImage() &&
             layer->GetImage()->CachedImage()->GetImage() &&
             layer->GetImage()->CachedImage()->GetImage()->MaybeAnimated();
-        if (maybe_animated) {
+        if (defer == CanDeferInvalidation::kYes && maybe_animated) {
           SetMayNeedPaintInvalidationAnimatedBackgroundImage();
         } else {
           SetShouldDoFullPaintInvalidationWithoutGeometryChange(
@@ -2028,11 +2030,27 @@ LayoutUnit LayoutBox::ShrinkLogicalWidthToAvoidFloats(
                                             kDoNotIndentText, logical_height) -
            child_margin_start - child_margin_end;
 
-  LayoutUnit width =
-      cb->AvailableLogicalWidthForLine(logical_top_position, kDoNotIndentText,
-                                       logical_height) -
-      std::max(LayoutUnit(), child_margin_start) -
-      std::max(LayoutUnit(), child_margin_end);
+  LayoutUnit width = cb->AvailableLogicalWidthForLine(
+      logical_top_position, kDoNotIndentText, logical_height);
+
+  // This section of code is just for a use counter. It counts if something
+  // that avoids floats may have been affected by a float with shape-outside.
+  // NOTE(ikilpatrick): This isn't the only code-path which uses
+  // AvailableLogicalWidthForLine, if we switch this over we need to inspect
+  // other usages.
+  if (!ShapeOutsideInfo::IsEmpty()) {
+    LayoutUnit alternate_width = cb->AvailableLogicalWidthForAvoidingFloats(
+        logical_top_position, logical_height);
+
+    if (alternate_width != width) {
+      UseCounter::Count(GetDocument(),
+                        WebFeature::kShapeOutsideMaybeAffectedInlineSize);
+    }
+  }
+
+  width -= std::max(LayoutUnit(), child_margin_start);
+  width -= std::max(LayoutUnit(), child_margin_end);
+
   // We need to see if margins on either the start side or the end side can
   // contain the floats in question. If they can, then just using the line width
   // is inaccurate. In the case where a float completely fits, we don't need to
@@ -3652,11 +3670,8 @@ LayoutUnit LayoutBox::ComputeReplacedLogicalHeightUsing(
         LayoutUnit new_content_height = computed_values.extent_ -
                                         block->BorderAndPaddingLogicalHeight() -
                                         block->ScrollbarLogicalHeight();
-        LayoutUnit new_height =
-            block->AdjustContentBoxLogicalHeightForBoxSizing(
-                new_content_height);
         return AdjustContentBoxLogicalHeightForBoxSizing(
-            ValueForLength(logical_height, new_height));
+            ValueForLength(logical_height, new_content_height));
       }
 
       // FIXME: availableLogicalHeight() is wrong if the replaced element's

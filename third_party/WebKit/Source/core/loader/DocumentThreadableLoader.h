@@ -44,6 +44,7 @@
 #include "platform/weborigin/Referrer.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/text/WTFString.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -125,8 +126,8 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // The FetchCredentialsMode argument must be the request's credentials mode.
   // It's used for CORS check.
   void HandleResponse(unsigned long identifier,
-                      WebURLRequest::FetchRequestMode,
-                      WebURLRequest::FetchCredentialsMode,
+                      network::mojom::FetchRequestMode,
+                      network::mojom::FetchCredentialsMode,
                       const ResourceResponse&,
                       std::unique_ptr<WebDataConsumerHandle>);
   void HandleReceivedData(const char* data, size_t data_length);
@@ -151,8 +152,8 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
                                       const ResourceRequest&,
                                       const ResourceResponse&);
   void HandleResponseOutOfBlinkCORS(unsigned long identifier,
-                                    WebURLRequest::FetchRequestMode,
-                                    WebURLRequest::FetchCredentialsMode,
+                                    network::mojom::FetchRequestMode,
+                                    network::mojom::FetchCredentialsMode,
                                     const ResourceResponse&,
                                     std::unique_ptr<WebDataConsumerHandle>);
   // TODO(hintzed): CORS handled in Blink. Methods below named *BlinkCORS are to
@@ -165,8 +166,8 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
                                  const ResourceRequest&,
                                  const ResourceResponse&);
   void HandleResponseBlinkCORS(unsigned long identifier,
-                               WebURLRequest::FetchRequestMode,
-                               WebURLRequest::FetchCredentialsMode,
+                               network::mojom::FetchRequestMode,
+                               network::mojom::FetchCredentialsMode,
                                const ResourceResponse&,
                                std::unique_ptr<WebDataConsumerHandle>);
 
@@ -200,7 +201,7 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // ResourceFetcher doesn't perform some part of the CORS logic since this
   // class performs it by itself.
   void LoadRequest(ResourceRequest&, ResourceLoaderOptions);
-  bool IsAllowedRedirect(WebURLRequest::FetchRequestMode, const KURL&) const;
+  bool IsAllowedRedirect(network::mojom::FetchRequestMode, const KURL&) const;
 
   // TODO(hiroshige): After crbug.com/633696 is fixed,
   // - Remove RawResourceClientStateChecker logic,
@@ -264,8 +265,8 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // Saved so that we can use the original value for the modes in
   // ResponseReceived() where |resource| might be a reused one (e.g. preloaded
   // resource) which can have different modes.
-  WebURLRequest::FetchRequestMode fetch_request_mode_;
-  WebURLRequest::FetchCredentialsMode fetch_credentials_mode_;
+  network::mojom::FetchRequestMode fetch_request_mode_;
+  network::mojom::FetchCredentialsMode fetch_credentials_mode_;
 
   // Holds the original request for fallback in case the Service Worker
   // does not respond.

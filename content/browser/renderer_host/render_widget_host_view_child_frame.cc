@@ -158,20 +158,17 @@ void RenderWidgetHostViewChildFrame::SetFrameConnectorDelegate(
     SetParentFrameSinkId(parent_view->GetFrameSinkId());
   }
 
+  current_device_scale_factor_ =
+      frame_connector_->screen_info().device_scale_factor;
+
   auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
   if (root_view) {
-    // Make sure we're not using the zero-valued default for
-    // current_device_scale_factor_.
-    current_device_scale_factor_ = root_view->current_device_scale_factor();
-    if (current_device_scale_factor_ == 0.f)
-      current_device_scale_factor_ = 1.f;
-
     auto* manager = root_view->GetTouchSelectionControllerClientManager();
     if (manager) {
       // We have managers in Aura and Android, as well as outside of content/.
       // There is no manager for Mac OS.
       selection_controller_client_ =
-          base::MakeUnique<TouchSelectionControllerClientChildFrame>(this,
+          std::make_unique<TouchSelectionControllerClientChildFrame>(this,
                                                                      manager);
       manager->AddObserver(this);
     }
@@ -331,10 +328,9 @@ SkColor RenderWidgetHostViewChildFrame::background_color() const {
 gfx::Size RenderWidgetHostViewChildFrame::GetPhysicalBackingSize() const {
   gfx::Size size;
   if (frame_connector_) {
-    content::ScreenInfo screen_info;
-    host_->GetScreenInfo(&screen_info);
-    size = gfx::ScaleToCeiledSize(frame_connector_->ChildFrameRect().size(),
-                                  screen_info.device_scale_factor);
+    size = gfx::ScaleToCeiledSize(
+        frame_connector_->ChildFrameRect().size(),
+        frame_connector_->screen_info().device_scale_factor);
   }
   return size;
 }
@@ -503,6 +499,17 @@ void RenderWidgetHostViewChildFrame::DidReceiveCompositorFrameAck(
     renderer_compositor_frame_sink_->DidReceiveCompositorFrameAck(resources);
 }
 
+void RenderWidgetHostViewChildFrame::DidPresentCompositorFrame(
+    uint32_t presentation_token,
+    base::TimeTicks time,
+    base::TimeDelta refresh,
+    uint32_t flags) {
+  NOTIMPLEMENTED();
+}
+void RenderWidgetHostViewChildFrame::DidDiscardCompositorFrame(
+    uint32_t presentation_token) {
+  NOTIMPLEMENTED();
+}
 void RenderWidgetHostViewChildFrame::DidCreateNewRendererCompositorFrameSink(
     viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
   ResetCompositorFrameSinkSupport();
@@ -806,7 +813,7 @@ void RenderWidgetHostViewChildFrame::CopyFromSurface(
   if (!IsSurfaceAvailableForCopy()) {
     // Defer submitting the copy request until after a frame is drawn, at which
     // point we should be guaranteed that the surface is available.
-    RegisterFrameSwappedCallback(base::MakeUnique<base::Closure>(base::Bind(
+    RegisterFrameSwappedCallback(std::make_unique<base::Closure>(base::Bind(
         &RenderWidgetHostViewChildFrame::SubmitSurfaceCopyRequest, AsWeakPtr(),
         src_rect, output_size, callback, preferred_color_type)));
     return;
@@ -926,6 +933,11 @@ RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
     bool for_root_frame) {
   return BrowserAccessibilityManager::Create(
       BrowserAccessibilityManager::GetEmptyDocument(), delegate);
+}
+
+void RenderWidgetHostViewChildFrame::GetScreenInfo(ScreenInfo* screen_info) {
+  if (frame_connector_)
+    *screen_info = frame_connector_->screen_info();
 }
 
 void RenderWidgetHostViewChildFrame::ClearCompositorSurfaceIfNecessary() {

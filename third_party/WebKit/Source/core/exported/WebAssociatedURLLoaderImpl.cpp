@@ -34,7 +34,6 @@
 #include <memory>
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/DocumentThreadableLoaderClient.h"
 #include "core/loader/ThreadableLoadingContext.h"
@@ -49,6 +48,8 @@
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebCORS.h"
 #include "public/platform/WebHTTPHeaderVisitor.h"
 #include "public/platform/WebString.h"
@@ -96,7 +97,7 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
       WebAssociatedURLLoaderImpl*,
       WebAssociatedURLLoaderClient*,
       const WebAssociatedURLLoaderOptions&,
-      WebURLRequest::FetchRequestMode,
+      network::mojom::FetchRequestMode,
       scoped_refptr<WebTaskRunner>);
 
   // ThreadableLoaderClient
@@ -139,7 +140,7 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   ClientAdapter(WebAssociatedURLLoaderImpl*,
                 WebAssociatedURLLoaderClient*,
                 const WebAssociatedURLLoaderOptions&,
-                WebURLRequest::FetchRequestMode,
+                network::mojom::FetchRequestMode,
                 scoped_refptr<WebTaskRunner>);
 
   void NotifyError(TimerBase*);
@@ -147,7 +148,7 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   WebAssociatedURLLoaderImpl* loader_;
   WebAssociatedURLLoaderClient* client_;
   WebAssociatedURLLoaderOptions options_;
-  WebURLRequest::FetchRequestMode fetch_request_mode_;
+  network::mojom::FetchRequestMode fetch_request_mode_;
   WebURLError error_;
 
   TaskRunnerTimer<ClientAdapter> error_timer_;
@@ -160,7 +161,7 @@ WebAssociatedURLLoaderImpl::ClientAdapter::Create(
     WebAssociatedURLLoaderImpl* loader,
     WebAssociatedURLLoaderClient* client,
     const WebAssociatedURLLoaderOptions& options,
-    WebURLRequest::FetchRequestMode fetch_request_mode,
+    network::mojom::FetchRequestMode fetch_request_mode,
     scoped_refptr<WebTaskRunner> task_runner) {
   return WTF::WrapUnique(new ClientAdapter(loader, client, options,
                                            fetch_request_mode, task_runner));
@@ -170,7 +171,7 @@ WebAssociatedURLLoaderImpl::ClientAdapter::ClientAdapter(
     WebAssociatedURLLoaderImpl* loader,
     WebAssociatedURLLoaderClient* client,
     const WebAssociatedURLLoaderOptions& options,
-    WebURLRequest::FetchRequestMode fetch_request_mode,
+    network::mojom::FetchRequestMode fetch_request_mode,
     scoped_refptr<WebTaskRunner> task_runner)
     : loader_(loader),
       client_(client),
@@ -214,9 +215,9 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidReceiveResponse(
     return;
 
   if (options_.expose_all_response_headers ||
-      (fetch_request_mode_ != WebURLRequest::kFetchRequestModeCORS &&
+      (fetch_request_mode_ != network::mojom::FetchRequestMode::kCORS &&
        fetch_request_mode_ !=
-           WebURLRequest::kFetchRequestModeCORSWithForcedPreflight)) {
+           network::mojom::FetchRequestMode::kCORSWithForcedPreflight)) {
     // Use the original ResourceResponse.
     client_->DidReceiveResponse(WrappedResourceResponse(response));
     return;
@@ -386,9 +387,13 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
     }
   }
 
-  scoped_refptr<WebTaskRunner> task_runner = TaskRunnerHelper::Get(
-      TaskType::kUnspecedLoading,
-      observer_ ? ToDocument(observer_->LifecycleContext()) : nullptr);
+  scoped_refptr<WebTaskRunner> task_runner;
+  if (observer_) {
+    task_runner = ToDocument(observer_->LifecycleContext())
+                      ->GetTaskRunner(TaskType::kUnspecedLoading);
+  } else {
+    task_runner = Platform::Current()->CurrentThread()->GetWebTaskRunner();
+  }
   client_ = client;
   client_adapter_ = ClientAdapter::Create(this, client, options_,
                                           request.GetFetchRequestMode(),

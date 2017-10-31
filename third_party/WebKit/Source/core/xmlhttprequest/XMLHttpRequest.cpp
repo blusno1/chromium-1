@@ -904,8 +904,6 @@ void XMLHttpRequest::send(Blob* body, ExceptionState& exception_state) {
       File* file = ToFile(body);
       if (!file->GetPath().IsEmpty())
         http_body->AppendFile(file->GetPath());
-      else if (!file->FileSystemURL().IsEmpty())
-        http_body->AppendFileSystemURL(file->FileSystemURL());
       else
         NOTREACHED();
     } else {
@@ -1073,11 +1071,11 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
   request.SetHTTPMethod(method_);
   request.SetRequestContext(WebURLRequest::kRequestContextXMLHttpRequest);
   request.SetFetchRequestMode(
-      upload_events ? WebURLRequest::kFetchRequestModeCORSWithForcedPreflight
-                    : WebURLRequest::kFetchRequestModeCORS);
+      upload_events ? network::mojom::FetchRequestMode::kCORSWithForcedPreflight
+                    : network::mojom::FetchRequestMode::kCORS);
   request.SetFetchCredentialsMode(
-      with_credentials_ ? WebURLRequest::kFetchCredentialsModeInclude
-                        : WebURLRequest::kFetchCredentialsModeSameOrigin);
+      with_credentials_ ? network::mojom::FetchCredentialsMode::kInclude
+                        : network::mojom::FetchCredentialsMode::kSameOrigin);
   request.SetServiceWorkerMode(is_isolated_world_
                                    ? WebURLRequest::ServiceWorkerMode::kNone
                                    : WebURLRequest::ServiceWorkerMode::kAll);

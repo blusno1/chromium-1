@@ -30,6 +30,8 @@
 #include "content/public/common/service_worker_modes.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/network/public/interfaces/fetch_api.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace blink {
@@ -220,10 +222,11 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // Returns a handler for a request, the handler may return nullptr if
   // the request doesn't require special handling.
   std::unique_ptr<ServiceWorkerRequestHandler> CreateRequestHandler(
-      FetchRequestMode request_mode,
-      FetchCredentialsMode credentials_mode,
+      network::mojom::FetchRequestMode request_mode,
+      network::mojom::FetchCredentialsMode credentials_mode,
       FetchRedirectMode redirect_mode,
       const std::string& integrity,
+      bool keepalive,
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
@@ -231,12 +234,20 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
       scoped_refptr<ResourceRequestBody> body,
       bool skip_service_worker);
 
+  // Returns an object info representing |registration|. The object info holds a
+  // Mojo connection to the ServiceWorkerRegistrationHandle for the
+  // |registration| to ensure the handle stays alive while the object info is
+  // alive. A new handle is created if one does not already exist.
+  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
+  CreateServiceWorkerRegistrationObjectInfo(
+      ServiceWorkerRegistration* registration);
+
   // Used to get a ServiceWorkerObjectInfo to send to the renderer. Finds an
   // existing ServiceWorkerHandle, and increments its reference count, or else
   // creates a new one (initialized to ref count 1). Returns the
   // ServiceWorkerObjectInfo from the handle. The renderer is expected to use
   // ServiceWorkerHandleReference::Adopt to balance out the ref count.
-  blink::mojom::ServiceWorkerObjectInfo GetOrCreateServiceWorkerHandle(
+  blink::mojom::ServiceWorkerObjectInfoPtr GetOrCreateServiceWorkerHandle(
       ServiceWorkerVersion* version);
 
   // Returns true if |registration| can be associated with this provider.
@@ -296,12 +307,6 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // until the worker thread id is known via SetReadyToSendMessagesToWorker().
   void SendUpdateFoundMessage(
       int registration_handle_id);
-  void SendSetVersionAttributesMessage(
-      int registration_handle_id,
-      ChangedVersionAttributesMask changed_mask,
-      ServiceWorkerVersion* installing_version,
-      ServiceWorkerVersion* waiting_version,
-      ServiceWorkerVersion* active_version);
   void SendServiceWorkerStateChangedMessage(
       int worker_handle_id,
       blink::mojom::ServiceWorkerState state);
@@ -402,6 +407,8 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
       GetRegistrationForReadyCallback callback) override;
   void GetControllerServiceWorker(
       mojom::ControllerServiceWorkerRequest controller_request) override;
+  void CloneForWorker(
+      mojom::ServiceWorkerContainerHostRequest container_host_request) override;
 
   // Callback for ServiceWorkerContextCore::RegisterServiceWorker().
   void RegistrationComplete(RegisterCallback callback,
@@ -516,6 +523,18 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // destroyed before being passed to the renderer, this
   // content::ServiceWorkerProviderHost will be destroyed.
   mojo::AssociatedBinding<mojom::ServiceWorkerContainerHost> binding_;
+
+  // Mojo bindings for provider host pointers which are used from (dedicated or
+  // shared) worker threads.
+  // When this is hosting a shared worker, |bindings_for_worker_threads_|
+  // contains exactly one element for the shared worker thread. This binding is
+  // needed because the host pointer which is bound to |binding_| can only be
+  // used from the main thread.
+  // When this is hosting a document, |bindings_for_worker_threads_| contains
+  // all dedicated workers associated with the document. This binding is needed
+  // for the host pointers which are used from the dedicated worker threads.
+  mojo::BindingSet<mojom::ServiceWorkerContainerHost>
+      bindings_for_worker_threads_;
 
   std::vector<base::Closure> queued_events_;
 

@@ -34,6 +34,7 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/gl/gl_switches.h"
 
 #if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
 #include "content/public/browser/zygote_handle_linux.h"
@@ -251,7 +252,7 @@ bool UtilityProcessHostImpl::StartProcess() {
       // As a workaround skip calling it here, since the executable name is
       // not needed on Android anyway. See crbug.com/500854.
     std::unique_ptr<base::CommandLine> cmd_line =
-        base::MakeUnique<base::CommandLine>(base::CommandLine::NO_PROGRAM);
+        std::make_unique<base::CommandLine>(base::CommandLine::NO_PROGRAM);
     #else
       int child_flags = child_flags_;
 
@@ -270,7 +271,7 @@ bool UtilityProcessHostImpl::StartProcess() {
       }
 
       std::unique_ptr<base::CommandLine> cmd_line =
-          base::MakeUnique<base::CommandLine>(exe_path);
+          std::make_unique<base::CommandLine>(exe_path);
     #endif
 
     cmd_line->AppendSwitchASCII(switches::kProcessType,
@@ -292,13 +293,18 @@ bool UtilityProcessHostImpl::StartProcess() {
       switches::kIgnoreCertificateErrorsSPKIList,
       switches::kLogNetLog,
       switches::kNoSandbox,
+      switches::kOverrideUseSoftwareGLForTests,
       switches::kProxyServer,
 #if defined(OS_MACOSX)
       switches::kEnableSandboxLogging,
 #endif
       switches::kUseFakeDeviceForMediaStream,
       switches::kUseFileForFakeVideoCapture,
+#if defined(OS_WIN)
+      switches::kForceMediaFoundationVideoCapture,
+#endif  // defined(OS_WIN)
       switches::kUtilityStartupDialog,
+      switches::kUseGL
     };
     cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
                                arraysize(kSwitchNames));
@@ -330,7 +336,7 @@ bool UtilityProcessHostImpl::StartProcess() {
           *service_identity_, cmd_line.get());
     }
 
-    process_->Launch(base::MakeUnique<UtilitySandboxedProcessLauncherDelegate>(
+    process_->Launch(std::make_unique<UtilitySandboxedProcessLauncherDelegate>(
                          exposed_dir_, run_elevated_, sandbox_type_, env_),
                      std::move(cmd_line), true);
   }

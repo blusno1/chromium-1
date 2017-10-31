@@ -163,7 +163,7 @@ void PepperURLLoaderHost::DidReceiveData(const char* data, int data_length) {
   bytes_received_ += data_length;
   UpdateProgress();
 
-  auto message = base::MakeUnique<PpapiPluginMsg_URLLoader_SendData>();
+  auto message = std::make_unique<PpapiPluginMsg_URLLoader_SendData>();
   message->WriteData(data, data_length);
   SendUpdateToPlugin(std::move(message));
 }
@@ -171,7 +171,7 @@ void PepperURLLoaderHost::DidReceiveData(const char* data, int data_length) {
 void PepperURLLoaderHost::DidFinishLoading(double finish_time) {
   // Note that |loader| will be NULL for document loads.
   SendUpdateToPlugin(
-      base::MakeUnique<PpapiPluginMsg_URLLoader_FinishedLoading>(PP_OK));
+      std::make_unique<PpapiPluginMsg_URLLoader_FinishedLoading>(PP_OK));
 }
 
 void PepperURLLoaderHost::DidFail(const WebURLError& error) {
@@ -191,7 +191,7 @@ void PepperURLLoaderHost::DidFail(const WebURLError& error) {
   if (error.is_web_security_violation)
     pp_error = PP_ERROR_NOACCESS;
   SendUpdateToPlugin(
-      base::MakeUnique<PpapiPluginMsg_URLLoader_FinishedLoading>(pp_error));
+      std::make_unique<PpapiPluginMsg_URLLoader_FinishedLoading>(pp_error));
 }
 
 void PepperURLLoaderHost::DidConnectPendingHostToResource() {
@@ -212,7 +212,7 @@ int32_t PepperURLLoaderHost::OnHostMsgOpen(
 
   if (ret != PP_OK)
     SendUpdateToPlugin(
-        base::MakeUnique<PpapiPluginMsg_URLLoader_FinishedLoading>(ret));
+        std::make_unique<PpapiPluginMsg_URLLoader_FinishedLoading>(ret));
   return PP_OK;
 }
 
@@ -272,14 +272,14 @@ int32_t PepperURLLoaderHost::InternalOnHostMsgOpen(
     if (filled_in_request_data.allow_cross_origin_requests) {
       // Allow cross-origin requests with access control. The request specifies
       // if credentials are to be sent.
-      web_request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeCORS);
+      web_request.SetFetchRequestMode(network::mojom::FetchRequestMode::kCORS);
       web_request.SetFetchCredentialsMode(
           filled_in_request_data.allow_credentials
-              ? WebURLRequest::kFetchCredentialsModeInclude
-              : WebURLRequest::kFetchCredentialsModeOmit);
+              ? network::mojom::FetchCredentialsMode::kInclude
+              : network::mojom::FetchCredentialsMode::kOmit);
     } else {
       web_request.SetFetchRequestMode(
-          WebURLRequest::kFetchRequestModeSameOrigin);
+          network::mojom::FetchRequestMode::kSameOrigin);
       // Same-origin requests can always send credentials. Use the default
       // credentials mode "include".
     }
@@ -420,7 +420,7 @@ void PepperURLLoaderHost::SaveResponse(const WebURLResponse& response) {
 void PepperURLLoaderHost::DidDataFromWebURLResponse(
     const ppapi::URLResponseInfoData& data) {
   SendUpdateToPlugin(
-      base::MakeUnique<PpapiPluginMsg_URLLoader_ReceivedResponse>(data));
+      std::make_unique<PpapiPluginMsg_URLLoader_ReceivedResponse>(data));
 }
 
 void PepperURLLoaderHost::UpdateProgress() {
@@ -434,7 +434,7 @@ void PepperURLLoaderHost::UpdateProgress() {
     // flag.
     ppapi::proxy::ResourceMessageReplyParams params;
     SendUpdateToPlugin(
-        base::MakeUnique<PpapiPluginMsg_URLLoader_UpdateProgress>(
+        std::make_unique<PpapiPluginMsg_URLLoader_UpdateProgress>(
             record_upload ? bytes_sent_ : -1,
             record_upload ? total_bytes_to_be_sent_ : -1,
             record_download ? bytes_received_ : -1,

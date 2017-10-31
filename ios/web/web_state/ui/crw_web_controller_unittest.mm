@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/testing/ocmock_complex_type_helper.h"
+#import "ios/testing/wait_util.h"
 #import "ios/web/navigation/crw_session_controller.h"
 #import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
@@ -35,6 +36,7 @@
 #import "ios/web/public/web_state/ui/crw_web_view_content_view.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
 #include "ios/web/public/web_state/web_state_observer.h"
+#import "ios/web/test/fakes/crw_test_back_forward_list.h"
 #import "ios/web/test/web_test_with_web_controller.h"
 #import "ios/web/test/wk_web_view_crash_utils.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
@@ -165,7 +167,8 @@ class CRWWebControllerTest : public WebTestWithWebController {
     }
 #endif
 
-    [[result stub] backForwardList];
+    mock_wk_list_ = [[CRWTestBackForwardList alloc] init];
+    OCMStub([result backForwardList]).andReturn(mock_wk_list_);
     [[[result stub] andReturn:[NSURL URLWithString:@(kTestURLString)]] URL];
     [[result stub] setNavigationDelegate:[OCMArg checkWithBlock:^(id delegate) {
                      navigation_delegate_ = delegate;
@@ -185,6 +188,7 @@ class CRWWebControllerTest : public WebTestWithWebController {
   __weak id<WKNavigationDelegate> navigation_delegate_;
   UIScrollView* scroll_view_;
   id mock_web_view_;
+  CRWTestBackForwardList* mock_wk_list_;
 };
 
 // Tests that AllowCertificateError is called with correct arguments if
@@ -622,6 +626,7 @@ TEST_F(CRWWebControllerTest, CurrentUrlWithTrustLevel) {
   // Simulate a page load to trigger a URL update.
   [navigation_delegate_ webView:mock_web_view_
       didStartProvisionalNavigation:nil];
+  [mock_wk_list_ setCurrentURL:@"http://chromium.test"];
   [navigation_delegate_ webView:mock_web_view_ didCommitNavigation:nil];
 
   URLVerificationTrustLevel trust_level = kNone;
@@ -641,6 +646,7 @@ class CRWWebControllerNativeContentTest : public WebTestWithWebController {
   }
 
   void Load(const GURL& URL) {
+    TestWebStateObserver observer(web_state());
     NavigationManagerImpl& navigation_manager =
         [web_controller() webStateImpl]->GetNavigationManagerImpl();
     navigation_manager.AddPendingItem(
@@ -648,6 +654,16 @@ class CRWWebControllerNativeContentTest : public WebTestWithWebController {
         NavigationInitiationType::USER_INITIATED,
         NavigationManager::UserAgentOverrideOption::INHERIT);
     [web_controller() loadCurrentURL];
+
+    // Native URL is loaded asynchronously with WKBasedNavigationManager. Wait
+    // for navigation to finish before asserting.
+    if (GetWebClient()->IsSlimNavigationManagerEnabled()) {
+      TestWebStateObserver* observer_ptr = &observer;
+      ASSERT_TRUE(testing::WaitUntilConditionOrTimeout(
+          testing::kWaitForPageLoadTimeout, ^{
+            return observer_ptr->did_finish_navigation_info() != nullptr;
+          }));
+    }
   }
 
   TestNativeContentProvider* mock_native_provider_;

@@ -23,6 +23,7 @@ ASH_PUBLIC_EXPORT extern const char kAshDisableShelfModelSynchronization[];
 ASH_PUBLIC_EXPORT extern const char kAshDisableSmoothScreenRotation[];
 ASH_PUBLIC_EXPORT extern const char kAshDisableTabletAutohideTitlebars[];
 ASH_PUBLIC_EXPORT extern const char kAshDisableTouchExplorationMode[];
+ASH_PUBLIC_EXPORT extern const char kAshEnableV1AppBackButton[];
 ASH_PUBLIC_EXPORT extern const char kAshEnableMagnifierKeyScroller[];
 ASH_PUBLIC_EXPORT extern const char kAshEnableNightLight[];
 ASH_PUBLIC_EXPORT extern const char kAshEnablePaletteOnAllDisplays[];
@@ -58,6 +59,7 @@ ASH_PUBLIC_EXPORT extern const char kSpuriousPowerButtonAccelCount[];
 ASH_PUBLIC_EXPORT extern const char kSpuriousPowerButtonScreenAccel[];
 ASH_PUBLIC_EXPORT extern const char kSpuriousPowerButtonKeyboardAccel[];
 ASH_PUBLIC_EXPORT extern const char kSpuriousPowerButtonLidAngleChange[];
+ASH_PUBLIC_EXPORT extern const char kTouchscreenUsableWhileScreenOff[];
 ASH_PUBLIC_EXPORT extern const char kUseIMEService[];
 
 ASH_PUBLIC_EXPORT bool IsNightLightEnabled();

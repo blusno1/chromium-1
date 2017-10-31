@@ -49,13 +49,13 @@ CoordinatorImpl* CoordinatorImpl::GetInstance() {
 
 CoordinatorImpl::CoordinatorImpl(service_manager::Connector* connector)
     : next_dump_id_(0) {
-  process_map_ = base::MakeUnique<ProcessMap>(connector);
+  process_map_ = std::make_unique<ProcessMap>(connector);
   DCHECK(!g_coordinator_impl);
   g_coordinator_impl = this;
   base::trace_event::MemoryDumpManager::GetInstance()->set_tracing_process_id(
       mojom::kServiceTracingProcessId);
 
-  tracing_observer_ = base::MakeUnique<TracingObserver>(
+  tracing_observer_ = std::make_unique<TracingObserver>(
       base::trace_event::TraceLog::GetInstance(), nullptr);
 }
 
@@ -82,7 +82,7 @@ void CoordinatorImpl::BindCoordinatorRequest(
 }
 
 void CoordinatorImpl::RequestGlobalMemoryDump(
-    const base::trace_event::MemoryDumpRequestArgs& args_in,
+    const base::trace_event::GlobalMemoryDumpRequestArgs& args_in,
     const RequestGlobalMemoryDumpCallback& callback) {
   // This merely strips out the |dump_guid| argument.
   auto callback_adapter = [](const RequestGlobalMemoryDumpCallback& callback,
@@ -95,7 +95,7 @@ void CoordinatorImpl::RequestGlobalMemoryDump(
 }
 
 void CoordinatorImpl::RequestGlobalMemoryDumpAndAppendToTrace(
-    const base::trace_event::MemoryDumpRequestArgs& args_in,
+    const base::trace_event::GlobalMemoryDumpRequestArgs& args_in,
     const RequestGlobalMemoryDumpAndAppendToTraceCallback& callback) {
   // This merely strips out the |dump_ptr| argument.
   auto callback_adapter =
@@ -108,8 +108,7 @@ void CoordinatorImpl::RequestGlobalMemoryDumpAndAppendToTrace(
 
 void CoordinatorImpl::GetVmRegionsForHeapProfiler(
     const GetVmRegionsForHeapProfilerCallback& callback) {
-  base::trace_event::MemoryDumpRequestArgs args{
-      0 /* dump_guid */,
+  base::trace_event::GlobalMemoryDumpRequestArgs args{
       base::trace_event::MemoryDumpType::EXPLICITLY_TRIGGERED,
       base::trace_event::MemoryDumpLevelOfDetail::
           VM_REGIONS_ONLY_FOR_HEAP_PROFILER};
@@ -125,7 +124,7 @@ void CoordinatorImpl::RegisterClientProcess(
       base::Bind(&CoordinatorImpl::UnregisterClientProcess,
                  base::Unretained(this), client_process));
   auto identity = GetClientIdentityForCurrentRequest();
-  auto client_info = base::MakeUnique<ClientInfo>(
+  auto client_info = std::make_unique<ClientInfo>(
       std::move(identity), std::move(client_process_ptr), process_type);
   auto iterator_and_inserted =
       clients_.emplace(client_process, std::move(client_info));
@@ -156,7 +155,7 @@ void CoordinatorImpl::UnregisterClientProcess(
 }
 
 void CoordinatorImpl::RequestGlobalMemoryDumpInternal(
-    const base::trace_event::MemoryDumpRequestArgs& args_in,
+    const base::trace_event::GlobalMemoryDumpRequestArgs& args_in,
     bool add_to_trace,
     const RequestGlobalMemoryDumpInternalCallback& callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -166,11 +165,10 @@ void CoordinatorImpl::RequestGlobalMemoryDumpInternal(
 
   bool another_dump_is_queued = !queued_memory_dump_requests_.empty();
 
-  // TODO(primiano): remove dump_guid from the request. For the moment callers
-  // should just pass a zero |dump_guid| in input. It should be an out-only arg.
-  DCHECK_EQ(0u, args_in.dump_guid);
-  base::trace_event::MemoryDumpRequestArgs args = args_in;
+  base::trace_event::MemoryDumpRequestArgs args;
   args.dump_guid = ++next_dump_id_;
+  args.dump_type = args_in.dump_type;
+  args.level_of_detail = args_in.level_of_detail;
 
   // If this is a periodic or peak memory dump request and there already is
   // another request in the queue with the same level of detail, there's no

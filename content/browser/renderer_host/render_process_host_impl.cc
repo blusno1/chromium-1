@@ -141,6 +141,7 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/in_process_child_thread_params.h"
+#include "content/common/navigation_subresource_loader_params.h"
 #include "content/common/render_process_messages.h"
 #include "content/common/resource_messages.h"
 #include "content/common/service_manager/child_connection.h"
@@ -172,6 +173,7 @@
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
+#include "device/gamepad/gamepad_haptics_manager.h"
 #include "device/gamepad/gamepad_monitor.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gpu_switches.h"
@@ -194,8 +196,8 @@
 #include "ppapi/features/features.h"
 #include "services/device/public/interfaces/battery_monitor.mojom.h"
 #include "services/device/public/interfaces/constants.mojom.h"
+#include "services/resource_coordinator/public/cpp/process_resource_coordinator.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
-#include "services/resource_coordinator/public/cpp/resource_coordinator_interface.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -203,10 +205,6 @@
 #include "services/service_manager/runner/common/client_util.h"
 #include "services/service_manager/runner/common/switches.h"
 #include "services/service_manager/sandbox/switches.h"
-#include "services/shape_detection/public/interfaces/barcodedetection.mojom.h"
-#include "services/shape_detection/public/interfaces/constants.mojom.h"
-#include "services/shape_detection/public/interfaces/facedetection_provider.mojom.h"
-#include "services/shape_detection/public/interfaces/textdetection.mojom.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
 #include "third_party/WebKit/public/public_features.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -689,9 +687,9 @@ void CreateMemoryCoordinatorHandle(
                                                      std::move(request));
 }
 
-void CreateResourceCoordinatorProcessInterface(
+void CreateProcessResourceCoordinator(
     RenderProcessHostImpl* render_process_host,
-    resource_coordinator::mojom::CoordinationUnitRequest request) {
+    resource_coordinator::mojom::ProcessCoordinationUnitRequest request) {
   render_process_host->GetProcessResourceCoordinator()->AddBinding(
       std::move(request));
 }
@@ -1506,7 +1504,7 @@ bool RenderProcessHostImpl::Init() {
     // Build command line for renderer.  We call AppendRendererCommandLine()
     // first so the process type argument will appear first.
     std::unique_ptr<base::CommandLine> cmd_line =
-        base::MakeUnique<base::CommandLine>(renderer_path);
+        std::make_unique<base::CommandLine>(renderer_path);
     if (!renderer_prefix.empty())
       cmd_line->PrependWrapper(renderer_prefix);
     AppendRendererCommandLine(cmd_line.get());
@@ -1515,7 +1513,7 @@ bool RenderProcessHostImpl::Init() {
     // As long as there's no renderer prefix, we can use the zygote process
     // at this stage.
     child_process_launcher_.reset(new ChildProcessLauncher(
-        base::MakeUnique<RendererSandboxedProcessLauncherDelegate>(),
+        std::make_unique<RendererSandboxedProcessLauncherDelegate>(),
         std::move(cmd_line), GetID(), this,
         std::move(broker_client_invitation_),
         base::Bind(&RenderProcessHostImpl::OnMojoError, id_)));
@@ -1564,7 +1562,7 @@ void RenderProcessHostImpl::InitializeChannelProxy() {
 
   // Establish a ServiceManager connection for the new render service instance.
   broker_client_invitation_ =
-      base::MakeUnique<mojo::edk::OutgoingBrokerClientInvitation>();
+      std::make_unique<mojo::edk::OutgoingBrokerClientInvitation>();
   service_manager::Identity child_identity(
       mojom::kRendererServiceName,
       BrowserContext::GetServiceUserIdFor(GetBrowserContext()),
@@ -1582,6 +1580,8 @@ void RenderProcessHostImpl::InitializeChannelProxy() {
   std::unique_ptr<IPC::ChannelFactory> channel_factory =
       IPC::ChannelMojo::CreateServerFactory(std::move(pipe.handle0),
                                             io_task_runner);
+
+  content::BindInterface(this, &child_control_interface_);
 
   ResetChannelProxy();
 
@@ -1776,24 +1776,11 @@ void RenderProcessHostImpl::CreateMessageFilters() {
 }
 
 void RenderProcessHostImpl::RegisterMojoInterfaces() {
-  auto registry = base::MakeUnique<service_manager::BinderRegistry>();
+  auto registry = std::make_unique<service_manager::BinderRegistry>();
 
   channel_->AddAssociatedInterfaceForIOThread(
       base::Bind(&IndexedDBDispatcherHost::AddBinding,
                  base::Unretained(indexed_db_factory_.get())));
-
-  AddUIThreadInterface(
-      registry.get(),
-      base::Bind(&ForwardRequest<shape_detection::mojom::BarcodeDetection>,
-                 shape_detection::mojom::kServiceName));
-  AddUIThreadInterface(
-      registry.get(),
-      base::Bind(&ForwardRequest<shape_detection::mojom::FaceDetectionProvider>,
-                 shape_detection::mojom::kServiceName));
-  AddUIThreadInterface(
-      registry.get(),
-      base::Bind(&ForwardRequest<shape_detection::mojom::TextDetection>,
-                 shape_detection::mojom::kServiceName));
 
   AddUIThreadInterface(
       registry.get(), base::Bind(&ForwardRequest<device::mojom::BatteryMonitor>,
@@ -1849,10 +1836,17 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
         registry.get(), base::Bind(&CreateMemoryCoordinatorHandle, GetID()));
   }
   if (resource_coordinator::IsResourceCoordinatorEnabled()) {
-    AddUIThreadInterface(registry.get(),
-                         base::Bind(&CreateResourceCoordinatorProcessInterface,
-                                    base::Unretained(this)));
+    AddUIThreadInterface(
+        registry.get(),
+        base::Bind(&CreateProcessResourceCoordinator, base::Unretained(this)));
   }
+
+  media::VideoDecodePerfHistory* video_perf_history =
+      GetBrowserContext()->GetVideoDecodePerfHistory();
+  AddUIThreadInterface(
+      registry.get(),
+      base::BindRepeating(&media::VideoDecodePerfHistory::BindRequest,
+                          base::Unretained(video_perf_history)));
 
   registry->AddInterface(
       base::Bind(&MimeRegistryImpl::Create),
@@ -1863,6 +1857,8 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
   registry->AddInterface(base::Bind(&hyphenation::HyphenationImpl::Create),
                          hyphenation::HyphenationImpl::GetTaskRunner());
 #endif
+
+  registry->AddInterface(base::Bind(&device::GamepadHapticsManager::Create));
 
   registry->AddInterface(base::Bind(&device::GamepadMonitor::Create));
 
@@ -1939,9 +1935,6 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
                    storage_partition_impl_->GetBlobRegistry(), GetID()));
   }
 
-  registry->AddInterface(
-      base::Bind(&media::VideoDecodePerfHistory::BindRequest));
-
   ServiceManagerConnection* service_manager_connection =
       BrowserContext::GetServiceManagerConnectionFor(browser_context_);
   std::unique_ptr<ConnectionFilterImpl> connection_filter(
@@ -2000,7 +1993,7 @@ void RenderProcessHostImpl::CreateOffscreenCanvasProvider(
   if (!offscreen_canvas_provider_) {
     // The client id gets converted to a uint32_t in FrameSinkId.
     uint32_t renderer_client_id = base::checked_cast<uint32_t>(id_);
-    offscreen_canvas_provider_ = base::MakeUnique<OffscreenCanvasProviderImpl>(
+    offscreen_canvas_provider_ = std::make_unique<OffscreenCanvasProviderImpl>(
         GetHostFrameSinkManager(), renderer_client_id);
   }
   offscreen_canvas_provider_->Add(std::move(request));
@@ -2110,32 +2103,29 @@ bool RenderProcessHostImpl::IsKeepAliveRefCountDisabled() {
 }
 
 void RenderProcessHostImpl::PurgeAndSuspend() {
-  Send(new ChildProcessMsg_PurgeAndSuspend());
+  GetRendererInterface()->ProcessPurgeAndSuspend();
 }
 
-void RenderProcessHostImpl::Resume() {
-  Send(new ChildProcessMsg_Resume());
-}
+void RenderProcessHostImpl::Resume() {}
 
 mojom::Renderer* RenderProcessHostImpl::GetRendererInterface() {
   return renderer_interface_.get();
 }
 
-resource_coordinator::ResourceCoordinatorInterface*
+resource_coordinator::ProcessResourceCoordinator*
 RenderProcessHostImpl::GetProcessResourceCoordinator() {
   if (process_resource_coordinator_)
     return process_resource_coordinator_.get();
 
   if (!resource_coordinator::IsResourceCoordinatorEnabled()) {
     process_resource_coordinator_ =
-        base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
-            nullptr, resource_coordinator::CoordinationUnitType::kProcess);
+        std::make_unique<resource_coordinator::ProcessResourceCoordinator>(
+            nullptr);
   } else {
     auto* connection = ServiceManagerConnection::GetForProcess();
     process_resource_coordinator_ =
-        base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
-            connection ? connection->GetConnector() : nullptr,
-            resource_coordinator::CoordinationUnitType::kProcess);
+        std::make_unique<resource_coordinator::ProcessResourceCoordinator>(
+            connection ? connection->GetConnector() : nullptr);
   }
   return process_resource_coordinator_.get();
 }
@@ -2920,8 +2910,8 @@ void RenderProcessHostImpl::OnChannelConnected(int32_t peer_pid) {
   }
 
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
-  Send(new ChildProcessMsg_SetIPCLoggingEnabled(
-      IPC::Logging::GetInstance()->Enabled()));
+  child_control_interface_->SetIPCLoggingEnabled(
+      IPC::Logging::GetInstance()->Enabled());
 #endif
 }
 
@@ -3370,6 +3360,19 @@ RenderProcessHost* RenderProcessHost::FromID(int render_process_id) {
 }
 
 // static
+RenderProcessHost* RenderProcessHost::FromRendererIdentity(
+    const service_manager::Identity& identity) {
+  for (content::RenderProcessHost::iterator i(
+           content::RenderProcessHost::AllHostsIterator());
+       !i.IsAtEnd(); i.Advance()) {
+    content::RenderProcessHost* process = i.GetCurrentValue();
+    if (process->GetChildIdentity() == identity)
+      return process;
+  }
+  return nullptr;
+}
+
+// static
 bool RenderProcessHost::ShouldTryToUseExistingProcessHost(
     BrowserContext* browser_context,
     const GURL& url) {
@@ -3738,7 +3741,7 @@ void RenderProcessHostImpl::OnShutdownRequest() {
   for (auto& observer : observers_)
     observer.RenderProcessWillExit(this);
 
-  Send(new ChildProcessMsg_Shutdown());
+  child_control_interface_->ProcessShutdown();
 }
 
 void RenderProcessHostImpl::SuddenTerminationChanged(bool enabled) {
@@ -3798,8 +3801,9 @@ void RenderProcessHostImpl::UpdateProcessPriority() {
   // Notify the child process of background state. Note
   // |priority_.boost_for_pending_views| state is not sent to renderer simply
   // due to lack of need.
-  if (should_background_changed)
-    Send(new ChildProcessMsg_SetProcessBackgrounded(priority.background));
+  if (should_background_changed) {
+    GetRendererInterface()->SetProcessBackgrounded(priority.background);
+  }
 }
 
 void RenderProcessHostImpl::OnProcessLaunched() {
@@ -3878,13 +3882,8 @@ void RenderProcessHostImpl::OnProcessLaunched() {
       observer.RenderProcessReady(this);
   }
 
-  GetProcessResourceCoordinator()->SetProperty(
-      resource_coordinator::mojom::PropertyType::kPID,
-      base::GetProcId(GetHandle()));
-
-  GetProcessResourceCoordinator()->SetProperty(
-      resource_coordinator::mojom::PropertyType::kLaunchTime,
-      base::Time::Now().ToTimeT());
+  GetProcessResourceCoordinator()->SetLaunchTime(base::Time::Now());
+  GetProcessResourceCoordinator()->SetPID(base::GetProcId(GetHandle()));
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   if (WebRTCInternals::GetInstance()->IsAudioDebugRecordingsEnabled()) {

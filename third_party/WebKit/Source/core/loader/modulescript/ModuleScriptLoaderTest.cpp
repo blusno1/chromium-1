@@ -9,7 +9,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/Modulator.h"
 #include "core/dom/ModuleScript.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/loader/modulescript/DocumentModuleScriptFetcher.h"
 #include "core/loader/modulescript/ModuleScriptFetchRequest.h"
 #include "core/loader/modulescript/ModuleScriptLoaderClient.h"
@@ -28,6 +27,7 @@
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -84,7 +84,7 @@ class ModuleScriptLoaderTestModulator final : public DummyModulator {
       const String& script,
       const String& url_str,
       AccessControlStatus access_control_status,
-      WebURLRequest::FetchCredentialsMode credentials_mode,
+      network::mojom::FetchCredentialsMode credentials_mode,
       const String& nonce,
       ParserDisposition parser_state,
       const TextPosition& position,
@@ -182,7 +182,7 @@ void ModuleScriptLoaderTest::InitializeForWorklet() {
       GetDocument().Url(), GetDocument().UserAgent(),
       String() /* source_code */, nullptr /* cached_meta_data */,
       nullptr /* content_security_policy_parsed_headers */,
-      String() /* referrer_policy */, GetDocument().GetSecurityOrigin(),
+      GetDocument().GetReferrerPolicy(), GetDocument().GetSecurityOrigin(),
       nullptr /* worker_clients */, GetDocument().AddressSpace(),
       OriginTrialContext::GetTokens(&GetDocument()).get(),
       nullptr /* worker_settings */, kV8CacheOptionsDefault);
@@ -196,8 +196,8 @@ void ModuleScriptLoaderTest::InitializeForWorklet() {
   global_scope_->SetModuleResponsesMapProxyForTesting(
       WorkletModuleResponsesMapProxy::Create(
           new WorkletModuleResponsesMap(modulator_->Fetcher()),
-          TaskRunnerHelper::Get(TaskType::kUnspecedLoading, &GetDocument()),
-          TaskRunnerHelper::Get(TaskType::kUnspecedLoading, global_scope_)));
+          GetDocument().GetTaskRunner(TaskType::kUnspecedLoading),
+          global_scope_->GetTaskRunner(TaskType::kUnspecedLoading)));
 }
 
 void ModuleScriptLoaderTest::TestFetchDataURL(

@@ -46,8 +46,8 @@ MultiResolutionImageResourceFetcher::MultiResolutionImageResourceFetcher(
   fetcher_->SetCacheMode(cache_mode);
 
   fetcher_->Start(
-      frame, request_context, WebURLRequest::kFetchRequestModeNoCORS,
-      WebURLRequest::kFetchCredentialsModeInclude,
+      frame, request_context, network::mojom::FetchRequestMode::kNoCORS,
+      network::mojom::FetchCredentialsMode::kInclude,
       WebURLRequest::kFrameTypeNone,
       base::Bind(&MultiResolutionImageResourceFetcher::OnURLFetchComplete,
                  base::Unretained(this)));

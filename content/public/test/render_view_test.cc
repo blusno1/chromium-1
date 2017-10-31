@@ -39,6 +39,7 @@
 #include "content/test/test_content_client.h"
 #include "content/test/test_render_frame.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "third_party/WebKit/public/platform/InterfaceRegistry.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
@@ -109,6 +110,14 @@ bool GetWindowsKeyCode(char ascii_character, int* key_code) {
     default:
       return false;
   }
+}
+
+// Returns an InterfaceProvider that is safe to call into, but will not actually
+// service any interface requests.
+service_manager::mojom::InterfaceProviderPtr CreateStubInterfaceProvider() {
+  ::service_manager::mojom::InterfaceProviderPtr stub_interface_provider_proxy;
+  mojo::MakeRequest(&stub_interface_provider_proxy);
+  return stub_interface_provider_proxy;
 }
 
 }  // namespace
@@ -246,7 +255,8 @@ void RenderViewTest::SetUp() {
   // Blink needs to be initialized before calling CreateContentRendererClient()
   // because it uses blink internally.
   blink_platform_impl_.Initialize();
-  blink::Initialize(blink_platform_impl_.Get());
+  blink::Initialize(blink_platform_impl_.Get(),
+                    blink::InterfaceRegistry::GetEmptyInterfaceRegistry());
 
   content_client_.reset(CreateContentClient());
   content_browser_client_.reset(CreateContentBrowserClient());
@@ -299,28 +309,30 @@ void RenderViewTest::SetUp() {
   compositor_deps_.reset(new FakeCompositorDependencies);
   mock_process_.reset(new MockRenderProcess);
 
-  mojom::CreateViewParams view_params;
-  view_params.opener_frame_route_id = MSG_ROUTING_NONE;
-  view_params.window_was_created_with_opener = false;
-  view_params.renderer_preferences = RendererPreferences();
-  view_params.web_preferences = WebPreferences();
-  view_params.view_id = kRouteId;
-  view_params.main_frame_routing_id = kMainFrameRouteId;
-  view_params.main_frame_widget_routing_id = kMainFrameWidgetRouteId;
-  view_params.session_storage_namespace_id = kInvalidSessionStorageNamespaceId;
-  view_params.swapped_out = false;
-  view_params.replicated_frame_state = FrameReplicationState();
-  view_params.proxy_routing_id = MSG_ROUTING_NONE;
-  view_params.hidden = false;
-  view_params.never_visible = false;
-  view_params.initial_size = *InitialSizeParams();
-  view_params.enable_auto_resize = false;
-  view_params.min_size = gfx::Size();
-  view_params.max_size = gfx::Size();
+  mojom::CreateViewParamsPtr view_params = mojom::CreateViewParams::New();
+  view_params->opener_frame_route_id = MSG_ROUTING_NONE;
+  view_params->window_was_created_with_opener = false;
+  view_params->renderer_preferences = RendererPreferences();
+  view_params->web_preferences = WebPreferences();
+  view_params->view_id = kRouteId;
+  view_params->main_frame_routing_id = kMainFrameRouteId;
+  view_params->main_frame_interface_provider = CreateStubInterfaceProvider();
+  view_params->main_frame_widget_routing_id = kMainFrameWidgetRouteId;
+  view_params->session_storage_namespace_id = kInvalidSessionStorageNamespaceId;
+  view_params->swapped_out = false;
+  view_params->replicated_frame_state = FrameReplicationState();
+  view_params->proxy_routing_id = MSG_ROUTING_NONE;
+  view_params->hidden = false;
+  view_params->never_visible = false;
+  view_params->initial_size = *InitialSizeParams();
+  view_params->enable_auto_resize = false;
+  view_params->min_size = gfx::Size();
+  view_params->max_size = gfx::Size();
 
   // This needs to pass the mock render thread to the view.
-  RenderViewImpl* view = RenderViewImpl::Create(
-      compositor_deps_.get(), view_params, RenderWidget::ShowCallback());
+  RenderViewImpl* view =
+      RenderViewImpl::Create(compositor_deps_.get(), std::move(view_params),
+                             RenderWidget::ShowCallback());
   view_ = view;
 }
 
@@ -529,7 +541,7 @@ void RenderViewTest::Reload(const GURL& url) {
       PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET", nullptr,
       base::Optional<SourceLocation>(),
       CSPDisposition::CHECK /* should_check_main_world_csp */,
-      false /* started_from_context_menu */);
+      false /* started_from_context_menu */, false /* has_user_gesture */);
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   TestRenderFrame* frame =
       static_cast<TestRenderFrame*>(impl->GetMainRenderFrame());
@@ -647,7 +659,7 @@ ContentRendererClient* RenderViewTest::CreateContentRendererClient() {
 }
 
 std::unique_ptr<ResizeParams> RenderViewTest::InitialSizeParams() {
-  auto initial_size = base::MakeUnique<ResizeParams>();
+  auto initial_size = std::make_unique<ResizeParams>();
   // Ensure the view has some size so tests involving scrolling bounds work.
   initial_size->new_size = gfx::Size(400, 300);
   initial_size->visible_viewport_size = gfx::Size(400, 300);
@@ -670,7 +682,7 @@ void RenderViewTest::GoToOffset(int offset,
       GURL(), PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET", nullptr,
       base::Optional<SourceLocation>(),
       CSPDisposition::CHECK /* should_check_main_world_csp */,
-      false /* started_from_context_menu */);
+      false /* started_from_context_menu */, false /* has_user_gesture */);
   RequestNavigationParams request_params;
   request_params.page_state = state;
   request_params.nav_entry_id = pending_offset + 1;

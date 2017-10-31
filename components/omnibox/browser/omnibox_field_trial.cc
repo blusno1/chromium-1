@@ -4,7 +4,9 @@
 
 #include "components/omnibox/browser/omnibox_field_trial.h"
 
+#include <algorithm>
 #include <cmath>
+#include <functional>
 #include <string>
 
 #include "base/command_line.h"
@@ -62,18 +64,6 @@ const base::Feature kEnableClipboardProvider {
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
-
-// Feature to enable demotion of URLs when the fakebox is selected.  Only used
-// on Android tablets unless kAndroidFakeboxDemotionOnPhones is also enabled.
-const base::Feature kAndroidFakeboxDemotion{"OmniboxAndroidFakeboxDemotion",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Feature to enable demotion of URLs when the fakebox is selected on a device
-// with a phone form factor.  Android phones have only one box on the NTP, so
-// the user doesn't have a choice between boxes.  This makes the case for
-// demoting URLs less clear, hence the separate feature flag.
-const base::Feature kAndroidFakeboxDemotionOnPhones{
-    "OmniboxAndroidFakeboxDemotionOnPhones", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Feature to enable personalized omnibox suggestions on focus when Android's
 // Chrome Home feature is enabled.
@@ -162,8 +152,13 @@ const base::Feature kUIExperimentVerticalMargin{
 // with the destination of the default match when the user's input looks like a
 // query.
 const base::Feature kSpeculativeServiceWorkerStartOnQueryInput{
-    "OmniboxSpeculativeServiceWorkerStartOnQueryInput",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+  "OmniboxSpeculativeServiceWorkerStartOnQueryInput",
+#if defined(OS_ANDROID)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 #if defined(OS_IOS)
 // Feature used to enable ZeroSuggestProvider on iOS.

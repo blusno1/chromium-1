@@ -285,8 +285,7 @@ void TextFieldInputType::CreateShadowSubtree() {
   bool creates_container = should_have_spin_button ||
                            should_have_data_list_indicator || NeedsContainer();
 
-  TextControlInnerEditorElement* inner_editor =
-      TextControlInnerEditorElement::Create(document);
+  HTMLElement* inner_editor = GetElement().CreateInnerEditorElement();
   if (!creates_container) {
     shadow_root->AppendChild(inner_editor);
     return;
@@ -525,8 +524,6 @@ void TextFieldInputType::SpinButtonStepUp() {
 }
 
 void TextFieldInputType::UpdateView() {
-  // The suggested values are now shown using placeholder elements, so there is
-  // nothing to do here for the suggested values.
   if (GetElement().SuggestedValue().IsEmpty() &&
       GetElement().NeedsToUpdateViewValue()) {
     // Update the view only if needsToUpdateViewValue is true. It protects
@@ -536,8 +533,8 @@ void TextFieldInputType::UpdateView() {
     // updated. In this case, updateView() is called but we should not
     // update the view value.
     GetElement().SetInnerEditorValue(VisibleValue());
-    GetElement().UpdatePlaceholderVisibility();
   }
+  GetElement().UpdatePlaceholderVisibility();
 }
 
 void TextFieldInputType::FocusAndSelectSpinButtonOwner() {

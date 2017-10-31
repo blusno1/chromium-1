@@ -20,8 +20,10 @@
 #include "core/workers/WorkerScriptLoader.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/WebContentSettingsClient.h"
 #include "public/web/WebFrameClient.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -78,13 +80,13 @@ void DedicatedWorker::postMessage(ScriptState* script_state,
 
 void DedicatedWorker::Start() {
   DCHECK(IsMainThread());
-  WebURLRequest::FetchRequestMode fetch_request_mode =
-      WebURLRequest::kFetchRequestModeSameOrigin;
-  WebURLRequest::FetchCredentialsMode fetch_credentials_mode =
-      WebURLRequest::kFetchCredentialsModeSameOrigin;
+  network::mojom::FetchRequestMode fetch_request_mode =
+      network::mojom::FetchRequestMode::kSameOrigin;
+  network::mojom::FetchCredentialsMode fetch_credentials_mode =
+      network::mojom::FetchCredentialsMode::kSameOrigin;
   if (script_url_.ProtocolIsData()) {
-    fetch_request_mode = WebURLRequest::kFetchRequestModeNoCORS;
-    fetch_credentials_mode = WebURLRequest::kFetchCredentialsModeInclude;
+    fetch_request_mode = network::mojom::FetchRequestMode::kNoCORS;
+    fetch_credentials_mode = network::mojom::FetchCredentialsMode::kInclude;
   }
 
   script_loader_ = WorkerScriptLoader::Create();
@@ -145,9 +147,15 @@ void DedicatedWorker::OnFinished() {
   } else if (script_loader_->Failed()) {
     DispatchEvent(Event::CreateCancelable(EventTypeNames::error));
   } else {
+    ReferrerPolicy referrer_policy = kReferrerPolicyDefault;
+    if (!script_loader_->GetReferrerPolicy().IsNull()) {
+      SecurityPolicy::ReferrerPolicyFromHeaderValue(
+          script_loader_->GetReferrerPolicy(),
+          kDoNotSupportReferrerPolicyLegacyKeywords, &referrer_policy);
+    }
     context_proxy_->StartWorkerGlobalScope(
         script_loader_->Url(), GetExecutionContext()->UserAgent(),
-        script_loader_->SourceText(), script_loader_->GetReferrerPolicy());
+        script_loader_->SourceText(), referrer_policy);
     probe::scriptImported(GetExecutionContext(), script_loader_->Identifier(),
                           script_loader_->SourceText());
   }

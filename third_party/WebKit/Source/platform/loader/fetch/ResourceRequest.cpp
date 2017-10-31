@@ -67,8 +67,8 @@ ResourceRequest::ResourceRequest(const KURL& url)
       previews_state_(WebURLRequest::kPreviewsUnspecified),
       request_context_(WebURLRequest::kRequestContextUnspecified),
       frame_type_(WebURLRequest::kFrameTypeNone),
-      fetch_request_mode_(WebURLRequest::kFetchRequestModeNoCORS),
-      fetch_credentials_mode_(WebURLRequest::kFetchCredentialsModeInclude),
+      fetch_request_mode_(network::mojom::FetchRequestMode::kNoCORS),
+      fetch_credentials_mode_(network::mojom::FetchCredentialsMode::kInclude),
       fetch_redirect_mode_(WebURLRequest::kFetchRedirectModeFollow),
       referrer_policy_(kReferrerPolicyDefault),
       did_set_http_referrer_(false),
@@ -220,12 +220,12 @@ void ResourceRequest::SetSiteForCookies(const KURL& site_for_cookies) {
   site_for_cookies_ = site_for_cookies;
 }
 
-RefPtr<SecurityOrigin> ResourceRequest::RequestorOrigin() const {
+scoped_refptr<SecurityOrigin> ResourceRequest::RequestorOrigin() const {
   return requestor_origin_;
 }
 
 void ResourceRequest::SetRequestorOrigin(
-    RefPtr<SecurityOrigin> requestor_origin) {
+    scoped_refptr<SecurityOrigin> requestor_origin) {
   requestor_origin_ = std::move(requestor_origin);
 }
 
@@ -297,7 +297,7 @@ EncodedFormData* ResourceRequest::HttpBody() const {
   return http_body_.get();
 }
 
-void ResourceRequest::SetHTTPBody(RefPtr<EncodedFormData> http_body) {
+void ResourceRequest::SetHTTPBody(scoped_refptr<EncodedFormData> http_body) {
   http_body_ = std::move(http_body);
 }
 
@@ -306,7 +306,7 @@ EncodedFormData* ResourceRequest::AttachedCredential() const {
 }
 
 void ResourceRequest::SetAttachedCredential(
-    RefPtr<EncodedFormData> attached_credential) {
+    scoped_refptr<EncodedFormData> attached_credential) {
   attached_credential_ = std::move(attached_credential);
 }
 

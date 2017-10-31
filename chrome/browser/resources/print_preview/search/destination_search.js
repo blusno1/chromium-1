@@ -41,12 +41,6 @@ cr.define('print_preview', function() {
     this.userInfo_ = userInfo;
 
     /**
-     * Instance of native layer used to send metrics to C++ metrics handler.
-     * @private {!print_preview.NativeLayer}
-     */
-    this.nativeLayer_ = print_preview.NativeLayer.getInstance();
-
-    /**
      * Currently displayed printer sharing invitation.
      * @private {print_preview.Invitation}
      */
@@ -151,7 +145,6 @@ cr.define('print_preview', function() {
         if (getIsVisible(this.getChildElement('.cloudprint-promo'))) {
           this.metrics_.record(
               print_preview.Metrics.DestinationSearchBucket.SIGNIN_PROMPT);
-          this.nativeLayer_.recordAction('Signin_Impression_FromCloudPrint');
         }
         if (this.userInfo_.initialized)
           this.onUsersChanged_();
@@ -179,11 +172,14 @@ cr.define('print_preview', function() {
 
     /** Shows the Google Cloud Print promotion banner. */
     showCloudPrintPromo: function() {
-      setIsVisible(this.getChildElement('.cloudprint-promo'), true);
+      const cloudPrintPromoElement = this.getChildElement('.cloudprint-promo');
+      if (getIsVisible(cloudPrintPromoElement))
+        return;
+
+      setIsVisible(cloudPrintPromoElement, true);
       if (this.getIsVisible()) {
         this.metrics_.record(
             print_preview.Metrics.DestinationSearchBucket.SIGNIN_PROMPT);
-        this.nativeLayer_.recordAction('Signin_Impression_FromCloudPrint');
       }
       this.reflowLists_();
     },

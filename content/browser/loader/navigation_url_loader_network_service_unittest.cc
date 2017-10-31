@@ -57,10 +57,6 @@ class TestURLLoaderRequestHandler : public URLLoaderRequestHandler {
                       std::move(client), TRAFFIC_ANNOTATION_FOR_TESTS);
   }
 
-  mojom::URLLoaderFactoryPtr MaybeCreateSubresourceFactory() override {
-    return nullptr;
-  }
-
   bool MaybeCreateLoaderForResponse(
       const ResourceResponseHead& response,
       mojom::URLLoaderPtr* loader,
@@ -90,7 +86,7 @@ class NavigationURLLoaderNetworkServiceTest : public testing::Test {
     // GetNetworkService.
     service_manager::mojom::ServicePtr service;
     ServiceManagerConnection::SetForProcess(
-        base::MakeUnique<ServiceManagerConnectionImpl>(
+        std::make_unique<ServiceManagerConnectionImpl>(
             mojo::MakeRequest(&service),
             BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
@@ -110,8 +106,8 @@ class NavigationURLLoaderNetworkServiceTest : public testing::Test {
       NavigationURLLoaderDelegate* delegate,
       bool allow_download = false) {
     BeginNavigationParams begin_params(
-        headers, net::LOAD_NORMAL, false /* has_user_gesture */,
-        false /* skip_service_worker */, REQUEST_CONTEXT_TYPE_LOCATION,
+        headers, net::LOAD_NORMAL, false /* skip_service_worker */,
+        REQUEST_CONTEXT_TYPE_LOCATION,
         blink::WebMixedContentContextType::kBlockable,
         false /* is_form_submission */, url::Origin::Create(url));
 
@@ -130,10 +126,10 @@ class NavigationURLLoaderNetworkServiceTest : public testing::Test {
 
     std::vector<std::unique_ptr<URLLoaderRequestHandler>> handlers;
     most_recent_resource_request_ = base::nullopt;
-    handlers.push_back(base::MakeUnique<TestURLLoaderRequestHandler>(
+    handlers.push_back(std::make_unique<TestURLLoaderRequestHandler>(
         &most_recent_resource_request_));
 
-    return base::MakeUnique<NavigationURLLoaderNetworkService>(
+    return std::make_unique<NavigationURLLoaderNetworkService>(
         browser_context_->GetResourceContext(),
         BrowserContext::GetDefaultStoragePartition(browser_context_.get()),
         std::move(request_info), nullptr /* navigation_ui_data */,

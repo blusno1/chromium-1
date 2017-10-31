@@ -272,7 +272,7 @@ if (!is_android && !is_mac) {
           ldflags += [ "-Wl,--long-plt" ]
         }
 
-        if (!is_component_build && !using_sanitizer) {
+        if (is_desktop_linux && !is_component_build && !using_sanitizer) {
           version_script = "//build/linux/chrome.map"
           inputs = [
             version_script,
@@ -1566,6 +1566,10 @@ group("extra_resources") {
       "//chrome/browser/resources:extensions_resources",
       "//chrome/browser/resources:sync_file_system_internals_resources",
     ]
+  }
+
+  if (enable_print_preview) {
+    public_deps += [ "//chrome/browser/resources:print_preview_resources" ]
   }
 }
 

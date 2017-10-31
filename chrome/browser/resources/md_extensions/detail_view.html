@@ -12,9 +12,11 @@
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
+<link rel="import" href="item_behavior.html">
 <link rel="import" href="item_util.html">
 <link rel="import" href="navigation_helper.html">
 <link rel="import" href="strings.html">
@@ -22,8 +24,7 @@
 
 <dom-module id="extensions-detail-view">
   <template>
-    <style include="iron-flex cr-shared-style cr-icons action-link
-        paper-button-style">
+    <style include="iron-flex cr-shared-style cr-icons action-link paper-button-style">
       :host {
         --iron-icon-fill-color: var(--paper-grey-600);
         display: block;
@@ -123,6 +124,11 @@
         cursor: pointer;
       }
 
+      #allow-incognito iron-icon {
+        -webkit-margin-start: 20px;
+        @apply --cr-icon-height-width;
+      }
+
       .inspectable-view {
         color: var(--google-blue-700);
         height: 20px;
@@ -171,7 +177,11 @@
           <button id="close-button" is="paper-icon-button-light"
               class="icon-arrow-back no-overlap"
               on-tap="onCloseButtonTap_"></button>
-          <img alt="" id="icon" src="[[data.iconUrl]]">
+          <img id="icon" src="[[data.iconUrl]]"
+              alt$="[[appOrExtension(
+                  data.type,
+                  '$i18nPolymer{appIcon}',
+                  '$i18nPolymer{extensionIcon}')]]">
           <span id="name">[[data.name]]</span>
         </div>
         <div class="section continuation control-line" id="enable-section">
@@ -185,6 +195,11 @@
                 icon-aria-label="[[data.controlledInfo.type]]">
             </cr-tooltip-icon>
             <cr-toggle id="enable-toggle"
+                aria-label$="[[appOrExtension(
+                    data.type,
+                    '$i18nPolymer{appEnabled}',
+                    '$i18nPolymer{extensionEnabled}')]]"
+                aria-describedby="name"
                 checked="[[isEnabled_(data.state)]]"
                 on-change="onEnableChange_"
                 disabled="[[!isEnableToggleEnabled_(data.*)]]">
@@ -300,7 +315,10 @@
               <extensions-toggle-row id="allow-incognito"
                   checked="[[data.incognitoAccess.isActive]]"
                   on-change="onAllowIncognitoChange_">
-                <span>$i18n{itemAllowIncognito}</span>
+                <span>
+                  $i18n{itemAllowIncognito}
+                  <iron-icon icon="cr:error-outline"></iron-icon>
+                </span>
               </extensions-toggle-row>
             </template>
             <template is="dom-if" if="[[data.fileAccess.isEnabled]]">

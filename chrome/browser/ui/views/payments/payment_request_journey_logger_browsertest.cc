@@ -204,6 +204,12 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestJourneyLoggerMultipleShowTest,
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestJourneyLoggerMultipleShowTest,
                        StartNewRequest) {
+  // Enable payment handlers, also known as service worker payment apps. The
+  // rest of the test is identical to "StartNewRequestWithoutPaymentAppsFeature"
+  // testcase above.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kServiceWorkerPaymentApps);
+
   base::HistogramTester histogram_tester;
 
   // Setup a credit card with an associated billing address.

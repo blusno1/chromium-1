@@ -783,6 +783,28 @@ static inline bool ObjectIsRelayoutBoundary(const LayoutObject* object) {
   return true;
 }
 
+// NGInlineNode::ColectInlines() collects inline children into NGInlineItem.
+// This function marks NeedsCollectInlines() to let it re-collect.
+void LayoutObject::MarkContainerNeedsCollectInlines() {
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
+    return;
+
+  // Mark only if this is a LayoutObject collected by CollectInlines().
+  if (!IsInline() && !IsFloatingOrOutOfFlowPositioned()) {
+    // If this is the container box of inline children, mark it.
+    if (IsLayoutBlockFlow())
+      SetNeedsCollectInlines(true);
+    return;
+  }
+
+  for (LayoutObject* object = this; !object->NeedsCollectInlines();) {
+    object->SetNeedsCollectInlines(true);
+    object = object->Parent();
+    if (!object || object->IsLayoutBlockFlow())
+      break;
+  }
+}
+
 void LayoutObject::MarkContainerChainForLayout(bool schedule_relayout,
                                                SubtreeLayoutScope* layouter) {
 #if DCHECK_IS_ON()
@@ -802,6 +824,12 @@ void LayoutObject::MarkContainerChainForLayout(bool schedule_relayout,
                                        !SelfNeedsLayout() &&
                                        !NormalChildNeedsLayout();
 
+  // We need to set NeedsCollectInlines() only if LayoutNGEnabled, but setting a
+  // flag in non-LayoutNG is harmless.
+  // When we set a flag, setting another flag should be zero-cost.
+  if (object)
+    object->SetNeedsCollectInlines(true);
+
   while (object) {
     if (object->SelfNeedsLayout())
       return;
@@ -817,15 +845,18 @@ void LayoutObject::MarkContainerChainForLayout(bool schedule_relayout,
         return;
       container = object->Container();
       object->SetPosChildNeedsLayout(true);
+      object->SetNeedsCollectInlines(true);
       simplified_normal_flow_layout = true;
     } else if (simplified_normal_flow_layout) {
       if (object->NeedsSimplifiedNormalFlowLayout())
         return;
       object->SetNeedsSimplifiedNormalFlowLayout(true);
+      object->SetNeedsCollectInlines(true);
     } else {
       if (object->NormalChildNeedsLayout())
         return;
       object->SetNormalChildNeedsLayout(true);
+      object->SetNeedsCollectInlines(true);
     }
 #if DCHECK_IS_ON()
     DCHECK(!object->IsSetNeedsLayoutForbidden());
@@ -1328,9 +1359,11 @@ void LayoutObject::ShowLayoutObject(StringBuilder& string_builder) const {
     while (string_builder.length() < kShowTreeCharacterOffset)
       string_builder.Append(' ');
     string_builder.Append('\t');
-    string_builder.Append(GetNode()->ToString());
+    WTFLogAlways("%s%s", string_builder.ToString().Utf8().data(),
+                 GetNode()->ToString().Utf8().data());
+  } else {
+    WTFLogAlways("%s", string_builder.ToString().Utf8().data());
   }
-  DLOG(INFO) << string_builder.ToString().Utf8().data();
 }
 
 void LayoutObject::ShowLayoutTreeAndMark(const LayoutObject* marked_object1,
@@ -2978,6 +3011,7 @@ void LayoutObject::ScheduleRelayout() {
 
 void LayoutObject::ForceLayout() {
   SetSelfNeedsLayout(true);
+  MarkContainerNeedsCollectInlines();
   SetShouldDoFullPaintInvalidation();
   UpdateLayout();
 }
@@ -2987,6 +3021,7 @@ void LayoutObject::ForceLayout() {
 // forceLayout.
 void LayoutObject::ForceChildLayout() {
   SetNormalChildNeedsLayout(true);
+  MarkContainerNeedsCollectInlines();
   UpdateLayout();
 }
 
@@ -3144,6 +3179,7 @@ bool LayoutObject::IsInert() const {
 }
 
 void LayoutObject::ImageChanged(ImageResourceContent* image,
+                                CanDeferInvalidation defer,
                                 const IntRect* rect) {
   DCHECK(node_);
 
@@ -3153,7 +3189,7 @@ void LayoutObject::ImageChanged(ImageResourceContent* image,
   DCHECK_NE(GetDocument().Lifecycle().GetState(),
             DocumentLifecycle::LifecycleState::kInPaint);
 
-  ImageChanged(static_cast<WrappedImagePtr>(image), rect);
+  ImageChanged(static_cast<WrappedImagePtr>(image), defer, rect);
 }
 
 Element* LayoutObject::OffsetParent(const Element* base) const {
@@ -3619,14 +3655,14 @@ void showTree(const blink::LayoutObject* object) {
   if (object)
     object->ShowTreeForThis();
   else
-    DLOG(INFO) << "Cannot showTree. Root is (nil)";
+    WTFLogAlways("%s", "Cannot showTree. Root is (nil)");
 }
 
 void showLineTree(const blink::LayoutObject* object) {
   if (object)
     object->ShowLineTreeForThis();
   else
-    DLOG(INFO) << "Cannot showLineTree. Root is (nil)";
+    WTFLogAlways("%s", "Cannot showLineTree. Root is (nil)");
 }
 
 void showLayoutTree(const blink::LayoutObject* object1) {
@@ -3641,7 +3677,7 @@ void showLayoutTree(const blink::LayoutObject* object1,
       root = root->Parent();
     root->ShowLayoutTreeAndMark(object1, "*", object2, "-", 0);
   } else {
-    DLOG(INFO) << "Cannot showLayoutTree. Root is (nil)";
+    WTFLogAlways("%s", "Cannot showLayoutTree. Root is (nil)");
   }
 }
 

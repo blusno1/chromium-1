@@ -34,6 +34,7 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/service_manager_connection.h"
+#include "content/public/common/service_names.mojom.h"
 #include "media/media_features.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "services/resource_coordinator/public/interfaces/coordination_unit.mojom.h"
@@ -53,6 +54,9 @@ MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
       is_process_backgrounded_(false),
       is_unused_(true),
       keep_alive_ref_count_(0),
+      child_identity_(mojom::kRendererServiceName,
+                      BrowserContext::GetServiceUserIdFor(browser_context),
+                      base::StringPrintf("%d", id_)),
       shared_bitmap_allocation_notifier_impl_(
           viz::ServerSharedBitmapManager::current()),
       weak_ptr_factory_(this) {
@@ -352,14 +356,14 @@ mojom::Renderer* MockRenderProcessHost::GetRendererInterface() {
   return renderer_interface_->get();
 }
 
-resource_coordinator::ResourceCoordinatorInterface*
+resource_coordinator::ProcessResourceCoordinator*
 MockRenderProcessHost::GetProcessResourceCoordinator() {
   if (!process_resource_coordinator_) {
     service_manager::Connector* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
     process_resource_coordinator_ =
-        base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
-            connector, resource_coordinator::CoordinationUnitType::kProcess);
+        std::make_unique<resource_coordinator::ProcessResourceCoordinator>(
+            connector);
   }
   return process_resource_coordinator_.get();
 }
@@ -457,7 +461,7 @@ MockRenderProcessHostFactory::~MockRenderProcessHostFactory() {
 RenderProcessHost* MockRenderProcessHostFactory::CreateRenderProcessHost(
     BrowserContext* browser_context) const {
   processes_.push_back(
-      base::MakeUnique<MockRenderProcessHost>(browser_context));
+      std::make_unique<MockRenderProcessHost>(browser_context));
   processes_.back()->SetFactory(this);
   return processes_.back().get();
 }

@@ -10,7 +10,7 @@
 #import "base/mac/scoped_nsobject.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_anchor_point_provider.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_view.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 
@@ -70,6 +70,10 @@ class ReadingListModel;
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
+
+// Height and Y offset to account for the status bar. Overridden by subclasses
+// if the toolbar shouldn't extend through the status bar.
+- (CGFloat)statusBarOffset;
 
 // Called when the application has entered the background.
 - (void)applicationDidEnterBackground:(NSNotification*)notify;
@@ -135,11 +139,10 @@ class ReadingListModel;
 // attention.
 - (void)triggerToolsMenuButtonAnimation;
 
+// TODO(crbug.com/778236): Remove this declaration once it is a
+// UIViewController.
 // Update the view's layout to take into account the new safe area insets.
-- (void)safeAreaInsetsDidChange;
-
-// Returns the preferred toolbar height in the current orientation.
-- (CGFloat)preferredToolbarHeightWhenAlignedToTopOfScreen;
+- (void)viewSafeAreaInsetsDidChange;
 
 @end
 

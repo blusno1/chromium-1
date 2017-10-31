@@ -349,6 +349,23 @@ bool GpuDataManagerImplPrivate::IsFeatureBlacklisted(int feature) const {
   return use_swiftshader_ || (blacklisted_features_.count(feature) == 1);
 }
 
+bool GpuDataManagerImplPrivate::IsFeatureEnabled(int feature) const {
+  DCHECK_EQ(feature, gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION);
+  return gpu_feature_info_
+             .status_values[gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION] ==
+         gpu::kGpuFeatureStatusEnabled;
+}
+
+bool GpuDataManagerImplPrivate::IsWebGLEnabled() const {
+  return use_swiftshader_ ||
+         !blacklisted_features_.count(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL);
+}
+
+bool GpuDataManagerImplPrivate::IsWebGL2Enabled() const {
+  return /*use_swiftshader_ ||*/ // Uncomment to enable WebGL 2 with SwiftShader
+         !blacklisted_features_.count(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL2);
+}
+
 size_t GpuDataManagerImplPrivate::GetBlacklistedFeatureCount() const {
   // SwiftShader blacklists all features
   return use_swiftshader_ ? gpu::NUMBER_OF_GPU_FEATURE_TYPES
@@ -684,19 +701,15 @@ void GpuDataManagerImplPrivate::UpdateGpuInfo(const gpu::GPUInfo& gpu_info) {
 
 void GpuDataManagerImplPrivate::UpdateGpuFeatureInfo(
     const gpu::GpuFeatureInfo& gpu_feature_info) {
-  gpu_feature_info_ = gpu_feature_info;
-  gpu_feature_info_available_ = true;
-  UpdateDriverBugListStats(gpu_feature_info);
+  if (!use_swiftshader_) {
+    gpu_feature_info_ = gpu_feature_info;
+    UpdateDriverBugListStats(gpu_feature_info);
+    NotifyGpuInfoUpdate();
+  }
 }
 
 gpu::GpuFeatureInfo GpuDataManagerImplPrivate::GetGpuFeatureInfo() const {
   return gpu_feature_info_;
-}
-
-gpu::GpuFeatureStatus GpuDataManagerImplPrivate::GetFeatureStatus(
-    gpu::GpuFeatureType feature) const {
-  DCHECK(feature >= 0 && feature < gpu::NUMBER_OF_GPU_FEATURE_TYPES);
-  return gpu_feature_info_.status_values[feature];
 }
 
 void GpuDataManagerImplPrivate::AppendRendererCommandLine(
@@ -823,8 +836,6 @@ void GpuDataManagerImplPrivate::UpdateGpuPreferences(
     gpu::GpuPreferences* gpu_preferences) const {
   DCHECK(gpu_preferences);
 
-  if (base::FeatureList::IsEnabled(features::kGpuScheduler))
-    gpu_preferences->enable_gpu_scheduler = true;
 
   gpu_preferences->gpu_program_cache_size =
       gpu::ShaderDiskCache::CacheSizeBytes();
@@ -901,7 +912,7 @@ void GpuDataManagerImplPrivate::ProcessCrashed(
 
 std::unique_ptr<base::ListValue> GpuDataManagerImplPrivate::GetLogMessages()
     const {
-  auto value = base::MakeUnique<base::ListValue>();
+  auto value = std::make_unique<base::ListValue>();
   for (size_t ii = 0; ii < log_messages_.size(); ++ii) {
     std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
     dict->SetInteger("level", log_messages_[ii].level);

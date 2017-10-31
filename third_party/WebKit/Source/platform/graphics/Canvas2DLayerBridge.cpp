@@ -333,7 +333,7 @@ bool Canvas2DLayerBridge::PrepareGpuMemoryBufferMailboxFromImage(
   *out_mailbox = viz::TextureMailbox(mailbox, sync_token, texture_target,
                                      gfx::Size(size_), is_overlay_candidate);
   out_mailbox->set_color_space(color_params_.GetSamplerGfxColorSpace());
-  image_info->gpu_memory_buffer_->SetColorSpaceForScanout(
+  image_info->gpu_memory_buffer_->SetColorSpace(
       color_params_.GetStorageGfxColorSpace());
 
   gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, 0);
@@ -417,6 +417,11 @@ bool Canvas2DLayerBridge::PrepareMailboxFromImage(
   }
 
   sk_sp<SkImage> skia_image = image->PaintImageForCurrentFrame().GetSkImage();
+
+  // This check should not be necessary, it is a speculative fix for
+  // crbug.com/759412
+  if (!skia_image || !skia_image->getTexture())
+    return false;
 
   if (RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled()) {
     if (PrepareGpuMemoryBufferMailboxFromImage(skia_image.get(), mailbox_info,
@@ -808,9 +813,9 @@ void Canvas2DLayerBridge::FlushRecordingOnly() {
   if (have_recorded_draw_commands_ && GetOrCreateSurface()) {
     TRACE_EVENT0("cc", "Canvas2DLayerBridge::flushRecordingOnly");
 
-    // For legacy canvases, transform all input colors and images to the target
-    // space using a SkCreateColorSpaceXformCanvas. This ensures blending will
-    // be done using target space pixel values.
+    // For legacy and sRGB canvases, transform all input colors and images to
+    // the target space using a SkCreateColorSpaceXformCanvas. This ensures
+    // blending will be done using target space pixel values.
     SkCanvas* canvas = GetOrCreateSurface()->getCanvas();
     std::unique_ptr<PaintCanvas> color_transform_canvas =
         color_params_.WrapCanvas(canvas);
@@ -975,6 +980,7 @@ bool Canvas2DLayerBridge::PrepareTextureMailbox(
 
   {
     sk_sp<SkImage> skImage = image->PaintImageForCurrentFrame().GetSkImage();
+    DCHECK(skImage->isTextureBacked());
     // Early exit if canvas was not drawn to since last prepareMailbox.
     GLenum filter = GetGLFilter();
     if (skImage->uniqueID() == last_image_id_ && filter == last_filter_)

@@ -23,8 +23,8 @@ ExecutionContext* ModulatorImplBase::GetExecutionContext() const {
 
 ModulatorImplBase::ModulatorImplBase(scoped_refptr<ScriptState> script_state)
     : script_state_(std::move(script_state)),
-      task_runner_(
-          TaskRunnerHelper::Get(TaskType::kNetworking, script_state_.get())),
+      task_runner_(ExecutionContext::From(script_state_.get())
+                       ->GetTaskRunner(TaskType::kNetworking)),
       map_(ModuleMap::Create(this)),
       loader_registry_(ModuleScriptLoaderRegistry::Create()),
       tree_linker_registry_(ModuleTreeLinkerRegistry::Create()),
@@ -133,7 +133,7 @@ ScriptModule ModulatorImplBase::CompileModule(
     const String& provided_source,
     const String& url_str,
     AccessControlStatus access_control_status,
-    WebURLRequest::FetchCredentialsMode credentials_mode,
+    network::mojom::FetchCredentialsMode credentials_mode,
     const String& nonce,
     ParserDisposition parser_state,
     const TextPosition& position,

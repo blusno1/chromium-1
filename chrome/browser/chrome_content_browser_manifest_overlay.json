@@ -7,7 +7,6 @@
         "renderer": [
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
-          "blink::mojom::BudgetService",
           "chrome::mojom::CacheStatsRecorder",
           "chrome::mojom::NetBenchmarking",
           "extensions::StashService",
@@ -15,8 +14,6 @@
           "mojom::ModuleEventSink",
           "rappor::mojom::RapporRecorder",
           "safe_browsing::mojom::SafeBrowsing",
-          "spellcheck::mojom::SpellCheckHost",
-          "spellcheck::mojom::SpellCheckPanelHost",
           "translate::mojom::ContentTranslateDriver"
         ],
         "url_keyed_metrics": [
@@ -44,6 +41,7 @@
         "local_state": [ "pref_client" ],
         "nacl_broker": [ "browser" ],
         "nacl_loader": [ "browser" ],
+        "pdf_compositor": [ "compositor" ],
         "profile_import": [ "import" ],
         "profiling": [ "profiling" ],
         "proxy_resolver": [ "factory" ],
@@ -54,7 +52,8 @@
           "ime_registrar",
           "input_device_controller",
           "window_manager"
-        ]
+        ],
+        "util_win" : [ "shell_util_win" ]
       }
     },
     "navigation:frame": {
@@ -84,12 +83,33 @@
           "translate::mojom::ContentTranslateDriver",
 
           // TODO(beng): These should be moved to a separate capability.
-	  "media::mojom::MediaEngagementScoreDetailsProvider",
+          "media::mojom::MediaEngagementScoreDetailsProvider",
           "mojom::InterventionsInternalsPageHandler",
           "mojom::OmniboxPageHandler",
           "mojom::PluginsPageHandler",
           "mojom::SiteEngagementDetailsProvider",
           "mojom::UsbInternalsPageHandler"
+        ]
+      }
+    },
+    "navigation:dedicated_worker": {
+      "provides": {
+        "renderer": [
+          "blink::mojom::BudgetService"
+        ]
+      }
+    },
+    "navigation:service_worker": {
+      "provides": {
+        "renderer": [
+          "blink::mojom::BudgetService"
+        ]
+      }
+    },
+    "navigation:shared_worker": {
+      "provides": {
+        "renderer": [
+          "blink::mojom::BudgetService"
         ]
       }
     }

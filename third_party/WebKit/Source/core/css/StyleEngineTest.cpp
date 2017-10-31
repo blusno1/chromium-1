@@ -80,15 +80,18 @@ TEST_F(StyleEngineTest, DocumentDirtyAfterInject) {
 }
 
 TEST_F(StyleEngineTest, AnalyzedInject) {
-  GetDocument().body()->SetInnerHTMLFromString(
-      "<style>"
-      " #t1 { color: red !important }"
-      " #t2 { color: black }"
-      "</style>"
-      "<div id='t1'>Green</div>"
-      "<div id='t2'>White</div>"
-      "<div id='t3' style='color: black !important'>White</div>"
-      "<div></div>");
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>
+     #t1 { color: red !important }
+     #t2 { color: black }
+     #t4 { animation-name: dummy-animation }
+    </style>
+    <div id='t1'>Green</div>
+    <div id='t2'>White</div>
+    <div id='t3' style='color: black !important'>White</div>
+    <div id='t4'>I animate!</div>
+    <div></div>
+  )HTML");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   Element* t1 = GetDocument().getElementById("t1");
@@ -187,6 +190,59 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
             t2->GetComputedStyle()->VisitedDependentColor(CSSPropertyColor));
   EXPECT_EQ(MakeRGB(0, 0, 0),
             t3->GetComputedStyle()->VisitedDependentColor(CSSPropertyColor));
+
+  // @keyframes rules
+
+  Element* t4 = GetDocument().getElementById("t4");
+  ASSERT_TRUE(t4);
+
+  // There's no @keyframes rule named dummy-animation
+  ASSERT_FALSE(GetStyleEngine().Resolver()->FindKeyframesRule(
+      t4, AtomicString("dummy-animation")));
+
+  StyleSheetContents* keyframes_parsed_sheet =
+      StyleSheetContents::Create(CSSParserContext::Create(GetDocument()));
+  keyframes_parsed_sheet->ParseString("@keyframes dummy-animation { from {} }");
+  WebStyleSheetId keyframes_id =
+      GetStyleEngine().AddUserSheet(keyframes_parsed_sheet);
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  // After injecting the style sheet, a @keyframes rule named dummy-animation
+  // is found with one keyframe.
+  StyleRuleKeyframes* keyframes =
+      GetStyleEngine().Resolver()->FindKeyframesRule(
+          t4, AtomicString("dummy-animation"));
+  ASSERT_TRUE(keyframes);
+  EXPECT_EQ(1u, keyframes->Keyframes().size());
+
+  HTMLStyleElement* style_element = HTMLStyleElement::Create(
+      GetDocument(), false);
+  style_element->SetInnerHTMLFromString(
+      "@keyframes dummy-animation { from {} to {} }");
+  GetDocument().body()->AppendChild(style_element);
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  // Author @keyframes rules take precedence; now there are two keyframes (from
+  // and to).
+  keyframes = GetStyleEngine().Resolver()->FindKeyframesRule(
+      t4, AtomicString("dummy-animation"));
+  ASSERT_TRUE(keyframes);
+  EXPECT_EQ(2u, keyframes->Keyframes().size());
+
+  GetDocument().body()->RemoveChild(style_element);
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  keyframes = GetStyleEngine().Resolver()->FindKeyframesRule(
+      t4, AtomicString("dummy-animation"));
+  ASSERT_TRUE(keyframes);
+  EXPECT_EQ(1u, keyframes->Keyframes().size());
+
+  GetStyleEngine().RemoveUserSheet(keyframes_id);
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  // Injected @keyframes rules are no longer available once removed.
+  ASSERT_FALSE(GetStyleEngine().Resolver()->FindKeyframesRule(
+      t4, AtomicString("dummy-animation")));
 }
 
 TEST_F(StyleEngineTest, TextToSheetCache) {
@@ -227,17 +283,18 @@ TEST_F(StyleEngineTest, TextToSheetCache) {
 }
 
 TEST_F(StyleEngineTest, RuleSetInvalidationTypeSelectors) {
-  GetDocument().body()->SetInnerHTMLFromString(
-      "<div>"
-      "  <span></span>"
-      "  <div></div>"
-      "</div>"
-      "<b></b><b></b><b></b><b></b>"
-      "<i id=i>"
-      "  <i>"
-      "    <b></b>"
-      "  </i>"
-      "</i>");
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div>
+      <span></span>
+      <div></div>
+    </div>
+    <b></b><b></b><b></b><b></b>
+    <i id=i>
+      <i>
+        <b></b>
+      </i>
+    </i>
+  )HTML");
 
   GetDocument().View()->UpdateAllLifecyclePhases();
 
@@ -272,10 +329,11 @@ TEST_F(StyleEngineTest, RuleSetInvalidationTypeSelectors) {
 }
 
 TEST_F(StyleEngineTest, RuleSetInvalidationCustomPseudo) {
-  GetDocument().body()->SetInnerHTMLFromString(
-      "<style>progress { -webkit-appearance:none }</style>"
-      "<progress></progress>"
-      "<div></div><div></div><div></div><div></div><div></div><div></div>");
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>progress { -webkit-appearance:none }</style>
+    <progress></progress>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  )HTML");
 
   GetDocument().View()->UpdateAllLifecyclePhases();
 
@@ -332,13 +390,14 @@ TEST_F(StyleEngineTest, RuleSetInvalidationHost) {
 }
 
 TEST_F(StyleEngineTest, RuleSetInvalidationSlotted) {
-  GetDocument().body()->SetInnerHTMLFromString(
-      "<div id=host>"
-      "  <span slot=other class=s1></span>"
-      "  <span class=s2></span>"
-      "  <span class=s1></span>"
-      "  <span></span>"
-      "</div>");
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div id=host>
+      <span slot=other class=s1></span>
+      <span class=s2></span>
+      <span class=s1></span>
+      <span></span>
+    </div>
+  )HTML");
 
   Element* host = GetDocument().getElementById("host");
   ASSERT_TRUE(host);
@@ -433,11 +492,12 @@ TEST_F(StyleEngineTest, RuleSetInvalidationV0BoundaryCrossing) {
 }
 
 TEST_F(StyleEngineTest, HasViewportDependentMediaQueries) {
-  GetDocument().body()->SetInnerHTMLFromString(
-      "<style>div {}</style>"
-      "<style id='sheet' media='(min-width: 200px)'>"
-      "  div {}"
-      "</style>");
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>div {}</style>
+    <style id='sheet' media='(min-width: 200px)'>
+      div {}
+    </style>
+  )HTML");
 
   Element* style_element = GetDocument().getElementById("sheet");
 
@@ -553,14 +613,15 @@ TEST_F(StyleEngineTest, ModifyStyleRuleMatchedPropertiesCache) {
 }
 
 TEST_F(StyleEngineTest, ScheduleInvalidationAfterSubtreeRecalc) {
-  GetDocument().body()->SetInnerHTMLFromString(
-      "<style id='s1'>"
-      "  .t1 span { color: green }"
-      "  .t2 span { color: green }"
-      "</style>"
-      "<style id='s2'>div { background: lime }</style>"
-      "<div id='t1'></div>"
-      "<div id='t2'></div>");
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style id='s1'>
+      .t1 span { color: green }
+      .t2 span { color: green }
+    </style>
+    <style id='s2'>div { background: lime }</style>
+    <div id='t1'></div>
+    <div id='t2'></div>
+  )HTML");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   Element* t1 = GetDocument().getElementById("t1");
@@ -637,13 +698,14 @@ TEST_F(StyleEngineTest, NoScheduledRuleSetInvalidationsOnNewShadow) {
                          init, ASSERT_NO_EXCEPTION);
   ASSERT_TRUE(shadow_root);
 
-  shadow_root->SetInnerHTMLFromString(
-      "<style>"
-      "  span { color: green }"
-      "  t1 { color: green }"
-      "</style>"
-      "<div id='t1'></div>"
-      "<span></span>");
+  shadow_root->SetInnerHTMLFromString(R"HTML(
+    <style>
+      span { color: green }
+      t1 { color: green }
+    </style>
+    <div id='t1'></div>
+    <span></span>
+  )HTML");
 
   GetStyleEngine().UpdateActiveStyle();
   EXPECT_FALSE(GetDocument().ChildNeedsStyleInvalidation());

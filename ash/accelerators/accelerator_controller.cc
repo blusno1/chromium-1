@@ -65,6 +65,7 @@
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/events/keyboard_layout_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
@@ -619,6 +620,10 @@ void HandleToggleVoiceInteraction(const ui::Accelerator& accelerator) {
     base::RecordAction(
         base::UserMetricsAction("VoiceInteraction.Started.Search_Space"));
   } else if (accelerator.IsCmdDown() && accelerator.key_code() == ui::VKEY_A) {
+    // Search+A shortcut is disabled on device with an assistant key.
+    if (ui::DeviceUsesKeyboardLayout2())
+      return;
+
     base::RecordAction(
         base::UserMetricsAction("VoiceInteraction.Started.Search_A"));
   } else if (accelerator.key_code() == ui::VKEY_ASSISTANT) {
@@ -679,7 +684,7 @@ bool CanHandleToggleCapsLock(const ui::Accelerator& accelerator,
                              const ui::Accelerator& previous_accelerator) {
   chromeos::input_method::InputMethodManager* ime =
       chromeos::input_method::InputMethodManager::Get();
-  if (!ime)
+  if (!ime || !ime->GetImeKeyboard())
     return false;
 
   // This shortcust is set to be trigger on release. Either the current
@@ -693,7 +698,7 @@ bool CanHandleToggleCapsLock(const ui::Accelerator& accelerator,
             ui::Accelerator::KeyState::PRESSED &&
         (previous_accelerator.key_code() == ui::VKEY_LWIN ||
          previous_accelerator.key_code() == ui::VKEY_MENU)) {
-      return ime->GetImeKeyboard();
+      return true;
     }
   }
 
@@ -707,14 +712,8 @@ bool CanHandleToggleCapsLock(const ui::Accelerator& accelerator,
             ui::Accelerator::KeyState::PRESSED &&
         (previous_accelerator.key_code() == ui::VKEY_LWIN ||
          previous_accelerator.key_code() == ui::VKEY_MENU)) {
-      return ime->GetImeKeyboard();
+      return true;
     }
-  }
-
-  // Caps Lock release
-  if (accelerator.key_code() == ui::VKEY_CAPITAL &&
-      accelerator.key_state() == ui::Accelerator::KeyState::RELEASED) {
-    return ime->GetImeKeyboard();
   }
 
   return false;

@@ -114,6 +114,8 @@
 - (void)touchesEndedWithEvent:(NSEvent*)event {}
 - (void)beginGestureWithEvent:(NSEvent*)event {}
 - (void)endGestureWithEvent:(NSEvent*)event {}
+- (void)rendererHandledOverscrollEvent:(const ui::DidOverscrollParams&)params {
+}
 
 @end
 
@@ -243,7 +245,7 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
                                           int32_t routing_id) {
     mojom::WidgetPtr widget;
     std::unique_ptr<MockWidgetImpl> widget_impl =
-        base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+        std::make_unique<MockWidgetImpl>(mojo::MakeRequest(&widget));
 
     return new MockRenderWidgetHostImpl(delegate, process, routing_id,
                                         std::move(widget_impl),
@@ -2055,6 +2057,23 @@ TEST_F(InputMethodMacTest, ImeCancelCompositionForAllViews) {
             replacementRange:replacementRange];
   EXPECT_TRUE([rwhv_cocoa_ hasMarkedText]);
   rwhv_mac_->ImeCancelComposition();
+  EXPECT_FALSE([rwhv_cocoa_ hasMarkedText]);
+}
+
+// This test verifies that calling FocusedNodeChanged() on
+// RenderWidgetHostViewMac calls cancelComposition on the Cocoa view.
+TEST_F(InputMethodMacTest, FocusedNodeChanged) {
+  // Some values for the call to setMarkedText.
+  base::scoped_nsobject<NSString> text(
+      [[NSString alloc] initWithString:@"sample text"]);
+  NSRange selectedRange = NSMakeRange(0, 1);
+  NSRange replacementRange = NSMakeRange(0, 1);
+
+  [rwhv_cocoa_ setMarkedText:text
+               selectedRange:selectedRange
+            replacementRange:replacementRange];
+  EXPECT_TRUE([rwhv_cocoa_ hasMarkedText]);
+  rwhv_mac_->FocusedNodeChanged(true, gfx::Rect());
   EXPECT_FALSE([rwhv_cocoa_ hasMarkedText]);
 }
 

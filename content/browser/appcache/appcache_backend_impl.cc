@@ -39,7 +39,7 @@ bool AppCacheBackendImpl::RegisterHost(int id) {
   if (GetHost(id))
     return false;
 
-  hosts_[id] = base::MakeUnique<AppCacheHost>(id, frontend_, service_);
+  hosts_[id] = std::make_unique<AppCacheHost>(id, frontend_, service_);
   return true;
 }
 
@@ -68,15 +68,6 @@ bool AppCacheBackendImpl::SelectCache(
 
   return host->SelectCache(document_url, cache_document_was_loaded_from,
                     manifest_url);
-}
-
-bool AppCacheBackendImpl::SelectCacheForWorker(
-    int host_id, int parent_process_id, int parent_host_id) {
-  AppCacheHost* host = GetHost(host_id);
-  if (!host)
-    return false;
-
-  return host->SelectCacheForWorker(parent_process_id, parent_host_id);
 }
 
 bool AppCacheBackendImpl::SelectCacheForSharedWorker(int host_id,
@@ -152,7 +143,7 @@ std::unique_ptr<AppCacheHost> AppCacheBackendImpl::TransferHostOut(
   std::unique_ptr<AppCacheHost> transferree = std::move(found->second);
 
   // Put a new empty host in its place.
-  found->second = base::MakeUnique<AppCacheHost>(host_id, frontend_, service_);
+  found->second = std::make_unique<AppCacheHost>(host_id, frontend_, service_);
 
   // We give up ownership.
   transferree->PrepareForTransfer();

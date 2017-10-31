@@ -249,10 +249,6 @@ const base::Feature kMseFlacInIsobmff{"MseFlacInIsobmff",
 const base::Feature kNewRemotePlaybackPipeline{
     "NewRemotePlaybackPipeline", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Set preload to "metadata" by default for <video> and <audio>.
-const base::Feature kPreloadDefaultIsMetadata{
-    "PreloadDefaultIsMetadata", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // CanPlayThrough issued according to standard.
 const base::Feature kSpecCompliantCanPlayThrough{
     "SpecCompliantCanPlayThrough", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -264,6 +260,11 @@ const base::Feature kUseNewMediaCache{"use-new-media-cache",
 // Use R16 texture for 9-16 bit channel instead of half-float conversion by CPU.
 const base::Feature kUseR16Texture{"use-r16-texture",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the Unified Autoplay policy by overriding the platform's default
+// autoplay policy.
+const base::Feature kUnifiedAutoplay{"UnifiedAutoplay",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use SurfaceLayer instead of VideoLayer.
 const base::Feature kUseSurfaceLayerForVideo{"UseSurfaceLayerForVideo",
@@ -350,6 +351,9 @@ std::string GetEffectiveAutoplayPolicy(const base::CommandLine& command_line) {
   // Return the autoplay policy set in the command line, if any.
   if (command_line.HasSwitch(switches::kAutoplayPolicy))
     return command_line.GetSwitchValueASCII(switches::kAutoplayPolicy);
+
+  if (base::FeatureList::IsEnabled(media::kUnifiedAutoplay))
+    return switches::autoplay::kDocumentUserActivationRequiredPolicy;
 
 // The default value is platform dependent.
 #if defined(OS_ANDROID)

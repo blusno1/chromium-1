@@ -12,11 +12,11 @@
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/lock_screen_apps/app_manager.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_observer.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "extensions/browser/app_window/app_window_registry.h"
@@ -25,6 +25,7 @@
 #include "ui/events/devices/input_device_event_observer.h"
 
 class PrefRegistrySimple;
+class Profile;
 
 namespace base {
 class TickClock;
@@ -56,6 +57,7 @@ namespace lock_screen_apps {
 
 class AppWindowMetricsTracker;
 class FocusCyclerDelegate;
+class LockScreenProfileCreator;
 class StateObserver;
 class FirstAppRunToastManager;
 
@@ -97,6 +99,10 @@ class StateController : public ash::mojom::TrayActionClient,
   // Sets test AppManager implementation. Should be called before
   // |SetPrimaryProfile|
   void SetAppManagerForTesting(std::unique_ptr<AppManager> app_manager);
+  // Sets test LockScreenProfileCreator implementation. Should be called before
+  // |SetPrimaryProfile|
+  void SetLockScreenLockScreenProfileCreatorForTesting(
+      std::unique_ptr<LockScreenProfileCreator> profile_creator);
 
   // Initializes mojo bindings for the StateController - it creates binding to
   // ash's tray action interface and sets this object as the interface's client.
@@ -143,7 +149,7 @@ class StateController : public ash::mojom::TrayActionClient,
 
   // chromeos::PowerManagerClient::Observer
   void BrightnessChanged(int level, bool user_initiated) override;
-  void SuspendImminent() override;
+  void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
 
   // Creates and registers an app window as action handler for the action on
   // Chrome OS lock screen. The ownership of the returned app window is passed
@@ -183,14 +189,6 @@ class StateController : public ash::mojom::TrayActionClient,
     // The screen is off - it's brightness level is 0.
     kOff
   };
-
-  // Called when profiles needed to run lock screen apps are ready - i.e. when
-  // primary user profile was set using |SetPrimaryProfile| and the profile in
-  // which app lock screen windows will be run creation is done.
-  // |status| - The lock screen profile creation status.
-  void OnProfilesReady(Profile* primary_profile,
-                       Profile* lock_screen_profile,
-                       Profile::CreateStatus status);
 
   // Gets the encryption key that should be used to encrypt user data created on
   // the lock screen. If a key hadn't previously been created and saved to
@@ -238,7 +236,7 @@ class StateController : public ash::mojom::TrayActionClient,
 
   // Updates the screen state to match the current screen brightness - no-op
   // unless the current screen state is unknown.
-  void SetInitialScreenState(double screen_brightness);
+  void SetInitialScreenState(base::Optional<double> screen_brightness);
 
   // Updates ths screen state - if the stylus was recently removed and screen
   // has turned on, this will launch a new note action (stylus being removed
@@ -255,7 +253,7 @@ class StateController : public ash::mojom::TrayActionClient,
   mojo::Binding<ash::mojom::TrayActionClient> binding_;
   ash::mojom::TrayActionPtr tray_action_ptr_;
 
-  Profile* lock_screen_profile_ = nullptr;
+  std::unique_ptr<LockScreenProfileCreator> lock_screen_profile_creator_;
 
   // The current screen state.
   ScreenState screen_state_ = ScreenState::kUnknown;

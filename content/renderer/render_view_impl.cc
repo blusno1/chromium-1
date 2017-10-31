@@ -556,7 +556,7 @@ RenderViewImpl::RenderViewImpl(CompositorDependencies* compositor_deps,
 }
 
 void RenderViewImpl::Initialize(
-    const mojom::CreateViewParams& params,
+    mojom::CreateViewParamsPtr params,
     const RenderWidget::ShowCallback& show_callback) {
   bool was_created_by_renderer = !show_callback.is_null();
 #if defined(OS_ANDROID)
@@ -564,7 +564,7 @@ void RenderViewImpl::Initialize(
   // HandleNavigation codepath.
   was_created_by_renderer_ = was_created_by_renderer;
 #endif
-  display_mode_ = params.initial_size.display_mode;
+  display_mode_ = params->initial_size.display_mode;
 
   webview_ = WebView::Create(this, is_hidden()
                                        ? blink::kWebPageVisibilityStateHidden
@@ -620,23 +620,26 @@ void RenderViewImpl::Initialize(
   ApplyBlinkSettings(command_line, webview()->GetSettings());
 
   WebFrame* opener_frame =
-      RenderFrameImpl::ResolveOpener(params.opener_frame_route_id);
+      RenderFrameImpl::ResolveOpener(params->opener_frame_route_id);
 
-  if (params.main_frame_routing_id != MSG_ROUTING_NONE) {
+  if (params->main_frame_routing_id != MSG_ROUTING_NONE) {
+    CHECK(params->main_frame_interface_provider.is_bound());
     main_render_frame_ = RenderFrameImpl::CreateMainFrame(
-        this, params.main_frame_routing_id, params.main_frame_widget_routing_id,
-        params.hidden, screen_info(), compositor_deps_, opener_frame,
-        params.devtools_main_frame_token, params.replicated_frame_state);
+        this, params->main_frame_routing_id,
+        std::move(params->main_frame_interface_provider),
+        params->main_frame_widget_routing_id, params->hidden, screen_info(),
+        compositor_deps_, opener_frame, params->devtools_main_frame_token,
+        params->replicated_frame_state);
   }
 
   // TODO(dcheng): Shouldn't these be mutually exclusive at this point? See
   // https://crbug.com/720116 where the browser is apparently sending both
   // routing IDs...
-  if (params.proxy_routing_id != MSG_ROUTING_NONE) {
-    CHECK(params.swapped_out);
-    RenderFrameProxy::CreateFrameProxy(params.proxy_routing_id, GetRoutingID(),
+  if (params->proxy_routing_id != MSG_ROUTING_NONE) {
+    CHECK(params->swapped_out);
+    RenderFrameProxy::CreateFrameProxy(params->proxy_routing_id, GetRoutingID(),
                                        opener_frame, MSG_ROUTING_NONE,
-                                       params.replicated_frame_state);
+                                       params->replicated_frame_state);
   }
 
   if (main_render_frame_)
@@ -650,32 +653,29 @@ void RenderViewImpl::Initialize(
     did_show_ = true;
 
   // TODO(davidben): Move this state from Blink into content.
-  if (params.window_was_created_with_opener)
+  if (params->window_was_created_with_opener)
     webview()->SetOpenedByDOM();
 
   UpdateWebViewWithDeviceScaleFactor();
-  OnSetRendererPrefs(params.renderer_preferences);
+  OnSetRendererPrefs(params->renderer_preferences);
 
-  if (!params.enable_auto_resize) {
-    OnResize(params.initial_size);
+  if (!params->enable_auto_resize) {
+    OnResize(params->initial_size);
   } else {
-    OnEnableAutoResize(params.min_size, params.max_size);
+    OnEnableAutoResize(params->min_size, params->max_size);
   }
 
   idle_user_detector_.reset(new IdleUserDetector(this));
 
   GetContentClient()->renderer()->RenderViewCreated(this);
 
-  page_zoom_level_ = params.page_zoom_level;
+  page_zoom_level_ = params->page_zoom_level;
 }
 
 RenderViewImpl::~RenderViewImpl() {
   DCHECK(!frame_widget_);
 
-  for (BitmapMap::iterator it = disambiguation_bitmaps_.begin();
-       it != disambiguation_bitmaps_.end();
-       ++it)
-    delete it->second;
+  disambiguation_bitmaps_.clear();
 
 #if defined(OS_ANDROID)
   // The date/time picker client is both a std::unique_ptr member of this class
@@ -1018,9 +1018,6 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   WebRuntimeFeatures::EnableNewRemotePlaybackPipeline(
       base::FeatureList::IsEnabled(media::kNewRemotePlaybackPipeline));
 
-  WebRuntimeFeatures::EnablePreloadDefaultIsMetadata(
-      base::FeatureList::IsEnabled(media::kPreloadDefaultIsMetadata));
-
   settings->SetPresentationReceiver(prefs.presentation_receiver);
 
   settings->SetMediaControlsEnabled(prefs.media_controls_enabled);
@@ -1038,16 +1035,16 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
 /*static*/
 RenderViewImpl* RenderViewImpl::Create(
     CompositorDependencies* compositor_deps,
-    const mojom::CreateViewParams& params,
+    mojom::CreateViewParamsPtr params,
     const RenderWidget::ShowCallback& show_callback) {
-  DCHECK(params.view_id != MSG_ROUTING_NONE);
-  RenderViewImpl* render_view = NULL;
+  DCHECK(params->view_id != MSG_ROUTING_NONE);
+  RenderViewImpl* render_view;
   if (g_create_render_view_impl)
-    render_view = g_create_render_view_impl(compositor_deps, params);
+    render_view = g_create_render_view_impl(compositor_deps, *params);
   else
-    render_view = new RenderViewImpl(compositor_deps, params);
+    render_view = new RenderViewImpl(compositor_deps, *params);
 
-  render_view->Initialize(params, show_callback);
+  render_view->Initialize(std::move(params), show_callback);
   return render_view;
 }
 
@@ -1312,7 +1309,7 @@ void RenderViewImpl::ApplyWebPreferencesInternal(
 void RenderViewImpl::OnForceRedraw(const ui::LatencyInfo& latency_info) {
   if (RenderWidgetCompositor* rwc = compositor()) {
     rwc->QueueSwapPromise(
-        base::MakeUnique<AlwaysDrawSwapPromise>(latency_info));
+        std::make_unique<AlwaysDrawSwapPromise>(latency_info));
     rwc->SetNeedsForcedRedraw();
   }
 }
@@ -1392,32 +1389,35 @@ WebView* RenderViewImpl::CreateView(WebLocalFrame* creator,
   // return from this call synchronously, we just have to make our best guess
   // and rely on the browser sending a WasHidden / WasShown message if it
   // disagrees.
-  mojom::CreateViewParams view_params;
+  mojom::CreateViewParamsPtr view_params = mojom::CreateViewParams::New();
 
-  view_params.opener_frame_route_id = creator_frame->GetRoutingID();
+  view_params->opener_frame_route_id = creator_frame->GetRoutingID();
   DCHECK_EQ(GetRoutingID(), creator_frame->render_view()->GetRoutingID());
 
-  view_params.window_was_created_with_opener = true;
-  view_params.renderer_preferences = renderer_preferences_;
-  view_params.web_preferences = webkit_preferences_;
-  view_params.view_id = reply->route_id;
-  view_params.main_frame_routing_id = reply->main_frame_route_id;
-  view_params.main_frame_widget_routing_id = reply->main_frame_widget_route_id;
-  view_params.session_storage_namespace_id =
+  view_params->window_was_created_with_opener = true;
+  view_params->renderer_preferences = renderer_preferences_;
+  view_params->web_preferences = webkit_preferences_;
+  view_params->view_id = reply->route_id;
+  view_params->main_frame_routing_id = reply->main_frame_route_id;
+  view_params->main_frame_interface_provider =
+      std::move(reply->main_frame_interface_provider);
+  view_params->main_frame_widget_routing_id = reply->main_frame_widget_route_id;
+  view_params->session_storage_namespace_id =
       reply->cloned_session_storage_namespace_id;
-  view_params.swapped_out = false;
-  view_params.replicated_frame_state.frame_policy.sandbox_flags = sandbox_flags;
-  view_params.replicated_frame_state.name = frame_name_utf8;
-  view_params.devtools_main_frame_token = reply->devtools_main_frame_token;
+  view_params->swapped_out = false;
+  view_params->replicated_frame_state.frame_policy.sandbox_flags =
+      sandbox_flags;
+  view_params->replicated_frame_state.name = frame_name_utf8;
+  view_params->devtools_main_frame_token = reply->devtools_main_frame_token;
   // Even if the main frame has a name, the main frame's unique name is always
   // the empty string.
-  view_params.hidden = is_background_tab;
-  view_params.never_visible = never_visible;
-  view_params.initial_size = initial_size;
-  view_params.enable_auto_resize = false;
-  view_params.min_size = gfx::Size();
-  view_params.max_size = gfx::Size();
-  view_params.page_zoom_level = page_zoom_level_;
+  view_params->hidden = is_background_tab;
+  view_params->never_visible = never_visible;
+  view_params->initial_size = initial_size;
+  view_params->enable_auto_resize = false;
+  view_params->min_size = gfx::Size();
+  view_params->max_size = gfx::Size();
+  view_params->page_zoom_level = page_zoom_level_;
 
   // Unretained() is safe here because our calling function will also call
   // show().
@@ -1425,8 +1425,8 @@ WebView* RenderViewImpl::CreateView(WebLocalFrame* creator,
       base::Bind(&RenderFrameImpl::ShowCreatedWindow,
                  base::Unretained(creator_frame), opened_by_user_gesture);
 
-  RenderViewImpl* view =
-      RenderViewImpl::Create(compositor_deps_, view_params, show_callback);
+  RenderViewImpl* view = RenderViewImpl::Create(
+      compositor_deps_, std::move(view_params), show_callback);
 
   return view->webview();
 }
@@ -1530,33 +1530,6 @@ void RenderViewImpl::SetValidationMessageDirection(
       base::i18n::WrapStringWithRTLFormatting(wrapped_sub_text);
     }
   }
-}
-
-void RenderViewImpl::ShowValidationMessage(
-    const blink::WebRect& anchor_in_viewport,
-    const blink::WebString& main_text,
-    blink::WebTextDirection main_text_hint,
-    const blink::WebString& sub_text,
-    blink::WebTextDirection sub_text_hint) {
-  base::string16 wrapped_main_text = main_text.Utf16();
-  base::string16 wrapped_sub_text = sub_text.Utf16();
-
-  SetValidationMessageDirection(
-      &wrapped_main_text, main_text_hint, &wrapped_sub_text, sub_text_hint);
-
-  Send(new ViewHostMsg_ShowValidationMessage(
-      GetRoutingID(), AdjustValidationMessageAnchor(anchor_in_viewport),
-      wrapped_main_text, wrapped_sub_text));
-}
-
-void RenderViewImpl::HideValidationMessage() {
-  Send(new ViewHostMsg_HideValidationMessage(GetRoutingID()));
-}
-
-void RenderViewImpl::MoveValidationMessage(
-    const blink::WebRect& anchor_in_viewport) {
-  Send(new ViewHostMsg_MoveValidationMessage(
-      GetRoutingID(), AdjustValidationMessageAnchor(anchor_in_viewport)));
 }
 
 void RenderViewImpl::UpdateTargetURL(const GURL& url,
@@ -2322,7 +2295,7 @@ bool RenderViewImpl::OpenDateTimeChooser(
 
 void RenderViewImpl::DismissDateTimeDialog() {
   DCHECK(date_time_picker_client_);
-  date_time_picker_client_.reset(NULL);
+  date_time_picker_client_.reset();
 }
 
 bool RenderViewImpl::DidTapMultipleTargets(
@@ -2358,7 +2331,7 @@ bool RenderViewImpl::DidTapMultipleTargets(
           RenderThreadImpl::current()->shared_bitmap_manager();
       std::unique_ptr<viz::SharedBitmap> shared_bitmap =
           manager->AllocateSharedBitmap(canvas_size);
-      CHECK(!!shared_bitmap);
+      CHECK(shared_bitmap);
       {
         SkBitmap bitmap;
         SkImageInfo info = SkImageInfo::MakeN32Premul(canvas_size.width(),
@@ -2390,7 +2363,7 @@ bool RenderViewImpl::DidTapMultipleTargets(
           GetRoutingID(), physical_window_zoom_rect, canvas_size,
           shared_bitmap->id()));
       viz::SharedBitmapId id = shared_bitmap->id();
-      disambiguation_bitmaps_[id] = shared_bitmap.release();
+      disambiguation_bitmaps_[id] = std::move(shared_bitmap);
       handled = true;
       break;
     }
@@ -2488,10 +2461,8 @@ void RenderViewImpl::DisableAutoResizeForTesting(const gfx::Size& new_size) {
 
 void RenderViewImpl::OnReleaseDisambiguationPopupBitmap(
     const viz::SharedBitmapId& id) {
-  BitmapMap::iterator it = disambiguation_bitmaps_.find(id);
-  DCHECK(it != disambiguation_bitmaps_.end());
-  delete it->second;
-  disambiguation_bitmaps_.erase(it);
+  size_t erased_count = disambiguation_bitmaps_.erase(id);
+  DCHECK_EQ(1U, erased_count);
 }
 
 void RenderViewImpl::OnResolveTapDisambiguation(double timestamp_seconds,

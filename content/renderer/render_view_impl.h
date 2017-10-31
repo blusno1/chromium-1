@@ -123,7 +123,7 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   // send an additional IPC to finish making this view visible.
   static RenderViewImpl* Create(
       CompositorDependencies* compositor_deps,
-      const mojom::CreateViewParams& params,
+      mojom::CreateViewParamsPtr params,
       const RenderWidget::ShowCallback& show_callback);
 
   // Used by content_layouttest_support to hook into the creation of
@@ -290,13 +290,6 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
                                      blink::WebTextDirection main_text_hint,
                                      base::string16* sub_text,
                                      blink::WebTextDirection sub_text_hint);
-  void ShowValidationMessage(const blink::WebRect& anchor_in_viewport,
-                             const blink::WebString& main_text,
-                             blink::WebTextDirection main_text_hint,
-                             const blink::WebString& sub_text,
-                             blink::WebTextDirection hint) override;
-  void HideValidationMessage() override;
-  void MoveValidationMessage(const blink::WebRect& anchor_in_viewport) override;
   void SetMouseOverURL(const blink::WebURL& url) override;
   void SetKeyboardFocusURL(const blink::WebURL& url) override;
   bool AcceptsLoadDrops() override;
@@ -394,7 +387,7 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   RenderViewImpl(CompositorDependencies* compositor_deps,
                  const mojom::CreateViewParams& params);
 
-  void Initialize(const mojom::CreateViewParams& params,
+  void Initialize(mojom::CreateViewParamsPtr params,
                   const RenderWidget::ShowCallback& show_callback);
   void SetScreenMetricsEmulationParameters(
       bool enabled,
@@ -790,8 +783,8 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   // constructors call the AddObservers method of RenderViewImpl.
   std::unique_ptr<StatsCollectionObserver> stats_collection_observer_;
 
-  typedef std::map<viz::SharedBitmapId, viz::SharedBitmap*> BitmapMap;
-  BitmapMap disambiguation_bitmaps_;
+  std::map<viz::SharedBitmapId, std::unique_ptr<viz::SharedBitmap>>
+      disambiguation_bitmaps_;
 
   std::unique_ptr<IdleUserDetector> idle_user_detector_;
 

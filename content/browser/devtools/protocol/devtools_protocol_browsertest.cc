@@ -243,7 +243,7 @@ class DevToolsProtocolTest : public ContentBrowserTest,
       return result_.get();
     }
     in_dispatch_ = false;
-    return result_.get();
+    return nullptr;
   }
 
   void WaitForResponse() {
@@ -473,7 +473,7 @@ class DevToolsProtocolTest : public ContentBrowserTest,
     }
   }
 
-  void AgentHostClosed(DevToolsAgentHost* agent_host, bool replaced) override {
+  void AgentHostClosed(DevToolsAgentHost* agent_host) override {
     if (!agent_host_can_close_)
       NOTREACHED();
   }
@@ -1031,8 +1031,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, NavigationPreservesMessages) {
   bool enough_results = result_ids_.size() >= 2u;
   EXPECT_TRUE(enough_results);
   if (enough_results) {
-    EXPECT_EQ(2, result_ids_[0]);  // Page.navigate
-    EXPECT_EQ(1, result_ids_[1]);  // Page.enable
+    EXPECT_EQ(1, result_ids_[0]);  // Page.enable
+    EXPECT_EQ(2, result_ids_[1]);  // Page.navigate
   }
 
   enough_results = notifications_.size() >= 1u;

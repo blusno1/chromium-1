@@ -32,6 +32,10 @@ extern const char kDragAndDropDescription[];
 extern const char kExternalSearchName[];
 extern const char kExternalSearchDescription[];
 
+// Title and description for the flag to enable History batch filtering.
+extern const char kHistoryBatchUpdatesFilterName[];
+extern const char kHistoryBatchUpdatesFilterDescription[];
+
 // Title and description for the flag to enable feature_engagement::Tracker
 // demo mode.
 extern const char kInProductHelpDemoModeName[];
@@ -42,11 +46,6 @@ extern const char kInProductHelpDemoModeDescription[];
 extern const char kMarkHttpAsName[];
 extern const char kMarkHttpAsDescription[];
 extern const char kMarkHttpAsDangerous[];
-
-// Title and descript for the flag to enable a prompt asking user to choose
-// which mail client app to use to handle mailto:// URLs.
-extern const char kMailtoPromptForUserChoiceName[];
-extern const char kMailtoPromptForUserChoiceDescription[];
 
 // Title and description for the flag to enable elision of the URL path, query,
 // and ref in omnibox URL suggestions.
@@ -70,6 +69,16 @@ extern const char kPhysicalWebDescription[];
 // Title and description for the flag to have the toolbar respect the safe area.
 extern const char kSafeAreaCompatibleToolbarName[];
 extern const char kSafeAreaCompatibleToolbarDescription[];
+
+// Title and description for the flag to share the canonical URL of the
+// current page instead of the visible URL.
+extern const char kShareCanonicalURLName[];
+extern const char kShareCanonicalURLDescription[];
+
+// Title and description for the flag to enable WKBackForwardList based
+// navigation manager.
+extern const char kSlimNavigationManagerName[];
+extern const char kSlimNavigationManagerDescription[];
 
 // Title and description for the flag to enable the TabSwitcher to present the
 // BVC.

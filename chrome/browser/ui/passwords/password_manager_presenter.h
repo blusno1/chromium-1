@@ -13,11 +13,9 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "chrome/browser/ui/passwords/credential_provider_interface.h"
-#include "chrome/browser/ui/passwords/password_access_authenticator.h"
-#include "chrome/browser/ui/passwords/password_manager_porter.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/ui/credential_provider_interface.h"
 #include "components/prefs/pref_member.h"
 #include "components/undo/undo_manager.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
@@ -39,7 +37,7 @@ class PasswordUIView;
 // PasswordStore operations and updates the view on PasswordStore changes.
 class PasswordManagerPresenter
     : public password_manager::PasswordStore::Observer,
-      public CredentialProviderInterface {
+      public password_manager::CredentialProviderInterface {
  public:
   // |password_view| the UI view that owns this presenter, must not be NULL.
   explicit PasswordManagerPresenter(PasswordUIView* password_view);
@@ -57,7 +55,7 @@ class PasswordManagerPresenter
   // Gets the password entry at |index|.
   const autofill::PasswordForm* GetPassword(size_t index);
 
-  // CredentialProviderInterface:
+  // password::manager::CredentialProviderInterface:
   std::vector<std::unique_ptr<autofill::PasswordForm>> GetAllPasswords()
       override;
 
@@ -79,14 +77,6 @@ class PasswordManagerPresenter
   // |index| The index of the entry.
   void RequestShowPassword(size_t index);
 
-  // Trigger the password import procedure, allowing the user to load passwords
-  // from a file.
-  void ImportPasswords(content::WebContents* web_contents);
-
-  // Trigger the password export procedure, allowing the user to save all their
-  // passwords to a file.
-  void ExportPasswords(content::WebContents* web_contents);
-
   // Wrapper around |PasswordStore::AddLogin| that adds the corresponding undo
   // action to |undo_manager_|.
   void AddLogin(const autofill::PasswordForm& form);
@@ -95,16 +85,8 @@ class PasswordManagerPresenter
   // undo action to |undo_manager_|.
   void RemoveLogin(const autofill::PasswordForm& form);
 
-  // Use this in tests to mock the OS-level reauthentication.
-  void SetOsReauthCallForTesting(
-      base::RepeatingCallback<bool()> os_reauth_call);
-
  private:
   friend class PasswordManagerPresenterTest;
-
-  // Triggers an OS-dependent UI to present OS account login challenge and
-  // returns true if the user is passed that challenge.
-  bool OsReauthCall();
 
   // Sets the password and exception list of the UI view.
   void SetPasswordList();
@@ -179,10 +161,6 @@ class PasswordManagerPresenter
 
   // UI view that owns this presenter.
   PasswordUIView* password_view_;
-
-  PasswordManagerPorter password_manager_porter_;
-
-  PasswordAccessAuthenticator password_access_authenticator_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordManagerPresenter);
 };

@@ -16,6 +16,7 @@ import("//third_party/WebKit/Source/core/core.gni")
 import("//third_party/WebKit/Source/build/scripts/scripts.gni")
 import("//third_party/WebKit/Source/modules/modules_idl_files.gni")
 import("//third_party/WebKit/Source/platform/platform_generated.gni")
+import("//third_party/protobuf/proto_library.gni")
 
 visibility = [
   "//third_party/WebKit/Source/*",
@@ -631,6 +632,7 @@ css_properties("make_core_generated_css_longhand_property_apis") {
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIOutlineOffset.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIOutlineWidth.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIOverflowAnchor.h",
+    "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIOverscrollBehavior.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIPaddingBottom.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIPaddingLeft.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIPaddingRight.h",
@@ -647,7 +649,6 @@ css_properties("make_core_generated_css_longhand_property_apis") {
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIRotate.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIScale.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIScrollBehavior.h",
-    "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIScrollBoundaryBehavior.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIScrollPadding.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIScrollPaddingBlockEnd.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIScrollPaddingBlockStart.h",
@@ -776,6 +777,7 @@ css_properties("make_core_generated_css_shorthand_property_apis") {
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIOffset.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIOutline.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIOverflow.h",
+    "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIOverscrollBehavior.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIPadding.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIPageBreakAfter.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIPageBreakBefore.h",
@@ -783,7 +785,6 @@ css_properties("make_core_generated_css_shorthand_property_apis") {
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIPlaceContent.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIPlaceItems.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIPlaceSelf.h",
-    "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIScrollBoundaryBehavior.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIScrollPadding.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIScrollPaddingBlock.h",
     "$blink_core_output_dir/css/properties/shorthands/CSSShorthandPropertyAPIScrollPaddingInline.h",
@@ -1444,6 +1445,7 @@ jumbo_source_set("unit_tests") {
     "dom/events/EventPathTest.cpp",
     "dom/events/EventTargetTest.cpp",
     "dom/events/ListenerLeakTest.cpp",
+    "dom/ng/flat_tree_traversal_ng_test.cc",
     "editing/CaretDisplayItemClientTest.cpp",
     "editing/KeyboardTest.cpp",
     "editing/LinkSelectionTest.cpp",
@@ -1602,7 +1604,6 @@ jumbo_source_set("unit_tests") {
     "layout/TextAutosizerTest.cpp",
     "layout/VisualRectMappingTest.cpp",
     "layout/api/SelectionStateTest.cpp",
-    "layout/line/InlineBoxTest.cpp",
     "layout/line/InlineTextBoxTest.cpp",
     "layout/ng/NGInlineLayoutTest.cpp",
     "layout/ng/geometry/ng_box_strut_test.cc",
@@ -1625,6 +1626,7 @@ jumbo_source_set("unit_tests") {
     "layout/ng/ng_column_layout_algorithm_test.cc",
     "layout/ng/ng_constraint_space_builder_test.cc",
     "layout/ng/ng_constraint_space_test.cc",
+    "layout/ng/ng_layout_test.h",
     "layout/ng/ng_length_utils_test.cc",
     "layout/ng/ng_out_of_flow_layout_part_test.cc",
     "layout/ng/ng_relative_utils_test.cc",
@@ -1692,7 +1694,6 @@ jumbo_source_set("unit_tests") {
     "paint/PaintPropertyTreePrinterTest.cpp",
     "paint/PaintPropertyTreeUpdateTests.cpp",
     "paint/PrePaintTreeWalkTest.cpp",
-    "paint/SVGInlineTextBoxPainterTest.cpp",
     "paint/StubChromeClientForSPv2.h",
     "paint/TablePainterTest.cpp",
     "paint/TextPainterTest.cpp",
@@ -1828,4 +1829,29 @@ fuzzer_test("content_security_policy_fuzzer") {
   ]
   dict = "//testing/libfuzzer/fuzzers/dicts/content_security_policy.dict"
   seed_corpus = "//testing/libfuzzer/fuzzers/content_security_policy_corpus"
+}
+
+# Since libFuzzer isn't working on Windows, and the proto_library cannot build
+# on Windows because of a build error, prevent it from being built on Windows.
+# TODO(metzman): Figure out how to get this building on Windows.
+if (!is_win) {
+  fuzzer_test("css_parser_proto_fuzzer") {
+    sources = [
+      "css/parser/CSSParserProtoFuzzer.cpp",
+      "css/parser/CSSProtoConverter.cpp",
+      "css/parser/CSSProtoConverter.h",
+    ]
+    deps = [
+      ":core",
+      ":css_proto",
+      "//third_party/WebKit/Source/platform:blink_fuzzer_test_support",
+      "//third_party/libprotobuf-mutator",
+    ]
+  }
+
+  proto_library("css_proto") {
+    sources = [
+      "css/parser/CSS.proto",
+    ]
+  }
 }

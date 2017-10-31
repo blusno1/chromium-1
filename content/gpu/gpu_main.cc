@@ -22,6 +22,7 @@
 #include "base/timer/hi_res_timer_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/viz/service/main/viz_main_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_switches_internal.h"
 #include "content/gpu/gpu_child_thread.h"
@@ -41,7 +42,6 @@
 #include "gpu/ipc/service/gpu_init.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "media/gpu/features.h"
-#include "services/ui/gpu/gpu_main.h"
 #include "third_party/angle/src/gpu_info_util/SystemInfo.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/events/platform/platform_event_source.h"
@@ -78,10 +78,10 @@
 
 #if defined(OS_LINUX)
 #include "content/common/font_config_ipc_linux.h"
-#include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/gpu/gpu_sandbox_hook_linux.h"
 #include "content/public/common/common_sandbox_support_linux.h"
 #include "content/public/common/sandbox_init.h"
+#include "services/service_manager/sandbox/linux/sandbox_linux.h"
 #include "third_party/skia/include/ports/SkFontConfigInterface.h"
 #endif
 
@@ -110,14 +110,14 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread*,
 bool StartSandboxWindows(const sandbox::SandboxInterfaceInfo*);
 #endif
 
-base::LazyInstance<ui::GpuMain::LogMessages>::DestructorAtExit
+base::LazyInstance<viz::VizMainImpl::LogMessages>::DestructorAtExit
     deferred_messages = LAZY_INSTANCE_INITIALIZER;
 
 bool GpuProcessLogMessageHandler(int severity,
                                  const char* file, int line,
                                  size_t message_start,
                                  const std::string& str) {
-  ui::GpuMain::LogMessage log;
+  viz::VizMainImpl::LogMessage log;
   log.severity = severity;
   log.header = str.substr(0, message_start);
   log.message = str.substr(message_start);
@@ -290,7 +290,7 @@ int GpuMain(const MainFunctionParams& parameters) {
   // set up between the browser and GPU process, and the GPU process crashes or
   // exits early, the browser process will never detect it.  For this reason we
   // defer tearing down the GPU process until receiving the initialization
-  // message from the browser (through mojom::GpuMain::CreateGpuService()).
+  // message from the browser (through mojom::VizMain::CreateGpuService()).
   const bool init_success = gpu_init->InitializeAndStartSandbox(
       const_cast<base::CommandLine*>(&command_line), gpu_preferences);
   const bool dead_on_arrival = !init_success;
@@ -348,12 +348,12 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
   if (watchdog_thread) {
     // SandboxLinux needs to be able to ensure that the thread
     // has really been stopped.
-    SandboxLinux::StopThread(watchdog_thread);
+    service_manager::SandboxLinux::StopThread(watchdog_thread);
   }
 
   // SandboxLinux::InitializeSandbox() must always be called
   // with only one thread.
-  SandboxSeccompBPF::Options sandbox_options;
+  service_manager::SandboxSeccompBPF::Options sandbox_options;
   sandbox_options.use_amd_specific_policies =
       gpu_info && angle::IsAMD(gpu_info->active_gpu().vendor_id);
   sandbox_options.accelerated_video_decode_enabled =
@@ -364,7 +364,9 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
       !gpu_prefs.disable_vaapi_accelerated_video_encode;
 #endif
 
-  bool res = SandboxLinux::InitializeSandbox(
+  bool res = service_manager::SandboxLinux::InitializeSandbox(
+      service_manager::SandboxTypeFromCommandLine(
+          *base::CommandLine::ForCurrentProcess()),
       GetGpuProcessPreSandboxHook(sandbox_options.use_amd_specific_policies),
       sandbox_options);
 

@@ -1528,6 +1528,66 @@ IN_PROC_BROWSER_TEST_P(WebViewNewWindowTest, Shim_TestNewWindowNoReferrerLink) {
   TestHelper("testNewWindowNoReferrerLink", "web_view/shim", NEEDS_TEST_SERVER);
 }
 
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowTest,
+                       Shim_TestWebViewAndEmbedderInNewWindow) {
+  ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
+
+  // Launch the app and wait until it's ready to load a test.
+  LoadAndLaunchPlatformApp("web_view/shim", "Launched");
+
+  content::WebContents* embedder_web_contents = GetFirstAppWindowWebContents();
+  ASSERT_TRUE(embedder_web_contents);
+
+  GURL::Replacements replace_host;
+  replace_host.SetHostStr("localhost");
+
+  std::string empty_guest_path(
+      "/extensions/platform_apps/web_view/shim/empty_guest.html");
+  GURL empty_guest_url = embedded_test_server()->GetURL(empty_guest_path);
+  empty_guest_url = empty_guest_url.ReplaceComponents(replace_host);
+
+  ui_test_utils::UrlLoadObserver empty_guest_observer(
+      empty_guest_url, content::NotificationService::AllSources());
+
+  // Run the test and wait until the guest WebContents is available and has
+  // finished loading.
+  ExtensionTestMessageListener done_listener("TEST_PASSED", false);
+  done_listener.set_failure_message("TEST_FAILED");
+  EXPECT_TRUE(content::ExecuteScript(
+      embedder_web_contents, "runTest('testWebViewAndEmbedderInNewWindow')"));
+
+  empty_guest_observer.Wait();
+
+  content::Source<content::NavigationController> source =
+      empty_guest_observer.source();
+  EXPECT_TRUE(source->GetWebContents()
+                  ->GetMainFrame()
+                  ->GetProcess()
+                  ->IsForGuestsOnly());
+  ASSERT_TRUE(done_listener.WaitUntilSatisfied());
+
+  // Make sure opener and owner for the empty_guest source are different.
+  // In general, we should have two guests and two embedders. Once we know the
+  // guests are different and the embedders are different, then we have four
+  // distinct WebContents, as we expect.
+  std::vector<content::WebContents*> guest_contents_list;
+  GetGuestViewManager()->GetGuestWebContentsList(&guest_contents_list);
+  ASSERT_EQ(2u, guest_contents_list.size());
+  content::WebContents* new_window_guest_contents = guest_contents_list[0];
+
+  content::WebContents* empty_guest_web_contents = source->GetWebContents();
+  ASSERT_EQ(empty_guest_web_contents, guest_contents_list[1]);
+  ASSERT_NE(empty_guest_web_contents, new_window_guest_contents);
+  content::WebContents* empty_guest_embedder =
+      GetEmbedderForGuest(empty_guest_web_contents);
+  ASSERT_NE(empty_guest_embedder, embedder_web_contents);
+  ASSERT_TRUE(empty_guest_embedder);
+  content::RenderFrameHost* empty_guest_opener =
+      empty_guest_web_contents->GetOriginalOpener();
+  ASSERT_TRUE(empty_guest_opener);
+  ASSERT_NE(empty_guest_opener, empty_guest_embedder->GetMainFrame());
+}
+
 IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestContentLoadEvent) {
   TestHelper("testContentLoadEvent", "web_view/shim", NO_TEST_SERVER);
 }
@@ -1718,6 +1778,13 @@ IN_PROC_BROWSER_TEST_P(WebViewSizeTest, Shim_TestResizeWebviewResizesContent) {
 }
 
 // Test makes sure that interstitial pages renders in <webview>.
+// Flaky on Win dbg: crbug.com/779973
+#if defined(OS_WIN) && defined(NDEBUG)
+#define MAYBE_InterstitialPage DISABLED_InterstitialPage
+#else
+#define MAYBE_InterstitialPage InterstitialPage
+#endif
+
 IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialPage) {
   // This test tests that a inner WebContents' InterstitialPage is properly
   // connected to an outer WebContents through a CrossProcessFrameConnector, it
@@ -1741,6 +1808,13 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialPage) {
 
 // Test makes sure that interstitial pages are registered in the
 // RenderWidgetHostInputEventRouter when inside a <webview>.
+// Flaky on Win dbg: crbug.com/779973
+#if defined(OS_WIN) && defined(NDEBUG)
+#define MAYBE_InterstitialPageRouteEvents DISABLED_InterstitialPageRouteEvents
+#else
+#define MAYBE_InterstitialPageRouteEvents InterstitialPageRouteEvents
+#endif
+
 IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialPageRouteEvents) {
   // This test tests that a inner WebContents' InterstitialPage is properly
   // connected to an outer WebContents through a CrossProcessFrameConnector, it
@@ -1764,6 +1838,14 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialPageRouteEvents) {
 
 // Test makes sure that interstitial pages will receive input events and can be
 // focused.
+// Flaky on Win dbg: crbug.com/779973
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_InterstitialPageFocusedWidget \
+  DISABLED_InterstitialPageFocusedWidget
+#else
+#define MAYBE_InterstitialPageFocusedWidget InterstitialPageFocusedWidget
+#endif
+
 IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialPageFocusedWidget) {
   // This test tests that a inner WebContents' InterstitialPage is properly
   // connected to an outer WebContents through a CrossProcessFrameConnector, it
@@ -1817,6 +1899,13 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialPageFocusedWidget) {
 
 // Test makes sure that the browser does not crash when a <webview> navigates
 // out of an interstitial.
+// Flaky on Win dbg: crbug.com/779973
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_InterstitialPageDetach DISABLED_InterstitialPageDetach
+#else
+#define MAYBE_InterstitialPageDetach InterstitialPageDetach
+#endif
+
 IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialPageDetach) {
   InterstitialTestHelper();
 
@@ -1834,6 +1923,13 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialPageDetach) {
 
 // This test makes sure the browser process does not crash if app is closed
 // while an interstitial page is being shown in guest.
+// Flaky on Win dbg: crbug.com/779973
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_InterstitialTeardown DISABLED_InterstitialTeardown
+#else
+#define MAYBE_InterstitialTeardown InterstitialTeardown
+#endif
+
 IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialTeardown) {
   InterstitialTestHelper();
 
@@ -3359,6 +3455,12 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestFocusWhileFocused) {
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, NestedGuestContainerBounds) {
+  // TODO(crbug.com/776539): Disabled due to being flaky.
+  if (GetParam() == true) {
+    DLOG(ERROR) << "Disabled due to flakiness.";
+    return;
+  }
+
   TestHelper("testPDFInWebview", "web_view/shim", NO_TEST_SERVER);
 
   std::vector<content::WebContents*> guest_web_contents_list;

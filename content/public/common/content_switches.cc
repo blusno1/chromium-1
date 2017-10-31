@@ -121,9 +121,6 @@ const char kDisableWebGL[] = "disable-webgl";
 // Disable WebGL2.
 const char kDisableWebGL2[] = "disable-webgl2";
 
-// Comma-separated list of feature names to disable. See also kEnableFeatures.
-const char kDisableFeatures[]               = "disable-features";
-
 // Disable FileSystem API.
 const char kDisableFileSystem[]             = "disable-file-system";
 
@@ -374,9 +371,6 @@ const char kEnableExperimentalWebPlatformFeatures[] =
 const char kDisableOriginTrialControlledBlinkFeatures[] =
     "disable-origin-trial-controlled-blink-features";
 
-// Comma-separated list of feature names to enable. See also kDisableFeatures.
-const char kEnableFeatures[] = "enable-features";
-
 // Makes the GL worker context run asynchronously by using a separate stream.
 const char kEnableGpuAsyncWorkerContext[] = "enable-gpu-async-worker-context";
 
@@ -612,8 +606,7 @@ const char kLogGpuControlListDecisions[]    = "log-gpu-control-list-decisions";
 const char kLoggingLevel[]                  = "log-level";
 
 // Overrides the default file name to use for general-purpose logging (does not
-// affect which events are logged). Currently supported only in app_shell.
-// TODO(crbug.com/760431): Make this work in chrome and content_shell too.
+// affect which events are logged).
 const char kLogFile[] = "log-file";
 
 // Enables saving net log events to a file and sets the file name to use.
@@ -864,9 +857,6 @@ const char kTouchEventFeatureDetectionDisabled[] = "disabled";
 // handles are dragged. Should be "character" or "direction". If not specified,
 // the platform default is used.
 const char kTouchTextSelectionStrategy[]    = "touch-selection-strategy";
-
-// Prioritizes the UI's command stream in the GPU process
-const char kUIPrioritizeInGpuProcess[] = "ui-prioritize-in-gpu-process";
 
 // Bypass the media stream infobar by selecting the default device for media
 // streams (e.g. WebRTC). Works with --use-fake-device-for-media-stream.

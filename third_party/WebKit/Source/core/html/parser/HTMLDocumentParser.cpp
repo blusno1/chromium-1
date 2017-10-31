@@ -30,7 +30,6 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLDocument.h"
@@ -59,6 +58,7 @@
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
 #include "public/platform/WebThread.h"
 
@@ -133,8 +133,7 @@ HTMLDocumentParser::HTMLDocumentParser(Document& document,
       tokenizer_(sync_policy == kForceSynchronousParsing
                      ? HTMLTokenizer::Create(options_)
                      : nullptr),
-      loading_task_runner_(
-          TaskRunnerHelper::Get(TaskType::kNetworking, &document)),
+      loading_task_runner_(document.GetTaskRunner(TaskType::kNetworking)),
       parser_scheduler_(
           sync_policy == kAllowAsynchronousParsing
               ? HTMLParserScheduler::Create(this, loading_task_runner_.get())
@@ -798,11 +797,14 @@ void HTMLDocumentParser::StartBackgroundParser() {
   DCHECK(GetDocument());
   have_background_parser_ = true;
 
-  // TODO(alexclarke): Remove WebFrameScheduler::setDocumentParsingInBackground
-  // when background parser goes away.
-  if (GetDocument()->GetFrame() && GetDocument()->GetFrame()->FrameScheduler())
-    GetDocument()->GetFrame()->FrameScheduler()->SetDocumentParsingInBackground(
-        true);
+  if (GetDocument()->GetFrame() &&
+      GetDocument()->GetFrame()->FrameScheduler()) {
+    virtual_time_pauser_ = GetDocument()
+                               ->GetFrame()
+                               ->FrameScheduler()
+                               ->CreateScopedVirtualTimePauser();
+    virtual_time_pauser_.PauseVirtualTime(true);
+  }
 
   // Make sure that a resolver is set up, so that the correct viewport
   // dimensions will be fed to the background parser and preload scanner.
@@ -854,11 +856,7 @@ void HTMLDocumentParser::StopBackgroundParser() {
   DCHECK(ShouldUseThreading());
   DCHECK(have_background_parser_);
 
-  if (have_background_parser_ && GetDocument()->GetFrame() &&
-      GetDocument()->GetFrame()->FrameScheduler())
-    GetDocument()->GetFrame()->FrameScheduler()->SetDocumentParsingInBackground(
-        false);
-
+  virtual_time_pauser_.PauseVirtualTime(false);
   have_background_parser_ = false;
 
   // Make this sync, as lsan triggers on some unittests if the task runner is

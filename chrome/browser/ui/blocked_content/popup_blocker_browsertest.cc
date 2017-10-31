@@ -651,7 +651,8 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnder) {
       JavaScriptDialogTabHelper::FromWebContents(tab);
   base::RunLoop dialog_wait;
   js_helper->SetDialogShownCallbackForTesting(dialog_wait.QuitClosure());
-  tab->GetMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16("alert()"));
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::UTF8ToUTF16("confirm()"));
   dialog_wait.Run();
 #if !defined(OS_MACOSX)
   if (chrome::FindLastActive() != browser())
@@ -695,7 +696,8 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnderWindowOpener) {
       JavaScriptDialogTabHelper::FromWebContents(tab);
   base::RunLoop dialog_wait;
   js_helper->SetDialogShownCallbackForTesting(dialog_wait.QuitClosure());
-  tab->GetMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16("alert()"));
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::UTF8ToUTF16("confirm()"));
   dialog_wait.Run();
 #if !defined(OS_MACOSX)
   if (chrome::FindLastActive() != browser())
@@ -733,7 +735,8 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnderSubframe) {
       JavaScriptDialogTabHelper::FromWebContents(tab);
   base::RunLoop dialog_wait;
   js_helper->SetDialogShownCallbackForTesting(dialog_wait.QuitClosure());
-  tab->GetMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16("alert()"));
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::UTF8ToUTF16("confirm()"));
   dialog_wait.Run();
 #if !defined(OS_MACOSX)
   if (chrome::FindLastActive() != browser())
@@ -771,7 +774,8 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnderNoOpener) {
       JavaScriptDialogTabHelper::FromWebContents(tab);
   base::RunLoop dialog_wait;
   js_helper->SetDialogShownCallbackForTesting(dialog_wait.QuitClosure());
-  tab->GetMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16("alert()"));
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::UTF8ToUTF16("confirm()"));
   dialog_wait.Run();
 #if !defined(OS_MACOSX)
   if (chrome::FindLastActive() != browser())
@@ -825,50 +829,6 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
   dialog->native_dialog()->AcceptAppModalDialog();
   waiter.WaitForActivation();
   ASSERT_EQ(popup_browser, chrome::FindLastActive());
-}
-
-IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnderViaHTTPAuth) {
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  GURL url(
-      embedded_test_server()->GetURL("/popup_blocker/popup-window-open.html"));
-  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetContentSettingDefaultScope(url, GURL(), CONTENT_SETTINGS_TYPE_POPUPS,
-                                      std::string(), CONTENT_SETTING_ALLOW);
-
-  NavigateAndCheckPopupShown(url, ExpectPopup);
-
-  Browser* popup_browser = chrome::FindLastActive();
-  ASSERT_NE(popup_browser, browser());
-
-  // Showing an http auth dialog will raise the tab over the popup.
-  LoginPromptBrowserTestObserver observer;
-  content::NavigationController* controller = &tab->GetController();
-  observer.Register(content::Source<content::NavigationController>(controller));
-  {
-#if !defined(OS_MACOSX)
-    // Mac doesn't activate the browser during modal dialogs, see
-    // https://crbug.com/687732 for details.
-    ui_test_utils::BrowserActivationWaiter raised_waiter(browser());
-#endif
-    WindowedAuthNeededObserver auth_needed_observer(controller);
-    tab->GetMainFrame()->ExecuteJavaScriptForTests(
-        base::UTF8ToUTF16("var f = document.createElement('iframe'); f.src = "
-                          "'/auth-basic'; document.body.appendChild(f);"));
-    auth_needed_observer.Wait();
-    ASSERT_FALSE(observer.handlers().empty());
-#if !defined(OS_MACOSX)
-    if (chrome::FindLastActive() != browser())
-      raised_waiter.WaitForActivation();
-#endif
-  }
-
-  {
-    ui_test_utils::BrowserActivationWaiter waiter(popup_browser);
-    LoginHandler* handler = *observer.handlers().begin();
-    handler->CancelAuth();
-    waiter.WaitForActivation();
-    ASSERT_EQ(popup_browser, chrome::FindLastActive());
-  }
 }
 
 // Tests that Ctrl+Enter/Cmd+Enter keys on a link open the backgournd tab.

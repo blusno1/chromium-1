@@ -8,8 +8,6 @@
 #include "bindings/modules/v8/v8_remote_playback_availability_callback.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
-#include "core/dom/UserGestureIndicator.h"
 #include "core/dom/events/Event.h"
 #include "core/html/media/HTMLMediaElement.h"
 #include "core/html/media/HTMLVideoElement.h"
@@ -21,6 +19,7 @@
 #include "modules/remoteplayback/RemotePlaybackConnectionCallbacks.h"
 #include "platform/MemoryCoordinator.h"
 #include "platform/wtf/text/Base64.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/modules/presentation/WebPresentationClient.h"
 #include "public/platform/modules/presentation/WebPresentationError.h"
 #include "public/platform/modules/presentation/WebPresentationInfo.h"
@@ -51,7 +50,7 @@ void RunRemotePlaybackTask(ExecutionContext* context,
                            WTF::Closure task,
                            std::unique_ptr<int> task_id) {
   probe::AsyncTask async_task(context, task_id.get());
-  task();
+  std::move(task).Run();
 }
 
 WebURL GetAvailabilityUrl(const WebURL& source, bool is_source_supported) {
@@ -183,7 +182,7 @@ ScriptPromise RemotePlayback::prompt(ScriptState* script_state) {
     return promise;
   }
 
-  if (!UserGestureIndicator::ProcessingUserGesture()) {
+  if (!Frame::HasTransientUserActivation(media_element_->GetFrame())) {
     resolver->Reject(DOMException::Create(
         kInvalidAccessError,
         "RemotePlayback::prompt() requires user gesture."));
@@ -249,7 +248,8 @@ void RemotePlayback::PromptInternal() {
       std::unique_ptr<int> task_id = WTF::MakeUnique<int>(0);
       probe::AsyncTaskScheduled(GetExecutionContext(), "promptCancelled",
                                 task_id.get());
-      TaskRunnerHelper::Get(TaskType::kMediaElementEvent, GetExecutionContext())
+      GetExecutionContext()
+          ->GetTaskRunner(TaskType::kMediaElementEvent)
           ->PostTask(BLINK_FROM_HERE,
                      WTF::Bind(RunRemotePlaybackTask,
                                WrapPersistent(GetExecutionContext()),
@@ -286,7 +286,8 @@ int RemotePlayback::WatchAvailabilityInternal(
   std::unique_ptr<int> task_id = WTF::MakeUnique<int>(0);
   probe::AsyncTaskScheduled(GetExecutionContext(), "watchAvailabilityCallback",
                             task_id.get());
-  TaskRunnerHelper::Get(TaskType::kMediaElementEvent, GetExecutionContext())
+  GetExecutionContext()
+      ->GetTaskRunner(TaskType::kMediaElementEvent)
       ->PostTask(BLINK_FROM_HERE,
                  WTF::Bind(RunRemotePlaybackTask,
                            WrapPersistent(GetExecutionContext()),

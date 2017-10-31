@@ -63,6 +63,12 @@ enum UiElementName {
   kWebVrTimeoutMessageText,
   kWebVrTimeoutMessageButton,
   kWebVrTimeoutMessageButtonText,
+  kSpeechRecognitionPrompt,
+  kSpeechRecognitionPromptGrowingCircle,
+  kSpeechRecognitionPromptInnerCircle,
+  kSpeechRecognitionPromptMicrophoneIcon,
+  kSpeechRecognitionPromptBackplane,
+  kSuggestionLayout,
 };
 
 }  // namespace vr

@@ -63,7 +63,7 @@ void RunCallback(ExecutionContext* execution_context,
     return;
   DCHECK(execution_context->IsContextThread());
   probe::AsyncTask async_task(execution_context, identifier.get());
-  task();
+  std::move(task).Run();
 }
 
 }  // namespace
@@ -213,7 +213,7 @@ void DOMFileSystem::ScheduleCallback(ExecutionContext* execution_context,
   std::unique_ptr<int> identifier = WTF::MakeUnique<int>(0);
   probe::AsyncTaskScheduled(execution_context, TaskNameForInstrumentation(),
                             identifier.get());
-  TaskRunnerHelper::Get(TaskType::kFileReading, execution_context)
+  execution_context->GetTaskRunner(TaskType::kFileReading)
       ->PostTask(BLINK_FROM_HERE,
                  WTF::Bind(&RunCallback, WrapWeakPersistent(execution_context),
                            WTF::Passed(std::move(task)),

@@ -76,7 +76,6 @@
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
 #include "platform/runtime_enabled_features.h"
 #include "platform/wtf/CurrentTime.h"
@@ -1220,9 +1219,9 @@ void CompositedLayerMapping::UpdateGraphicsLayerGeometry(
 
 void CompositedLayerMapping::UpdateScrollBoundaryBehavior() {
   EScrollBoundaryBehavior behavior_x =
-      GetLayoutObject().StyleRef().ScrollBoundaryBehaviorX();
+      GetLayoutObject().StyleRef().OverscrollBehaviorX();
   EScrollBoundaryBehavior behavior_y =
-      GetLayoutObject().StyleRef().ScrollBoundaryBehaviorY();
+      GetLayoutObject().StyleRef().OverscrollBehaviorY();
   if (scrolling_contents_layer_) {
     scrolling_contents_layer_->SetScrollBoundaryBehavior(
         WebScrollBoundaryBehavior(
@@ -3205,21 +3204,6 @@ void CompositedLayerMapping::DoPaintTask(
   }
 }
 
-static void PaintScrollbar(const Scrollbar* scrollbar,
-                           GraphicsContext& context,
-                           const IntRect& clip) {
-  if (!scrollbar)
-    return;
-
-  const IntRect& scrollbar_rect = scrollbar->FrameRect();
-  TransformRecorder transform_recorder(
-      context, *scrollbar,
-      AffineTransform::Translation(-scrollbar_rect.X(), -scrollbar_rect.Y()));
-  IntRect transformed_clip = clip;
-  transformed_clip.MoveBy(scrollbar_rect.Location());
-  scrollbar->Paint(context, CullRect(transformed_clip));
-}
-
 // TODO(eseckler): Make recording distance configurable, e.g. for use in
 // headless, where we would like to record an exact area.
 // Note however that the minimum value for this constant is the size of a
@@ -3506,19 +3490,17 @@ void CompositedLayerMapping::PaintScrollableArea(
   // frame. For painting frame ScrollableAreas, see
   // PaintLayerCompositor::paintContents.
 
-  if (DrawingRecorder::UseCachedDrawingIfPossible(
-          context, *graphics_layer, DisplayItem::kScrollbarCompositedScrollbar))
-    return;
-
-  FloatRect layer_bounds(FloatPoint(), graphics_layer->Size());
-  PaintRecordBuilder builder(layer_bounds, nullptr, &context);
   PaintLayerScrollableArea* scrollable_area = owning_layer_.GetScrollableArea();
   if (graphics_layer == LayerForHorizontalScrollbar()) {
-    PaintScrollbar(scrollable_area->HorizontalScrollbar(), builder.Context(),
-                   interest_rect);
+    if (const Scrollbar* scrollbar = scrollable_area->HorizontalScrollbar()) {
+      ScrollableAreaPainter::PaintCompositedScrollbar(*scrollbar, context,
+                                                      CullRect(interest_rect));
+    }
   } else if (graphics_layer == LayerForVerticalScrollbar()) {
-    PaintScrollbar(scrollable_area->VerticalScrollbar(), builder.Context(),
-                   interest_rect);
+    if (const Scrollbar* scrollbar = scrollable_area->VerticalScrollbar()) {
+      ScrollableAreaPainter::PaintCompositedScrollbar(*scrollbar, context,
+                                                      CullRect(interest_rect));
+    }
   } else if (graphics_layer == LayerForScrollCorner()) {
     // Note that scroll corners always paint into local space, whereas
     // scrollbars paint in the space of their containing frame.
@@ -3526,19 +3508,11 @@ void CompositedLayerMapping::PaintScrollableArea(
         scrollable_area->ScrollCornerAndResizerRect().Location();
     CullRect cull_rect(interest_rect);
     ScrollableAreaPainter(*scrollable_area)
-        .PaintScrollCorner(builder.Context(),
-                           -scroll_corner_and_resizer_location, cull_rect);
+        .PaintScrollCorner(context, -scroll_corner_and_resizer_location,
+                           cull_rect);
     ScrollableAreaPainter(*scrollable_area)
-        .PaintResizer(builder.Context(), -scroll_corner_and_resizer_location,
-                      cull_rect);
+        .PaintResizer(context, -scroll_corner_and_resizer_location, cull_rect);
   }
-  // Replay the painted scrollbar content with the GraphicsLayer backing as the
-  // DisplayItemClient in order for the resulting DrawingDisplayItem to produce
-  // the correct visualRect (i.e., the bounds of the involved GraphicsLayer).
-  DrawingRecorder recorder(context, *graphics_layer,
-                           DisplayItem::kScrollbarCompositedScrollbar,
-                           layer_bounds);
-  context.Canvas()->drawPicture(builder.EndRecording());
 }
 
 bool CompositedLayerMapping::IsScrollableAreaLayer(

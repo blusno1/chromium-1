@@ -33,6 +33,7 @@
 #include "bindings/core/v8/V8Initializer.h"
 #include "bindings/modules/v8/V8ContextSnapshotExternalReferences.h"
 #include "build/build_config.h"
+#include "controller/OomInterventionImpl.h"
 #include "core/animation/AnimationClock.h"
 #include "core/frame/LocalFrame.h"
 #include "platform/Histogram.h"
@@ -42,6 +43,7 @@
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/WTF.h"
+#include "public/platform/InterfaceRegistry.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
 #include "public/web/WebKit.h"
@@ -70,7 +72,8 @@ static BlinkInitializer& GetBlinkInitializer() {
   return *initializer;
 }
 
-void Initialize(Platform* platform) {
+void Initialize(Platform* platform, InterfaceRegistry* registry) {
+  DCHECK(registry);
   Platform::Initialize(platform);
 
 #if !defined(ARCH_CPU_X86_64) && !defined(ARCH_CPU_ARM64) && defined(OS_WIN)
@@ -101,6 +104,8 @@ void Initialize(Platform* platform) {
 
   GetBlinkInitializer().Initialize();
 
+  GetBlinkInitializer().RegisterInterfaces(*registry);
+
   // currentThread is null if we are running on a thread without a message loop.
   if (WebThread* current_thread = platform->CurrentThread()) {
     DCHECK(!g_end_of_task_runner);
@@ -111,6 +116,11 @@ void Initialize(Platform* platform) {
 
 void BlinkInitializer::InitLocalFrame(LocalFrame& frame) const {
   ModulesInitializer::InitLocalFrame(frame);
+
+  if (frame.IsMainFrame()) {
+    frame.GetInterfaceRegistry()->AddInterface(
+        WTF::Bind(&OomInterventionImpl::Create));
+  }
 }
 
 }  // namespace blink

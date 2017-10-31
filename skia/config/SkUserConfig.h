@@ -204,10 +204,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_USE_LEGACY_DISTANCE_FIELDS
 #endif
 
-#ifndef SK_DISABLE_DEFERRED_PROXIES
-#define SK_DISABLE_DEFERRED_PROXIES
-#endif
-
 #ifndef SK_SUPPORT_LEGACY_BLUR_IMAGE
 #define SK_SUPPORT_LEGACY_BLUR_IMAGE
 #endif
@@ -226,10 +222,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 #ifndef SK_COLOR_SPACE_XFORM_LEGACY_PIPELINE
 #define SK_COLOR_SPACE_XFORM_LEGACY_PIPELINE
-#endif
-
-#ifndef SK_LEGACY_LOWP_STAGES
-#define SK_LEGACY_LOWP_STAGES
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi

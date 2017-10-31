@@ -506,6 +506,14 @@ Response InspectorPageAgent::reload(
   return Response::OK();
 }
 
+Response InspectorPageAgent::navigate(const String& url,
+                                      Maybe<String> referrer,
+                                      Maybe<String> transitionType,
+                                      String* out_frame_id) {
+  *out_frame_id = IdentifiersFactory::FrameId(inspected_frames_->Root());
+  return Response::OK();
+}
+
 Response InspectorPageAgent::stopLoading() {
   return Response::OK();
 }
@@ -562,6 +570,12 @@ static HeapVector<Member<Resource>> CachedResourcesForFrame(LocalFrame* frame,
 
 Response InspectorPageAgent::getResourceTree(
     std::unique_ptr<protocol::Page::FrameResourceTree>* object) {
+  *object = BuildObjectForResourceTree(inspected_frames_->Root());
+  return Response::OK();
+}
+
+Response InspectorPageAgent::getFrameTree(
+    std::unique_ptr<protocol::Page::FrameTree>* object) {
   *object = BuildObjectForFrameTree(inspected_frames_->Root());
   return Response::OK();
 }
@@ -862,8 +876,28 @@ std::unique_ptr<protocol::Page::Frame> InspectorPageAgent::BuildObjectForFrame(
   return frame_object;
 }
 
-std::unique_ptr<protocol::Page::FrameResourceTree>
+std::unique_ptr<protocol::Page::FrameTree>
 InspectorPageAgent::BuildObjectForFrameTree(LocalFrame* frame) {
+  std::unique_ptr<protocol::Page::FrameTree> result =
+      protocol::Page::FrameTree::create()
+          .setFrame(BuildObjectForFrame(frame))
+          .build();
+
+  std::unique_ptr<protocol::Array<protocol::Page::FrameTree>> children_array;
+  for (Frame* child = frame->Tree().FirstChild(); child;
+       child = child->Tree().NextSibling()) {
+    if (!child->IsLocalFrame())
+      continue;
+    if (!children_array)
+      children_array = protocol::Array<protocol::Page::FrameTree>::create();
+    children_array->addItem(BuildObjectForFrameTree(ToLocalFrame(child)));
+  }
+  result->setChildFrames(std::move(children_array));
+  return result;
+}
+
+std::unique_ptr<protocol::Page::FrameResourceTree>
+InspectorPageAgent::BuildObjectForResourceTree(LocalFrame* frame) {
   std::unique_ptr<protocol::Page::Frame> frame_object =
       BuildObjectForFrame(frame);
   std::unique_ptr<protocol::Array<protocol::Page::FrameResource>> subresources =
@@ -916,7 +950,7 @@ InspectorPageAgent::BuildObjectForFrameTree(LocalFrame* frame) {
     if (!children_array)
       children_array =
           protocol::Array<protocol::Page::FrameResourceTree>::create();
-    children_array->addItem(BuildObjectForFrameTree(ToLocalFrame(child)));
+    children_array->addItem(BuildObjectForResourceTree(ToLocalFrame(child)));
   }
   result->setChildFrames(std::move(children_array));
   return result;

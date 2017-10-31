@@ -46,13 +46,13 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/previews_state.h"
-#include "content/public/common/url_loader_factory.mojom.h"
 #include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/http/http_response_headers.h"
 #include "services/device/public/interfaces/wake_lock_context.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "services/service_manager/public/interfaces/interface_provider.mojom.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
 #include "third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h"
@@ -126,12 +126,12 @@ struct FrameOwnerProperties;
 struct FramePolicy;
 struct FileChooserParams;
 struct ResourceResponse;
+struct SubresourceLoaderParams;
 
 class CONTENT_EXPORT RenderFrameHostImpl
     : public RenderFrameHost,
       public base::SupportsUserData,
       public mojom::FrameHost,
-      public mojom::FrameHostInterfaceBroker,
       public BrowserAccessibilityDelegate,
       public SiteInstanceImpl::Observer,
       public service_manager::mojom::InterfaceProvider,
@@ -210,12 +210,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   bool IsBeforeUnloadHangMonitorDisabledForTesting() override;
   bool GetSuddenTerminationDisablerState(
       blink::WebSuddenTerminationDisablerType disabler_type) override;
-
   bool IsFeatureEnabled(blink::WebFeaturePolicyFeature feature) override;
-
-  // mojom::FrameHostInterfaceBroker
-  void GetInterfaceProvider(
-      service_manager::mojom::InterfaceProviderRequest interfaces) override;
+  void ViewSource() override;
 
   // IPC::Sender
   bool Send(IPC::Message* msg) override;
@@ -277,7 +273,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // that was partially handled on the IO thread (to allocate |new_routing_id|
   // and |devtools_frame_token|), and is forwarded here. The renderer has
   // already been told to create a RenderFrame with the specified ID values.
+  // |interface_provider_request| is the request end of the InterfaceProvider
+  // interface that the RenderFrameHost corresponding to the child frame should
+  // bind to expose services to the renderer process. The caller takes care of
+  // sending down the client end of the pipe to the child RenderFrame to use.
   void OnCreateChildFrame(int new_routing_id,
+                          service_manager::mojom::InterfaceProviderRequest
+                              interface_provider_request,
                           blink::WebTreeScopeType scope,
                           const std::string& frame_name,
                           const std::string& frame_unique_name,
@@ -545,9 +547,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // PlzNavigate: Indicates that a navigation is ready to commit and can be
   // handled by this RenderFrame.
-  // |subresource_url_loader_factory_info| is used in network service land to
-  // allow factories interested in handling subresource requests to the
-  // renderer. E.g. AppCache.
+  // |subresource_loader_params| is used in network service land to pass
+  // the parameters to create a custom subresource loader in the renderer
+  // process, e.g. by AppCache etc.
   void CommitNavigation(
       ResourceResponse* response,
       std::unique_ptr<StreamHandle> body,
@@ -555,7 +557,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       const CommonNavigationParams& common_params,
       const RequestNavigationParams& request_params,
       bool is_view_source,
-      mojom::URLLoaderFactoryPtrInfo subresource_url_loader_factory_info);
+      base::Optional<SubresourceLoaderParams> subresource_loader_params);
 
   // PlzNavigate
   // Indicates that a navigation failed and that this RenderFrame should display
@@ -602,8 +604,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Returns the Mojo ImageDownloader service.
   const content::mojom::ImageDownloaderPtr& GetMojoImageDownloader();
 
-  resource_coordinator::ResourceCoordinatorInterface*
-  GetFrameResourceCoordinator() override;
+  resource_coordinator::FrameResourceCoordinator* GetFrameResourceCoordinator()
+      override;
 
   // Resets the loading state. Following this call, the RenderFrameHost will be
   // in a non-loading state.
@@ -660,6 +662,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Once media switches to mojo, we should be able to remove this in favor of
   // sending a mojo overlay factory.
   const base::UnguessableToken& GetOverlayRoutingToken();
+
+  // Binds the request end of the InterfaceProvider interface through which
+  // services provided by this RenderFrameHost are exposed to the correponding
+  // RenderFrame. The caller is responsible for plumbing the client end to the
+  // the renderer process.
+  void BindInterfaceProviderRequest(
+      service_manager::mojom::InterfaceProviderRequest
+          interface_provider_request);
 
   const StreamHandle* stream_handle_for_testing() const {
     return stream_handle_.get();
@@ -842,7 +852,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
                            const gfx::Rect& initial_rect,
                            bool user_gesture);
 
-  // mojom::FrameHost
+  // mojom::FrameHost:
   void CreateNewWindow(mojom::CreateNewWindowParamsPtr params,
                        CreateNewWindowCallback callback) override;
   void IssueKeepAliveHandle(mojom::KeepAliveHandleRequest request) override;
@@ -1211,7 +1221,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   content::mojom::ImageDownloaderPtr mojo_image_downloader_;
 
   // Holds the interface wrapper to the Global Resource Coordinator service.
-  std::unique_ptr<resource_coordinator::ResourceCoordinatorInterface>
+  std::unique_ptr<resource_coordinator::FrameResourceCoordinator>
       frame_resource_coordinator_;
 
   // Tracks a navigation happening in this frame. Note that while there can be
@@ -1250,8 +1260,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // same Previews status as the top-level frame.
   PreviewsState last_navigation_previews_state_;
 
-  mojo::Binding<mojom::FrameHostInterfaceBroker>
-      frame_host_interface_broker_binding_;
   mojo::AssociatedBinding<mojom::FrameHost> frame_host_associated_binding_;
   mojom::FramePtr frame_;
   mojom::FrameBindingsControlAssociatedPtr frame_bindings_control_;
@@ -1309,8 +1317,17 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::unique_ptr<JavaInterfaceProvider> java_interface_registry_;
 #endif
 
-  mojo::BindingSet<service_manager::mojom::InterfaceProvider>
-      interface_provider_bindings_;
+  // Binding for the InterfaceProvider through which this RFHI exposes Mojo
+  // services to the corresonding RenderFrame.
+  //
+  // Normally, whoever creates this RFHI, is responsible for creating a message
+  // pipe, then supplying the request end to BindInterfaceProviderRequest(), and
+  // plumbing the client end to the RenderFrame in the renderer process.
+  //
+  // Currently the only exception to this rule are out-of-process iframes, where
+  // the child RFHI takes care of this internally in CreateRenderFrame().
+  mojo::Binding<service_manager::mojom::InterfaceProvider>
+      interface_provider_binding_;
 
   // IPC-friendly token that represents this host for AndroidOverlays, if we
   // have created one yet.

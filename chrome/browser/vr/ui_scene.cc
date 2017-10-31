@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/containers/adapters.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -37,18 +38,21 @@ void UiScene::AddUiElement(UiElementName parent,
   CHECK_GE(element->id(), 0);
   CHECK_EQ(GetUiElementById(element->id()), nullptr);
   CHECK_GE(element->draw_phase(), 0);
-  if (gl_initialized_)
-    element->Initialize();
+  if (gl_initialized_) {
+    for (auto& child : *element) {
+      child.Initialize();
+    }
+  }
   GetUiElementByName(parent)->AddChild(std::move(element));
   is_dirty_ = true;
 }
 
-void UiScene::RemoveUiElement(int element_id) {
+std::unique_ptr<UiElement> UiScene::RemoveUiElement(int element_id) {
   UiElement* to_remove = GetUiElementById(element_id);
   CHECK_NE(nullptr, to_remove);
   CHECK_NE(nullptr, to_remove->parent());
-  to_remove->parent()->RemoveChild(to_remove);
   is_dirty_ = true;
+  return to_remove->parent()->RemoveChild(to_remove);
 }
 
 bool UiScene::OnBeginFrame(const base::TimeTicks& current_time,
@@ -125,8 +129,11 @@ bool UiScene::OnBeginFrame(const base::TimeTicks& current_time,
   {
     TRACE_EVENT0("gpu", "UiScene::OnBeginFrame.UpdateLayout");
 
-    // Update layout, which depends on size.
-    for (auto& element : *root_element_) {
+    // Update layout, which depends on size. Note that the layout phase changes
+    // the size of layout-type elements, as they adjust to fit the cumulative
+    // size of their children. This must be done in reverse order, such that
+    // children are correctly sized when laid out by their parent.
+    for (auto& element : base::Reversed(*root_element_)) {
       element.LayOutChildren();
       element.set_update_phase(UiElement::kUpdatedLayout);
     }

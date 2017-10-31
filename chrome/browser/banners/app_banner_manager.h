@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
@@ -159,7 +160,7 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Returns true if |triggered_by_devtools_| is true or the
   // kBypassAppBannerEngagementChecks flag is set.
-  virtual bool IsDebugMode() const;
+  bool IsDebugMode() const;
 
   // Returns true if the webapp at |start_url| has already been installed.
   virtual bool IsWebAppInstalled(content::BrowserContext* browser_context,
@@ -190,8 +191,7 @@ class AppBannerManager : public content::WebContentsObserver,
   void RecordDidShowBanner(const std::string& event_name);
 
   // Reports |code| via a UMA histogram or logs it to the console.
-  void ReportStatus(content::WebContents* web_contents,
-                    InstallableStatusCode code);
+  void ReportStatus(InstallableStatusCode code);
 
   // Resets all fetched data for the current page.
   virtual void ResetCurrentPageData();

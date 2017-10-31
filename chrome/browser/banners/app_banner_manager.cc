@@ -5,12 +5,12 @@
 #include "chrome/browser/banners/app_banner_manager.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
@@ -64,32 +64,28 @@ class AppBannerManager::StatusReporter {
   virtual ~StatusReporter() {}
 
   // Reports |code| (via a mechanism which depends on the implementation).
-  virtual void ReportStatus(content::WebContents* web_contents,
-                            InstallableStatusCode code) = 0;
+  virtual void ReportStatus(InstallableStatusCode code) = 0;
 };
 
 }  // namespace banners
 
 namespace {
 
-// Returns a string parameter for a devtools console message corresponding to
-// |code|. Returns the empty string if |code| requires no parameter.
-std::string GetStatusParam(InstallableStatusCode code) {
-  if (code == NO_ACCEPTABLE_ICON || code == MANIFEST_MISSING_SUITABLE_ICON)
-    return base::IntToString(InstallableManager::GetMinimumIconSizeInPx());
-
-  return std::string();
-}
-
 // Logs installable status codes to the console.
 class ConsoleStatusReporter : public banners::AppBannerManager::StatusReporter {
  public:
-  // Logs an error message corresponding to |code| to the devtools console
+  // Constructs a ConsoleStatusReporter which logs to the devtools console
   // attached to |web_contents|.
-  void ReportStatus(content::WebContents* web_contents,
-                    InstallableStatusCode code) override {
-    LogErrorToConsole(web_contents, code, GetStatusParam(code));
+  explicit ConsoleStatusReporter(content::WebContents* web_contents)
+      : web_contents_(web_contents) {}
+
+  // Logs an error message corresponding to |code| to the devtools console.
+  void ReportStatus(InstallableStatusCode code) override {
+    LogErrorToConsole(web_contents_, code);
   }
+
+ private:
+  content::WebContents* web_contents_;
 };
 
 // Tracks installable status codes via an UMA histogram.
@@ -97,11 +93,10 @@ class TrackingStatusReporter
     : public banners::AppBannerManager::StatusReporter {
  public:
   TrackingStatusReporter() : done_(false) {}
-  ~TrackingStatusReporter() override { DCHECK(done_); }
+  ~TrackingStatusReporter() override {}
 
   // Records code via an UMA histogram.
-  void ReportStatus(content::WebContents* web_contents,
-                    InstallableStatusCode code) override {
+  void ReportStatus(InstallableStatusCode code) override {
     // We only increment the histogram once per page load (and only if the
     // banner pipeline is triggered).
     if (!done_ && code != NO_ERROR_DETECTED)
@@ -116,8 +111,7 @@ class TrackingStatusReporter
 
 class NullStatusReporter : public banners::AppBannerManager::StatusReporter {
  public:
-  void ReportStatus(content::WebContents* web_contents,
-                    InstallableStatusCode code) override {
+  void ReportStatus(InstallableStatusCode code) override {
     // In general, NullStatusReporter::ReportStatus should not be called.
     // However, it may be called in cases where Stop is called without a
     // preceding call to RequestAppBanner e.g. because the WebContents is being
@@ -146,7 +140,7 @@ void AppBannerManager::RequestAppBanner(const GURL& validated_url,
   // We only need to use TrackingStatusReporter if we aren't in debug mode
   // (this avoids skew from testing).
   if (IsDebugMode())
-    status_reporter_ = std::make_unique<ConsoleStatusReporter>();
+    status_reporter_ = std::make_unique<ConsoleStatusReporter>(web_contents());
   else
     status_reporter_ = std::make_unique<TrackingStatusReporter>();
 
@@ -323,10 +317,9 @@ void AppBannerManager::RecordDidShowBanner(const std::string& event_name) {
                                           contents->GetLastCommittedURL());
 }
 
-void AppBannerManager::ReportStatus(content::WebContents* web_contents,
-                                    InstallableStatusCode code) {
+void AppBannerManager::ReportStatus(InstallableStatusCode code) {
   DCHECK(status_reporter_);
-  status_reporter_->ReportStatus(web_contents, code);
+  status_reporter_->ReportStatus(code);
 }
 
 void AppBannerManager::ResetCurrentPageData() {
@@ -372,7 +365,7 @@ InstallableStatusCode AppBannerManager::TerminationCode() const {
 }
 
 void AppBannerManager::Stop(InstallableStatusCode code) {
-  ReportStatus(web_contents(), code);
+  ReportStatus(code);
 
   weak_factory_.InvalidateWeakPtrs();
   ResetBindings();

@@ -88,6 +88,7 @@
 #include "content/public/browser/stream_info.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/origin_util.h"
 #include "content/public/common/resource_request.h"
 #include "content/public/common/resource_request_body.h"
 #include "content/public/common/resource_request_completion_status.h"
@@ -242,11 +243,11 @@ bool IsValidatedSCT(
 // If previews_to_allow is set to anything other than PREVIEWS_UNSPECIFIED,
 // it is either the values passed in for a sub-frame to use, or if this is
 // the main frame, it is a limitation on which previews to allow.
-PreviewsState GetPreviewsState(PreviewsState previews_to_allow,
-                               ResourceDispatcherHostDelegate* delegate,
-                               const net::URLRequest& request,
-                               ResourceContext* resource_context,
-                               bool is_main_frame) {
+PreviewsState DeterminePreviewsState(PreviewsState previews_to_allow,
+                                     ResourceDispatcherHostDelegate* delegate,
+                                     const net::URLRequest& request,
+                                     ResourceContext* resource_context,
+                                     bool is_main_frame) {
   // If previews have already been turned off, or we are inheriting values on a
   // sub-frame, don't check any further.
   if (previews_to_allow & PREVIEWS_OFF ||
@@ -256,8 +257,8 @@ PreviewsState GetPreviewsState(PreviewsState previews_to_allow,
   }
 
   // Get the mask of previews we could apply to the current navigation.
-  PreviewsState previews_state =
-      delegate->GetPreviewsState(request, resource_context, previews_to_allow);
+  PreviewsState previews_state = delegate->DeterminePreviewsState(
+      request, resource_context, previews_to_allow);
 
   return previews_state;
 }
@@ -363,7 +364,7 @@ ResourceDispatcherHostImpl::ResourceDispatcherHostImpl(
       FROM_HERE, base::BindOnce(&ResourceDispatcherHostImpl::OnInit,
                                 base::Unretained(this)));
 
-  update_load_states_timer_ = base::MakeUnique<base::RepeatingTimer>();
+  update_load_states_timer_ = std::make_unique<base::RepeatingTimer>();
 
   // Monitor per-tab outstanding requests only if OOPIF is not enabled, because
   // the routing id doesn't represent tabs in OOPIF modes.
@@ -371,7 +372,7 @@ ResourceDispatcherHostImpl::ResourceDispatcherHostImpl(
       !SiteIsolationPolicy::IsTopDocumentIsolationEnabled() &&
       !SiteIsolationPolicy::AreIsolatedOriginsEnabled()) {
     record_outstanding_requests_stats_timer_ =
-        base::MakeUnique<base::RepeatingTimer>();
+        std::make_unique<base::RepeatingTimer>();
   }
 }
 
@@ -1257,7 +1258,7 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
 
     if (request_data.originated_from_service_worker) {
       new_request->SetUserData(URLRequestServiceWorkerData::kUserDataKey,
-                               base::MakeUnique<URLRequestServiceWorkerData>());
+                               std::make_unique<URLRequestServiceWorkerData>());
     }
 
     // If the request is a MAIN_FRAME request, the first-party URL gets updated
@@ -1346,7 +1347,7 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
   // Update the previews state, but only if this is not using PlzNavigate.
   PreviewsState previews_state = request_data.previews_state;
   if (!IsBrowserSideNavigationEnabled()) {
-    previews_state = GetPreviewsState(
+    previews_state = DeterminePreviewsState(
         request_data.previews_state, delegate_, *new_request, resource_context,
         request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME);
   }
@@ -1400,17 +1401,19 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
         service_worker_mode != ServiceWorkerMode::ALL,
         request_data.fetch_request_mode, request_data.fetch_credentials_mode,
         request_data.fetch_redirect_mode, request_data.fetch_integrity,
-        request_data.resource_type, request_data.fetch_request_context_type,
-        request_data.fetch_frame_type, request_data.request_body);
+        request_data.keepalive, request_data.resource_type,
+        request_data.fetch_request_context_type, request_data.fetch_frame_type,
+        request_data.request_body);
 
     ForeignFetchRequestHandler::InitializeHandler(
         new_request.get(), requester_info->service_worker_context(),
         blob_context, child_id, request_data.service_worker_provider_id,
         service_worker_mode, request_data.fetch_request_mode,
         request_data.fetch_credentials_mode, request_data.fetch_redirect_mode,
-        request_data.fetch_integrity, request_data.resource_type,
-        request_data.fetch_request_context_type, request_data.fetch_frame_type,
-        request_data.request_body, request_data.initiated_in_secure_context);
+        request_data.fetch_integrity, request_data.keepalive,
+        request_data.resource_type, request_data.fetch_request_context_type,
+        request_data.fetch_frame_type, request_data.request_body,
+        request_data.initiated_in_secure_context);
 
     // Have the appcache associate its extra info with the request.
     AppCacheInterceptor::SetExtraRequestInfo(
@@ -1481,7 +1484,7 @@ ResourceDispatcherHostImpl::CreateResourceHandler(
     }
 
     std::unique_ptr<DetachableResourceHandler> detachable_handler =
-        base::MakeUnique<DetachableResourceHandler>(request, timeout,
+        std::make_unique<DetachableResourceHandler>(request, timeout,
                                                     std::move(handler));
     if (start_detached)
       detachable_handler->Detach();
@@ -1539,7 +1542,7 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
   // PlzNavigate: the throttle is unnecessary as communication with the UI
   // thread is handled by the NavigationResourceHandler below.
   if (!IsBrowserSideNavigationEnabled() && IsResourceTypeFrame(resource_type)) {
-    throttles.push_back(base::MakeUnique<NavigationResourceThrottle>(
+    throttles.push_back(std::make_unique<NavigationResourceThrottle>(
         request, delegate_, fetch_request_context_type,
         fetch_mixed_content_context_type));
   }
@@ -1555,7 +1558,7 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
   if (request->has_upload()) {
     // Request wake lock while uploading data.
     throttles.push_back(
-        base::MakeUnique<WakeLockResourceThrottle>(request->url().host()));
+        std::make_unique<WakeLockResourceThrottle>(request->url().host()));
   }
 
   // The Clear-Site-Data throttle.
@@ -2102,9 +2105,9 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
             .get()));
   }
 
-  PreviewsState previews_state =
-      GetPreviewsState(info.common_params.previews_state, delegate_,
-                       *new_request, resource_context, info.is_main_frame);
+  PreviewsState previews_state = DeterminePreviewsState(
+      info.common_params.previews_state, delegate_, *new_request,
+      resource_context, info.is_main_frame);
 
   // Make extra info and read footer (contains request ID).
   //
@@ -2126,7 +2129,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
       false,
       false,  // is download
       false,  // is stream
-      info.common_params.allow_download, info.begin_params.has_user_gesture,
+      info.common_params.allow_download, info.common_params.has_user_gesture,
       true,   // enable_load_timing
       false,  // enable_upload_progress
       false,  // do_not_prompt_for_login
@@ -2283,7 +2286,7 @@ void ResourceDispatcherHostImpl::BeginRequestInternal(
     // reasonable.
     handler->OnResponseCompleted(
         request->status(),
-        base::MakeUnique<NullResourceController>(&was_resumed));
+        std::make_unique<NullResourceController>(&was_resumed));
     // TODO(darin): The handler is not ready for us to kill the request. Oops!
     DCHECK(was_resumed);
 
@@ -2534,7 +2537,7 @@ void ResourceDispatcherHostImpl::BlockRequestsForRoute(
          blocked_loaders_map_.end())
       << "BlockRequestsForRoute called  multiple time for the same RFH";
   blocked_loaders_map_[global_routing_id] =
-      base::MakeUnique<BlockedLoadersList>();
+      std::make_unique<BlockedLoadersList>();
 }
 
 void ResourceDispatcherHostImpl::ResumeBlockedRequestsForRoute(
@@ -2583,8 +2586,15 @@ ResourceDispatcherHostImpl::HttpAuthRelationTypeOf(
 
   if (net::registry_controlled_domains::SameDomainOrHost(
           first_party, request_url,
-          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES))
+          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)) {
+    // If the first party is secure but the subresource is not, this is
+    // mixed-content. Do not allow the image.
+    if (!allow_cross_origin_auth_prompt() && IsOriginSecure(first_party) &&
+        !IsOriginSecure(request_url)) {
+      return HTTP_AUTH_RELATION_BLOCKED_CROSS;
+    }
     return HTTP_AUTH_RELATION_SAME_DOMAIN;
+  }
 
   if (allow_cross_origin_auth_prompt())
     return HTTP_AUTH_RELATION_ALLOWED_CROSS;

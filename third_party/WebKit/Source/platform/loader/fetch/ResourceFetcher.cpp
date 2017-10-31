@@ -346,7 +346,7 @@ void ResourceFetcher::RequestLoadStarted(unsigned long identifier,
       !cached_resources_map_.Contains(url)) {
     // Resources loaded from memory cache should be reported the first time
     // they're used.
-    RefPtr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
+    scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
         params.Options().initiator_info.name, MonotonicallyIncreasingTime(),
         resource->GetType() == Resource::kMainResource);
     PopulateTimingInfo(info.get(), resource);
@@ -420,7 +420,7 @@ Resource* ResourceFetcher::ResourceForStaticData(
   }
 
   ResourceResponse response;
-  RefPtr<SharedBuffer> data;
+  scoped_refptr<SharedBuffer> data;
   if (substitute_data.IsValid()) {
     data = substitute_data.Content();
     response.SetURL(url);
@@ -614,7 +614,7 @@ ResourceFetcher::PrepareRequestResult ResourceFetcher::PrepareRequest(
   if (!params.Url().IsValid())
     return kAbort;
 
-  RefPtr<SecurityOrigin> origin = options.security_origin;
+  scoped_refptr<SecurityOrigin> origin = options.security_origin;
   params.MutableOptions().cors_flag =
       !origin || !origin->CanRequestNoSuborigin(params.Url());
 
@@ -622,16 +622,16 @@ ResourceFetcher::PrepareRequestResult ResourceFetcher::PrepareRequest(
       kEnableCORSHandlingByResourceFetcher) {
     bool allow_stored_credentials = false;
     switch (resource_request.GetFetchCredentialsMode()) {
-      case WebURLRequest::kFetchCredentialsModeOmit:
+      case network::mojom::FetchCredentialsMode::kOmit:
         break;
-      case WebURLRequest::kFetchCredentialsModeSameOrigin:
+      case network::mojom::FetchCredentialsMode::kSameOrigin:
         allow_stored_credentials =
             !params.Options().cors_flag ||
             (origin &&
              origin->HasSuboriginAndShouldAllowCredentialsFor(params.Url()));
         break;
-      case WebURLRequest::kFetchCredentialsModeInclude:
-      case WebURLRequest::kFetchCredentialsModePassword:
+      case network::mojom::FetchCredentialsMode::kInclude:
+      case network::mojom::FetchCredentialsMode::kPassword:
         allow_stored_credentials = true;
         break;
     }
@@ -779,7 +779,7 @@ Resource* ResourceFetcher::RequestResource(
 
 void ResourceFetcher::ResourceTimingReportTimerFired(TimerBase* timer) {
   DCHECK_EQ(timer, &resource_timing_report_timer_);
-  Vector<RefPtr<ResourceTimingInfo>> timing_reports;
+  Vector<scoped_refptr<ResourceTimingInfo>> timing_reports;
   timing_reports.swap(scheduled_resource_timing_reports_);
   for (const auto& timing_info : timing_reports)
     Context().AddResourceTiming(*timing_info);
@@ -866,7 +866,7 @@ void ResourceFetcher::StorePerformanceTimingInitiatorInformation(
         fetch_initiator, start_time, is_main_resource);
   }
 
-  RefPtr<ResourceTimingInfo> info =
+  scoped_refptr<ResourceTimingInfo> info =
       ResourceTimingInfo::Create(fetch_initiator, start_time, is_main_resource);
 
   if (resource->IsCacheValidator()) {
@@ -1343,7 +1343,7 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
           encoded_data_length == -1 ? 0 : encoded_data_length);
     }
   }
-  if (RefPtr<ResourceTimingInfo> info =
+  if (scoped_refptr<ResourceTimingInfo> info =
           resource_timing_info_map_.Take(resource)) {
     // Store redirect responses that were packed inside the final response.
     AddRedirectsToTimingInfo(resource, info.get());
@@ -1365,6 +1365,7 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
     }
   }
 
+  resource->VirtualTimePauser().PauseVirtualTime(false);
   Context().DispatchDidFinishLoading(
       resource->Identifier(), finish_time, encoded_data_length,
       resource->GetResponse().DecodedBodyLength());
@@ -1386,6 +1387,7 @@ void ResourceFetcher::HandleLoaderError(Resource* resource,
   bool is_internal_request = resource->Options().initiator_info.name ==
                              FetchInitiatorTypeNames::internal;
 
+  resource->VirtualTimePauser().PauseVirtualTime(false);
   Context().DispatchDidFail(resource->Identifier(), error,
                             resource->GetResponse().EncodedDataLength(),
                             is_internal_request);
@@ -1431,6 +1433,12 @@ bool ResourceFetcher::StartLoad(Resource* resource) {
                                             request, response,
                                             resource->Options().initiator_info);
 
+    if (Context().GetFrameScheduler()) {
+      ScopedVirtualTimePauser virtual_time_pauser =
+          Context().GetFrameScheduler()->CreateScopedVirtualTimePauser();
+      virtual_time_pauser.PauseVirtualTime(true);
+      resource->VirtualTimePauser() = std::move(virtual_time_pauser);
+    }
     Context().DispatchWillSendRequest(resource->Identifier(), request, response,
                                       resource->GetType(),
                                       resource->Options().initiator_info);

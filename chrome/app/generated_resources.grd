@@ -5688,7 +5688,7 @@ the Bookmarks menu.">
         Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>history.google.com<ph name="END_LINK">&lt;/a&gt;</ph>
       </message>
       <message name="IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE" desc="A dialog informing the user that their Chrome browsing history was deleted, but other forms of history can still be found on Google My Activity.">
-        The selected data has been removed from Chrome and synced devices. Your Google Account may have other forms of browsing history like searches and activity from other Google services at <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>history.google.com<ph name="END_LINK">&lt;/a&gt;</ph>.
+        The selected data has been removed from Chrome and synced devices. Your Google Account may have other forms of browsing history like searches and activity from other Google services at <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/a&gt;</ph>.
       </message>
       <message name="IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_TITLE" desc="Title of a dialog that informs the user that the deletion of Chrome's browsing data has been completed.">
         Cleared Chrome data
@@ -11068,8 +11068,8 @@ read aloud to screenreader users to announce that a completion is available.">
     </message>
 
     <if expr="is_win">
-      <message name="IDS_UTILITY_PROCESS_SHELL_HANDLER_NAME" desc="The name of the utility process used to handle shell operations.">
-        Shell Handler
+      <message name="IDS_UTILITY_PROCESS_UTILITY_WIN_NAME" desc="The name of the utility process used to handle Windows utility operations.">
+        Windows Utilities
       </message>
     </if>
 

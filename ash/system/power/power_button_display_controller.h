@@ -8,6 +8,7 @@
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "ui/events/devices/input_device_event_observer.h"
@@ -72,7 +73,7 @@ class ASH_EXPORT PowerButtonDisplayController
   void GetInitialBacklightsForcedOff();
 
   // Initializes |backlights_forced_off_|.
-  void OnGotInitialBacklightsForcedOff(bool is_forced_off);
+  void OnGotInitialBacklightsForcedOff(base::Optional<bool> is_forced_off);
 
   // Enables or disables the touchscreen by updating the global touchscreen
   // enabled status. The touchscreen is disabled when backlights are forced off
@@ -87,6 +88,10 @@ class ASH_EXPORT PowerButtonDisplayController
 
   // Saves the most recent timestamp that screen state changed.
   base::TimeTicks screen_state_last_changed_;
+
+  // Controls whether the touchscreen is disabled when the screen is turned off
+  // due to user inactivity.
+  bool disable_touchscreen_while_screen_off_ = true;
 
   // Time source for performed action times.
   base::TickClock* tick_clock_;  // Not owned.

@@ -555,8 +555,8 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
 
   V8CompileHistogram::Cacheability cacheability_if_no_handler =
       V8CompileHistogram::Cacheability::kNoncacheable;
-  if (!cache_handler && (script_start_position.line_.ZeroBasedInt() == 0) &&
-      (script_start_position.column_.ZeroBasedInt() == 0))
+  if (!cache_handler && (script_start_position.line_.ZeroBasedInt() != 0 ||
+                         script_start_position.column_.ZeroBasedInt() != 0))
     cacheability_if_no_handler =
         V8CompileHistogram::Cacheability::kInlineScript;
 
@@ -566,11 +566,11 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
                                        cacheability_if_no_handler);
 
   if (!*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(kTraceEventCategoryGroup))
-    return compile_fn(isolate, code, origin, nullptr);
+    return std::move(compile_fn).Run(isolate, code, origin, nullptr);
 
   InspectorCompileScriptEvent::V8CacheResult cache_result;
   v8::MaybeLocal<v8::Script> script =
-      compile_fn(isolate, code, origin, &cache_result);
+      std::move(compile_fn).Run(isolate, code, origin, &cache_result);
   TRACE_EVENT_END1(
       kTraceEventCategoryGroup, "v8.compile", "data",
       InspectorCompileScriptEvent::Data(file_name, script_start_position,

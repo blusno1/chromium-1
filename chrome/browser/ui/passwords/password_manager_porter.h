@@ -6,34 +6,51 @@
 #define CHROME_BROWSER_UI_PASSWORDS_PASSWORD_MANAGER_PORTER_H_
 
 #include "components/password_manager/core/browser/import/password_importer.h"
+#include "components/password_manager/core/browser/ui/export_flow.h"
+#include "components/password_manager/core/browser/ui/import_flow.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 namespace content {
 class WebContents;
 }
 
+namespace password_manager {
 class CredentialProviderInterface;
+}
+
 class Profile;
 
 // Handles the exporting of passwords to a file, and the importing of such a
 // file to the Password Manager.
-class PasswordManagerPorter : public ui::SelectFileDialog::Listener {
+class PasswordManagerPorter : public ui::SelectFileDialog::Listener,
+                              public password_manager::ExportFlow,
+                              public password_manager::ImportFlow {
  public:
+  explicit PasswordManagerPorter(password_manager::CredentialProviderInterface*
+                                     credential_provider_interface);
+
+  ~PasswordManagerPorter() override;
+
+  void set_web_contents(content::WebContents* web_contents) {
+    web_contents_ = web_contents;
+  }
+
+  // password_manager::ExportFlow
+  void Store() override;
+
+  // password_manager::ImportFlow
+  void Load() override;
+
+ private:
   enum Type {
     PASSWORD_IMPORT,
     PASSWORD_EXPORT,
   };
 
-  explicit PasswordManagerPorter(
-      CredentialProviderInterface* credential_provider_interface);
-
-  ~PasswordManagerPorter() override;
-
   // Display the file-picker dialogue for either importing or exporting
   // passwords.
   void PresentFileSelector(content::WebContents* web_contents, Type type);
 
- private:
   // Callback from the file selector dialogue when a file has been picked (for
   // either import or export).
   // ui::SelectFileDialog::Listener:
@@ -45,9 +62,12 @@ class PasswordManagerPorter : public ui::SelectFileDialog::Listener {
 
   virtual void ExportPasswordsToPath(const base::FilePath& path);
 
-  CredentialProviderInterface* credential_provider_interface_;
+  password_manager::CredentialProviderInterface* credential_provider_interface_;
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
-  Profile* profile_;
+  Profile* profile_ = nullptr;
+
+  // Caching the current WebContents for when PresentFileSelector is called.
+  content::WebContents* web_contents_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordManagerPorter);
 };

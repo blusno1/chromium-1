@@ -7,6 +7,7 @@
 
 #include <memory>
 #include "core/CoreExport.h"
+#include "core/loader/resource/ImageResourceObserver.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageObserver.h"
@@ -59,8 +60,6 @@ class CORE_EXPORT ImageResourceContent final
   blink::Image* GetImage();
   bool HasImage() const { return image_.get(); }
 
-  bool UsesImageContainerSize() const;
-  bool ImageHasRelativeSize() const;
   // The device pixel ratio we got from the server for this image, or 1.0.
   float DevicePixelRatioHeaderValue() const;
   bool HasDevicePixelRatioHeaderValue() const;
@@ -173,6 +172,8 @@ class CORE_EXPORT ImageResourceContent final
   }
 
  private:
+  using CanDeferInvalidation = ImageResourceObserver::CanDeferInvalidation;
+
   explicit ImageResourceContent(scoped_refptr<blink::Image> = nullptr);
 
   // ImageObserver
@@ -189,6 +190,7 @@ class CORE_EXPORT ImageResourceContent final
 
   // If not null, changeRect is the changed part of the image.
   void NotifyObservers(NotifyFinishOption,
+                       CanDeferInvalidation,
                        const IntRect* change_rect = nullptr);
   void MarkObserverFinished(ImageResourceObserver*);
   void UpdateToLoadedContentStatus(ResourceStatus);

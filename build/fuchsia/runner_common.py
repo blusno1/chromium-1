@@ -29,10 +29,13 @@ GUEST_NET = '192.168.3.0/24'
 GUEST_IP_ADDRESS = '192.168.3.9'
 HOST_IP_ADDRESS = '192.168.3.2'
 
+# A string used to uniquely identify this invocation of Fuchsia.
+INSTANCE_ID = str(uuid.uuid1())
+
 # Signals to the host that the the remote binary has finished executing.
 # The UUID reduces the likelihood of the remote end generating the signal
 # by coincidence.
-ALL_DONE_MESSAGE = '*** RUN FINISHED: %s' % uuid.uuid1()
+ALL_DONE_MESSAGE = '*** RUN FINISHED: %s' % INSTANCE_ID
 
 
 def _RunAndCheck(dry_run, args):
@@ -199,7 +202,7 @@ class BootfsData(object):
 
 
 def WriteAutorun(bin_name, child_args, summary_output, shutdown_machine,
-                 dry_run, use_device, file_mapping):
+                 wait_for_network, dry_run, use_device, file_mapping):
   # Generate a script that runs the binaries and shuts down QEMU (if used).
   autorun_file = open(bin_name + '.bootfs_autorun', 'w')
   autorun_file.write('#!/boot/bin/sh\n')
@@ -207,6 +210,15 @@ def WriteAutorun(bin_name, child_args, summary_output, shutdown_machine,
   if _IsRunningOnBot():
     # TODO(scottmg): Passed through for https://crbug.com/755282.
     autorun_file.write('export CHROME_HEADLESS=1\n')
+
+  if wait_for_network:
+    # Quietly block until `ping google.com` succeeds.
+    autorun_file.write("""echo "Waiting for network connectivity..."
+                       until ping -c 1 google.com >/dev/null 2>/dev/null
+                       do
+                       :
+                       done
+                       """)
 
   if summary_output:
     # Unfortunately, devmgr races with this autorun script. This delays long
@@ -252,14 +264,14 @@ def WriteAutorun(bin_name, child_args, summary_output, shutdown_machine,
 
 def BuildBootfs(output_directory, runtime_deps, bin_name, child_args, dry_run,
                 bootdata, summary_output, shutdown_machine, target_cpu,
-                use_device, use_autorun):
+                use_device, wait_for_network, use_autorun):
   # |runtime_deps| already contains (target, source) pairs for the runtime deps,
   # so we can initialize |file_mapping| from it directly.
   file_mapping = dict(runtime_deps)
 
   if use_autorun:
       WriteAutorun(bin_name, child_args, summary_output, shutdown_machine,
-                   dry_run, use_device, file_mapping)
+                   wait_for_network, dry_run, use_device, file_mapping)
 
   # Find the full list of files to add to the bootfs.
   file_mapping = _ExpandDirectories(
@@ -321,7 +333,7 @@ def _SymbolizeEntries(entries):
         return 'at ' + relpath + ':' + m.group(2)
       filtered_line = filename_re.sub(RelativizePath, output_line)
 
-      if '??' in filtered_line:
+      if '??' in filtered_line.split():
         # If symbolization fails just output the raw backtrace.
         filtered_line = raw
       else:
@@ -482,12 +494,13 @@ def RunFuchsia(bootfs_data, use_device, kernel_path, dry_run,
     # Deploy the boot image to the device.
     bootserver_path = os.path.join(SDK_ROOT, 'tools', 'bootserver')
     bootserver_command = [bootserver_path, '-1', kernel_path,
-                          bootfs_data.bootfs]
+                          bootfs_data.bootfs, '--', '-o',
+                          'zircon.nodename=%s' % INSTANCE_ID]
     _RunAndCheck(dry_run, bootserver_command)
 
     # Start listening for logging lines.
     process = subprocess.Popen(
-        [os.path.join(SDK_ROOT, 'tools', 'loglistener')],
+        [os.path.join(SDK_ROOT, 'tools', 'loglistener'), INSTANCE_ID],
         stdout=subprocess.PIPE, stdin=open(os.devnull))
   else:
     qemu_path = os.path.join(
@@ -536,7 +549,12 @@ def RunFuchsia(bootfs_data, use_device, kernel_path, dry_run,
       _RunAndCheck(dry_run, ['truncate', '-s100M', img_filename,])
       _RunAndCheck(dry_run, [os.path.join(SDK_ROOT, 'tools', 'minfs'),
                              img_filename, 'mkfs'])
-      qemu_command.extend(['-drive', 'file=' + img_filename + ',format=raw'])
+      # Specifically set an AHCI drive, otherwise the drive won't be mountable
+      # on ARM64.
+      qemu_command.extend(['-drive', 'file=' + img_filename +
+                               ',if=none,format=raw,id=resultsdisk',
+                           '-device', 'ahci,id=ahci',
+                           '-device', 'ide-drive,drive=resultsdisk,bus=ahci.0'])
 
     if dry_run:
       print 'Run:', ' '.join(qemu_command)

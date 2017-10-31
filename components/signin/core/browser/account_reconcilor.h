@@ -32,6 +32,10 @@
 class ProfileOAuth2TokenService;
 class SigninClient;
 
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
+
 class AccountReconcilor : public KeyedService,
                           public content_settings::Observer,
                           public GaiaCookieManagerService::Observer,
@@ -80,6 +84,8 @@ class AccountReconcilor : public KeyedService,
                     GaiaCookieManagerService* cookie_manager_service);
   ~AccountReconcilor() override;
 
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
   void Initialize(bool start_reconcile_if_tokens_available);
 
   // Signal that the status of the new_profile_management flag has changed.
@@ -115,6 +121,9 @@ class AccountReconcilor : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, DiceReconcileWhithoutSignin);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, DiceReconcileNoop);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, DiceLastKnownFirstAccount);
+  FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, DiceMigrationAfterNoop);
+  FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest,
+                           DiceNoMigrationAfterReconcile);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest,
                            DiceReconcileReuseGaiaFirstAccount);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, TokensNotLoaded);
@@ -149,6 +158,7 @@ class AccountReconcilor : public KeyedService,
                            AddAccountToCookieCompletedWithBogusAccount);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, NoLoopWithBadPrimary);
   FRIEND_TEST_ALL_PREFIXES(AccountReconcilorTest, WontMergeAccountsWithError);
+  FRIEND_TEST_ALL_PREFIXES(AccountReconcilorMigrationTest, MigrateAtCreation);
 
   bool IsRegisteredWithTokenService() const {
     return registered_with_token_service_;
@@ -166,8 +176,10 @@ class AccountReconcilor : public KeyedService,
 
   // The reconcilor is enabled if Sync or Dice is enabled.
   bool IsEnabled();
-  // Returns true if account consistency is enabled (Mirror or Dice).
-  bool IsAccountConsistencyEnabled();
+  // Returns true if account consistency is enforced (Mirror or Dice).
+  // If this is false, reconcile is done, but its results are discarded and no
+  // changes to the accounts are made.
+  bool IsAccountConsistencyEnforced();
 
   // All actions with side effects, only doing meaningful work if account
   // consistency is enabled. Virtual so that they can be overridden in tests.
@@ -228,6 +240,12 @@ class AccountReconcilor : public KeyedService,
   void UnblockReconcile();
   bool IsReconcileBlocked() const;
 
+  // Dice migration methods:
+  // Returns true if migration should happen on the next startup.
+  bool ShouldMigrateToDiceOnStartup();
+  // Schedules migration to happen at next startup.
+  static void SetDiceMigrationOnStartup(PrefService* prefs, bool migrate);
+
   // The ProfileOAuth2TokenService associated with this reconcilor.
   ProfileOAuth2TokenService* token_service_;
 
@@ -254,6 +272,10 @@ class AccountReconcilor : public KeyedService,
 
   // True iff an error occured during the last attempt to reconcile.
   bool error_during_last_reconcile_;
+
+  // Used for Dice migration: migration can happen if the accounts are
+  // consistent, which is indicated by reconcile being a no-op.
+  bool reconcile_is_noop_;
 
   // Used during reconcile action.
   // These members are used to validate the gaia cookie.  |gaia_accounts_|

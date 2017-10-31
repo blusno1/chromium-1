@@ -36,14 +36,15 @@
 #include "core/animation/AnimationEffectReadOnly.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/EffectModel.h"
+#include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "platform/Timer.h"
 #include "platform/animation/CompositorAnimationTimeline.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -91,6 +92,10 @@ class CORE_EXPORT DocumentTimeline : public AnimationTimeline {
   bool HasPendingUpdates() const {
     return !animations_needing_update_.IsEmpty();
   }
+  size_t PendingAnimationsCount() const {
+    return animations_needing_update_.size();
+  }
+  size_t MainThreadCompositableAnimationsCount() const;
   double ZeroTime();
   double currentTime(bool& is_null) override;
   double currentTime();
@@ -116,6 +121,7 @@ class CORE_EXPORT DocumentTimeline : public AnimationTimeline {
   Document* GetDocument() { return document_.Get(); }
   void Wake();
   void ResetForTesting();
+  bool HasAnimations() { return !animations_.IsEmpty(); }
 
   void Trace(blink::Visitor*) override;
 
@@ -148,10 +154,10 @@ class CORE_EXPORT DocumentTimeline : public AnimationTimeline {
    public:
     DocumentTimelineTiming(DocumentTimeline* timeline)
         : timeline_(timeline),
-          timer_(TaskRunnerHelper::Get(TaskType::kUnspecedTimer,
-                                       timeline->GetDocument()),
-                 this,
-                 &DocumentTimelineTiming::TimerFired) {
+          timer_(
+              timeline->GetDocument()->GetTaskRunner(TaskType::kUnspecedTimer),
+              this,
+              &DocumentTimelineTiming::TimerFired) {
       DCHECK(timeline_);
     }
 

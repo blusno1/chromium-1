@@ -116,7 +116,7 @@ class URLResponseBodyConsumerTest : public ::testing::Test,
     request->url = GURL("http://www.example.com/");
     request->priority = net::LOW;
     request->appcache_host_id = 0;
-    request->fetch_request_mode = FETCH_REQUEST_MODE_NO_CORS;
+    request->fetch_request_mode = network::mojom::FetchRequestMode::kNoCORS;
     request->fetch_frame_type = REQUEST_CONTEXT_FRAME_TYPE_NONE;
 
     const RequestExtraData extra_data;
@@ -140,7 +140,7 @@ class URLResponseBodyConsumerTest : public ::testing::Test,
     return dispatcher_->StartAsync(
         std::move(request), 0, nullptr, url::Origin(),
         TRAFFIC_ANNOTATION_FOR_TESTS, false,
-        base::MakeUnique<TestRequestPeer>(context, message_loop_.task_runner()),
+        std::make_unique<TestRequestPeer>(context, message_loop_.task_runner()),
         blink::WebURLRequest::LoadingIPCType::kChromeIPC, nullptr,
         std::vector<std::unique_ptr<URLLoaderThrottle>>(),
         mojo::ScopedDataPipeConsumerHandle());

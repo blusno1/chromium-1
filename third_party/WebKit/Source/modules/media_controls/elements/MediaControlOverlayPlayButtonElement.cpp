@@ -13,12 +13,12 @@
 #include "modules/media_controls/elements/MediaControlElementsHelper.h"
 #include "platform/runtime_enabled_features.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebSize.h"
 
 namespace {
 
-bool IsModern() {
-  return blink::RuntimeEnabledFeatures::ModernMediaControlsEnabled();
-}
+// The size of the inner circle button in pixels.
+constexpr int kInnerButtonSize = 56;
 
 }  // namespace.
 
@@ -29,25 +29,26 @@ namespace blink {
 // MediaControlOverlayPlayButtonElement
 //   (-webkit-media-controls-overlay-play-button)
 // +-div (-internal-media-controls-overlay-play-button-internal)
-//   {if IsModern}
+//   {if MediaControlsImpl::IsModern}
 //   This contains the inner circle with the actual play/pause icon.
 MediaControlOverlayPlayButtonElement::MediaControlOverlayPlayButtonElement(
     MediaControlsImpl& media_controls)
-    : MediaControlInputElement(media_controls, kMediaOverlayPlayButton) {
+    : MediaControlInputElement(media_controls, kMediaOverlayPlayButton),
+      internal_button_(nullptr) {
   EnsureUserAgentShadowRoot();
   setType(InputTypeNames::button);
   SetShadowPseudoId(AtomicString("-webkit-media-controls-overlay-play-button"));
 
-  if (IsModern()) {
+  if (MediaControlsImpl::IsModern()) {
     ShadowRoot& shadow_root = Shadow()->OldestShadowRoot();
-    MediaControlElementsHelper::CreateDiv(
+    internal_button_ = MediaControlElementsHelper::CreateDiv(
         "-internal-media-controls-overlay-play-button-internal", &shadow_root);
   }
 }
 
 void MediaControlOverlayPlayButtonElement::UpdateDisplayType() {
   SetIsWanted(MediaElement().ShouldShowControls() &&
-              (IsModern() || MediaElement().paused()));
+              (MediaControlsImpl::IsModern() || MediaElement().paused()));
   MediaControlInputElement::UpdateDisplayType();
 }
 
@@ -83,6 +84,18 @@ void MediaControlOverlayPlayButtonElement::DefaultEventHandler(Event* event) {
 
 bool MediaControlOverlayPlayButtonElement::KeepEventInNode(Event* event) {
   return MediaControlElementsHelper::IsUserInteractionEvent(event);
+}
+
+WebSize MediaControlOverlayPlayButtonElement::GetSizeOrDefault() const {
+  // The size should come from the internal button which actually displays the
+  // button.
+  return MediaControlElementsHelper::GetSizeOrDefault(
+      *internal_button_, WebSize(kInnerButtonSize, kInnerButtonSize));
+}
+
+void MediaControlOverlayPlayButtonElement::Trace(blink::Visitor* visitor) {
+  MediaControlInputElement::Trace(visitor);
+  visitor->Trace(internal_button_);
 }
 
 }  // namespace blink

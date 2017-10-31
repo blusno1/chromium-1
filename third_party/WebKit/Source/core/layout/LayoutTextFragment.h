@@ -51,12 +51,8 @@ class CORE_EXPORT LayoutTextFragment final : public LayoutText {
 
   bool IsTextFragment() const override { return true; }
 
-  bool ContainsCaretOffset(int) const override;
-  bool IsBeforeNonCollapsedCharacter(unsigned) const override;
-  bool IsAfterNonCollapsedCharacter(unsigned) const override;
-  int CaretMinOffset() const override;
-  int CaretMaxOffset() const override;
-  unsigned ResolvedTextLength() const override;
+  Position PositionForCaretOffset(unsigned) const override;
+  Optional<unsigned> CaretOffsetForPosition(const Position&) const override;
 
   unsigned Start() const { return start_; }
   unsigned FragmentLength() const { return fragment_length_; }
@@ -80,7 +76,6 @@ class CORE_EXPORT LayoutTextFragment final : public LayoutText {
 
   void TransformText() override;
 
-  // FIXME: Rename to LayoutTextFragment
   const char* GetName() const override { return "LayoutTextFragment"; }
 
   void SetFirstLetterPseudoElement(FirstLetterPseudoElement* element) {

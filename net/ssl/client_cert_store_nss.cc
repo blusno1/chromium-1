@@ -53,8 +53,7 @@ class ClientCertIdentityNSS : public ClientCertIdentity {
         FROM_HERE,
         {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
         base::Bind(&FetchClientCertPrivateKey, base::Unretained(certificate()),
-                   cert_certificate_.get(),
-                   base::Unretained(password_delegate_.get())),
+                   cert_certificate_.get(), password_delegate_),
         private_key_callback);
   }
 
@@ -118,7 +117,6 @@ void ClientCertStoreNSS::FilterCertsOnWorkerThread(
 
     X509Certificate::OSCertHandles intermediates_raw;
     intermediates_raw.reserve(nss_intermediates.size());
-#if BUILDFLAG(USE_BYTE_CERTS)
     std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> intermediates;
     intermediates.reserve(nss_intermediates.size());
     for (const ScopedCERTCertificate& nss_intermediate : nss_intermediates) {
@@ -131,10 +129,6 @@ void ClientCertStoreNSS::FilterCertsOnWorkerThread(
       intermediates_raw.push_back(intermediate_cert_handle.get());
       intermediates.push_back(std::move(intermediate_cert_handle));
     }
-#else
-    for (const ScopedCERTCertificate& nss_intermediate : nss_intermediates)
-      intermediates_raw.push_back(nss_intermediate.get());
-#endif
 
     // Retain a copy of the intermediates. Some deployments expect the client to
     // supply intermediates out of the local store. See

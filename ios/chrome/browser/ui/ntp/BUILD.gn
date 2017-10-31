@@ -35,7 +35,8 @@ source_set("ntp_header") {
     "//ios/chrome/browser/ui/favicon:favicon_ui",
     "//ios/chrome/browser/ui/toolbar",
     "//ios/chrome/browser/ui/toolbar:resource_macros",
-    "//ios/chrome/browser/ui/toolbar:toolbar_base_feature",
+    "//ios/chrome/browser/ui/toolbar/public",
+    "//ios/chrome/browser/ui/toolbar/public:toolbar_base_feature",
     "//ios/chrome/common",
     "//ui/base",
   ]
@@ -48,6 +49,7 @@ source_set("ntp_controller") {
     "new_tab_page_controller.mm",
   ]
   deps = [
+    ":modal_ntp",
     ":ntp",
     ":ntp_internal",
     "//base",
@@ -63,6 +65,7 @@ source_set("ntp_controller") {
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui:notifications",
     "//ios/chrome/browser/ui/bookmarks",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_constant",
@@ -89,8 +92,6 @@ source_set("ntp_internal") {
     "incognito_view_controller.mm",
     "metrics.h",
     "metrics.mm",
-    "modal_ntp.h",
-    "modal_ntp.mm",
     "most_visited_cell.h",
     "most_visited_cell.mm",
     "most_visited_layout.h",
@@ -115,6 +116,7 @@ source_set("ntp_internal") {
     ":ntp_header",
   ]
   deps = [
+    ":modal_ntp",
     ":ntp",
     ":ntp_tile",
     "resources:bookmarks_bar_bg",
@@ -179,6 +181,7 @@ source_set("ntp_internal") {
     "//ios/chrome/browser/suggestions",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui:notifications",
     "//ios/chrome/browser/ui/bookmarks",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/content_suggestions",
@@ -186,6 +189,7 @@ source_set("ntp_internal") {
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_util",
     "//ios/chrome/browser/ui/content_suggestions/cells",
     "//ios/chrome/browser/ui/context_menu",
+    "//ios/chrome/browser/ui/favicon",
     "//ios/chrome/browser/ui/favicon:favicon_ui",
     "//ios/chrome/browser/ui/overscroll_actions",
     "//ios/chrome/browser/ui/toolbar",
@@ -220,6 +224,20 @@ source_set("ntp_tile") {
   ]
 }
 
+# TODO(crbug.com/768817): Remove the following once new bookmarks are enabled by
+# default.
+source_set("modal_ntp") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "modal_ntp.h",
+    "modal_ntp.mm",
+  ]
+  deps = [
+    "//ios/chrome/browser/bookmarks:features",
+    "//ios/chrome/browser/ui:ui_util",
+  ]
+}
+
 source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
@@ -233,6 +251,7 @@ source_set("unit_tests") {
     "ntp_tile_saver_unittest.mm",
   ]
   deps = [
+    ":modal_ntp",
     ":ntp",
     ":ntp_controller",
     ":ntp_internal",

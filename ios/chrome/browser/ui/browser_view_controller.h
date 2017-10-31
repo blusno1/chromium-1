@@ -26,20 +26,15 @@ class GURL;
 @class Tab;
 @class TabModel;
 @protocol TabStripFoldAnimation;
+@protocol ToolbarSnapshotProviding;
 
 namespace ios {
 class ChromeBrowserState;
 }
 
-// Notification sent when the location bar becomes first responder.
-extern NSString* const kLocationBarBecomesFirstResponderNotification;
-// Notification sent when the location bar resigns first responder.
-extern NSString* const kLocationBarResignsFirstResponderNotification;
-
 // The top-level view controller for the browser UI. Manages other controllers
 // which implement the interface.
-@interface BrowserViewController : UIViewController<SideSwipeControllerDelegate,
-                                                    ToolbarOwner,
+@interface BrowserViewController : UIViewController<ToolbarOwner,
                                                     UrlLoader,
                                                     VoiceSearchPresenter,
                                                     WebToolbarDelegate>
@@ -88,6 +83,9 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 
 // Returns the ios::ChromeBrowserState passed to the initializer.
 @property(nonatomic, assign, readonly) ios::ChromeBrowserState* browserState;
+
+@property(nonatomic, strong, readonly) id<ToolbarSnapshotProviding>
+    toolbarSnapshotProvider;
 
 // Whether the receiver is currently the primary BVC.
 - (void)setPrimary:(BOOL)primary;

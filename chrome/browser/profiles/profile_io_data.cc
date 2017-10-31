@@ -63,6 +63,7 @@
 #include "components/cookie_config/cookie_store_util.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/dom_distiller/core/url_constants.h"
+#include "components/domain_reliability/monitor.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
 #include "components/net_log/chrome_net_log.h"
@@ -72,6 +73,7 @@
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/previews/core/previews_io_data.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "components/sync/base/pref_names.h"
 #include "components/url_formatter/url_fixer.h"
@@ -493,6 +495,9 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
     sync_first_setup_complete_.MoveToThread(io_task_runner);
     sync_has_auth_error_.Init(syncer::prefs::kSyncHasAuthError, pref_service);
     sync_has_auth_error_.MoveToThread(io_task_runner);
+    dice_enabled_ = signin::CreateDicePrefMember(pref_service);
+    if (dice_enabled_)
+      dice_enabled_->MoveToThread(io_task_runner);
   }
 
   network_prediction_options_.Init(prefs::kNetworkPredictionOptions,
@@ -619,6 +624,7 @@ ProfileIOData::ProfileIOData(Profile::ProfileType profile_type)
 #endif
       main_request_context_(nullptr),
       resource_context_(new ResourceContext(this)),
+      domain_reliability_monitor_unowned_(nullptr),
       profile_type_(profile_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
@@ -668,6 +674,9 @@ ProfileIOData::~ProfileIOData() {
     memcpy(&media_context_vtable_cache[current_context],
            static_cast<void*>(it->second), sizeof(void*));
   }
+
+  if (domain_reliability_monitor_unowned_)
+    domain_reliability_monitor_unowned_->Shutdown();
 
   if (main_request_context_) {
     // Prevent the TreeStateTracker from getting any more notifications by
@@ -1046,6 +1055,9 @@ void ProfileIOData::Init(
   chrome_network_delegate->set_data_use_aggregator(
       io_thread_globals->data_use_aggregator.get(), IsOffTheRecord());
 
+  ChromeNetworkDelegate* chrome_network_delegate_unowned =
+      chrome_network_delegate.get();
+
   std::unique_ptr<net::NetworkDelegate> network_delegate =
       ConfigureNetworkDelegate(profile_params_->io_thread,
                                std::move(chrome_network_delegate));
@@ -1150,6 +1162,19 @@ void ProfileIOData::Init(
           std::move(profile_params_->main_network_context_request),
           std::move(profile_params_->main_network_context_params),
           std::move(builder), &main_request_context_);
+
+  if (chrome_network_delegate_unowned->domain_reliability_monitor()) {
+    // Save a pointer to shut down Domain Reliability cleanly before the
+    // URLRequestContext is dismantled.
+    domain_reliability_monitor_unowned_ =
+        chrome_network_delegate_unowned->domain_reliability_monitor();
+
+    domain_reliability_monitor_unowned_->InitURLRequestContext(
+        main_request_context_);
+    domain_reliability_monitor_unowned_->AddBakedInConfigs();
+    domain_reliability_monitor_unowned_->SetDiscardUploads(
+        !GetMetricsEnabledStateOnIOThread());
+  }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extension_cookie_notifier_ =
@@ -1348,6 +1373,8 @@ void ProfileIOData::ShutdownOnUIThread(
   sync_suppress_start_.Destroy();
   sync_first_setup_complete_.Destroy();
   sync_has_auth_error_.Destroy();
+  if (dice_enabled_)
+    dice_enabled_->Destroy();
   enable_referrers_.Destroy();
   enable_do_not_track_.Destroy();
   force_google_safesearch_.Destroy();

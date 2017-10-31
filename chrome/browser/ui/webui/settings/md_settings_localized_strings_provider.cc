@@ -468,11 +468,12 @@ void AddClearBrowsingDataStrings(content::WebUIDataSource* html_source) {
       "clearBrowsingHistorySummarySignedIn",
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SIGNED_IN,
-          base::ASCIIToUTF16(chrome::kMyActivityUrl)));
-  html_source->AddString("clearBrowsingHistorySummarySynced",
-                         l10n_util::GetStringFUTF16(
-                             IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SYNCED,
-                             base::ASCIIToUTF16(chrome::kMyActivityUrl)));
+          base::ASCIIToUTF16(chrome::kMyActivityUrlInClearBrowsingData)));
+  html_source->AddString(
+      "clearBrowsingHistorySummarySynced",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SYNCED,
+          base::ASCIIToUTF16(chrome::kMyActivityUrlInClearBrowsingData)));
   html_source->AddString(
       "otherFormsOfBrowsingHistory",
       l10n_util::GetStringFUTF16(
@@ -484,7 +485,7 @@ void AddClearBrowsingDataStrings(content::WebUIDataSource* html_source) {
       l10n_util::GetStringFUTF16(
           IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE,
           l10n_util::GetStringUTF16(
-              IDS_SETTINGS_CLEAR_DATA_WEB_HISTORY_URL_IN_DIALOG)));
+              IDS_SETTINGS_CLEAR_DATA_MYACTIVITY_URL_IN_DIALOG)));
 
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -897,10 +898,11 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
       {"internetAddThirdPartyVPN", IDS_SETTINGS_INTERNET_ADD_THIRD_PARTY_VPN},
       {"internetAddVPN", IDS_SETTINGS_INTERNET_ADD_VPN},
       {"internetAddWiFi", IDS_SETTINGS_INTERNET_ADD_WIFI},
-      {"internetConfigTitle", IDS_SETTINGS_INTERNET_CONFIG},
+      {"internetConfigName", IDS_SETTINGS_INTERNET_CONFIG_NAME},
       {"internetDetailPageTitle", IDS_SETTINGS_INTERNET_DETAIL},
       {"internetDeviceEnabling", IDS_SETTINGS_INTERNET_DEVICE_ENABLING},
       {"internetDeviceInitializing", IDS_SETTINGS_INTERNET_DEVICE_INITIALIZING},
+      {"internetJoinType", IDS_SETTINGS_INTERNET_JOIN_TYPE},
       {"internetKnownNetworksPageTitle", IDS_SETTINGS_INTERNET_KNOWN_NETWORKS},
       {"internetMobileSearching", IDS_SETTINGS_INTERNET_MOBILE_SEARCH},
       {"internetNoNetworks", IDS_SETTINGS_INTERNET_NO_NETWORKS},
@@ -953,30 +955,6 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
       {"networkSectionProxyExpandA11yLabel",
        IDS_SETTINGS_INTERNET_NETWORK_SECTION_PROXY_ACCESSIBILITY_LABEL},
       {"networkShared", IDS_SETTINGS_INTERNET_NETWORK_SHARED},
-      {"networkSimCardLocked", IDS_SETTINGS_INTERNET_NETWORK_SIM_CARD_LOCKED},
-      {"networkSimCardMissing", IDS_SETTINGS_INTERNET_NETWORK_SIM_CARD_MISSING},
-      {"networkSimChange", IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_CHANGE},
-      {"networkSimChangePin", IDS_SETTINGS_INTERNET_NETWORK_SIM_CHANGE_PIN},
-      {"networkSimChangePinTitle",
-       IDS_SETTINGS_INTERNET_NETWORK_SIM_CHANGE_PIN_TITLE},
-      {"networkSimEnter", IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_ENTER},
-      {"networkSimEnterNewPin",
-       IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_NEW_PIN},
-      {"networkSimEnterOldPin",
-       IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_OLD_PIN},
-      {"networkSimEnterPin", IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PIN},
-      {"networkSimEnterPinTitle",
-       IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PIN_TITLE},
-      {"networkSimEnterPuk", IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PUK},
-      {"networkSimLockEnable", IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCK_ENABLE},
-      {"networkSimLockedTitle", IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCKED_TITLE},
-      {"networkSimLockedWarning",
-       IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCKED_WARNING},
-      {"networkSimReEnterNewPin",
-       IDS_SETTINGS_INTERNET_NETWORK_SIM_RE_ENTER_NEW_PIN},
-      {"networkSimReEnterNewPin",
-       IDS_SETTINGS_INTERNET_NETWORK_SIM_RE_ENTER_NEW_PIN},
-      {"networkSimUnlock", IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_UNLOCK},
       {"networkVpnBuiltin", IDS_NETWORK_TYPE_VPN_BUILTIN},
       {"tetherConnectionDialogTitle",
        IDS_SETTINGS_INTERNET_TETHER_CONNECTION_DIALOG_TITLE},

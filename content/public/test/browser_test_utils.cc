@@ -600,7 +600,12 @@ void WaitForLoadStopWithoutSuccessCheck(WebContents* web_contents) {
 }
 
 bool WaitForLoadStop(WebContents* web_contents) {
+  WebContentsDestroyedObserver observer(web_contents);
   WaitForLoadStopWithoutSuccessCheck(web_contents);
+  if (observer.IsDestroyed()) {
+    LOG(ERROR) << "WebContents was destroyed during waiting for load stop.";
+    return false;
+  }
   return IsLastCommittedEntryOfPageType(web_contents, PAGE_TYPE_NORMAL);
 }
 
@@ -1756,6 +1761,18 @@ bool WebContentsAddedObserver::RenderViewCreatedCalled() {
   return false;
 }
 
+WebContentsDestroyedObserver::WebContentsDestroyedObserver(
+    WebContents* web_contents)
+    : WebContentsObserver(web_contents) {
+  DCHECK(web_contents);
+}
+
+WebContentsDestroyedObserver::~WebContentsDestroyedObserver() {}
+
+void WebContentsDestroyedObserver::WebContentsDestroyed() {
+  destroyed_ = true;
+}
+
 bool RequestFrame(WebContents* web_contents) {
   DCHECK(web_contents);
   return RenderWidgetHostImpl::From(
@@ -2145,22 +2162,6 @@ bool ConsoleObserverDelegate::DidAddMessageToConsole(
 }
 
 // static
-void PwnMessageHelper::CreateBlobWithPayload(RenderProcessHost* process,
-                                             std::string uuid,
-                                             std::string content_type,
-                                             std::string content_disposition,
-                                             std::string payload) {
-  std::vector<storage::DataElement> data_elements(1);
-  data_elements[0].SetToBytes(payload.c_str(), payload.size());
-
-  IPC::IpcSecurityTestUtil::PwnMessageReceived(
-      process->GetChannel(),
-      BlobStorageMsg_RegisterBlob(uuid, content_type, content_disposition,
-                                  data_elements));
-}
-
-
-// static
 void PwnMessageHelper::RegisterBlobURL(RenderProcessHost* process,
                                        GURL url,
                                        std::string uuid) {
@@ -2259,7 +2260,7 @@ class MockOverscrollControllerImpl : public OverscrollController,
 MockOverscrollController* MockOverscrollController::Create(
     RenderWidgetHostView* rwhv) {
   std::unique_ptr<MockOverscrollControllerImpl> mock =
-      base::MakeUnique<MockOverscrollControllerImpl>();
+      std::make_unique<MockOverscrollControllerImpl>();
   MockOverscrollController* raw_mock = mock.get();
 
   RenderWidgetHostViewAura* rwhva =
@@ -2302,6 +2303,11 @@ void ContextMenuFilter::OnContextMenu(
   handled_ = true;
   last_params_ = params;
   message_loop_runner_->Quit();
+}
+
+WebContents* GetEmbedderForGuest(content::WebContents* guest) {
+  CHECK(guest);
+  return static_cast<content::WebContentsImpl*>(guest)->GetOuterWebContents();
 }
 
 }  // namespace content

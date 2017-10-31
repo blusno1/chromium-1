@@ -58,6 +58,10 @@ PermissionType PermissionDescriptorToPermissionType(
       return PermissionType::SENSORS;
     case PermissionName::ACCESSIBILITY_EVENTS:
       return PermissionType::ACCESSIBILITY_EVENTS;
+    case PermissionName::CLIPBOARD_READ:
+    case PermissionName::CLIPBOARD_WRITE:
+      NOTIMPLEMENTED();
+      break;
   }
 
   NOTREACHED();
@@ -118,7 +122,7 @@ void PermissionRequestResponseCallbackWrapper(
   std::move(callback).Run(vector[0]);
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 class PermissionServiceImpl::PendingRequest {
  public:
@@ -233,7 +237,7 @@ void PermissionServiceImpl::RequestPermissions(
     types[i] = PermissionDescriptorToPermissionType(permissions[i]);
 
   std::unique_ptr<PendingRequest> pending_request =
-      base::MakeUnique<PendingRequest>(types, std::move(callback));
+      std::make_unique<PendingRequest>(types, std::move(callback));
   std::vector<PermissionType> request_types;
   for (size_t i = 0; i < types.size(); ++i) {
     // Check feature policy.

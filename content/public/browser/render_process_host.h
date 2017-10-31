@@ -35,7 +35,7 @@ class Identity;
 }
 
 namespace resource_coordinator {
-class ResourceCoordinatorInterface;
+class ProcessResourceCoordinator;
 }
 
 namespace viz {
@@ -380,7 +380,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual mojom::Renderer* GetRendererInterface() = 0;
 
   // Acquires the interface to the Global Resource Coordinator for this process.
-  virtual resource_coordinator::ResourceCoordinatorInterface*
+  virtual resource_coordinator::ProcessResourceCoordinator*
   GetProcessResourceCoordinator() = 0;
 
   // Whether this process is locked out from ever being reused for sites other
@@ -465,6 +465,12 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // Returns the RenderProcessHost given its ID.  Returns nullptr if the ID does
   // not correspond to a live RenderProcessHost.
   static RenderProcessHost* FromID(int render_process_id);
+
+  // Returns the RenderProcessHost given its renderer's service Identity.
+  // Returns nullptr if the Identity does not correspond to a live
+  // RenderProcessHost.
+  static RenderProcessHost* FromRendererIdentity(
+      const service_manager::Identity& identity);
 
   // Returns whether the process-per-site model is in use (globally or just for
   // the current site), in which case we should ensure there is only one

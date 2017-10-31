@@ -16,6 +16,7 @@
 #include "content/browser/loader/navigation_url_loader_delegate.h"
 #include "content/browser/loader/navigation_url_loader_impl_core.h"
 #include "content/browser/service_worker/service_worker_navigation_handle.h"
+#include "content/common/navigation_subresource_loader_params.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_request_id.h"
@@ -23,6 +24,7 @@
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/stream_handle.h"
+#include "net/url_request/url_request_context_getter.h"
 
 namespace content {
 
@@ -55,7 +57,7 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(
           &NavigationURLLoaderImplCore::Start, core_, resource_context,
-          storage_partition->GetURLRequestContext(),
+          base::Unretained(storage_partition->GetURLRequestContext()),
           base::Unretained(storage_partition->GetFileSystemContext()),
           service_worker_handle_core, appcache_handle_core,
           base::Passed(&request_info), base::Passed(&navigation_ui_data)));
@@ -106,10 +108,10 @@ void NavigationURLLoaderImpl::NotifyResponseStarted(
     bool is_stream) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  delegate_->OnResponseStarted(
-      response, std::move(body), mojo::ScopedDataPipeConsumerHandle(),
-      ssl_status, std::move(navigation_data), request_id, is_download,
-      is_stream, mojom::URLLoaderFactoryPtrInfo());
+  delegate_->OnResponseStarted(response, std::move(body),
+                               mojo::ScopedDataPipeConsumerHandle(), ssl_status,
+                               std::move(navigation_data), request_id,
+                               is_download, is_stream, base::nullopt);
 }
 void NavigationURLLoaderImpl::NotifyRequestFailed(
     bool in_cache,

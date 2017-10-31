@@ -7,6 +7,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/vr/model/model.h"
+#include "chrome/browser/vr/model/omnibox_suggestions.h"
+#include "chrome/browser/vr/speech_recognizer.h"
 #include "chrome/browser/vr/ui_input_manager.h"
 #include "chrome/browser/vr/ui_interface.h"
 #include "chrome/browser/vr/ui_renderer.h"
@@ -95,6 +97,19 @@ void Ui::SetLocationAccessIndicator(bool enabled) {
 
 void Ui::SetExitVrPromptEnabled(bool enabled, UiUnsupportedMode reason) {
   scene_manager_->SetExitVrPromptEnabled(enabled, reason);
+}
+
+void Ui::SetSpeechRecognitionEnabled(bool enabled) {
+  model_->recognizing_speech = enabled;
+}
+
+void Ui::OnSpeechRecognitionStateChanged(int new_state) {
+  model_->speech_recognition_state = new_state;
+}
+
+void Ui::SetOmniboxSuggestions(
+    std::unique_ptr<OmniboxSuggestions> suggestions) {
+  model_->omnibox_suggestions = suggestions->suggestions;
 }
 
 bool Ui::ShouldRenderWebVr() {

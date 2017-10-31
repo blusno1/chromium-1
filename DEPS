@@ -38,10 +38,14 @@ vars = {
   # custom_vars.
   'checkout_src_internal': False,
 
+  # libaom provides support for AV1 but the bitstream is not frozen.
+  'checkout_libaom': False,
+
   # TODO(dpranke): change to != "small" once != is supported.
   'checkout_traffic_annotation_tools': 'checkout_configuration == "default"',
   'checkout_instrumented_libraries': 'checkout_linux and checkout_configuration == "default"',
 
+  'aomedia_git': 'https://aomedia.googlesource.com',
   'chromium_git': 'https://chromium.googlesource.com',
   'swiftshader_git': 'https://swiftshader.googlesource.com',
   'pdfium_git': 'https://pdfium.googlesource.com',
@@ -55,31 +59,31 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'f8e353d5eb97119f4dd44e65331f70d4a57ce7d9',
+  'skia_revision': '90dabec62f9baa912d5936254ad6e73f20e0a973',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': 'c437a77d83253f6d4990f7f5194eb2c0a77f18f2',
+  'v8_revision': '32a6cc20a29b89674d5892ee75497d5977c887d2',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
-  'swarming_revision': '5e8001d9a710121ce7a68efd0804430a34b4f9e4',
+  'swarming_revision': 'fe94e7274e40e2e929cdbc8787836f70d38de1f1',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '54118be673602e7936a566d16185ed311e700ac2',
+  'angle_revision': '1b605ee345902554c2ff1f747cb9360d286e664c',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': 'e043d81e9185a2445fa3ec3fc34a4f69b58d4969',
+  'buildtools_revision': '3275a099f3c199b50ff97117aa0184f3e91f8a32',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling SwiftShader
   # and whatever else without interference from each other.
-  'swiftshader_revision': 'ec5da193b1c29dc8bee19dcc8fe297901ff74911',
+  'swiftshader_revision': 'e2febff0f79aab45451c5d20e59e3b55040f2fa6',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'e85107bc8ab5bbd5b2d3f97fd6071d7ce4a78bcc',
+  'pdfium_revision': '994f20cfb76f4902491a94c4ef61f55705fc124d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -111,7 +115,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '40d0e648f8925445cd3b4d55e14ba7ed46b05ad5',
+  'catapult_revision': '14715602e04a3a6e6cf79342f45d2f2595cce0f4',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -130,6 +134,7 @@ vars = {
 # If you need to add a new host, contact chrome infrastracture team.
 allowed_hosts = [
   'android.googlesource.com',
+  'aomedia.googlesource.com',
   'boringssl.googlesource.com',
   'chrome-internal.googlesource.com',
   'chromium.googlesource.com',
@@ -173,7 +178,7 @@ deps = {
   },
 
   'src/ios/third_party/material_components_ios/src': {
-      'url': Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + 'fe66153a064fd2faf16c4d5d4486d8b54932533c',
+      'url': Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + 'e4ef28e6796430e550023be60ff58d6418b40a49',
       'condition': 'checkout_ios',
   },
 
@@ -222,7 +227,7 @@ deps = {
   },
 
   'src/third_party/android_tools': {
-      'url': Var('chromium_git') + '/android_tools.git' + '@' + '110e5f6c0dcb6f7d586ac0c00f10bc7d1d410088',
+      'url': Var('chromium_git') + '/android_tools.git' + '@' + 'ca0bd083872ad925881736fe2bedc3ff855e08f5',
       'condition': 'checkout_android',
   },
 
@@ -256,7 +261,7 @@ deps = {
 
   # Build tools for Chrome OS. Note: This depends on third_party/pyelftools.
   'src/third_party/chromite': {
-      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '61a24395b7c197fe15a21758bd1bbbaf05d4bd49',
+      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '370839fe525e79fe84ceb71147661953e632fabd',
       'condition': 'checkout_linux',
   },
 
@@ -274,7 +279,7 @@ deps = {
 
   # For Linux and Chromium OS.
   'src/third_party/cros_system_api': {
-      'url': Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '106eeed3635eef25a103c5fc27ce237854d27108',
+      'url': Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '47afcabaf957c013418ef2a33481ec1fe764dc94',
       'condition': 'checkout_linux',
   },
 
@@ -284,7 +289,7 @@ deps = {
   },
 
   'src/third_party/depot_tools':
-    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'bfc4082f431375a49de0a5a18fd0e6685715426f',
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '7d1c484ecd93e94c5258dc330602ac37c5efab44',
 
   # DevTools node modules. Used on Linux buildbots only.
   'src/third_party/devtools-node-modules': {
@@ -392,11 +397,16 @@ deps = {
     Var('chromium_git') + '/chromium/llvm-project/compiler-rt/lib/fuzzer.git' + '@' +  Var('libfuzzer_revision'),
 
   'src/third_party/libaddressinput/src':
-    Var('chromium_git') + '/external/libaddressinput.git' + '@' + '87f69db0b1ca732ba148489d2f75b3af2f236632',
+    Var('chromium_git') + '/external/libaddressinput.git' + '@' + '8200a3221282582ca3291ef219257ca4be7426ca',
+
+  'src/third_party/libaom/source/libaom': {
+    'url': Var('aomedia_git') + '/aom.git' + '@' +  'd9f2286e4c0bbb0fee5719d151653247939c3847',
+    'condition': 'checkout_libaom',
+  },
 
   # Userspace interface to kernel DRM services.
   'src/third_party/libdrm/src': {
-      'url': Var('chromium_git') + '/chromiumos/third_party/libdrm.git' + '@' + '0ce18bedd3e62d4784fa755403801934ba171084',
+      'url': Var('chromium_git') + '/chromiumos/third_party/libdrm.git' + '@' + '16ffb1e6fce0fbd57f7a1e76021c575a40f6dc7a',
       'condition': 'checkout_linux',
   },
 
@@ -595,7 +605,7 @@ deps = {
     Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '34842fa3c36988840c89f5bc6a68503175acf7d9',
 
   'src/third_party/webrtc':
-    Var('webrtc_git') + '/src.git' + '@' + 'a194e58e799ccab6c999998e5d0f75725aa3f748', # commit position 20237
+    Var('webrtc_git') + '/src.git' + '@' + '1b8205f9ee8fda98ddb66c464c7e4d8bfa49cf50', # commit position 20237
 
   'src/third_party/xdg-utils': {
       'url': Var('chromium_git') + '/chromium/deps/xdg-utils.git' + '@' + 'd80274d5869b17b8c9067a1022e4416ee7ed5e0d',
@@ -618,7 +628,7 @@ deps = {
     Var('chromium_git') + '/v8/v8.git' + '@' +  Var('v8_revision'),
 
   'src-internal': {
-    'url': 'https://chrome-internal.googlesource.com/chrome/src-internal.git@cbae27f0a0f7d4fe0d6fb31bc9963a6942de5ec1',
+    'url': 'https://chrome-internal.googlesource.com/chrome/src-internal.git@2c1ee306751c58c05daf7a5c3756d32d8bf2d8aa',
     'condition': 'checkout_src_internal',
   },
 }
@@ -1426,7 +1436,7 @@ hooks = [
     'action': [
       'python',
       'src/build/fuchsia/update_sdk.py',
-      '492eec9e40c9832dd8772f4718b7db6aac4d7921',
+      'f6dffb2fee82a21900fc3a00261dc5844901ea9e',
     ],
   },
 

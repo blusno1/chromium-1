@@ -740,7 +740,7 @@ TEST_P(ImageResourceReloadTest,
   ScopedMockedURLLoad scoped_mocked_url_load(test_url, GetTestFilePath());
   ResourceRequest request(test_url);
   request.SetPreviewsState(WebURLRequest::kServerLoFiOn);
-  request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+  request.SetFetchCredentialsMode(network::mojom::FetchCredentialsMode::kOmit);
   ImageResource* image_resource = ImageResource::Create(request);
   image_resource->SetStatus(ResourceStatus::kPending);
   image_resource->NotifyStartLoad();
@@ -1266,6 +1266,7 @@ TEST(ImageResourceTest, AddClientAfterPrune) {
   Persistent<MockResourceClient> client2 =
       new MockResourceClient(image_resource);
 
+  blink::testing::RunPendingTasks();
   ASSERT_TRUE(image_resource->GetContent()->HasImage());
   EXPECT_FALSE(image_resource->GetContent()->GetImage()->IsNull());
   EXPECT_EQ(kJpegImageWidth, image_resource->GetContent()->GetImage()->width());
@@ -1921,6 +1922,25 @@ TEST(ImageResourceTest, PeriodicFlushTest) {
   EXPECT_EQ(50, image_resource->GetContent()->GetImage()->height());
 
   WTF::SetTimeFunctionsForTesting(nullptr);
+}
+
+TEST(ImageResourceTest, DeferredInvalidation) {
+  ImageResource* image_resource = ImageResource::CreateForTest(NullURL());
+  std::unique_ptr<MockImageResourceObserver> obs =
+      MockImageResourceObserver::Create(image_resource->GetContent());
+
+  // Image loaded.
+  ReceiveResponse(image_resource, NullURL(), "image/jpeg",
+                  reinterpret_cast<const char*>(kJpegImage),
+                  sizeof(kJpegImage));
+  EXPECT_EQ(obs->ImageChangedCount(), 2);
+  EXPECT_EQ(obs->Defer(), ImageResourceObserver::CanDeferInvalidation::kNo);
+
+  // Image animated.
+  static_cast<ImageObserver*>(image_resource->GetContent())
+      ->AnimationAdvanced(image_resource->GetContent()->GetImage());
+  EXPECT_EQ(obs->ImageChangedCount(), 3);
+  EXPECT_EQ(obs->Defer(), ImageResourceObserver::CanDeferInvalidation::kYes);
 }
 
 }  // namespace

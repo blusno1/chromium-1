@@ -177,9 +177,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       network_state_(WebMediaPlayer::kNetworkStateEmpty),
       ready_state_(WebMediaPlayer::kReadyStateHaveNothing),
       highest_ready_state_(WebMediaPlayer::kReadyStateHaveNothing),
-      preload_(base::FeatureList::IsEnabled(kPreloadDefaultIsMetadata)
-                   ? MultibufferDataSource::METADATA
-                   : MultibufferDataSource::AUTO),
+      preload_(MultibufferDataSource::METADATA),
       has_poster_(false),
       main_task_runner_(
           frame->GetTaskRunner(blink::TaskType::kMediaElementEvent)),
@@ -1864,6 +1862,16 @@ void WebMediaPlayerImpl::OnPlay() {
 void WebMediaPlayerImpl::OnPause() {
   Pause();
   client_->PlaybackStateChanged();
+}
+
+void WebMediaPlayerImpl::OnSeekForward(double seconds) {
+  DCHECK_GE(seconds, 0) << "Attempted to seek by a negative number of seconds";
+  client_->RequestSeek(CurrentTime() + seconds);
+}
+
+void WebMediaPlayerImpl::OnSeekBackward(double seconds) {
+  DCHECK_GE(seconds, 0) << "Attempted to seek by a negative number of seconds";
+  client_->RequestSeek(CurrentTime() - seconds);
 }
 
 void WebMediaPlayerImpl::OnVolumeMultiplierUpdate(double multiplier) {

@@ -113,7 +113,8 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
 
   // https://html.spec.whatwg.org/#resolve-a-module-specifier
   static KURL ResolveModuleSpecifier(const String& module_request,
-                                     const KURL& base_url);
+                                     const KURL& base_url,
+                                     String* failure_reason = nullptr);
 
   // https://tc39.github.io/proposal-dynamic-import/#sec-hostimportmoduledynamically
   virtual void ResolveDynamically(const String& specifier,
@@ -129,7 +130,7 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
   virtual ScriptModule CompileModule(const String& script,
                                      const String& url_str,
                                      AccessControlStatus,
-                                     WebURLRequest::FetchCredentialsMode,
+                                     network::mojom::FetchCredentialsMode,
                                      const String& nonce,
                                      ParserDisposition,
                                      const TextPosition&,

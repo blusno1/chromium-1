@@ -392,18 +392,15 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserTest,
   EXPECT_TRUE(ExecuteScript(shell(), "location.reload()"));
   reload_observer.Wait();
 
-  // The expectation is that about:blank was loaded and the virtual URL is set
-  // to the URL that was blocked.
-  //
-  // TODO(nasko): Now that the error commits on the previous URL, the blocked
-  // navigation logic is no longer needed. https://crbug.com/723796
+  // The expectation is that the blocked URL is present in the NavigationEntry,
+  // and shows up in both GetURL and GetVirtualURL.
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_FALSE(
       controller.GetLastCommittedEntry()->GetURL().SchemeIs(url::kDataScheme));
   EXPECT_EQ(redirect_to_blank_url,
+            controller.GetLastCommittedEntry()->GetURL());
+  EXPECT_EQ(redirect_to_blank_url,
             controller.GetLastCommittedEntry()->GetVirtualURL());
-  EXPECT_EQ(url::kAboutBlankURL,
-            controller.GetLastCommittedEntry()->GetURL().spec());
 }
 
 class BrowserSideNavigationBrowserDisableWebSecurityTest
@@ -455,10 +452,9 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserDisableWebSecurityTest,
       file_url,  // base_url_for_data_url
       GURL(), PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET", nullptr,
       base::Optional<SourceLocation>(), CSPDisposition::CHECK,
-      false /* started_from_context_menu */);
+      false /* started_from_context_menu */, false /* has_user_gesture */);
   BeginNavigationParams begin_params(
-      std::string(), net::LOAD_NORMAL, false, false,
-      REQUEST_CONTEXT_TYPE_LOCATION,
+      std::string(), net::LOAD_NORMAL, false, REQUEST_CONTEXT_TYPE_LOCATION,
       blink::WebMixedContentContextType::kBlockable, false,
       url::Origin::Create(data_url));
   FrameHostMsg_BeginNavigation msg(rfh->GetRoutingID(), common_params,

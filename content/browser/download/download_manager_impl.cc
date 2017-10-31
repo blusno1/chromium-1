@@ -112,7 +112,7 @@ void CreateInterruptedDownload(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(&DownloadManager::StartDownload, download_manager,
                      std::move(failed_created_info),
-                     base::MakeUnique<DownloadManager::InputStream>(
+                     std::make_unique<DownloadManager::InputStream>(
                          std::move(empty_byte_stream)),
                      params->callback()));
 }
@@ -198,13 +198,14 @@ void InterceptNavigationResponse(
     const SSLStatus& ssl_status,
     std::unique_ptr<ResourceRequest> resource_request,
     std::unique_ptr<ThrottlingURLLoader> url_loader,
+    std::vector<GURL> url_chain,
     base::Optional<ResourceRequestCompletionStatus> completion_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DownloadManagerImpl::UniqueUrlDownloadHandlerPtr resource_downloader(
       ResourceDownloader::InterceptNavigationResponse(
           download_manager, std::move(resource_request), response,
           std::move(consumer_handle), ssl_status, std::move(url_loader),
-          std::move(completion_status))
+          std::move(url_chain), std::move(completion_status))
           .release());
 
   BrowserThread::PostTask(
@@ -283,15 +284,14 @@ base::FilePath GetTemporaryDownloadDirectory() {
 
 }  // namespace
 
-DownloadManagerImpl::DownloadManagerImpl(net::NetLog* net_log,
-                                         BrowserContext* browser_context)
+DownloadManagerImpl::DownloadManagerImpl(BrowserContext* browser_context)
     : item_factory_(new DownloadItemFactoryImpl()),
       file_factory_(new DownloadFileFactory()),
       shutdown_needed_(true),
       initialized_(false),
       browser_context_(browser_context),
       delegate_(nullptr),
-      net_log_(net_log),
+      net_log_(nullptr),
       weak_factory_(this) {
   DCHECK(browser_context);
 }

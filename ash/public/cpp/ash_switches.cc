@@ -36,6 +36,10 @@ const char kAshDisableTabletAutohideTitlebars[] =
 const char kAshDisableTouchExplorationMode[] =
     "ash-disable-touch-exploration-mode";
 
+// Enables Backbutton on frame for v1 apps.
+// TODO(oshima): Remove this once the feature is launched. crbug.com/749713.
+const char kAshEnableV1AppBackButton[] = "ash-enable-v1-app-back-button";
+
 // Enables key bindings to scroll magnified screen.
 const char kAshEnableMagnifierKeyScroller[] =
     "ash-enable-magnifier-key-scroller";
@@ -147,6 +151,14 @@ const char kSpuriousPowerButtonKeyboardAccel[] =
 // exceeded for a power button event to be considered spurious.
 const char kSpuriousPowerButtonLidAngleChange[] =
     "spurious-power-button-lid-angle-change";
+
+// Chromebases' touchscreens can be used to wake from suspend, unlike the
+// touchscreens on other Chrome OS devices. If set, the touchscreen is kept
+// enabled while the screen is off so that it can be used to turn the screen
+// back on after it has been turned off for inactivity but before the system has
+// suspended.
+const char kTouchscreenUsableWhileScreenOff[] =
+    "touchscreen-usable-while-screen-off";
 
 // By default we use classic IME (i.e. InputMethodChromeOS) in kMus. This flag
 // enables the IME service (i.e. InputMethodMus) instead.

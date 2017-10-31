@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -97,8 +98,6 @@ class LabelButtonTest : public test::WidgetTest {
     styled_highlight_text_color_ = styled_normal_text_color_ =
         button_->GetNativeTheme()->GetSystemColor(
             ui::NativeTheme::kColorId_ButtonEnabledColor);
-#elif defined(OS_MACOSX)
-    styled_highlight_text_color_ = SK_ColorWHITE;
 #else
     styled_highlight_text_color_ = styled_normal_text_color_;
 #endif
@@ -386,7 +385,14 @@ TEST_F(LabelButtonTest, ChangeLabelImageSpacing) {
 
 // Ensure the label gets the correct style for default buttons (e.g. bolding)
 // and button size updates correctly. Regression test for crbug.com/578722.
-TEST_F(LabelButtonTest, ButtonStyleIsDefaultStyle) {
+// Disabled on Mac. The system bold font on 10.10 doesn't get wide enough to
+// change the size, but we don't use styled buttons on Mac, just MdTextButton.
+#if defined(OS_MACOSX)
+#define MAYBE_ButtonStyleIsDefaultStyle DISABLED_ButtonStyleIsDefaultStyle
+#else
+#define MAYBE_ButtonStyleIsDefaultStyle ButtonStyleIsDefaultStyle
+#endif
+TEST_F(LabelButtonTest, MAYBE_ButtonStyleIsDefaultStyle) {
   TestLabelButton* button = AddStyledButton("Save", false);
   gfx::Size non_default_size = button->label()->size();
   EXPECT_EQ(button->label()->GetPreferredSize().width(),
@@ -398,26 +404,13 @@ TEST_F(LabelButtonTest, ButtonStyleIsDefaultStyle) {
   button->SizeToPreferredSize();
   button->Layout();
   EXPECT_EQ(styled_highlight_text_color_, button->label()->enabled_color());
-  if (PlatformStyle::kDefaultLabelButtonHasBoldFont) {
-    EXPECT_NE(non_default_size, button->label()->size());
-    EXPECT_EQ(button->label()->font_list().GetFontWeight(),
-              gfx::Font::Weight::BOLD);
-  } else {
-    EXPECT_EQ(non_default_size, button->label()->size());
-    EXPECT_EQ(button->label()->font_list().GetFontWeight(),
-              gfx::Font::Weight::NORMAL);
-  }
+  EXPECT_NE(non_default_size, button->label()->size());
+  EXPECT_EQ(button->label()->font_list().GetFontWeight(),
+            gfx::Font::Weight::BOLD);
 }
 
 // Ensure the label gets the correct style when pressed or becoming default.
 TEST_F(LabelButtonTest, HighlightedButtonStyle) {
-#if defined(OS_MACOSX)
-  // On Mac, ensure the normal and highlight colors are different, to ensure the
-  // tests are actually testing something. This might be the case on other
-  // platforms.
-  EXPECT_NE(styled_normal_text_color_, styled_highlight_text_color_);
-#endif
-
   // For STYLE_TEXTBUTTON, the NativeTheme might not provide SK_ColorBLACK, but
   // it should be the same for normal and pressed states.
   EXPECT_EQ(themed_normal_text_color_, button_->label()->enabled_color());

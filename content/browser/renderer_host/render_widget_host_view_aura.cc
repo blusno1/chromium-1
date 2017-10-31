@@ -930,6 +930,14 @@ void RenderWidgetHostViewAura::SubmitCompositorFrame(
   UpdateBackgroundColorFromRenderer(frame.metadata.root_background_color);
 
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
+  if (IsUseZoomForDSFEnabled()) {
+    // With zoom-for-DSF Blink pixel coordinates are used and zoom is used to
+    // adjusts for the device scale factor. That's why last_scroll_offset_
+    // needs to be scaled to view coordinates.
+    // Without zoom-for-DSF the values are already in view coordinates.
+    last_scroll_offset_.Scale(1.0f / current_device_scale_factor_);
+  }
+
   if (delegated_frame_host_) {
     delegated_frame_host_->SubmitCompositorFrame(local_surface_id,
                                                  std::move(frame));
@@ -1701,6 +1709,10 @@ bool RenderWidgetHostViewAura::TransformPointToCoordSpaceForView(
 void RenderWidgetHostViewAura::FocusedNodeChanged(
     bool editable,
     const gfx::Rect& node_bounds_in_screen) {
+  if (GetInputMethod())
+    GetInputMethod()->CancelComposition(this);
+  has_composition_text_ = false;
+
 #if defined(OS_WIN)
   if (!editable && virtual_keyboard_requested_) {
     virtual_keyboard_requested_ = false;
@@ -1930,12 +1942,12 @@ void RenderWidgetHostViewAura::CreateDelegatedFrameHostClient() {
   // Tests may set |delegated_frame_host_client_|.
   if (!delegated_frame_host_client_) {
     delegated_frame_host_client_ =
-        base::MakeUnique<DelegatedFrameHostClientAura>(this);
+        std::make_unique<DelegatedFrameHostClientAura>(this);
   }
 
   const bool enable_viz =
       base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableViz);
-  delegated_frame_host_ = base::MakeUnique<DelegatedFrameHost>(
+  delegated_frame_host_ = std::make_unique<DelegatedFrameHost>(
       frame_sink_id_, delegated_frame_host_client_.get(),
       enable_surface_synchronization_, enable_viz);
 

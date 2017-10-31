@@ -224,6 +224,9 @@ size_t RegisterChromeCrashKeys() {
     // Accessibility keys. Temporary for http://crbug.com/765490.
     {"ax_tree_error", kSmallSize},
     {"ax_tree_update", kMediumSize},
+
+    // Temporary for crbug.com/756624.
+    {"break_iterator", kSmallSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering
@@ -282,7 +285,6 @@ static bool IsBoringSwitch(const std::string& flag) {
     switches::kPpapiFlashArgs,
     switches::kPpapiFlashPath,
     switches::kRegisterPepperPlugins,
-    switches::kUIPrioritizeInGpuProcess,
     switches::kUseGL,
     switches::kUserDataDir,
     // Cros/CC flags are specified as raw strings to avoid dependency.

@@ -12,7 +12,8 @@
 #import "ios/chrome/browser/ui/ntp/google_landing_data_source.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_toolbar_controller.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller_base_feature.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
@@ -56,7 +57,7 @@
 
 - (void)addConstraintsToToolbar {
   _toolbarController.heightConstraint.constant =
-      [_toolbarController preferredToolbarHeightWhenAlignedToTopOfScreen];
+      ToolbarHeightWithTopOfScreenOffset([_toolbarController statusBarOffset]);
   _toolbarController.heightConstraint.active = YES;
   [NSLayoutConstraint activateConstraints:@[
     [[_toolbarController view].leadingAnchor
@@ -144,10 +145,11 @@
                         height:(NSLayoutConstraint*)heightConstraint
                      topMargin:(NSLayoutConstraint*)topMarginConstraint
             subviewConstraints:(NSArray*)constraints
-                 logoIsShowing:(BOOL)logoIsShowing
                      forOffset:(CGFloat)offset
-                         width:(CGFloat)width {
-  CGFloat screenWidth = width > 0 ? width : self.bounds.size.width;
+                   screenWidth:(CGFloat)screenWidth
+                safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
+  CGFloat contentWidth = std::max<CGFloat>(
+      0, screenWidth - safeAreaInsets.left - safeAreaInsets.right);
   // The scroll offset at which point searchField's frame should stop growing.
   CGFloat maxScaleOffset =
       self.frame.size.height - ntp_header::kMinHeaderHeight;
@@ -160,11 +162,11 @@
     percent = MIN(1, MAX(0, animatingOffset / ntp_header::kAnimationDistance));
   }
 
-  if (screenWidth == 0)
+  if (screenWidth == 0 || contentWidth == 0)
     return;
 
   CGFloat searchFieldNormalWidth =
-      content_suggestions::searchFieldWidth(screenWidth);
+      content_suggestions::searchFieldWidth(contentWidth);
 
   // Calculate the amount to grow the width and height of searchField so that
   // its frame covers the entire toolbar area.
@@ -184,7 +186,8 @@
 
   // Adjust the position of the search field's subviews by adjusting their
   // constraint constant value.
-  CGFloat constantDiff = percent * ntp_header::kMaxHorizontalMarginDiff;
+  CGFloat constantDiff =
+      percent * (ntp_header::kMaxHorizontalMarginDiff + safeAreaInsets.left);
   for (NSLayoutConstraint* constraint in constraints) {
     if (constraint.constant > 0)
       constraint.constant = constantDiff + ntp_header::kHintLabelSidePadding;
@@ -197,7 +200,8 @@
   [super safeAreaInsetsDidChange];
   if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
     _toolbarController.heightConstraint.constant =
-        [_toolbarController preferredToolbarHeightWhenAlignedToTopOfScreen];
+        ToolbarHeightWithTopOfScreenOffset(
+            [_toolbarController statusBarOffset]);
   }
 }
 

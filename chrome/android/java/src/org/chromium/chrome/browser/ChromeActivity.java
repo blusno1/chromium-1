@@ -14,7 +14,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
-import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -138,6 +137,7 @@ import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.util.ChromeFileProvider;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.vr_shell.VrIntentUtils;
 import org.chromium.chrome.browser.vr_shell.VrShellDelegate;
 import org.chromium.chrome.browser.webapps.AddToHomescreenManager;
 import org.chromium.chrome.browser.widget.ControlContainer;
@@ -210,8 +210,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * Timeout in ms for reading PartnerBrowserCustomizations provider.
      */
     private static final int PARTNER_BROWSER_CUSTOMIZATIONS_TIMEOUT_MS = 10000;
-    private static final String TAG = "ChromeActivity";
-    private static final Rect EMPTY_RECT = new Rect();
 
     private static AppMenuHandlerFactory sAppMenuHandlerFactory =
             (activity, delegate, menuResourceId) -> new AppMenuHandler(activity, delegate,
@@ -236,7 +234,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private boolean mDeferredStartupPosted;
 
     private boolean mTabModelsInitialized;
-    private boolean mNativeInitialized;
+    protected boolean mNativeInitialized;
     private boolean mRemoveWindowBackgroundDone;
 
     // The class cannot implement TouchExplorationStateChangeListener,
@@ -295,7 +293,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private boolean mDidAddPolicyChangeListener;
 
     /**
-     * @param factory The {@link AppMenuHandlerFactory} for creating {@link mAppMenuHandler}
+     * @param factory The {@link AppMenuHandlerFactory} for creating {@link #mAppMenuHandler}
      */
     @VisibleForTesting
     public static void setAppMenuHandlerFactoryForTesting(AppMenuHandlerFactory factory) {
@@ -310,6 +308,12 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     @Override
     public void preInflationStartup() {
         super.preInflationStartup();
+
+        // We need to explicitly enable VR mode here so that the system doesn't kick us out of VR
+        // mode while we prepare for VR rendering.
+        if (VrIntentUtils.isVrIntent(getIntent())) {
+            VrShellDelegate.setVrModeEnabled(this);
+        }
 
         // Force a partner customizations refresh if it has yet to be initialized.  This can happen
         // if Chrome is killed and you refocus a previous activity from Android recents, which does
@@ -443,7 +447,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                             ((ViewStub) findViewById(R.id.control_container_stub));
 
                     toolbarContainerStub.setLayoutResource(controlContainerLayoutId);
-                    View container = toolbarContainerStub.inflate();
+                    toolbarContainerStub.inflate();
                 }
 
                 // It cannot be assumed that the result of toolbarContainerStub.inflate() will be
@@ -928,8 +932,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     @Override
     protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
+        // This should be called before the call to super so that the needed VR flags are set as
+        // soon as the VR intent is received.
         VrShellDelegate.maybeHandleVrIntentPreNative(this, intent);
+        super.onNewIntent(intent);
     }
 
     @Override
@@ -1237,8 +1243,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * Called when the accessibility status of this device changes.  This might be triggered by
      * touch exploration or general accessibility status updates.  It is an aggregate of two other
      * accessibility update methods.
-     * @see #onAccessibilityModeChanged(boolean)
-     * @see #onTouchExplorationStateChanged(boolean)
+     *
+     * @see #onAccessibilityStateChanged
+     * @see #mTouchExplorationStateChangeListener
      * @param enabled Whether or not accessibility and touch exploration are currently enabled.
      */
     protected void onAccessibilityModeChanged(boolean enabled) {

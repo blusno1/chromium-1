@@ -640,6 +640,22 @@ class WebContentsAddedObserver {
   DISALLOW_COPY_AND_ASSIGN(WebContentsAddedObserver);
 };
 
+// Watches a WebContents to check if it was destroyed.
+class WebContentsDestroyedObserver : public WebContentsObserver {
+ public:
+  explicit WebContentsDestroyedObserver(WebContents* web_contents);
+  ~WebContentsDestroyedObserver() override;
+  bool IsDestroyed() { return destroyed_; }
+
+ private:
+  // Overridden WebContentsObserver methods.
+  void WebContentsDestroyed() override;
+
+  bool destroyed_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(WebContentsDestroyedObserver);
+};
+
 // Request a new frame be drawn, returns false if request fails.
 bool RequestFrame(WebContents* web_contents);
 
@@ -903,13 +919,6 @@ class ConsoleObserverDelegate : public WebContentsDelegate {
 // came from |process|. Used to simulate a compromised renderer.
 class PwnMessageHelper {
  public:
-  // Sends BlobStorageMsg_RegisterBlob
-  static void CreateBlobWithPayload(RenderProcessHost* process,
-                                    std::string uuid,
-                                    std::string content_type,
-                                    std::string content_disposition,
-                                    std::string payload);
-
   // Sends BlobHostMsg_RegisterPublicURL
   static void RegisterBlobURL(RenderProcessHost* process,
                               GURL url,
@@ -984,6 +993,8 @@ class ContextMenuFilter : public content::BrowserMessageFilter {
 
   DISALLOW_COPY_AND_ASSIGN(ContextMenuFilter);
 };
+
+WebContents* GetEmbedderForGuest(content::WebContents* guest);
 
 }  // namespace content
 

@@ -1535,6 +1535,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Android.SysUtilsLowEndMatches" enum="BooleanEqual">
+  <owner>mariakhomenko@chromium.org</owner>
+  <summary>
+    Measures whether Chrome low-end detection logic based on RAM size matches
+    the Android system utility value for isLowRamDevice(). This is recorded once
+    per browser start and may be recorded in the renderer if isLowEndDevice()
+    bit is checked.
+  </summary>
+</histogram>
+
 <histogram name="Android.TabNavigationInterceptResult"
     enum="NavigationInterceptResult">
   <owner>mariakhomenko@chromium.org</owner>
@@ -2066,6 +2076,28 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Apps.LockScreen.AppsProfile.Creation.Duration" units="ms">
+  <owner>tbarzic@chromium.org</owner>
+  <summary>
+    The amount of time needed to create a lock screen apps profile. This metric
+    is recorded only if the profile creation was successful. The lock screen
+    apps profile is created if the user has an app enabled on Chrome OS lock
+    screen, and is used as the context in which the app is launched on top of
+    the lock screen.
+  </summary>
+</histogram>
+
+<histogram name="Apps.LockScreen.AppsProfile.Creation.Success"
+    units="BooleanSuccess">
+  <owner>tbarzic@chromium.org</owner>
+  <summary>
+    Boolean indicating whether the lock screen apps profile creation succeeded.
+    The lock screen apps profile is created if the user has an app enabled on
+    Chrome OS lock screen, and is used as the context in which the app is
+    launched on top of the lock screen.
+  </summary>
+</histogram>
+
 <histogram name="Apps.LockScreen.DataItemStorage.ClearTextItemSize"
     units="bytes">
   <owner>tbarzic@chromium.org</owner>
@@ -2252,6 +2284,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The result of attempting to launch the user-specified preferred note-taking
     app, if any, on Chrome OS.
+  </summary>
+</histogram>
+
+<histogram name="Apps.StateTransition.AnimationSmoothness" units="%">
+  <owner>vadimt@chromium.org</owner>
+  <summary>
+    Relative smoothness of animations of peeking launcher state transitions.
+    100% represents ideally smooth 60 frames per second. 50% represents only 30
+    frames per second is achieved during the animations. 0% should not happen.
+    This metric is recorded exactly once when the user switches states of the
+    launcher.
   </summary>
 </histogram>
 
@@ -2769,12 +2812,34 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Ash.DisplayColorManager.IccFileDownloaded"
+    enum="BooleanDownloaded">
+  <owner>mcasas@chromium.org</owner>
+  <owner>dcastagna@chromium.org</owner>
+  <summary>
+    This boolean keeps track if an ICC file was downloaded correctly (if true)
+    or a local file was reused instead.
+  </summary>
+</histogram>
+
 <histogram name="Ash.DisplayColorManager.IccFileFound" enum="Boolean">
+  <obsolete>
+    Deprecated 10/2017, replaced by Ash.DisplayColorManager.IccFileDownloaded
+  </obsolete>
   <owner>mcasas@chromium.org</owner>
   <owner>dcastagna@chromium.org</owner>
   <summary>
     This boolean keeps track if a request for an ICC for a specific product id
     has been successful or not.
+  </summary>
+</histogram>
+
+<histogram name="Ash.DisplayColorManager.ValidDisplayColorSpace" enum="Boolean">
+  <owner>mcasas@chromium.org</owner>
+  <owner>dcastagna@chromium.org</owner>
+  <summary>
+    This boolean keeps track if a Display update (i.e. when connecting a new
+    one) carried valid ColorSpace information.
   </summary>
 </histogram>
 
@@ -2886,6 +2951,56 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The type of the window which is put into immersive fullscreen. Immersive
     fullscreen is entered via the F4 key.
+  </summary>
+</histogram>
+
+<histogram name="Ash.Login.Lock.AuthMethod.Switched"
+    enum="AuthMethodSwitchType">
+  <owner>xiaoyinh@google.com</owner>
+  <summary>
+    The count of auth method switching actions in ChromeOS lock screen.
+  </summary>
+</histogram>
+
+<histogram name="Ash.Login.Lock.AuthMethod.Used.ClamShellMode"
+    enum="AuthMethod">
+  <owner>xiaoyinh@google.com</owner>
+  <summary>
+    The usage of different auth methods (PIN / Password / Smartlock) in ChromeOS
+    lock screen clamshell mode.
+  </summary>
+</histogram>
+
+<histogram name="Ash.Login.Lock.AuthMethod.Used.TabletMode" enum="AuthMethod">
+  <owner>xiaoyinh@google.com</owner>
+  <summary>
+    The usage of different auth methods (PIN / Password / Smartlock) in ChromeOS
+    lock screen tablet mode.
+  </summary>
+</histogram>
+
+<histogram name="Ash.Login.Lock.NumPasswordAttempts.UntilFailure" units="count">
+  <owner>xiaoyinh@google.com</owner>
+  <summary>
+    The number of incorrect password entered in ChromeOS lock screen until the
+    user gives up (switch pods or user sign out the current session or shutdown
+    the device).
+  </summary>
+</histogram>
+
+<histogram name="Ash.Login.Lock.NumPasswordAttempts.UntilSuccess" units="count">
+  <owner>xiaoyinh@google.com</owner>
+  <summary>
+    The number of incorrect password entered in ChromeOS lock screen until a
+    successful attempt.
+  </summary>
+</histogram>
+
+<histogram name="Ash.Login.Lock.UserClicks" enum="LockScreenUserClickTarget">
+  <owner>xiaoyinh@google.com</owner>
+  <summary>
+    The numbers of times that users click on the shelf buttons, trays and lock
+    screen note on the ChromeOS lock screen.
   </summary>
 </histogram>
 
@@ -7870,6 +7985,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="BrotliFilter.UsedMemoryKB" units="KiB">
   <owner>eustas@chromium.org</owner>
   <summary>Maximal amount of memory allocated by decoder.</summary>
+</histogram>
+
+<histogram name="BrowserActions.SelectedOption" enum="BrowserActionsMenuOption">
+  <owner>ltian@chromium.org</owner>
+  <summary>
+    The option that the user selected from a Browser Actions context menu.
+  </summary>
 </histogram>
 
 <histogram name="BrowserDialogs.ExternalProtocol.HandleState"
@@ -20227,7 +20349,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Time between initial creation of a touch event and start of the frame swap
     on the GPU service caused by the generated ScrollUpdate gesture event. If no
-    swap was induced by the event, no recording is made.
+    swap was induced by the event, no recording is made. The first GSU of every
+    scrolling sequence is excluded from this metric.
 
     Team: input-dev@chromium.org.
   </summary>
@@ -20323,6 +20446,19 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     ScrollUpdate gesture event is handled on main/impl thread (specified by
     suffix). If no swap was induced by the ScrollUpdate gesture event, no
     recording is made.
+
+    Team: input-dev@chromium.org.
+  </summary>
+</histogram>
+
+<histogram name="Event.Latency.ScrollUpdate.Wheel.TimeToScrollUpdateSwapBegin2"
+    units="microseconds">
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    Time between initial creation of a wheel event and start of the frame swap
+    on the GPU service caused by the generated ScrollUpdate gesture event. If no
+    swap was induced by the event, no recording is made. The first GSU of every
+    scrolling sequence is excluded from this metric.
 
     Team: input-dev@chromium.org.
   </summary>
@@ -22019,6 +22155,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     json ruleset is indexed. This may happen when a packed extension is
     installed, an unpacked extension is loaded, an extension's ruleset is re-
     indexed, due to corruption, etc.
+  </summary>
+</histogram>
+
+<histogram
+    name="Extensions.DeclarativeNetRequest.ShouldBlockRequestTime.AllExtensions"
+    units="ms">
+  <owner>karandeepb@chromium.org</owner>
+  <summary>
+    Time taken to evaluate whether a network request should be blocked as per
+    the Declarative Net Request API. This includes the time taken to evaluate
+    all the extension rulesets. Emitted whenever a non-sensitive network request
+    is seen by the Extension System.
   </summary>
 </histogram>
 
@@ -24569,6 +24717,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Favicons.LargeIconService.BlacklistedURLMismatch"
+    units="BooleanError">
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    Records the number of large icons that were fetched from the local cache
+    (e.g. during NTP impression), where the URL (of the page or the icon)
+    matches a hardcoded blacklist. Suspicious mismatches are reported as errors.
+  </summary>
+</histogram>
+
 <histogram name="Favicons.LargeIconService.DownloadedSize" units="pixels">
   <owner>jkrcal@chromium.org</owner>
   <summary>
@@ -24890,7 +25048,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="FileBrowser.SuggestApps.Close"
+<histogram name="FileBrowser.SuggestApps.CloseDialog"
     enum="SuggestAppsDialogCloseReason">
   <owner>joshwoodward@google.com</owner>
   <summary>
@@ -29386,6 +29544,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     histogram is emitted to each time a condition affecting Instant Tethering's
     state, e.g. the user enabling or disabling the feature, or Bluetooth
     becoming enabled or disabled.
+
+    Note: The &quot;Screen locked&quot; bucket is obsolete, and should not have
+    any reports.
   </summary>
 </histogram>
 
@@ -32519,6 +32680,21 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Media.EME.CdmLoadErrorCode" units="code">
+  <owner>media-dev@chromium.org</owner>
+  <summary>The error code of a library CDM load failure.</summary>
+</histogram>
+
+<histogram name="Media.EME.CdmLoadResult" enum="CdmLoadResult">
+  <owner>media-dev@chromium.org</owner>
+  <summary>The result from an attempt to load a library CDM.</summary>
+</histogram>
+
+<histogram name="Media.EME.CdmLoadTime" units="ms">
+  <owner>media-dev@chromium.org</owner>
+  <summary>The time spent to load a library CDM.</summary>
+</histogram>
+
 <histogram name="Media.EME.ClearKey" enum="CdmPromiseResult">
   <owner>sandersd@chromium.org</owner>
   <summary>
@@ -35544,6 +35720,25 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Memory.Experimental.SwapThrashingLevel"
+    enum="SwapThrashingLevel">
+  <owner>sebmarchand@chromium.org</owner>
+  <summary>
+    The swap thrashing level, which is recorded periodically. This shows the
+    cumulative number of seconds that systems spend in each of the swap
+    thrashing states. Only available on Windows.
+  </summary>
+</histogram>
+
+<histogram name="Memory.Experimental.SwapThrashingLevelChanges"
+    enum="SwapThrashingLevelChanges">
+  <owner>sebmarchand@chromium.org</owner>
+  <summary>
+    The number of swap-thrashing level state changes for each possible pairwise
+    state change. Only available on Windows.
+  </summary>
+</histogram>
+
 <histogram name="Memory.Experimental.Total2.PrivateMemoryFootprint" units="MB">
   <owner>erikchen@chromium.org</owner>
   <summary>
@@ -36695,6 +36890,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="MobileDownload.Notification.FixingSummaryLeak"
     enum="BooleanForegroundNotification">
+  <obsolete>
+    Deprecated 10/2017 in Issue 722320 with the removal of
+    DownloadNotificationService.hideDanglingSummaryNotification.
+  </obsolete>
   <owner>dtrainor@chromium.org</owner>
   <summary>
     Android: Records the situation where we try to fix a standalone downloads
@@ -36945,6 +37144,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     screen. This is measured from the time the last tab is closed until a Main
     intent is received. Has a minute level precision for first 10 minutes
     increasing exponentially till 30 days.
+
+    Note: this metric is broken in M63 and below and only reliable in M64+.
   </summary>
 </histogram>
 
@@ -44087,6 +44288,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Net.QuicSession.RetryAfterWriteErrorCount" units="retries">
+  <owner>rch@chromium.org</owner>
+  <summary>
+    The number of consecutive times a packet was retried after a write error.
+  </summary>
+</histogram>
+
 <histogram name="Net.QuicSession.RstStreamErrorCodeClient"
     enum="QuicRstStreamErrorCodes">
   <owner>rch@chromium.org</owner>
@@ -48006,7 +48214,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Network.Shill.Wifi.Ap80211kSupport" enum="WiFiAp80211kSupport">
+<histogram name="Network.Shill.WiFi.Ap80211kSupport" enum="WiFiAp80211kSupport">
   <owner>matthewmwang@chromium.org</owner>
   <summary>
     Chrome OS network metric sampling the number of Wireless Access Points that
@@ -48014,7 +48222,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Network.Shill.Wifi.Ap80211rSupport" enum="WiFiAp80211rSupport">
+<histogram name="Network.Shill.WiFi.Ap80211rSupport" enum="WiFiAp80211rSupport">
   <owner>matthewmwang@chromium.org</owner>
   <summary>
     Chrome OS network metric sampling the number of Wireless Access Points that
@@ -48022,7 +48230,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Network.Shill.Wifi.Ap80211vBSSMaxIdlePeriodSupport"
+<histogram name="Network.Shill.WiFi.Ap80211vBSSMaxIdlePeriodSupport"
     enum="WiFiAp80211vBSSMaxIdlePeriodSupport">
   <owner>matthewmwang@chromium.org</owner>
   <summary>
@@ -48032,7 +48240,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Network.Shill.Wifi.Ap80211vBSSTransitionSupport"
+<histogram name="Network.Shill.WiFi.Ap80211vBSSTransitionSupport"
     enum="WiFiAp80211vBSSTransitionSupport">
   <owner>matthewmwang@chromium.org</owner>
   <summary>
@@ -48042,7 +48250,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Network.Shill.Wifi.Ap80211vDMSSupport"
+<histogram name="Network.Shill.WiFi.Ap80211vDMSSupport"
     enum="WiFiAp80211vDMSSupport">
   <owner>matthewmwang@chromium.org</owner>
   <summary>
@@ -50861,6 +51069,26 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.TileFaviconType" enum="FaviconType">
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    The favicon type that was chosen to represent a most visited tile displayed
+    on the new tab page, logged at impression time. Note that these values don't
+    involve an actual icon being displayed because a scrabble time might have
+    been displayed instead (see NewTabPage.TileType).
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.TileFaviconTypeClicked" enum="FaviconType">
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    The favicon type that was chosen to represent a most visited tile displayed
+    on the new tab page, logged when a tile is clicked. Note that these values
+    don't involve an actual icon being displayed (see
+    NewTabPage.TileTypeClicked).
+  </summary>
+</histogram>
+
 <histogram name="NewTabPage.TileOfflineAvailable" enum="MostVisitedTileIndex">
   <owner>treib@chromium.org</owner>
   <summary>
@@ -51144,6 +51372,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Notifications.Display" enum="NotifierType">
+  <obsolete>
+    Deprecated October 2017 (fullscreen notifications feature enabled by
+    default).
+  </obsolete>
   <owner>bmalcolm@chromium.org</owner>
   <summary>
     Counts the number of times a notification was shown for the various types of
@@ -72799,6 +73031,43 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Scheduling.DrawIntervalWithCompositedAnimations2"
+    units="microseconds">
+  <owner>paint-dev@chromium.org</owner>
+  <summary>
+    The time delta between the draw times of back-to-back BeginImplFrames,
+    regardless of whether or not they result in a swap, when there is at least
+    one composited animation.
+
+    The interval is only recorded when every BeginImplFrame wants to draw.
+  </summary>
+</histogram>
+
+<histogram name="Scheduling.DrawIntervalWithMainThreadAnimations2"
+    units="microseconds">
+  <owner>paint-dev@chromium.org</owner>
+  <summary>
+    The time delta between the draw times of back-to-back BeginImplFrames of new
+    active trees only, regardless of whether or not they result in a swap, when
+    there is at least one main thread animation.
+
+    The interval is only recorded when every BeginImplFrame wants to draw.
+  </summary>
+</histogram>
+
+<histogram name="Scheduling.DrawIntervalWithMainThreadCompositableAnimations2"
+    units="microseconds">
+  <owner>paint-dev@chromium.org</owner>
+  <summary>
+    The time delta between the draw times of back-to-back BeginImplFrames of new
+    active trees only, regardless of whether or not they result in a swap, when
+    there is at least one main thread animation that could be composited but
+    not, due to running experiment.
+
+    The interval is only recorded when every BeginImplFrame wants to draw.
+  </summary>
+</histogram>
+
 <histogram name="Scheduling.InvalidationToReadyToActivateDuration2"
     units="microseconds">
   <owner>brianderson@chromium.org</owner>
@@ -76084,7 +76353,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="ServiceWorkerCache.Cache.AddResponseType"
-    enum="ServiceWorkerCacheResponseType">
+    enum="FetchResponseType">
   <owner>nhiroki@chromium.org</owner>
   <summary>
     Records the response type to be added in the Cache by Cache.add()/addAll().
@@ -76092,7 +76361,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="ServiceWorkerCache.Cache.AllWritesResponseType"
-    enum="ServiceWorkerCacheResponseType">
+    enum="FetchResponseType">
   <owner>jkarlin@chromium.org</owner>
   <summary>
     Records the response type to be added in the Cache by all operations that
@@ -77719,6 +77988,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="Signin.CookieJar.TotalCount" units="accounts">
   <owner>skym@chromium.org</owner>
   <summary>The total number of accounts in the cookie jar.</summary>
+</histogram>
+
+<histogram name="Signin.DiceEnabledForProfile" enum="Boolean">
+  <owner>droger@chromium.org</owner>
+  <summary>
+    Whether Dice is enabled for the current profile, recorded at startup.
+  </summary>
 </histogram>
 
 <histogram name="Signin.DiceResponseHeader" enum="SigninDiceResponseHeader">
@@ -80587,6 +80863,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     before being killed. For first launch after upgrade, the crash reports may
     be discarded before this histogram is written to so it's not possible to
     determine if there's a valid crash log present or not.
+  </summary>
+</histogram>
+
+<histogram name="Stability.RendererUnresponsiveBeforeTermination"
+    enum="BooleanUnresponsive">
+  <owner>dtapuska@chromium.org</owner>
+  <summary>
+    If the renderer is considered unresponsive from the browser's perspective
+    before the process is terminated. This metric is being used to figure out
+    crash reports that have all idle threads and perhaps the process is being
+    terminated when it shouldn't be. crbug.com/615090.
   </summary>
 </histogram>
 
@@ -90989,22 +91276,67 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Records the available space that can be used when installing a WebAPK from
     Google Play fails. The space recorded is the available space beyond the
-    system's minimum free space threshold, with a range between -1000 and 500
+    system's minimum free space threshold, with a range between -1000 and 1000
     MB. Negative values mean that there is less free space available than the
     system's minimum, by the given amount.
   </summary>
 </histogram>
 
 <histogram name="WebApk.Install.AvailableSpace.Success" units="MB">
+  <obsolete>
+    Deprecated 2017-09. As of M64, this is no longer recorded.
+  </obsolete>
   <owner>hanxi@chromium.org</owner>
   <owner>ranj@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
     Records the available space that can be used when installing a WebAPK from
     Google Play succeeds. The space recorded is the available space beyond the
-    system's minimum free space threshold, with a range between -1000 and 500
+    system's minimum free space threshold, with a range between -1000 and 1000
     MB. Negative values mean that there is less free space available than the
     system's minimum, by the given amount.
+  </summary>
+</histogram>
+
+<histogram name="WebApk.Install.AvailableSpaceAfterFreeUpAll.Fail" units="MB">
+  <owner>hanxi@chromium.org</owner>
+  <owner>ranj@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    Records the available space that can be used when installing a WebAPK from
+    Google Play fails after freeing up cache and unimportant storage. The space
+    recorded is the available space beyond the system's minimum free space
+    threshold, with a range between -1000 and 1000 MB. Negative values mean that
+    there is less free space available than the system's minimum, by the given
+    amount.
+  </summary>
+</histogram>
+
+<histogram name="WebApk.Install.AvailableSpaceAfterFreeUpCache.Fail" units="MB">
+  <owner>hanxi@chromium.org</owner>
+  <owner>ranj@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    Records the available space that can be used when installing a WebAPK from
+    Google Play fails after freeing up cache. The space recorded is the
+    available space beyond the system's minimum free space threshold, with a
+    range between -1000 and 1000 MB. Negative values mean that there is less
+    free space available than the system's minimum, by the given amount.
+  </summary>
+</histogram>
+
+<histogram
+    name="WebApk.Install.AvailableSpaceAfterFreeUpUnimportantStorage.Fail"
+    units="MB">
+  <owner>hanxi@chromium.org</owner>
+  <owner>ranj@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    Records the available space that can be used when installing a WebAPK from
+    Google Play fails after freeing up unimportant storage. The space recorded
+    is the available space beyond the system's minimum free space threshold,
+    with a range between -1000 and 1000 MB. Negative values mean that there is
+    less free space available than the system's minimum, by the given amount.
   </summary>
 </histogram>
 
@@ -91014,7 +91346,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>yfriedman@chromium.org</owner>
   <summary>
     Records the Chrome cache size when installing a WebAPK from Google Play
-    fails, with a range between 0 and 2000, rounded to the nearest 10MB.
+    fails, with a range between 0 and 1000, rounded to the nearest 10MB.
   </summary>
 </histogram>
 
@@ -91432,6 +91764,35 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The buffer size (in audio frames) for WebAudio rendering recommended by the
     audio hardware.  Recorded for every WebAudio AudioContext that is created.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioParam.ValueSetterConflictCount">
+  <owner>rtoy@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <summary>
+    The number of times the AudioParam value setter was called that also
+    conflicts with an ongoing AudioParam automation.  Updated when the realtime
+    AudioContext is closed.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioParam.ValueSetterConflictPercentage">
+  <owner>rtoy@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <summary>
+    The percentage of number of calls to an AudioParam value setter that
+    conflicts with an ongoing AudioParam automation to the total number of calls
+    to the value setter.  Updated once when an AudioContext is closed.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioParam.ValueSetterCount">
+  <owner>rtoy@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <summary>
+    The number of times the AudioParam value setter was called per tab. Updated
+    when the realtime AudioContext is closed.
   </summary>
 </histogram>
 
@@ -97164,6 +97525,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <affected-histogram name="Scheduling.CommitToReadyToActivateDuration2"/>
   <affected-histogram name="Scheduling.DrawDuration2"/>
   <affected-histogram name="Scheduling.DrawInterval2"/>
+  <affected-histogram name="Scheduling.DrawIntervalWithCompositedAnimations2"/>
+  <affected-histogram name="Scheduling.DrawIntervalWithMainThreadAnimations2"/>
+  <affected-histogram
+      name="Scheduling.DrawIntervalWithMainThreadCompositableAnimations2"/>
   <affected-histogram name="Scheduling.InvalidationToReadyToActivateDuration2"/>
   <affected-histogram name="Scheduling.MainAndImplFrameTimeDelta2"/>
   <affected-histogram name="Scheduling.PrepareTilesDuration2"/>
@@ -97938,54 +98303,66 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <suffix name="Upstream.Unknown.CellularKB"/>
   <suffix name="Downstream.Unknown.NotCellularKB"/>
   <suffix name="Downstream.Unknown.CellularKB"/>
-  <suffix name="Upstream.Background.NotCellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Upstream.Background.Cellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Upstream.Foreground.NotCellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Upstream.Foreground.Cellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Downstream.Background.NotCellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Downstream.Background.Cellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Downstream.Foreground.NotCellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Downstream.Foreground.Cellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Upstream.Unknown.NotCellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Upstream.Unknown.Cellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Downstream.Unknown.NotCellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
-  <suffix name="Downstream.Unknown.Cellular"/>
-  <obsolete>
-    Replaced by KB version in October, 2017.
-  </obsolete>
+  <suffix name="Upstream.Background.NotCellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Upstream.Background.Cellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Upstream.Foreground.NotCellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Upstream.Foreground.Cellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Downstream.Background.NotCellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Downstream.Background.Cellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Downstream.Foreground.NotCellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Downstream.Foreground.Cellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Upstream.Unknown.NotCellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Upstream.Unknown.Cellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Downstream.Unknown.NotCellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
+  <suffix name="Downstream.Unknown.Cellular">
+    <obsolete>
+      Replaced by KB version in October, 2017.
+    </obsolete>
+  </suffix>
   <affected-histogram name="DataUse.MessageSize.AllServices"/>
 </histogram_suffixes>
 
@@ -101918,6 +102295,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
       label="Default gray box in place of a thumbnail/screenshot."/>
   <affected-histogram name="NewTabPage.MostVisited"/>
   <affected-histogram name="NewTabPage.SuggestionsImpression"/>
+  <affected-histogram name="NewTabPage.TileFaviconType"/>
+  <affected-histogram name="NewTabPage.TileFaviconTypeClicked"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="NewTabPageLogoShownFromCache" separator=".">
@@ -102012,6 +102391,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram_suffixes>
 
 <histogram_suffixes name="NotificationDisplayExperiment" separator="_">
+  <obsolete>
+    Deprecated October 2017 (feature enabled by default).
+  </obsolete>
   <suffix name="Fullscreen.Shown"
       label="A notification sent by a fullscreen app or webpage that is
              displayed."/>

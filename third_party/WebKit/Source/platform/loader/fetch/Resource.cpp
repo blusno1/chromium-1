@@ -122,7 +122,7 @@ class Resource::CachedMetadataHandlerImpl : public CachedMetadataHandler {
   void Trace(blink::Visitor*) override;
   void SetCachedMetadata(uint32_t, const char*, size_t, CacheType) override;
   void ClearCachedMetadata(CacheType) override;
-  RefPtr<CachedMetadata> GetCachedMetadata(uint32_t) const override;
+  scoped_refptr<CachedMetadata> GetCachedMetadata(uint32_t) const override;
   String Encoding() const override;
   // Sets the serialized metadata retrieved from the platform's cache.
   void SetSerializedCachedMetadata(const char*, size_t);
@@ -134,7 +134,7 @@ class Resource::CachedMetadataHandlerImpl : public CachedMetadataHandler {
     return resource_->GetResponse();
   }
 
-  RefPtr<CachedMetadata> cached_metadata_;
+  scoped_refptr<CachedMetadata> cached_metadata_;
 
  private:
   Member<Resource> resource_;
@@ -170,7 +170,8 @@ void Resource::CachedMetadataHandlerImpl::ClearCachedMetadata(
     SendToPlatform();
 }
 
-RefPtr<CachedMetadata> Resource::CachedMetadataHandlerImpl::GetCachedMetadata(
+scoped_refptr<CachedMetadata>
+Resource::CachedMetadataHandlerImpl::GetCachedMetadata(
     uint32_t data_type_id) const {
   if (!cached_metadata_ || cached_metadata_->DataTypeID() != data_type_id)
     return nullptr;
@@ -222,7 +223,7 @@ class Resource::ServiceWorkerResponseCachedMetadataHandler
   explicit ServiceWorkerResponseCachedMetadataHandler(Resource*,
                                                       SecurityOrigin*);
   String cache_storage_cache_name_;
-  RefPtr<SecurityOrigin> security_origin_;
+  scoped_refptr<SecurityOrigin> security_origin_;
 };
 
 Resource::ServiceWorkerResponseCachedMetadataHandler::
@@ -380,7 +381,7 @@ void Resource::AppendData(const char* data, size_t length) {
   SetEncodedSize(data_->size());
 }
 
-void Resource::SetResourceBuffer(RefPtr<SharedBuffer> resource_buffer) {
+void Resource::SetResourceBuffer(scoped_refptr<SharedBuffer> resource_buffer) {
   DCHECK(!is_revalidating_);
   DCHECK(!ErrorOccurred());
   DCHECK_EQ(options_.data_buffering_policy, kBufferData);
@@ -648,8 +649,6 @@ static bool TypeNeedsSynchronousCacheHit(Resource::Type type) {
   // performance regression.
   // FIXME: Get to the point where we don't need to special-case sync/async
   // behavior for different resource types.
-  if (type == Resource::kImage)
-    return true;
   if (type == Resource::kCSSStyleSheet)
     return true;
   if (type == Resource::kScript)
@@ -828,7 +827,7 @@ bool Resource::CanReuse(const FetchParameters& params) const {
       GetResponse().ResponseTypeViaServiceWorker() ==
           network::mojom::FetchResponseType::kOpaque &&
       new_request.GetFetchRequestMode() !=
-          WebURLRequest::kFetchRequestModeNoCORS) {
+          network::mojom::FetchRequestMode::kNoCORS) {
     return false;
   }
 
@@ -900,13 +899,13 @@ bool Resource::CanReuse(const FetchParameters& params) const {
     return false;
 
   switch (new_mode) {
-    case WebURLRequest::kFetchRequestModeNoCORS:
-    case WebURLRequest::kFetchRequestModeNavigate:
+    case network::mojom::FetchRequestMode::kNoCORS:
+    case network::mojom::FetchRequestMode::kNavigate:
       break;
 
-    case WebURLRequest::kFetchRequestModeCORS:
-    case WebURLRequest::kFetchRequestModeSameOrigin:
-    case WebURLRequest::kFetchRequestModeCORSWithForcedPreflight:
+    case network::mojom::FetchRequestMode::kCORS:
+    case network::mojom::FetchRequestMode::kSameOrigin:
+    case network::mojom::FetchRequestMode::kCORSWithForcedPreflight:
       // We have two separate CORS handling logics in DocumentThreadableLoader
       // and ResourceLoader and sharing resources is difficult when they are
       // handled differently.
@@ -1164,13 +1163,15 @@ static const char* InitiatorTypeNameToString(
     return "Processing instruction";
   if (initiator_type_name == FetchInitiatorTypeNames::texttrack)
     return "Text track";
+  if (initiator_type_name == FetchInitiatorTypeNames::uacss)
+    return "User Agent CSS resource";
   if (initiator_type_name == FetchInitiatorTypeNames::xml)
     return "XML resource";
   if (initiator_type_name == FetchInitiatorTypeNames::xmlhttprequest)
     return "XMLHttpRequest";
 
   static_assert(
-      FetchInitiatorTypeNames::FetchInitiatorTypeNamesCount == 12,
+      FetchInitiatorTypeNames::FetchInitiatorTypeNamesCount == 13,
       "New FetchInitiatorTypeNames should be handled correctly here.");
 
   return "Resource";

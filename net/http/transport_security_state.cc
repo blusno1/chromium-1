@@ -30,6 +30,7 @@
 #include "net/cert/x509_certificate.h"
 #include "net/dns/dns_util.h"
 #include "net/http/http_security_headers.h"
+#include "net/net_features.h"
 #include "net/ssl/ssl_info.h"
 
 #if !defined(OS_NACL)
@@ -897,7 +898,7 @@ TransportSecurityState::CheckCTRequirements(
   ExpectCTState state;
   if (is_issued_by_known_root && IsDynamicExpectCTEnabled() &&
       GetDynamicExpectCTState(hostname, &state)) {
-    if (expect_ct_reporter_ && !state.report_uri.is_empty() &&
+    if (!complies && expect_ct_reporter_ && !state.report_uri.is_empty() &&
         report_status == ENABLE_EXPECT_CT_REPORTS) {
       MaybeNotifyExpectCTFailed(host_port_pair, state.report_uri, state.expiry,
                                 validated_certificate_chain,

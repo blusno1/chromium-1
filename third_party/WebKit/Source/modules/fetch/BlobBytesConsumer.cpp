@@ -76,8 +76,10 @@ BytesConsumer::Result BlobBytesConsumer::BeginRead(const char** buffer,
 
       ResourceRequest request(blob_url_);
       request.SetRequestContext(WebURLRequest::kRequestContextInternal);
-      request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeSameOrigin);
-      request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+      request.SetFetchRequestMode(
+          network::mojom::FetchRequestMode::kSameOrigin);
+      request.SetFetchCredentialsMode(
+          network::mojom::FetchCredentialsMode::kOmit);
       request.SetUseStreamOnResponse(true);
       // We intentionally skip
       // 'setExternalRequestStateFromRequestorAddressSpace', as 'blob:'

@@ -31,6 +31,10 @@ namespace display {
 class Screen;
 }
 
+namespace ui {
+class AnimationMetricsReporter;
+}
+
 namespace app_list {
 class ApplicationDragAndDropHost;
 class AppListMainView;
@@ -148,6 +152,7 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   // WidgetDelegate overrides:
   bool ShouldHandleSystemCommands() const override;
+  ui::AXRole GetAccessibleWindowRole() const override;
 
   // Overridden from views::View:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
@@ -403,6 +408,10 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   // Whether FocusManager can handle arrow key before this class is constructed.
   const bool previous_arrow_key_traversal_enabled_;
+
+  // Metric reporter for state change animations.
+  const std::unique_ptr<ui::AnimationMetricsReporter>
+      state_animation_metrics_reporter_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListView);
 };

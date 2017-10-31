@@ -39,7 +39,6 @@
 #include "bindings/core/v8/serialization/SerializedScriptValueFactory.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/Event.h"
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -57,6 +56,7 @@
 #include "platform/network/http_names.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/text/StringBuilder.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
@@ -71,7 +71,7 @@ inline EventSource::EventSource(ExecutionContext* context,
       current_url_(url),
       with_credentials_(event_source_init.withCredentials()),
       state_(kConnecting),
-      connect_timer_(TaskRunnerHelper::Get(TaskType::kRemoteEvent, context),
+      connect_timer_(context->GetTaskRunner(TaskType::kRemoteEvent),
                      this,
                      &EventSource::ConnectTimerFired),
       reconnect_delay_(kDefaultReconnectDelay) {}
@@ -132,10 +132,11 @@ void EventSource::Connect() {
   request.SetHTTPHeaderField(HTTPNames::Accept, "text/event-stream");
   request.SetHTTPHeaderField(HTTPNames::Cache_Control, "no-cache");
   request.SetRequestContext(WebURLRequest::kRequestContextEventSource);
-  request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeCORS);
+  request.SetFetchRequestMode(network::mojom::FetchRequestMode::kCORS);
   request.SetFetchCredentialsMode(
-      with_credentials_ ? WebURLRequest::kFetchCredentialsModeInclude
-                        : WebURLRequest::kFetchCredentialsModeSameOrigin);
+      with_credentials_ ? network::mojom::FetchCredentialsMode::kInclude
+                        : network::mojom::FetchCredentialsMode::kSameOrigin);
+  request.SetCacheMode(blink::mojom::FetchCacheMode::kNoStore);
   request.SetExternalRequestStateFromRequestorAddressSpace(
       execution_context.GetSecurityContext().AddressSpace());
   if (parser_ && !parser_->LastEventId().IsEmpty()) {

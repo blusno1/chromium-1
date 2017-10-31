@@ -211,6 +211,10 @@ extern const base::Feature kPushMessagingBackgroundMode;
 
 extern const base::Feature kPwaMinimalUi;
 
+#if !defined(OS_ANDROID)
+extern const base::Feature kRemoveUsageOfDeprecatedGaiaSigninEndpoint;
+#endif
+
 #if defined(OS_CHROMEOS)
 extern const base::Feature kRuntimeMemoryLeakDetector;
 #endif  // defined(OS_CHROMEOS)
@@ -255,6 +259,9 @@ extern const base::Feature kUseGoogleLocalNtp;
 #if !defined(OS_ANDROID)
 extern const base::Feature kVoiceSearchOnLocalNtp;
 #endif
+
+extern const base::Feature kVrShell;
+extern const base::Feature kVrShellExperimentalRendering;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kOptInImeMenu;

@@ -641,8 +641,7 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
     case CSSPropertyPosition:
       return value_id == CSSValueStatic || value_id == CSSValueRelative ||
              value_id == CSSValueAbsolute || value_id == CSSValueFixed ||
-             (RuntimeEnabledFeatures::CSSStickyPositionEnabled() &&
-              value_id == CSSValueSticky);
+             value_id == CSSValueSticky;
     case CSSPropertyResize:
       return value_id == CSSValueNone || value_id == CSSValueBoth ||
              value_id == CSSValueHorizontal || value_id == CSSValueVertical ||
@@ -855,10 +854,10 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
     case CSSPropertyScrollSnapStop:
       DCHECK(RuntimeEnabledFeatures::CSSScrollSnapPointsEnabled());
       return value_id == CSSValueNormal || value_id == CSSValueAlways;
-    case CSSPropertyScrollBoundaryBehaviorX:
+    case CSSPropertyOverscrollBehaviorX:
       return value_id == CSSValueAuto || value_id == CSSValueContain ||
              value_id == CSSValueNone;
-    case CSSPropertyScrollBoundaryBehaviorY:
+    case CSSPropertyOverscrollBehaviorY:
       return value_id == CSSValueAuto || value_id == CSSValueContain ||
              value_id == CSSValueNone;
     default:
@@ -912,8 +911,8 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyPosition:
     case CSSPropertyResize:
     case CSSPropertyScrollBehavior:
-    case CSSPropertyScrollBoundaryBehaviorX:
-    case CSSPropertyScrollBoundaryBehaviorY:
+    case CSSPropertyOverscrollBehaviorX:
+    case CSSPropertyOverscrollBehaviorY:
     case CSSPropertyShapeRendering:
     case CSSPropertySpeak:
     case CSSPropertyStrokeLinecap:
@@ -1228,24 +1227,9 @@ static CSSValue* ParseSimpleTransform(CSSPropertyID property_id,
   return ParseSimpleTransformList(string.Characters16(), string.length());
 }
 
-// This is a blacklist for common properties that require fast parsing but
-// cannot be parsed via a fast path. Blacklisting them will reduce extra
-// work when their values are not suitable for the fast paths.
-static bool IsFastPathPossibleForProperty(CSSPropertyID property_id) {
-  switch (property_id) {
-    case CSSPropertyTransitionDuration:
-    case CSSPropertyFilter:
-      return false;
-    default:
-      return true;
-  }
-}
-
 CSSValue* CSSParserFastPaths::MaybeParseValue(CSSPropertyID property_id,
                                               const String& string,
                                               CSSParserMode parser_mode) {
-  if (!IsFastPathPossibleForProperty(property_id))
-    return nullptr;
   if (CSSValue* length =
           ParseSimpleLengthValue(property_id, string, parser_mode))
     return length;

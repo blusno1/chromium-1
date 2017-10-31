@@ -122,10 +122,10 @@ void TestRenderFrameHost::InitializeRenderFrameIfNeeded() {
 TestRenderFrameHost* TestRenderFrameHost::AppendChild(
     const std::string& frame_name) {
   std::string frame_unique_name = base::GenerateGUID();
-  OnCreateChildFrame(GetProcess()->GetNextRoutingID(),
-                     blink::WebTreeScopeType::kDocument, frame_name,
-                     frame_unique_name, base::UnguessableToken::Create(),
-                     FramePolicy(), FrameOwnerProperties());
+  OnCreateChildFrame(
+      GetProcess()->GetNextRoutingID(), CreateStubInterfaceProviderRequest(),
+      blink::WebTreeScopeType::kDocument, frame_name, frame_unique_name,
+      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
   return static_cast<TestRenderFrameHost*>(
       child_creation_observer_.last_created_frame());
 }
@@ -438,7 +438,7 @@ void TestRenderFrameHost::SendNavigateWithParams(
     navigation_handle()->set_response_headers_for_testing(response_headers);
   }
   DidCommitProvisionalLoad(
-      base::MakeUnique<FrameHostMsg_DidCommitProvisionalLoad_Params>(*params));
+      std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>(*params));
   last_commit_was_error_page_ = params->url_is_unreachable;
 }
 
@@ -452,8 +452,7 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
   if (IsBrowserSideNavigationEnabled()) {
     // TODO(mkwst): The initiator origin here is incorrect.
     BeginNavigationParams begin_params(
-        std::string(), net::LOAD_NORMAL, has_user_gesture, false,
-        REQUEST_CONTEXT_TYPE_HYPERLINK,
+        std::string(), net::LOAD_NORMAL, false, REQUEST_CONTEXT_TYPE_HYPERLINK,
         blink::WebMixedContentContextType::kBlockable,
         false,  // is_form_submission
         url::Origin());
@@ -462,6 +461,7 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
     common_params.referrer = Referrer(GURL(), blink::kWebReferrerPolicyDefault);
     common_params.transition = ui::PAGE_TRANSITION_LINK;
     common_params.navigation_type = FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT;
+    common_params.has_user_gesture = has_user_gesture;
     OnBeginNavigation(common_params, begin_params);
   }
 }
@@ -565,6 +565,13 @@ mojom::FrameNavigationControl* TestRenderFrameHost::GetNavigationControl() {
 mojom::FrameNavigationControl*
 TestRenderFrameHost::GetInternalNavigationControl() {
   return RenderFrameHostImpl::GetNavigationControl();
+}
+
+// static
+service_manager::mojom::InterfaceProviderRequest
+TestRenderFrameHost::CreateStubInterfaceProviderRequest() {
+  ::service_manager::mojom::InterfaceProviderPtr dead_interface_provider_proxy;
+  return mojo::MakeRequest(&dead_interface_provider_proxy);
 }
 
 }  // namespace content

@@ -185,9 +185,11 @@ SimpleEntryImpl::SimpleEntryImpl(
     const uint64_t entry_hash,
     OperationsMode operations_mode,
     SimpleBackendImpl* backend,
+    SimpleFileTracker* file_tracker,
     net::NetLog* net_log)
     : cleanup_tracker_(std::move(cleanup_tracker)),
       backend_(backend->AsWeakPtr()),
+      file_tracker_(file_tracker),
       cache_type_(cache_type),
       worker_pool_(backend->worker_pool()),
       path_(path),
@@ -199,6 +201,7 @@ SimpleEntryImpl::SimpleEntryImpl(
       sparse_data_size_(0),
       open_count_(0),
       doomed_(false),
+      optimistic_create_pending_doom_state_(CREATE_NORMAL),
       state_(STATE_UNINITIALIZED),
       synchronous_entry_(NULL),
       net_log_(
@@ -281,6 +284,14 @@ int SimpleEntryImpl::CreateEntry(Entry** out_entry,
     pending_operations_.push(SimpleEntryOperation::CreateOperation(
         this, have_index, CompletionCallback(), static_cast<Entry**>(NULL)));
     ret_value = net::OK;
+
+    // If we are optimistically returning before a preceeding doom, we need to
+    // wait for that IO, about which we will be notified externally.
+    if (optimistic_create_pending_doom_state_ != CREATE_NORMAL) {
+      DCHECK_EQ(CREATE_OPTIMISTIC_PENDING_DOOM,
+                optimistic_create_pending_doom_state_);
+      state_ = STATE_IO_PENDING;
+    }
   } else {
     pending_operations_.push(SimpleEntryOperation::CreateOperation(
         this, have_index, callback, out_entry));
@@ -305,11 +316,46 @@ int SimpleEntryImpl::DoomEntry(const CompletionCallback& callback) {
   net_log_.AddEvent(net::NetLogEventType::SIMPLE_CACHE_ENTRY_DOOM_BEGIN);
 
   MarkAsDoomed();
-  if (backend_.get())
-    backend_->OnDoomStart(entry_hash_);
+  if (backend_.get()) {
+    if (optimistic_create_pending_doom_state_ == CREATE_NORMAL) {
+      backend_->OnDoomStart(entry_hash_);
+    } else {
+      DCHECK_EQ(STATE_IO_PENDING, state_);
+      DCHECK_EQ(CREATE_OPTIMISTIC_PENDING_DOOM,
+                optimistic_create_pending_doom_state_);
+      // If we are in this state, we went ahead with making the entry even
+      // though the backend was already keeping track of a doom, so it can't
+      // keep track of ours. So we delay notifying it until
+      // NotifyDoomBeforeCreateComplete is called.  Since this path is invoked
+      // only when the queue of post-doom callbacks was previously empty, while
+      // the CompletionCallback for the op is posted,
+      // NotifyDoomBeforeCreateComplete() will be the first thing running after
+      // the previous doom completes, so at that point we can immediately grab
+      // a spot in entries_pending_doom_.
+      optimistic_create_pending_doom_state_ =
+          CREATE_OPTIMISTIC_PENDING_DOOM_FOLLOWED_BY_DOOM;
+    }
+  }
   pending_operations_.push(SimpleEntryOperation::DoomOperation(this, callback));
   RunNextOperationIfNeeded();
   return net::ERR_IO_PENDING;
+}
+
+void SimpleEntryImpl::SetCreatePendingDoom() {
+  DCHECK_EQ(CREATE_NORMAL, optimistic_create_pending_doom_state_);
+  optimistic_create_pending_doom_state_ = CREATE_OPTIMISTIC_PENDING_DOOM;
+}
+
+void SimpleEntryImpl::NotifyDoomBeforeCreateComplete() {
+  DCHECK_EQ(STATE_IO_PENDING, state_);
+  DCHECK_NE(CREATE_NORMAL, optimistic_create_pending_doom_state_);
+  if (backend_.get() && optimistic_create_pending_doom_state_ ==
+                            CREATE_OPTIMISTIC_PENDING_DOOM_FOLLOWED_BY_DOOM)
+    backend_->OnDoomStart(entry_hash_);
+
+  state_ = STATE_UNINITIALIZED;
+  optimistic_create_pending_doom_state_ = CREATE_NORMAL;
+  RunNextOperationIfNeeded();
 }
 
 void SimpleEntryImpl::SetKey(const std::string& key) {
@@ -718,9 +764,9 @@ void SimpleEntryImpl::OpenEntryInternal(bool have_index,
   std::unique_ptr<SimpleEntryCreationResults> results(
       new SimpleEntryCreationResults(SimpleEntryStat(
           last_used_, last_modified_, data_size_, sparse_data_size_)));
-  Closure task =
-      base::Bind(&SimpleSynchronousEntry::OpenEntry, cache_type_, path_, key_,
-                 entry_hash_, have_index, start_time, results.get());
+  Closure task = base::Bind(&SimpleSynchronousEntry::OpenEntry, cache_type_,
+                            path_, key_, entry_hash_, have_index, start_time,
+                            file_tracker_, results.get());
   Closure reply =
       base::Bind(&SimpleEntryImpl::CreationOperationComplete, this, callback,
                  start_time, base::Passed(&results), out_entry,
@@ -760,9 +806,9 @@ void SimpleEntryImpl::CreateEntryInternal(bool have_index,
   std::unique_ptr<SimpleEntryCreationResults> results(
       new SimpleEntryCreationResults(SimpleEntryStat(
           last_used_, last_modified_, data_size_, sparse_data_size_)));
-  Closure task =
-      base::Bind(&SimpleSynchronousEntry::CreateEntry, cache_type_, path_, key_,
-                 entry_hash_, have_index, start_time, results.get());
+  Closure task = base::Bind(&SimpleSynchronousEntry::CreateEntry, cache_type_,
+                            path_, key_, entry_hash_, have_index, start_time,
+                            file_tracker_, results.get());
   Closure reply =
       base::Bind(&SimpleEntryImpl::CreationOperationComplete, this, callback,
                  start_time, base::Passed(&results), out_entry,

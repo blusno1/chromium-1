@@ -174,105 +174,26 @@ void LayoutTextFragment::UpdateHitTestResult(HitTestResult& result,
   result.SetInnerNode(GetFirstLetterPseudoElement());
 }
 
-int LayoutTextFragment::CaretMinOffset() const {
-  if (!ShouldUseNGAlternatives())
-    return LayoutText::CaretMinOffset();
-
-  const Node* node = AssociatedTextNode();
+Position LayoutTextFragment::PositionForCaretOffset(unsigned offset) const {
+  DCHECK_LE(offset, FragmentLength());
+  const Text* node = AssociatedTextNode();
   if (!node)
-    return 0;
-
-  Optional<unsigned> candidate =
-      GetNGOffsetMapping().StartOfNextNonCollapsedCharacter(*node, Start());
-  DCHECK(!candidate || *candidate >= Start());
-  // Align with the legacy behavior that 0 is returned if the entire layout
-  // object contains only collapsed whitespaces.
-  const bool fully_collapsed =
-      !candidate || *candidate >= Start() + FragmentLength();
-  return fully_collapsed ? 0 : *candidate - Start();
+    return Position();
+  // TODO(layout-dev): Support offset change due to text-transform.
+  return Position(node, Start() + offset);
 }
 
-int LayoutTextFragment::CaretMaxOffset() const {
-  if (!ShouldUseNGAlternatives())
-    return LayoutText::CaretMaxOffset();
-
-  const Node* node = AssociatedTextNode();
-  if (!node)
-    return 0;
-
-  Optional<unsigned> candidate =
-      GetNGOffsetMapping().EndOfLastNonCollapsedCharacter(
-          *node, Start() + FragmentLength());
-  // Align with the legacy behavior that FragmentLength() is returned if the
-  // entire layout object contains only collapsed whitespaces.
-  const bool fully_collapsed = !candidate || *candidate <= Start();
-  return fully_collapsed ? FragmentLength() : *candidate - Start();
-}
-
-unsigned LayoutTextFragment::ResolvedTextLength() const {
-  if (!ShouldUseNGAlternatives())
-    return LayoutText::ResolvedTextLength();
-
-  const Node* node = AssociatedTextNode();
-  if (!node)
-    return 0;
-  const NGOffsetMapping& mapping = GetNGOffsetMapping();
-  Optional<unsigned> start = mapping.GetTextContentOffset(*node, Start());
-  Optional<unsigned> end =
-      mapping.GetTextContentOffset(*node, Start() + FragmentLength());
-  DCHECK(start);
-  DCHECK(end);
-  DCHECK_LE(*start, *end);
-  return *end - *start;
-}
-
-bool LayoutTextFragment::ContainsCaretOffset(int text_offset) const {
-  if (!ShouldUseNGAlternatives())
-    return LayoutText::ContainsCaretOffset(text_offset);
-
-  DCHECK_GE(text_offset, 0);
-  if (text_offset > static_cast<int>(FragmentLength()))
-    return false;
-  const Node* node = AssociatedTextNode();
-  if (!node)
-    return false;
-  const unsigned dom_offset = text_offset + Start();
-  const NGOffsetMapping& mapping = GetNGOffsetMapping();
-  if (mapping.IsBeforeNonCollapsedCharacter(*node, dom_offset))
-    return true;
-  if (text_offset == 0)
-    return false;
-  if (!mapping.IsAfterNonCollapsedCharacter(*node, dom_offset))
-    return false;
-  return *mapping.GetCharacterBefore(*node, dom_offset) != kNewlineCharacter;
-}
-
-bool LayoutTextFragment::IsBeforeNonCollapsedCharacter(
-    unsigned text_offset) const {
-  if (!ShouldUseNGAlternatives())
-    return LayoutText::IsBeforeNonCollapsedCharacter(text_offset);
-
-  if (text_offset >= FragmentLength())
-    return false;
-  const Node* node = AssociatedTextNode();
-  if (!node)
-    return false;
-  const unsigned dom_offset = text_offset + Start();
-  return GetNGOffsetMapping().IsBeforeNonCollapsedCharacter(*node, dom_offset);
-}
-
-bool LayoutTextFragment::IsAfterNonCollapsedCharacter(
-    unsigned text_offset) const {
-  if (!ShouldUseNGAlternatives())
-    return LayoutText::IsAfterNonCollapsedCharacter(text_offset);
-
-  if (!text_offset)
-    return false;
-  const Node* node = AssociatedTextNode();
-  if (!node)
-    return false;
-  const unsigned dom_offset = text_offset + Start();
-  return GetNGOffsetMapping().IsAfterNonCollapsedCharacter(*node, dom_offset);
+Optional<unsigned> LayoutTextFragment::CaretOffsetForPosition(
+    const Position& position) const {
+  if (position.IsNull() || position.AnchorNode() != AssociatedTextNode())
+    return WTF::nullopt;
+  // TODO(xiaochengh): Consider Before/AfterAnchor.
+  DCHECK(position.IsOffsetInAnchor()) << position;
+  // TODO(layout-dev): Support offset change due to text-transform.
+  unsigned dom_offset = position.OffsetInContainerNode();
+  if (dom_offset < Start() || dom_offset > Start() + FragmentLength())
+    return WTF::nullopt;
+  return dom_offset - Start();
 }
 
 }  // namespace blink

@@ -104,6 +104,8 @@ uint32_t BufferFormatToVARTFormat(gfx::BufferFormat fmt) {
 
 namespace media {
 
+namespace {
+
 // Maximum framerate of encoded profile. This value is an arbitary limit
 // and not taken from HW documentation.
 const int kMaxEncoderFramerate = 30;
@@ -120,24 +122,128 @@ static const VAConfigAttrib kEncodeVAConfigAttribs[] = {
      VA_ENC_PACKED_HEADER_SEQUENCE | VA_ENC_PACKED_HEADER_PICTURE},
 };
 
-struct ProfileMap {
+// A map between VideoCodecProfile and VAProfile.
+static const struct {
   VideoCodecProfile profile;
   VAProfile va_profile;
-};
-
-// A map between VideoCodecProfile and VAProfile.
-static const ProfileMap kProfileMap[] = {
+} kProfileMap[] = {
     {H264PROFILE_BASELINE, VAProfileH264Baseline},
     {H264PROFILE_MAIN, VAProfileH264Main},
-    // TODO(posciak): See if we can/want support other variants of
+    // TODO(posciak): See if we can/want to support other variants of
     // H264PROFILE_HIGH*.
     {H264PROFILE_HIGH, VAProfileH264High},
     {VP8PROFILE_ANY, VAProfileVP8Version0_3},
     {VP9PROFILE_PROFILE0, VAProfileVP9Profile0},
     {VP9PROFILE_PROFILE1, VAProfileVP9Profile1},
-    {VP9PROFILE_PROFILE2, VAProfileVP9Profile2},
-    {VP9PROFILE_PROFILE3, VAProfileVP9Profile3},
+    // TODO(mcasas): support other VP9 Profiles, https://crbug.com/778093.
 };
+
+// This class is a wrapper around its |va_display_| (and its associated
+// |va_lock_|) to guarantee mutual exclusion and singleton behaviour.
+class VADisplayState {
+ public:
+  static VADisplayState* Get();
+
+  VADisplayState();
+  ~VADisplayState() = delete;
+
+  // |va_lock_| must be held on entry.
+  bool Initialize();
+  void Deinitialize(VAStatus* status);
+
+  base::Lock* va_lock() { return &va_lock_; }
+  VADisplay va_display() const { return va_display_; }
+
+#if defined(USE_OZONE)
+  void SetDrmFd(base::PlatformFile fd) { drm_fd_.reset(HANDLE_EINTR(dup(fd))); }
+#endif  // USE_OZONE
+
+ private:
+  // Protected by |va_lock_|.
+  int refcount_;
+
+  // Libva is not thread safe, so we have to do locking for it ourselves.
+  // This lock is to be taken for the duration of all VA-API calls and for
+  // the entire job submission sequence in ExecuteAndDestroyPendingBuffers().
+  base::Lock va_lock_;
+
+#if defined(USE_OZONE)
+  // Drm fd used to obtain access to the driver interface by VA.
+  base::ScopedFD drm_fd_;
+#endif  // USE_OZONE
+
+  // The VADisplay handle.
+  VADisplay va_display_;
+
+  // True if vaInitialize() has been called successfully.
+  bool va_initialized_;
+};
+
+// static
+VADisplayState* VADisplayState::Get() {
+  static VADisplayState* display_state = new VADisplayState();
+  return display_state;
+}
+
+VADisplayState::VADisplayState()
+    : refcount_(0), va_display_(nullptr), va_initialized_(false) {}
+
+bool VADisplayState::Initialize() {
+  va_lock_.AssertAcquired();
+  if (refcount_++ > 0)
+    return true;
+#if defined(USE_X11)
+  va_display_ = vaGetDisplay(gfx::GetXDisplay());
+#elif defined(USE_OZONE)
+  va_display_ = vaGetDisplayDRM(drm_fd_.get());
+#endif  // USE_X11
+
+  if (!vaDisplayIsValid(va_display_)) {
+    LOG(ERROR) << "Could not get a valid VA display";
+    return false;
+  }
+
+  // Set VA logging level to enable error messages, unless already set
+  constexpr char libva_log_level_env[] = "LIBVA_MESSAGING_LEVEL";
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  if (!env->HasVar(libva_log_level_env))
+    env->SetVar(libva_log_level_env, "1");
+
+  // The VAAPI version.
+  int major_version, minor_version;
+  VAStatus va_res = vaInitialize(va_display_, &major_version, &minor_version);
+  if (va_res != VA_STATUS_SUCCESS) {
+    LOG(ERROR) << "vaInitialize failed: " << vaErrorStr(va_res);
+    return false;
+  }
+
+  va_initialized_ = true;
+  DVLOG(1) << "VAAPI version: " << major_version << "." << minor_version;
+
+  if (major_version != VA_MAJOR_VERSION || minor_version != VA_MINOR_VERSION) {
+    LOG(ERROR) << "This build of Chromium requires VA-API version "
+               << VA_MAJOR_VERSION << "." << VA_MINOR_VERSION
+               << ", system version: " << major_version << "." << minor_version;
+    return false;
+  }
+  return true;
+}
+
+void VADisplayState::Deinitialize(VAStatus* status) {
+  va_lock_.AssertAcquired();
+  if (--refcount_ > 0)
+    return;
+
+  // Must check if vaInitialize completed successfully, to work around a bug in
+  // libva. The bug was fixed upstream:
+  // http://lists.freedesktop.org/archives/libva/2013-July/001807.html
+  // TODO(mgiuca): Remove this check, and the |va_initialized_| variable, once
+  // the fix has rolled out sufficiently.
+  if (va_initialized_ && va_display_)
+    *status = vaTerminate(va_display_);
+  va_initialized_ = false;
+  va_display_ = nullptr;
+}
 
 static std::vector<VAConfigAttrib> GetRequiredAttribs(
     VaapiWrapper::CodecMode mode) {
@@ -153,20 +259,7 @@ static std::vector<VAConfigAttrib> GetRequiredAttribs(
   return required_attribs;
 }
 
-VASurface::VASurface(VASurfaceID va_surface_id,
-                     const gfx::Size& size,
-                     unsigned int format,
-                     const ReleaseCB& release_cb)
-    : va_surface_id_(va_surface_id),
-      size_(size),
-      format_(format),
-      release_cb_(release_cb) {
-  DCHECK(!release_cb_.is_null());
-}
-
-VASurface::~VASurface() {
-  release_cb_.Run(va_surface_id_);
-}
+}  // namespace
 
 VaapiWrapper::VaapiWrapper()
     : va_surface_format_(0),
@@ -176,7 +269,7 @@ VaapiWrapper::VaapiWrapper()
       va_vpp_config_id_(VA_INVALID_ID),
       va_vpp_context_id_(VA_INVALID_ID),
       va_vpp_buffer_id_(VA_INVALID_ID) {
-  va_lock_ = GetDisplayState()->va_lock();
+  va_lock_ = VADisplayState::Get()->va_lock();
 }
 
 VaapiWrapper::~VaapiWrapper() {
@@ -362,10 +455,10 @@ bool VaapiWrapper::VaInitialize(const base::Closure& report_error_to_uma_cb) {
   report_error_to_uma_cb_ = report_error_to_uma_cb;
 
   base::AutoLock auto_lock(*va_lock_);
-  if (!GetDisplayState()->Initialize())
+  if (!VADisplayState::Get()->Initialize())
     return false;
 
-  va_display_ = GetDisplayState()->va_display();
+  va_display_ = VADisplayState::Get()->va_display();
   return true;
 }
 
@@ -512,7 +605,7 @@ void VaapiWrapper::Deinitialize() {
   }
 
   VAStatus va_res = VA_STATUS_SUCCESS;
-  GetDisplayState()->Deinitialize(&va_res);
+  VADisplayState::Get()->Deinitialize(&va_res);
   VA_LOG_ON_ERROR(va_res, "vaTerminate failed");
 
   va_config_id_ = VA_INVALID_ID;
@@ -844,32 +937,6 @@ bool VaapiWrapper::PutSurfaceIntoPixmap(VASurfaceID va_surface_id,
 }
 #endif  // USE_X11
 
-bool VaapiWrapper::GetDerivedVaImage(VASurfaceID va_surface_id,
-                                     VAImage* image,
-                                     void** mem) {
-  base::AutoLock auto_lock(*va_lock_);
-
-  VAStatus va_res = vaSyncSurface(va_display_, va_surface_id);
-  VA_SUCCESS_OR_RETURN(va_res, "Failed syncing surface", false);
-
-  // Derive a VAImage from the VASurface
-  va_res = vaDeriveImage(va_display_, va_surface_id, image);
-  VA_LOG_ON_ERROR(va_res, "vaDeriveImage failed");
-  if (va_res != VA_STATUS_SUCCESS)
-    return false;
-
-  // Map the VAImage into memory
-  va_res = vaMapBuffer(va_display_, image->buf, mem);
-  VA_LOG_ON_ERROR(va_res, "vaMapBuffer failed");
-  if (va_res == VA_STATUS_SUCCESS)
-    return true;
-
-  va_res = vaDestroyImage(va_display_, image->image_id);
-  VA_LOG_ON_ERROR(va_res, "vaDestroyImage failed");
-
-  return false;
-}
-
 bool VaapiWrapper::GetVaImage(VASurfaceID va_surface_id,
                               VAImageFormat* format,
                               const gfx::Size& size,
@@ -1115,7 +1182,7 @@ void VaapiWrapper::PreSandboxInitialization() {
       base::FilePath::FromUTF8Unsafe(kDriRenderNode0Path),
       base::File::FLAG_OPEN | base::File::FLAG_READ | base::File::FLAG_WRITE);
   if (drm_file.IsValid())
-    GetDisplayState()->SetDrmFd(drm_file.GetPlatformFile());
+    VADisplayState::Get()->SetDrmFd(drm_file.GetPlatformFile());
 #endif
 }
 
@@ -1132,12 +1199,6 @@ bool VaapiWrapper::PostSandboxInitialization() {
 #endif
 
   return InitializeStubs(paths);
-}
-
-// static
-VaapiWrapper::VADisplayState* VaapiWrapper::GetDisplayState() {
-  static VADisplayState* display_state = new VADisplayState();
-  return display_state;
 }
 
 // static
@@ -1175,79 +1236,5 @@ bool VaapiWrapper::LazyProfileInfos::IsProfileSupported(CodecMode mode,
   }
   return false;
 }
-
-VaapiWrapper::VADisplayState::VADisplayState()
-    : refcount_(0),
-      va_display_(nullptr),
-      major_version_(-1),
-      minor_version_(-1),
-      va_initialized_(false) {}
-
-VaapiWrapper::VADisplayState::~VADisplayState() {}
-
-bool VaapiWrapper::VADisplayState::Initialize() {
-  va_lock_.AssertAcquired();
-  if (refcount_++ == 0) {
-#if defined(USE_X11)
-    va_display_ = vaGetDisplay(gfx::GetXDisplay());
-#elif defined(USE_OZONE)
-    va_display_ = vaGetDisplayDRM(drm_fd_.get());
-#endif  // USE_X11
-
-    if (!vaDisplayIsValid(va_display_)) {
-      LOG(ERROR) << "Could not get a valid VA display";
-      return false;
-    }
-
-    // Set VA logging level to enable error messages, unless already set
-    constexpr char libva_log_level_env[] = "LIBVA_MESSAGING_LEVEL";
-    std::unique_ptr<base::Environment> env(base::Environment::Create());
-    if (!env->HasVar(libva_log_level_env))
-      env->SetVar(libva_log_level_env, "1");
-
-    VAStatus va_res =
-        vaInitialize(va_display_, &major_version_, &minor_version_);
-    if (va_res != VA_STATUS_SUCCESS) {
-      LOG(ERROR) << "vaInitialize failed: " << vaErrorStr(va_res);
-      return false;
-    }
-
-    va_initialized_ = true;
-    DVLOG(1) << "VAAPI version: " << major_version_ << "." << minor_version_;
-  }
-
-  if (major_version_ != VA_MAJOR_VERSION ||
-      minor_version_ != VA_MINOR_VERSION) {
-    LOG(ERROR) << "This build of Chromium requires VA-API version "
-               << VA_MAJOR_VERSION << "." << VA_MINOR_VERSION
-               << ", system version: " << major_version_ << "."
-               << minor_version_;
-    return false;
-  }
-  return true;
-}
-
-void VaapiWrapper::VADisplayState::Deinitialize(VAStatus* status) {
-  va_lock_.AssertAcquired();
-  if (--refcount_ > 0)
-    return;
-
-  // Must check if vaInitialize completed successfully, to work around a bug in
-  // libva. The bug was fixed upstream:
-  // http://lists.freedesktop.org/archives/libva/2013-July/001807.html
-  // TODO(mgiuca): Remove this check, and the |va_initialized_| variable, once
-  // the fix has rolled out sufficiently.
-  if (va_initialized_ && va_display_) {
-    *status = vaTerminate(va_display_);
-  }
-  va_initialized_ = false;
-  va_display_ = nullptr;
-}
-
-#if defined(USE_OZONE)
-void VaapiWrapper::VADisplayState::SetDrmFd(base::PlatformFile fd) {
-  drm_fd_.reset(HANDLE_EINTR(dup(fd)));
-}
-#endif  // USE_OZONE
 
 }  // namespace media

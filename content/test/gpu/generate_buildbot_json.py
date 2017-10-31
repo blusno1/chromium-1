@@ -752,16 +752,14 @@ FYI_WATERFALL = {
     'Android Release (Nexus 6P)': {
       'swarming_dimensions': [
         {
-          # There are no PCI IDs on Android.
-          # This is a hack to get the script working.
-          'gpu': '0000:0000',
-          'os': 'Android'
+          'device_type': 'angler',
+          'device_os': 'M',
+          'os': 'Android',
+          'pool': 'Chrome-GPU',
         },
       ],
       'build_config': 'android-chromium',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
+      'swarming': True,
       'os_type': 'android',
     },
     'Android Release (Nexus 9)': {
@@ -1230,10 +1228,12 @@ COMMON_GTESTS = {
             'os': 'Windows-2008ServerR2-SP1'
           },
           # AMD Win 7
-          {
-            'gpu': '1002:6613',
-            'os': 'Windows-2008ServerR2-SP1'
-          },
+          # Temporarily disabled to prevent a recipe engine crash.
+          # TODO(jmadill): Re-enable when http://crbug.com713196 is fixed.
+          # {
+          #   'gpu': '1002:6613',
+          #   'os': 'Windows-2008ServerR2-SP1'
+          # },
         ],
       }
     ],
@@ -2323,13 +2323,6 @@ NON_TELEMETRY_ISOLATED_SCRIPT_TESTS = {
         ],
       },
     ],
-    'disabled_tester_configs': [
-      {
-        'names': [
-          'Linux Ozone (Intel)',
-        ],
-      },
-    ],
     'compile_target': 'command_buffer_perftests',
     'isolate_name': 'command_buffer_perftests',
     'args': [
@@ -2350,13 +2343,6 @@ NON_TELEMETRY_ISOLATED_SCRIPT_TESTS = {
             'gpu': NVIDIA_GEFORCE_610_ALL_DRIVERS,
             'os': 'Windows-2008ServerR2-SP1'
           },
-        ],
-      },
-    ],
-    'disabled_tester_configs': [
-      {
-        'names': [
-          'Linux Ozone (Intel)',
         ],
       },
     ],

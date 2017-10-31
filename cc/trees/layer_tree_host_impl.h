@@ -40,6 +40,7 @@
 #include "cc/trees/managed_memory_policy.h"
 #include "cc/trees/mutator_host_client.h"
 #include "cc/trees/task_runner_provider.h"
+#include "cc/trees/ukm_manager.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
 #include "components/viz/common/quads/render_pass.h"
@@ -382,6 +383,11 @@ class CC_EXPORT LayerTreeHostImpl
       const gfx::Transform& transform) override;
   void DidLoseLayerTreeFrameSink() override;
   void DidReceiveCompositorFrameAck() override;
+  void DidPresentCompositorFrame(uint32_t presentation_token,
+                                 base::TimeTicks time,
+                                 base::TimeDelta refresh,
+                                 uint32_t flags) override;
+  void DidDiscardCompositorFrame(uint32_t presentation_token) override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override;
@@ -619,9 +625,8 @@ class CC_EXPORT LayerTreeHostImpl
 
   LayerImpl* ViewportMainScrollLayer();
 
-  void QueueImageDecode(const PaintImage& image,
-                        const base::Callback<void(bool)>& embedder_callback);
-  std::vector<base::Closure> TakeCompletedImageDecodeCallbacks();
+  void QueueImageDecode(int request_id, const PaintImage& image);
+  std::vector<std::pair<int, bool>> TakeCompletedImageDecodeRequests();
 
   void ClearImageCacheOnNavigation();
 
@@ -631,6 +636,11 @@ class CC_EXPORT LayerTreeHostImpl
   void UpdateImageDecodingHints(
       base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
           decoding_mode_map);
+
+  void InitializeUkm(std::unique_ptr<ukm::UkmRecorder> recorder);
+  UkmManager* ukm_manager() { return ukm_manager_.get(); }
+
+  void RenewTreePriorityForTesting() { client_->RenewTreePriority(); }
 
  protected:
   LayerTreeHostImpl(
@@ -736,8 +746,7 @@ class CC_EXPORT LayerTreeHostImpl
                                    base::TimeDelta delayed_by);
 
   void SetContextVisibility(bool is_visible);
-  void ImageDecodeFinished(const base::Callback<void(bool)>& embedder_callback,
-                           bool decode_succeeded);
+  void ImageDecodeFinished(int request_id, bool decode_succeeded);
 
   // This function keeps track of sources of scrolls that are handled in the
   // compositor side. The information gets shared by the main thread as part of
@@ -909,9 +918,10 @@ class CC_EXPORT LayerTreeHostImpl
   // in SetPropertyTrees.
   ElementId scroll_animating_latched_element_id_;
 
-  // These callbacks are stored here to be transfered to the main thread when we
-  // begin main frame. These callbacks must only be called on the main thread.
-  std::vector<base::Closure> completed_image_decode_callbacks_;
+  // These completion states to be transfered to the main thread when we
+  // begin main frame. The pair represents a request id and the completion (ie
+  // success) state.
+  std::vector<std::pair<int, bool>> completed_image_decode_requests_;
 
   // These are used to transfer usage of touch and wheel scrolls to the main
   // thread.
@@ -923,6 +933,8 @@ class CC_EXPORT LayerTreeHostImpl
   ImplThreadPhase impl_thread_phase_;
 
   base::Optional<ImageAnimationController> image_animation_controller_;
+
+  std::unique_ptr<UkmManager> ukm_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHostImpl);
 };

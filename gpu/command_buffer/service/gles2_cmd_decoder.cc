@@ -4952,6 +4952,9 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
     for (auto& fence : deschedule_until_finished_fences_) {
       fence->Invalidate();
     }
+
+    if (group_ && group_->texture_manager())
+      group_->texture_manager()->MarkContextLost();
   }
   deschedule_until_finished_fences_.clear();
 
@@ -12428,11 +12431,12 @@ error::Error GLES2DecoderImpl::HandleScheduleDCLayerCHROMIUM(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderImpl::HandleSetColorSpaceForScanoutCHROMIUM(
+error::Error GLES2DecoderImpl::HandleSetColorSpaceMetadataCHROMIUM(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  const volatile gles2::cmds::SetColorSpaceForScanoutCHROMIUM& c = *static_cast<
-      const volatile gles2::cmds::SetColorSpaceForScanoutCHROMIUM*>(cmd_data);
+  const volatile gles2::cmds::SetColorSpaceMetadataCHROMIUM& c =
+      *static_cast<const volatile gles2::cmds::SetColorSpaceMetadataCHROMIUM*>(
+          cmd_data);
 
   GLuint texture_id = c.texture_id;
   GLsizei color_space_size = c.color_space_size;
@@ -12450,23 +12454,22 @@ error::Error GLES2DecoderImpl::HandleSetColorSpaceForScanoutCHROMIUM(
                                                &color_space))
     return error::kOutOfBounds;
 
-  scoped_refptr<gl::GLImage> image;
   TextureRef* ref = texture_manager()->GetTexture(texture_id);
   if (!ref) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glSetColorSpaceForScanoutCHROMIUM",
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glSetColorSpaceMetadataCHROMIUM",
                        "unknown texture");
     return error::kNoError;
   }
-  Texture::ImageState image_state;
-  image =
-      ref->texture()->GetLevelImage(ref->texture()->target(), 0, &image_state);
+
+  scoped_refptr<gl::GLImage> image =
+      ref->texture()->GetLevelImage(ref->texture()->target(), 0);
   if (!image) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glSetColorSpaceForScanoutCHROMIUM",
-                       "unsupported texture format");
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glSetColorSpaceMetadataCHROMIUM",
+                       "no image associated with texture");
     return error::kNoError;
   }
 
-  image->SetColorSpaceForScanout(color_space);
+  image->SetColorSpace(color_space);
   return error::kNoError;
 }
 
@@ -12853,49 +12856,26 @@ error::Error GLES2DecoderImpl::HandleGetString(uint32_t immediate_data_size,
     case GL_SHADING_LANGUAGE_VERSION:
       str = GetServiceShadingLanguageVersionString(feature_info_.get());
       break;
-    case GL_EXTENSIONS:
-      {
-        // For WebGL contexts, strip out shader extensions if they have not
-        // been enabled on WebGL1 or no longer exist (become core) in WebGL2.
-        if (feature_info_->IsWebGLContext()) {
-          extensions = feature_info_->extensions();
-          if (!derivatives_explicitly_enabled_) {
-            size_t offset = extensions.find(kOESDerivativeExtension);
-            if (std::string::npos != offset) {
-              extensions.replace(offset, arraysize(kOESDerivativeExtension),
-                                 std::string());
-            }
-          }
-          if (!frag_depth_explicitly_enabled_) {
-            size_t offset = extensions.find(kEXTFragDepthExtension);
-            if (std::string::npos != offset) {
-              extensions.replace(offset, arraysize(kEXTFragDepthExtension),
-                                 std::string());
-            }
-          }
-          if (!draw_buffers_explicitly_enabled_) {
-            size_t offset = extensions.find(kEXTDrawBuffersExtension);
-            if (std::string::npos != offset) {
-              extensions.replace(offset, arraysize(kEXTDrawBuffersExtension),
-                                 std::string());
-            }
-          }
-          if (!shader_texture_lod_explicitly_enabled_) {
-            size_t offset = extensions.find(kEXTShaderTextureLodExtension);
-            if (std::string::npos != offset) {
-              extensions.replace(offset,
-                                 arraysize(kEXTShaderTextureLodExtension),
-                                 std::string());
-            }
-          }
-        } else {
-          extensions = feature_info_->extensions().c_str();
-        }
-        if (supports_post_sub_buffer_)
-          extensions += " GL_CHROMIUM_post_sub_buffer";
-        str = extensions.c_str();
+    case GL_EXTENSIONS: {
+      gl::ExtensionSet extension_set = feature_info_->extensions();
+      // For WebGL contexts, strip out shader extensions if they have not
+      // been enabled on WebGL1 or no longer exist (become core) in WebGL2.
+      if (feature_info_->IsWebGLContext()) {
+        if (!derivatives_explicitly_enabled_)
+          extension_set.erase(kOESDerivativeExtension);
+        if (!frag_depth_explicitly_enabled_)
+          extension_set.erase(kEXTFragDepthExtension);
+        if (!draw_buffers_explicitly_enabled_)
+          extension_set.erase(kEXTDrawBuffersExtension);
+        if (!shader_texture_lod_explicitly_enabled_)
+          extension_set.erase(kEXTShaderTextureLodExtension);
       }
+      if (supports_post_sub_buffer_)
+        extension_set.insert("GL_CHROMIUM_post_sub_buffer");
+      extensions = gl::MakeExtensionString(extension_set);
+      str = extensions.c_str();
       break;
+    }
     default:
       str = reinterpret_cast<const char*>(api()->glGetStringFn(name));
       break;
@@ -16091,7 +16071,7 @@ error::Error GLES2DecoderImpl::HandleGetRequestableExtensionsCHROMIUM(
   DisallowedFeatures disallowed_features = feature_info_->disallowed_features();
   disallowed_features.AllowExtensions();
   info->Initialize(feature_info_->context_type(), disallowed_features);
-  bucket->SetFromString(info->extensions().c_str());
+  bucket->SetFromString(gl::MakeExtensionString(info->extensions()).c_str());
   return error::kNoError;
 }
 
@@ -16146,6 +16126,10 @@ error::Error GLES2DecoderImpl::HandleRequestExtensionCHROMIUM(
   }
   if (feature_str.find("GL_EXT_color_buffer_float ") != std::string::npos) {
     feature_info_->EnableEXTColorBufferFloat();
+  }
+  if (feature_str.find("GL_EXT_color_buffer_half_float ") !=
+      std::string::npos) {
+    feature_info_->EnableEXTColorBufferHalfFloat();
   }
   if (feature_str.find("GL_OES_texture_float_linear ") != std::string::npos) {
     feature_info_->EnableOESTextureFloatLinear();
@@ -16371,6 +16355,8 @@ bool GLES2DecoderImpl::CheckResetStatus() {
 error::Error GLES2DecoderImpl::HandleDescheduleUntilFinishedCHROMIUM(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
+  if (!gl::GLFence::IsSupported())
+    return error::kNoError;
   std::unique_ptr<gl::GLFence> fence(gl::GLFence::Create());
   deschedule_until_finished_fences_.push_back(std::move(fence));
 
@@ -16705,6 +16691,15 @@ error::Error GLES2DecoderImpl::HandleQueryCounterEXT(
     }
     query =
         query_manager_->CreateQuery(target, client_id, std::move(buffer), sync);
+  } else {
+    if (query->target() != target) {
+      LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glQueryCounterEXT",
+                         "target does not match");
+      return error::kNoError;
+    } else if (query->sync() != sync) {
+      DLOG(ERROR) << "Shared memory used by query not the same as before";
+      return error::kInvalidArguments;
+    }
   }
   query_manager_->QueryCounter(query, submit_count);
 

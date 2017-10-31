@@ -57,8 +57,7 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   void DecreaseScreenBrightness(bool allow_off) override;
   void IncreaseScreenBrightness() override;
   void SetScreenBrightnessPercent(double percent, bool gradual) override;
-  void GetScreenBrightnessPercent(
-      const GetScreenBrightnessPercentCallback& callback) override;
+  void GetScreenBrightnessPercent(DBusMethodCallback<double> callback) override;
   void DecreaseKeyboardBrightness() override;
   void IncreaseKeyboardBrightness() override;
   void RequestStatusUpdate() override;
@@ -73,9 +72,8 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   void SetIsProjecting(bool is_projecting) override;
   void SetPowerSource(const std::string& id) override;
   void SetBacklightsForcedOff(bool forced_off) override;
-  void GetBacklightsForcedOff(
-      const GetBacklightsForcedOffCallback& callback) override;
-  void GetSwitchStates(const GetSwitchStatesCallback& callback) override;
+  void GetBacklightsForcedOff(DBusMethodCallback<bool> callback) override;
+  void GetSwitchStates(DBusMethodCallback<SwitchStates> callback) override;
   base::Closure GetSuspendReadinessCallback() override;
   int GetNumPendingSuspendReadinessCallbacks() override;
 
@@ -85,7 +83,7 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
 
   // Emulates the power manager announcing that the system is starting or
   // completing a suspend attempt.
-  void SendSuspendImminent();
+  void SendSuspendImminent(power_manager::SuspendImminent::Reason reason);
   void SendSuspendDone();
   void SendDarkSuspendImminent();
 

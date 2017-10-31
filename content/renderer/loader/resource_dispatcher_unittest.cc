@@ -211,7 +211,7 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
     request->referrer_policy = blink::kWebReferrerPolicyDefault;
     request->resource_type = RESOURCE_TYPE_SUB_RESOURCE;
     request->priority = net::LOW;
-    request->fetch_request_mode = FETCH_REQUEST_MODE_NO_CORS;
+    request->fetch_request_mode = network::mojom::FetchRequestMode::kNoCORS;
     request->fetch_frame_type = REQUEST_CONTEXT_FRAME_TYPE_NONE;
     request->download_to_file = download_to_file;
 
@@ -400,7 +400,7 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
       std::unique_ptr<RequestPeer> current_peer,
       const std::string& mime_type,
       const GURL& url) override {
-    return base::MakeUnique<WrapperPeer>(std::move(current_peer));
+    return std::make_unique<WrapperPeer>(std::move(current_peer));
   }
 
   class WrapperPeer : public RequestPeer {
@@ -435,7 +435,7 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
       original_peer_->OnReceivedResponse(response_info_);
       if (!data_.empty()) {
         original_peer_->OnReceivedData(
-            base::MakeUnique<FixedReceivedData>(data_.data(), data_.size()));
+            std::make_unique<FixedReceivedData>(data_.data(), data_.size()));
       }
       original_peer_->OnCompletedRequest(error_code, stale_copy_in_cache,
                                          completion_time, total_transfer_size,

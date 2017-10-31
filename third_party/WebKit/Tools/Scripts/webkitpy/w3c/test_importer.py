@@ -433,16 +433,23 @@ class TestImporter(object):
         directory_owners = self.get_directory_owners()
         description = self._cl_description(directory_owners)
         sheriff_email = self.tbr_reviewer()
+
+        temp_file, temp_path = self.fs.open_text_tempfile()
+        temp_file.write(description)
+        temp_file.close()
+
         self.git_cl.run([
             'upload',
             '-f',
             '--gerrit',
-            '-m', description,
+            '--message-file', temp_path,
             '--tbrs', sheriff_email,
             # Note: we used to CC all the directory owners, but have stopped
             # in search of a better notification mechanism. (crbug.com/765334)
             '--cc', 'robertma@chromium.org',
         ])
+
+        self.fs.remove(temp_path)
 
     def get_directory_owners(self):
         """Returns a mapping of email addresses to owners of changed tests."""
@@ -488,19 +495,20 @@ class TestImporter(object):
         return '\n'.join(message_lines)
 
     def tbr_reviewer(self):
-        """Returns the email address to use as the reviewer.
+        """Returns the user name or email address to use as the reviewer.
 
-        This tries to fetch the current ecosystem infra sheriff,
-        but falls back in case of error.
+        This tries to fetch the current ecosystem infra sheriff, but falls back
+        in case of error.
+
+        Either a user name (which is assumed to have a chromium.org email
+        address) or a full email address (for other cases) is returned.
         """
-        username = ''
+        username = 'qyearsley'  # Fallback in case of failure.
         try:
             username = self._fetch_ecosystem_infra_sheriff_username()
         except (IOError, KeyError, ValueError) as error:
             _log.error('Exception while fetching current sheriff: %s', error)
-        if not username:
-            username = 'qyearsley'  # Fallback in case of failure.
-        return username + '@chromium.org'
+        return username
 
     def _fetch_ecosystem_infra_sheriff_username(self):
         content = self.host.web.get_binary(ROTATIONS_URL)

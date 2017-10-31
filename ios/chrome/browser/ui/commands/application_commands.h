@@ -17,8 +17,9 @@
 // may also be forwarded directly to a settings navigation controller.
 @protocol ApplicationSettingsCommands
 
-// Shows the accounts settings.
-- (void)showAccountsSettings;
+// Shows the accounts settings UI, presenting from |baseViewController|.
+- (void)showAccountsSettingsFromViewController:
+    (UIViewController*)baseViewController;
 
 // Shows the sync settings UI.
 - (void)showSyncSettings;
@@ -40,6 +41,7 @@
 // Dismisses all modal dialogs.
 - (void)dismissModalDialogs;
 
+// TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
 // Shows the Settings UI, presenting from |baseViewController|.
 - (void)showSettingsFromViewController:(UIViewController*)baseViewController;
 
@@ -76,8 +78,9 @@
 // Shows the Save Passwords settings UI.
 - (void)showSavePasswordsSettings;
 
-// Shows the Report an Issue UI.
-- (void)showReportAnIssue;
+// Shows the Report an Issue UI, presenting from |baseViewController|.
+- (void)showReportAnIssueFromViewController:
+    (UIViewController*)baseViewController;
 
 // Opens the |command| URL.
 - (void)openURL:(OpenUrlCommand*)command;

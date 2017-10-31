@@ -10,6 +10,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -37,8 +38,6 @@ extern const base::Feature kNewOmniboxAnswerTypes;
 extern const base::Feature kOmniboxEntitySuggestions;
 extern const base::Feature kOmniboxTailSuggestions;
 extern const base::Feature kEnableClipboardProvider;
-extern const base::Feature kAndroidFakeboxDemotion;
-extern const base::Feature kAndroidFakeboxDemotionOnPhones;
 extern const base::Feature kAndroidChromeHomePersonalizedSuggestions;
 extern const base::Feature kSearchProviderWarmUpOnFocus;
 extern const base::Feature kSearchProviderContextAllowHttpsUrls;
@@ -59,7 +58,7 @@ extern const base::Feature kSpeculativeServiceWorkerStartOnQueryInput;
 #if defined(OS_IOS)
 extern const base::Feature kZeroSuggestProviderIOS;
 #endif
-}
+}  // namespace omnibox
 
 // The set of parameters customizing the HUP scoring.
 struct HUPScoringParams {

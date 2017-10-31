@@ -214,10 +214,8 @@ void SingleThreadProxy::DoCommit() {
 void SingleThreadProxy::IssueImageDecodeFinishedCallbacks() {
   DCHECK(task_runner_provider_->IsImplThread());
 
-  auto completed_decode_callbacks =
-      host_impl_->TakeCompletedImageDecodeCallbacks();
-  for (auto& callback : completed_decode_callbacks)
-    callback.Run();
+  layer_tree_host_->ImageDecodesFinished(
+      host_impl_->TakeCompletedImageDecodeRequests());
 }
 
 void SingleThreadProxy::CommitComplete() {
@@ -368,6 +366,18 @@ void SingleThreadProxy::PostAnimationEventsToMainThreadOnImplThread(
   DCHECK(task_runner_provider_->IsImplThread());
   DebugScopedSetMainThread main(task_runner_provider_);
   layer_tree_host_->SetAnimationEvents(std::move(events));
+}
+
+size_t SingleThreadProxy::CompositedAnimationsCount() const {
+  return 0;
+}
+
+size_t SingleThreadProxy::MainThreadAnimationsCount() const {
+  return 0;
+}
+
+size_t SingleThreadProxy::MainThreadCompositableAnimationsCount() const {
+  return 0;
 }
 
 bool SingleThreadProxy::IsInsideDraw() {

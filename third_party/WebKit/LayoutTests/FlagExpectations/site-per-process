@@ -119,8 +119,8 @@ crbug.com/645641 external/wpt/html/syntax/parsing/html5lib_tests19.html [ Crash 
 # http/ flaky tests w/ --site-per-process
 crbug.com/678481 http/tests/devtools/appcache/appcache-iframe-manifests.html [ Timeout Pass ]
 crbug.com/678481 virtual/mojo-loading/http/tests/devtools/appcache/appcache-iframe-manifests.html [ Timeout Pass ]
-crbug.com/678482 http/tests/devtools/debugger/fetch-breakpoints.html [ Timeout Pass ]
-crbug.com/678482 virtual/mojo-loading/http/tests/devtools/debugger/fetch-breakpoints.html [ Timeout Pass ]
+crbug.com/678482 http/tests/devtools/debugger/fetch-breakpoints.js [ Timeout Pass ]
+crbug.com/678482 virtual/mojo-loading/http/tests/devtools/debugger/fetch-breakpoints.js [ Timeout Pass ]
 crbug.com/678484 http/tests/devtools/startup/reattach-after-editing-styles.html [ Timeout Pass ]
 crbug.com/678484 virtual/mojo-loading/http/tests/devtools/startup/reattach-after-editing-styles.html [ Timeout Pass ]
 crbug.com/678485 http/tests/devtools/startup/shadow-dom-rules-restart.html [ Timeout ]
@@ -131,8 +131,8 @@ crbug.com/678491 virtual/mojo-loading/http/tests/misc/webtiming-no-origin.html [
 # Slow tests. These are listed in SlowTests listed here also because
 # expectations are unfortunately not inherited automatically (e.g. see
 # https://crbug.com/594216)
-crbug.com/451577 http/tests/devtools/network/network-datareceived.html [ Timeout Pass ]
-crbug.com/451577 virtual/mojo-loading/http/tests/devtools/network/network-datareceived.html [ Timeout Pass ]
+crbug.com/451577 http/tests/devtools/network/network-datareceived.js [ Timeout Pass ]
+crbug.com/451577 virtual/mojo-loading/http/tests/devtools/network/network-datareceived.js [ Timeout Pass ]
 crbug.com/24182 http/tests/perf/large-inlined-script.html [ Timeout Pass ]
 crbug.com/24182 virtual/mojo-loading/http/tests/perf/large-inlined-script.html [ Timeout Pass ]
 
@@ -143,6 +143,9 @@ crbug.com/650348 virtual/mojo-loading/http/tests/webaudio/autoplay-crossorigin.h
 
 # https://crbug.com/745881: Image diff in test due to font rendering issues.
 crbug.com/745881 [ Win ] fast/text/ellipsis-in-relative-inline.html [ Failure ]
+
+# https://crbug.com/778696: Not much info...
+crbug.com/778696 virtual/threaded/fast/scroll-behavior/first-scroll-runs-on-compositor.html [ Failure ]
 
 # TODO(lukasza, alexmos): Triage these failures.
 Bug(none) external/wpt/html/syntax/parsing/html5lib_adoption01.html [ Failure ]

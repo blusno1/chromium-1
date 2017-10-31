@@ -105,6 +105,7 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/resource_request_details.h"
+#include "content/public/browser/restore_type.h"
 #include "content/public/browser/security_style_explanations.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/storage_partition.h"
@@ -116,6 +117,7 @@
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/page_state.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/url_utils.h"
@@ -801,12 +803,6 @@ bool WebContentsImpl::OnMessageReceived(RenderViewHostImpl* render_view_host,
     IPC_MESSAGE_HANDLER(ViewHostMsg_RequestPpapiBrokerPermission,
                         OnRequestPpapiBrokerPermission)
 #endif
-    IPC_MESSAGE_HANDLER(ViewHostMsg_ShowValidationMessage,
-                        OnShowValidationMessage)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_HideValidationMessage,
-                        OnHideValidationMessage)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_MoveValidationMessage,
-                        OnMoveValidationMessage)
 #if defined(OS_ANDROID)
     IPC_MESSAGE_HANDLER(ViewHostMsg_OpenDateTimeDialog, OnOpenDateTimeDialog)
 #endif
@@ -1017,8 +1013,6 @@ void WebContentsImpl::CancelActiveAndPendingDialogs() {
   }
   if (browser_plugin_embedder_)
     browser_plugin_embedder_->CancelGuestDialogs();
-  if (delegate_)
-    delegate_->HideValidationMessage(this);
 }
 
 void WebContentsImpl::ClosePage() {
@@ -1868,7 +1862,7 @@ void WebContentsImpl::OnWebContentsDestroyed(WebContentsImpl* web_contents) {
 void WebContentsImpl::AddDestructionObserver(WebContentsImpl* web_contents) {
   if (!ContainsKey(destruction_observers_, web_contents)) {
     destruction_observers_[web_contents] =
-        base::MakeUnique<DestructionObserver>(this, web_contents);
+        std::make_unique<DestructionObserver>(this, web_contents);
   }
 }
 
@@ -1978,19 +1972,8 @@ void WebContentsImpl::RenderWidgetWasResized(
   GetScreenInfo(&screen_info);
   SendPageMessage(new PageMsg_UpdateScreenInfo(MSG_ROUTING_NONE, screen_info));
 
-  // Send resize message to subframes.
-  for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree()) {
-    if (view != rfh->GetView())
-      view->GetRenderWidgetHost()->WasResized();
-  }
-
   for (auto& observer : observers_)
     observer.MainFrameWasResized(width_changed);
-}
-
-void WebContentsImpl::ScreenInfoChanged() {
-  if (browser_plugin_embedder_)
-    browser_plugin_embedder_->ScreenInfoChanged();
 }
 
 KeyboardEventProcessingResult WebContentsImpl::PreHandleKeyboardEvent(
@@ -2358,7 +2341,7 @@ void WebContentsImpl::CreateNewWindow(
   create_params.renderer_initiated_creation =
       main_frame_route_id != MSG_ROUTING_NONE;
 
-  WebContentsImpl* new_contents = NULL;
+  WebContentsImpl* new_contents = nullptr;
   if (!is_guest) {
     create_params.context = view_->GetNativeView();
     create_params.initial_size = GetContainerBounds().size();
@@ -2772,31 +2755,6 @@ void WebContentsImpl::GetNFC(device::mojom::NFCRequest request) {
   nfc_host_->GetNFC(std::move(request));
 }
 #endif
-
-void WebContentsImpl::OnShowValidationMessage(
-    RenderViewHostImpl* source,
-    const gfx::Rect& anchor_in_root_view,
-    const base::string16& main_text,
-    const base::string16& sub_text) {
-  // TODO(nick): Should we consider |source| here or pass it to the delegate?
-  if (delegate_)
-    delegate_->ShowValidationMessage(
-        this, anchor_in_root_view, main_text, sub_text);
-}
-
-void WebContentsImpl::OnHideValidationMessage(RenderViewHostImpl* source) {
-  // TODO(nick): Should we consider |source| here or pass it to the delegate?
-  if (delegate_)
-    delegate_->HideValidationMessage(this);
-}
-
-void WebContentsImpl::OnMoveValidationMessage(
-    RenderViewHostImpl* source,
-    const gfx::Rect& anchor_in_root_view) {
-  // TODO(nick): Should we consider |source| here or pass it to the delegate?
-  if (delegate_)
-    delegate_->MoveValidationMessage(this, anchor_in_root_view);
-}
 
 void WebContentsImpl::SetNotWaitingForResponse() {
   if (waiting_for_response_ == false)
@@ -3373,7 +3331,7 @@ void WebContentsImpl::SaveFrameWithHeaders(const GURL& url,
             "triggered by user request."
           policy_exception_justification: "Not implemented."
         })");
-  auto params = base::MakeUnique<DownloadUrlParameters>(
+  auto params = std::make_unique<DownloadUrlParameters>(
       url, frame_host->GetProcess()->GetID(),
       frame_host->GetRenderViewHost()->GetRoutingID(),
       frame_host->GetRoutingID(), storage_partition->GetURLRequestContext(),
@@ -3497,25 +3455,6 @@ void WebContentsImpl::SetClosedByUserGesture(bool value) {
 
 bool WebContentsImpl::GetClosedByUserGesture() const {
   return closed_by_user_gesture_;
-}
-
-void WebContentsImpl::ViewSource() {
-  if (!delegate_)
-    return;
-
-  NavigationEntry* entry = GetController().GetLastCommittedEntry();
-  if (!entry)
-    return;
-
-  delegate_->ViewSourceForTab(this, entry->GetURL());
-}
-
-void WebContentsImpl::ViewFrameSource(const GURL& url,
-                                      const PageState& page_state) {
-  if (!delegate_)
-    return;
-
-  delegate_->ViewSourceForFrame(this, url, page_state);
 }
 
 int WebContentsImpl::GetMinimumZoomPercent() const {
@@ -3965,6 +3904,83 @@ bool WebContentsImpl::ShouldAllowRunningInsecureContent(
     const GURL& resource_url) {
   return GetDelegate()->ShouldAllowRunningInsecureContent(
       web_contents, allowed_per_prefs, origin, resource_url);
+}
+
+void WebContentsImpl::ViewSource(RenderFrameHostImpl* frame) {
+  DCHECK_EQ(this, WebContents::FromRenderFrameHost(frame));
+
+  // Don't do anything if there is no |delegate_| that could accept and show the
+  // new WebContents containing the view-source.
+  if (!delegate_)
+    return;
+
+  // Use the last committed entry, since the pending entry hasn't loaded yet and
+  // won't be copied into the cloned tab.
+  NavigationEntryImpl* last_committed_entry =
+      static_cast<NavigationEntryImpl*>(frame->frame_tree_node()
+                                            ->navigator()
+                                            ->GetController()
+                                            ->GetLastCommittedEntry());
+  if (!last_committed_entry)
+    return;
+
+  FrameNavigationEntry* frame_entry =
+      last_committed_entry->GetFrameEntry(frame->frame_tree_node());
+  if (!frame_entry)
+    return;
+
+  // Any new WebContents opened while this WebContents is in fullscreen can be
+  // used to confuse the user, so drop fullscreen.
+  if (IsFullscreenForCurrentTab())
+    ExitFullscreen(true);
+
+  // We intentionally don't share the SiteInstance with the original frame so
+  // that view source has a consistent process model and always ends up in a new
+  // process (https://crbug.com/699493).
+  scoped_refptr<SiteInstanceImpl> site_instance_for_view_source = nullptr;
+  // Referrer is not important, because view-source should not hit the network,
+  // but should be served from the cache instead.
+  Referrer referrer_for_view_source;
+  // Do not restore title, derive it from the url.
+  base::string16 title_for_view_source;
+  auto navigation_entry = std::make_unique<NavigationEntryImpl>(
+      site_instance_for_view_source, frame_entry->url(),
+      referrer_for_view_source, title_for_view_source, ui::PAGE_TRANSITION_LINK,
+      /* is_renderer_initiated = */ false);
+  navigation_entry->SetVirtualURL(GURL(content::kViewSourceScheme +
+                                       std::string(":") +
+                                       frame_entry->url().spec()));
+
+  // Do not restore scroller position.
+  // TODO(creis, lukasza, arthursonzogni): Do not reuse the original PageState,
+  // but start from a new one and only copy the needed data.
+  const PageState& new_page_state =
+      frame_entry->page_state().RemoveScrollOffset();
+
+  scoped_refptr<FrameNavigationEntry> new_frame_entry =
+      navigation_entry->root_node()->frame_entry;
+  new_frame_entry->set_method(frame_entry->method());
+  new_frame_entry->SetPageState(new_page_state);
+
+  // Create a new WebContents, which is used to display the source code.
+  WebContentsImpl* view_source_contents =
+      static_cast<WebContentsImpl*>(Create(CreateParams(GetBrowserContext())));
+
+  // Restore the previously created NavigationEntry.
+  std::vector<std::unique_ptr<NavigationEntry>> navigation_entries;
+  navigation_entries.push_back(std::move(navigation_entry));
+  view_source_contents->GetController().Restore(0, RestoreType::CURRENT_SESSION,
+                                                &navigation_entries);
+
+  // Add |view_source_contents| as a new tab.
+  gfx::Rect initial_rect;
+  constexpr bool kUserGesture = true;
+  bool ignored_was_blocked;
+  delegate_->AddNewContents(this, view_source_contents,
+                            WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                            initial_rect, kUserGesture, &ignored_was_blocked);
+  // Note that the |delegate_| could have deleted |view_source_contents| during
+  // AddNewContents method call.
 }
 
 #if defined(OS_ANDROID)
@@ -5758,12 +5774,12 @@ void WebContentsImpl::OnPreferredSizeChanged(const gfx::Size& old_size) {
 }
 
 std::unique_ptr<WebUIImpl> WebContentsImpl::CreateWebUI(const GURL& url) {
-  std::unique_ptr<WebUIImpl> web_ui = base::MakeUnique<WebUIImpl>(this);
+  std::unique_ptr<WebUIImpl> web_ui = std::make_unique<WebUIImpl>(this);
   WebUIController* controller =
       WebUIControllerFactoryRegistry::GetInstance()
           ->CreateWebUIControllerForURL(web_ui.get(), url);
   if (controller) {
-    web_ui->AddMessageHandler(base::MakeUnique<GenericHandler>());
+    web_ui->AddMessageHandler(std::make_unique<GenericHandler>());
     web_ui->SetController(controller);
     return web_ui;
   }

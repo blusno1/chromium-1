@@ -786,6 +786,11 @@ WebFrameScheduler* LocalFrame::FrameScheduler() {
   return frame_scheduler_.get();
 }
 
+scoped_refptr<WebTaskRunner> LocalFrame::GetTaskRunner(TaskType type) {
+  DCHECK(IsMainThread());
+  return frame_scheduler_->GetTaskRunner(type);
+}
+
 void LocalFrame::ScheduleVisualUpdateUnlessThrottled() {
   if (ShouldThrottleRendering())
     return;
@@ -948,7 +953,7 @@ bool LocalFrame::CanNavigateWithoutFramebusting(const Frame& target_frame,
       if (GetSecurityContext()->IsSandboxed(kSandboxTopNavigation) &&
           !GetSecurityContext()->IsSandboxed(
               kSandboxTopNavigationByUserActivation) &&
-          !UserGestureIndicator::ProcessingUserGesture()) {
+          !Frame::HasTransientUserActivation(this)) {
         // With only 'allow-top-navigation-by-user-activation' (but not
         // 'allow-top-navigation'), top navigation requires a user gesture.
         reason =

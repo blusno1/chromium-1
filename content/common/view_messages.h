@@ -36,7 +36,6 @@
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/renderer_preferences.h"
-#include "content/public/common/screen_info.h"
 #include "content/public/common/three_d_api_types.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message_macros.h"
@@ -158,19 +157,6 @@ IPC_STRUCT_TRAITS_BEGIN(blink::WebDeviceEmulationParams)
   IPC_STRUCT_TRAITS_MEMBER(viewport_scale)
   IPC_STRUCT_TRAITS_MEMBER(screen_orientation_angle)
   IPC_STRUCT_TRAITS_MEMBER(screen_orientation_type)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::ScreenInfo)
-  IPC_STRUCT_TRAITS_MEMBER(device_scale_factor)
-  IPC_STRUCT_TRAITS_MEMBER(color_space)
-  IPC_STRUCT_TRAITS_MEMBER(icc_profile)
-  IPC_STRUCT_TRAITS_MEMBER(depth)
-  IPC_STRUCT_TRAITS_MEMBER(depth_per_component)
-  IPC_STRUCT_TRAITS_MEMBER(is_monochrome)
-  IPC_STRUCT_TRAITS_MEMBER(rect)
-  IPC_STRUCT_TRAITS_MEMBER(available_rect)
-  IPC_STRUCT_TRAITS_MEMBER(orientation_type)
-  IPC_STRUCT_TRAITS_MEMBER(orientation_angle)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::ResizeParams)
@@ -770,22 +756,6 @@ IPC_MESSAGE_ROUTED3(ViewHostMsg_ShowDisambiguationPopup,
 // node is editable.
 IPC_MESSAGE_ROUTED1(ViewHostMsg_FocusedNodeTouched,
                     bool /* editable */)
-
-// Message sent from the renderer to the browser when an HTML form has failed
-// validation constraints.
-IPC_MESSAGE_ROUTED3(ViewHostMsg_ShowValidationMessage,
-                    gfx::Rect /* anchor rectangle in root view coordinate */,
-                    base::string16 /* validation message */,
-                    base::string16 /* supplemental text */)
-
-// Message sent from the renderer to the browser when a HTML form validation
-// message should be hidden from view.
-IPC_MESSAGE_ROUTED0(ViewHostMsg_HideValidationMessage)
-
-// Message sent from the renderer to the browser when the suggested co-ordinates
-// of the anchor for a HTML form validation message have changed.
-IPC_MESSAGE_ROUTED1(ViewHostMsg_MoveValidationMessage,
-                    gfx::Rect /* anchor rectangle in root view coordinate */)
 
 // Sent once a paint happens after the first non empty layout. In other words,
 // after the frame widget has painted something.

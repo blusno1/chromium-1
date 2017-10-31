@@ -710,9 +710,8 @@ void RenderWidgetHostImpl::WasShown(const ui::LatencyInfo& latency_info) {
   // 2. WasResized -> do nothing as resize_ack_pending_ is true
   // 3. WasHidden
   // 4. OnResizeOrRepaintACK from (1) processed. Does NOT invoke WasResized as
-  // view
-  //    is hidden. Now renderer/browser out of sync with what they think size
-  //    is.
+  //    view is hidden. Now renderer/browser out of sync with what they think
+  //    size is.
   // By invoking WasResized the renderer is updated as necessary. WasResized
   // does nothing if the sizes are already in sync.
   //
@@ -736,7 +735,14 @@ void RenderWidgetHostImpl::SetImportance(ChildProcessImportance importance) {
 bool RenderWidgetHostImpl::GetResizeParams(ResizeParams* resize_params) {
   *resize_params = ResizeParams();
 
-  GetScreenInfo(&resize_params->screen_info);
+  // TODO(fsamuel): We should have a single code path for propagation of
+  // ScreenInfo. Ideally we should always grab the ScreenInfo from the
+  // view, and in the case of top level pages, we grab ScreenInfo from
+  // the WebContentsView through the RenderWidgetHostView.
+  if (view_ && view_->IsRenderWidgetHostViewChildFrame())
+    view_->GetScreenInfo(&resize_params->screen_info);
+  else
+    GetScreenInfo(&resize_params->screen_info);
 
   if (delegate_) {
     resize_params->is_fullscreen_granted =
@@ -807,7 +813,7 @@ void RenderWidgetHostImpl::SetInitialRenderSizeParams(
     const ResizeParams& resize_params) {
   resize_ack_pending_ = resize_params.needs_resize_ack;
 
-  old_resize_params_ = base::MakeUnique<ResizeParams>(resize_params);
+  old_resize_params_ = std::make_unique<ResizeParams>(resize_params);
 }
 
 void RenderWidgetHostImpl::WasResized() {
@@ -1066,6 +1072,10 @@ void RenderWidgetHostImpl::RestartHangMonitorTimeoutIfNecessary() {
     if (hang_monitor_timeout_)
       hang_monitor_timeout_->Restart(hung_renderer_delay_);
   }
+}
+
+bool RenderWidgetHostImpl::IsCurrentlyUnresponsive() const {
+  return is_unresponsive_;
 }
 
 void RenderWidgetHostImpl::StopHangMonitorTimeout() {
@@ -1386,7 +1396,7 @@ void RenderWidgetHostImpl::QueueSyntheticGesture(
     base::OnceCallback<void(SyntheticGesture::Result)> on_complete) {
   if (!synthetic_gesture_controller_ && view_) {
     synthetic_gesture_controller_ =
-        base::MakeUnique<SyntheticGestureController>(
+        std::make_unique<SyntheticGestureController>(
             this, view_->CreateSyntheticGestureTarget());
   }
   if (synthetic_gesture_controller_) {
@@ -2819,12 +2829,12 @@ void RenderWidgetHostImpl::SetupInputRouter() {
     // widget shutdown, so we present an UnboundWidgetInputHandler had
     // DLOGS the message calls.
     legacy_widget_input_handler_ =
-        base::MakeUnique<UnboundWidgetInputHandler>();
+        std::make_unique<UnboundWidgetInputHandler>();
   } else {
     input_router_.reset(new LegacyInputRouterImpl(
         process_, this, this, routing_id_, GetInputRouterConfigForPlatform()));
     legacy_widget_input_handler_ =
-        base::MakeUnique<LegacyIPCWidgetInputHandler>(
+        std::make_unique<LegacyIPCWidgetInputHandler>(
             static_cast<LegacyInputRouterImpl*>(input_router_.get()));
   }
 }

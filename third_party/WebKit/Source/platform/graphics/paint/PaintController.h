@@ -183,20 +183,11 @@ class PLATFORM_EXPORT PaintController {
 
   void AppendDebugDrawingAfterCommit(const DisplayItemClient&,
                                      sk_sp<const PaintRecord>,
-                                     const FloatRect& record_bounds,
                                      const PropertyTreeState*);
 
   void ShowDebugData() const;
 #ifndef NDEBUG
   void ShowDebugDataWithRecords() const;
-#endif
-
-#if DCHECK_IS_ON()
-  enum Usage { kForNormalUsage, kForPaintRecordBuilder };
-  void SetUsage(Usage usage) { usage_ = usage; }
-  bool IsForPaintRecordBuilder() const {
-    return usage_ == kForPaintRecordBuilder;
-  }
 #endif
 
   void SetTracksRasterInvalidations(bool);
@@ -397,8 +388,6 @@ class PLATFORM_EXPORT PaintController {
 #if DCHECK_IS_ON()
   // This is used to check duplicated ids during CreateAndAppend().
   IndicesByClientMap new_display_item_indices_by_client_;
-
-  Usage usage_ = kForNormalUsage;
 #endif
 
   // These are set in UseCachedDrawingIfPossible() and

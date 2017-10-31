@@ -328,6 +328,8 @@ void FeatureInfo::EnableEXTColorBufferFloat() {
 }
 
 void FeatureInfo::EnableEXTColorBufferHalfFloat() {
+  if (!ext_color_buffer_half_float_available_)
+    return;
   AddExtensionString("GL_EXT_color_buffer_half_float");
   validators_.render_buffer_format.AddValue(GL_R16F);
   validators_.render_buffer_format.AddValue(GL_RG16F);
@@ -402,6 +404,7 @@ void FeatureInfo::InitializeFeatures() {
   AddExtensionString("GL_ANGLE_translated_shader_source");
   AddExtensionString("GL_CHROMIUM_async_pixel_transfers");
   AddExtensionString("GL_CHROMIUM_bind_uniform_location");
+  AddExtensionString("GL_CHROMIUM_color_space_metadata");
   AddExtensionString("GL_CHROMIUM_command_buffer_query");
   AddExtensionString("GL_CHROMIUM_command_buffer_latency_query");
   AddExtensionString("GL_CHROMIUM_copy_texture");
@@ -1618,9 +1621,10 @@ void FeatureInfo::InitializeFloatAndHalfFloatFeatures(
   }
 
   // Enable GL_EXT_color_buffer_half_float if we have found the capability.
-  if (enable_ext_color_buffer_half_float &&
-      !disallowed_features_.ext_color_buffer_half_float) {
-    EnableEXTColorBufferHalfFloat();
+  if (enable_ext_color_buffer_half_float) {
+    ext_color_buffer_half_float_available_ = true;
+    if (!disallowed_features_.ext_color_buffer_half_float)
+      EnableEXTColorBufferHalfFloat();
   }
 
   if (enable_texture_float) {
@@ -1745,18 +1749,8 @@ bool FeatureInfo::IsWebGL2OrES3Context() const {
   return IsWebGL2OrES3ContextType(context_type_);
 }
 
-void FeatureInfo::AddExtensionString(const char* s) {
-  std::string str(s);
-  size_t pos = extensions_.find(str);
-  while (pos != std::string::npos &&
-         pos + str.length() < extensions_.length() &&
-         extensions_.substr(pos + str.length(), 1) != " ") {
-    // This extension name is a substring of another.
-    pos = extensions_.find(str, pos + str.length());
-  }
-  if (pos == std::string::npos) {
-    extensions_ += (extensions_.empty() ? "" : " ") + str;
-  }
+void FeatureInfo::AddExtensionString(const base::StringPiece& extension) {
+  extensions_.insert(extension);
 }
 
 FeatureInfo::~FeatureInfo() {

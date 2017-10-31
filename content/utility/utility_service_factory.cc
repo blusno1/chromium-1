@@ -25,6 +25,8 @@
 #include "services/shape_detection/shape_detection_service.h"
 #include "services/video_capture/public/interfaces/constants.mojom.h"
 #include "services/video_capture/service_impl.h"
+#include "services/viz/public/interfaces/constants.mojom.h"
+#include "services/viz/service.h"
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 #include "media/cdm/cdm_adapter_factory.h"           // nogncheck
@@ -47,7 +49,7 @@ extern sandbox::TargetServices* g_utility_target_services;
 namespace {
 
 std::unique_ptr<service_manager::Service> CreateVideoCaptureService() {
-  return base::MakeUnique<video_capture::ServiceImpl>();
+  return std::make_unique<video_capture::ServiceImpl>();
 }
 
 }  // anonymous namespace
@@ -96,7 +98,7 @@ class CdmMojoMediaClient final : public media::MojoMediaClient {
 
 std::unique_ptr<service_manager::Service> CreateCdmService() {
   return std::unique_ptr<service_manager::Service>(
-      new ::media::MediaService(base::MakeUnique<CdmMojoMediaClient>()));
+      new ::media::MediaService(std::make_unique<CdmMojoMediaClient>()));
 }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
@@ -105,10 +107,14 @@ std::unique_ptr<service_manager::Service> CreateDataDecoderService() {
   return data_decoder::DataDecoderService::Create();
 }
 
+std::unique_ptr<service_manager::Service> CreateVizService() {
+  return std::make_unique<viz::Service>();
+}
+
 }  // namespace
 
 UtilityServiceFactory::UtilityServiceFactory()
-    : network_registry_(base::MakeUnique<service_manager::BinderRegistry>()) {}
+    : network_registry_(std::make_unique<service_manager::BinderRegistry>()) {}
 
 UtilityServiceFactory::~UtilityServiceFactory() {}
 
@@ -137,6 +143,10 @@ void UtilityServiceFactory::RegisterServices(ServiceMap* services) {
   services->insert(
       std::make_pair(data_decoder::mojom::kServiceName, data_decoder_info));
 
+  service_manager::EmbeddedServiceInfo viz_info;
+  viz_info.factory = base::Bind(&CreateVizService);
+  services->insert(std::make_pair(viz::mojom::kVizServiceName, viz_info));
+
   if (base::FeatureList::IsEnabled(features::kNetworkService)) {
     GetContentClient()->utility()->RegisterNetworkBinders(
         network_registry_.get());
@@ -162,7 +172,7 @@ void UtilityServiceFactory::OnLoadFailed() {
 
 std::unique_ptr<service_manager::Service>
 UtilityServiceFactory::CreateNetworkService() {
-  return base::MakeUnique<NetworkServiceImpl>(std::move(network_registry_));
+  return std::make_unique<NetworkServiceImpl>(std::move(network_registry_));
 }
 
 }  // namespace content

@@ -4,11 +4,14 @@
 
 #import "ios/chrome/browser/ui/ntp/metrics.h"
 
+#include "base/mac/foundation_util.h"
+#include "components/favicon_base/favicon_types.h"
 #include "components/ntp_tiles/metrics.h"
 #include "components/ntp_tiles/ntp_tile_impression.h"
 #include "components/ntp_tiles/tile_visual_type.h"
 #include "components/rappor/rappor_service_impl.h"
 #include "ios/chrome/browser/application_context.h"
+#import "ios/chrome/browser/ui/favicon/favicon_attributes_with_payload.h"
 
 namespace {
 
@@ -24,6 +27,17 @@ ntp_tiles::TileVisualType VisualTypeFromAttributes(
              : ntp_tiles::TileVisualType::ICON_COLOR;
 }
 
+favicon_base::IconType IconTypeFromAttributes(
+    const FaviconAttributes* attributes) {
+  favicon_base::IconType icon_type = favicon_base::INVALID_ICON;
+  if (attributes.faviconImage) {
+    FaviconAttributesWithPayload* favicon_attributes =
+        base::mac::ObjCCastStrict<FaviconAttributesWithPayload>(attributes);
+    icon_type = favicon_attributes.iconType;
+  }
+  return icon_type;
+}
+
 }  // namespace
 
 void RecordNTPTileImpression(int index,
@@ -33,9 +47,9 @@ void RecordNTPTileImpression(int index,
                              base::Time data_generation_time,
                              const GURL& url) {
   ntp_tiles::metrics::RecordTileImpression(
-      ntp_tiles::NTPTileImpression(index, source, title_source,
-                                   VisualTypeFromAttributes(attributes),
-                                   data_generation_time, url),
+      ntp_tiles::NTPTileImpression(
+          index, source, title_source, VisualTypeFromAttributes(attributes),
+          IconTypeFromAttributes(attributes), data_generation_time, url),
       GetApplicationContext()->GetRapporServiceImpl());
 }
 
@@ -47,5 +61,5 @@ void RecordNTPTileClick(int index,
                         const GURL& url) {
   ntp_tiles::metrics::RecordTileClick(ntp_tiles::NTPTileImpression(
       index, source, title_source, VisualTypeFromAttributes(attributes),
-      data_generation_time, url));
+      IconTypeFromAttributes(attributes), data_generation_time, url));
 }

@@ -40,7 +40,6 @@
 #include "chrome/browser/cache_stats_recorder.h"
 #include "chrome/browser/chrome_content_browser_client_parts.h"
 #include "chrome/browser/chrome_quota_permission_context.h"
-#include "chrome/browser/chrome_service.h"
 #include "chrome/browser/client_hints/client_hints.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -185,6 +184,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/browsing_data_remover.h"
+#include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/client_certificate_delegate.h"
@@ -242,6 +242,7 @@
 #include "chrome/browser/chrome_browser_main_win.h"
 #include "chrome/browser/conflicts/module_database_win.h"
 #include "chrome/browser/conflicts/module_event_sink_impl_win.h"
+#include "chrome/services/util_win/public/interfaces/constants.mojom.h"
 #include "sandbox/win/src/sandbox_policy.h"
 #elif defined(OS_MACOSX)
 #include "chrome/browser/chrome_browser_main_mac.h"
@@ -373,13 +374,6 @@
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/chrome_content_browser_client_plugins_part.h"
 #include "chrome/browser/plugins/flash_download_interception.h"
-#endif
-
-#if BUILDFLAG(ENABLE_SPELLCHECK)
-#include "chrome/browser/spellchecker/spell_check_host_impl.h"
-#if BUILDFLAG(HAS_SPELLCHECK_PANEL)
-#include "chrome/browser/spellchecker/spell_check_panel_host_impl.h"
-#endif
 #endif
 
 #if BUILDFLAG(USE_BROWSER_SPELLCHECKER)
@@ -764,8 +758,8 @@ void CreateWebUsbChooserService(
 
 void CreateBudgetService(blink::mojom::BudgetServiceRequest request,
                          content::RenderFrameHost* render_frame_host) {
-  BudgetServiceImpl::Create(render_frame_host->GetProcess()->GetID(),
-                            std::move(request));
+  BudgetServiceImpl::Create(std::move(request), render_frame_host->GetProcess(),
+                            render_frame_host->GetLastCommittedOrigin());
 }
 
 bool GetDataSaverEnabledPref(const PrefService* prefs) {
@@ -1441,9 +1435,13 @@ std::vector<url::Origin>
 ChromeContentBrowserClient::GetOriginsRequiringDedicatedProcess() {
   std::vector<url::Origin> isolated_origin_list;
 
+// Sign-in process isolation is not needed on Android, see
+// https://crbug.com/739418.
+#if !defined(OS_ANDROID)
   if (base::FeatureList::IsEnabled(features::kSignInProcessIsolation))
     isolated_origin_list.emplace_back(
         url::Origin::Create(GaiaUrls::GetInstance()->gaia_url()));
+#endif
 
   return isolated_origin_list;
 }
@@ -2248,6 +2246,15 @@ void ChromeContentBrowserClient::AllowCertificateError(
     return;
   }
 
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kCommittedInterstitials)) {
+    // We deny the request here in order to trigger the committed interstitials
+    // code path (committing certificate error pages as navigations) instead of
+    // the old code path.
+    callback.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
+    return;
+  }
+
   // Otherwise, display an SSL blocking page. The interstitial page takes
   // ownership of ssl_blocking_page.
 
@@ -2930,18 +2937,6 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
       content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::UI);
   registry->AddInterface(
-      base::Bind(&BudgetServiceImpl::Create, render_process_host->GetID()),
-      ui_task_runner);
-#if BUILDFLAG(ENABLE_SPELLCHECK)
-  registry->AddInterface(
-      base::Bind(&SpellCheckHostImpl::Create, render_process_host->GetID()),
-      ui_task_runner);
-#if BUILDFLAG(HAS_SPELLCHECK_PANEL)
-  registry->AddInterface(base::Bind(&SpellCheckPanelHostImpl::Create),
-                         ui_task_runner);
-#endif
-#endif
-  registry->AddInterface(
       base::Bind(&rappor::RapporRecorderImpl::Create,
                  g_browser_process->rappor_service()),
       ui_task_runner);
@@ -3020,8 +3015,10 @@ void ChromeContentBrowserClient::BindInterfaceRequestFromFrame(
     content::RenderFrameHost* render_frame_host,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  if (!frame_interfaces_.get() && !frame_interfaces_parameterized_.get())
-    InitFrameInterfaces();
+  if (!frame_interfaces_ && !frame_interfaces_parameterized_ &&
+      !worker_interfaces_parameterized_) {
+    InitWebContextInterfaces();
+  }
 
   if (!frame_interfaces_parameterized_->TryBindInterface(
           interface_name, &interface_pipe, render_frame_host)) {
@@ -3043,6 +3040,20 @@ bool ChromeContentBrowserClient::BindAssociatedInterfaceRequestFromFrame(
     return true;
   }
   return false;
+}
+
+void ChromeContentBrowserClient::BindInterfaceRequestFromWorker(
+    content::RenderProcessHost* render_process_host,
+    const url::Origin& origin,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  if (!frame_interfaces_ && !frame_interfaces_parameterized_ &&
+      !worker_interfaces_parameterized_) {
+    InitWebContextInterfaces();
+  }
+
+  worker_interfaces_parameterized_->BindInterface(
+      interface_name, std::move(interface_pipe), render_process_host, origin);
 }
 
 void ChromeContentBrowserClient::BindInterfaceRequest(
@@ -3109,6 +3120,11 @@ void ChromeContentBrowserClient::RegisterOutOfProcessServices(
 
   (*services)[proxy_resolver::mojom::kProxyResolverServiceName] =
       l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_PROXY_RESOLVER_NAME);
+#endif
+
+#if defined(OS_WIN)
+  (*services)[chrome::mojom::kUtilWinServiceName] =
+      l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_UTILITY_WIN_NAME);
 #endif
 
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
@@ -3438,10 +3454,13 @@ void ChromeContentBrowserClient::OverridePageVisibilityState(
   }
 }
 
-void ChromeContentBrowserClient::InitFrameInterfaces() {
+void ChromeContentBrowserClient::InitWebContextInterfaces() {
   frame_interfaces_ = base::MakeUnique<service_manager::BinderRegistry>();
   frame_interfaces_parameterized_ = base::MakeUnique<
       service_manager::BinderRegistryWithArgs<content::RenderFrameHost*>>();
+  worker_interfaces_parameterized_ =
+      base::MakeUnique<service_manager::BinderRegistryWithArgs<
+          content::RenderProcessHost*, const url::Origin&>>();
 
   if (base::FeatureList::IsEnabled(features::kWebUsb)) {
     frame_interfaces_parameterized_->AddInterface(
@@ -3492,6 +3511,9 @@ void ChromeContentBrowserClient::InitFrameInterfaces() {
 
   frame_interfaces_parameterized_->AddInterface(
       base::Bind(&CreateBudgetService));
+
+  worker_interfaces_parameterized_->AddInterface(
+      base::Bind(&BudgetServiceImpl::Create));
 }
 
 #if BUILDFLAG(ENABLE_WEBRTC)

@@ -945,8 +945,7 @@ std::string RenderViewContextMenu::GetTargetLanguage() const {
   std::unique_ptr<translate::TranslatePrefs> prefs(
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefs(browser_context_)));
   language::LanguageModel* language_model =
-      LanguageModelFactory::GetInstance()->GetForBrowserContext(
-          browser_context_);
+      LanguageModelFactory::GetForBrowserContext(browser_context_);
   return translate::TranslateManager::GetTargetLanguage(prefs.get(),
                                                         language_model);
 }
@@ -1925,7 +1924,7 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     case IDC_VIEW_SOURCE:
-      embedder_web_contents_->ViewSource();
+      embedder_web_contents_->GetMainFrame()->ViewSource();
       break;
 
     case IDC_CONTENT_CONTEXT_INSPECTELEMENT:
@@ -1948,8 +1947,8 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     case IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE:
-      source_web_contents_->ViewFrameSource(params_.frame_url,
-                                            params_.frame_page_state);
+      if (GetRenderFrameHost())
+        GetRenderFrameHost()->ViewSource();
       break;
 
     case IDC_CONTENT_CONTEXT_UNDO:

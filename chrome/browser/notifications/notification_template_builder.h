@@ -15,6 +15,10 @@
 class GURL;
 class XmlWriter;
 
+namespace base {
+class Time;
+}
+
 namespace message_center {
 struct ButtonInfo;
 class Notification;
@@ -41,6 +45,9 @@ class NotificationTemplateBuilder {
   base::string16 GetNotificationTemplate() const;
 
  private:
+  // The different types of text nodes to output.
+  enum class TextType { NORMAL, ATTRIBUTION };
+
   NotificationTemplateBuilder();
 
   // Formats the |origin| for display in the notification template.
@@ -48,7 +55,8 @@ class NotificationTemplateBuilder {
 
   // Writes the <toast> element with the |notification_id| as the launch string.
   // Also closes the |xml_writer_| for writing as the toast is now complete.
-  void StartToastElement(const std::string& notification_id);
+  void StartToastElement(const std::string& notification_id,
+                         const base::Time& timastamp);
   void EndToastElement();
 
   // Writes the <visual> element.
@@ -59,12 +67,19 @@ class NotificationTemplateBuilder {
   void StartBindingElement(const std::string& template_name);
   void EndBindingElement();
 
-  // Writes the <text> element with the given |id| and |content|.
-  void WriteTextElement(const std::string& id, const std::string& content);
+  // Writes the <text> element with the given |id| and |content|. If
+  // |text_type| is ATTRIBUTION then |content| is treated as the source that the
+  // notification is attributed to.
+  void WriteTextElement(const std::string& id,
+                        const std::string& content,
+                        TextType text_type);
 
   // Writes the <actions> element.
   void StartActionsElement();
   void EndActionsElement();
+
+  // Writes the <audio silent="true"> element.
+  void WriteAudioSilentElement();
 
   // Fills in the details for the actions.
   void AddActions(const std::vector<message_center::ButtonInfo>& buttons);

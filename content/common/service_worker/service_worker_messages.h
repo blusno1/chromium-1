@@ -76,6 +76,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerFetchRequest)
   IPC_STRUCT_TRAITS_MEMBER(credentials_mode)
   IPC_STRUCT_TRAITS_MEMBER(redirect_mode)
   IPC_STRUCT_TRAITS_MEMBER(integrity)
+  IPC_STRUCT_TRAITS_MEMBER(keepalive)
   IPC_STRUCT_TRAITS_MEMBER(client_id)
   IPC_STRUCT_TRAITS_MEMBER(is_reload)
   IPC_STRUCT_TRAITS_MEMBER(fetch_type)
@@ -107,12 +108,6 @@ IPC_STRUCT_TRAITS_BEGIN(blink::mojom::ServiceWorkerObjectInfo)
   IPC_STRUCT_TRAITS_MEMBER(version_id)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerVersionAttributes)
-  IPC_STRUCT_TRAITS_MEMBER(installing)
-  IPC_STRUCT_TRAITS_MEMBER(waiting)
-  IPC_STRUCT_TRAITS_MEMBER(active)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerClientInfo)
   IPC_STRUCT_TRAITS_MEMBER(client_uuid)
   IPC_STRUCT_TRAITS_MEMBER(page_visibility_state)
@@ -126,14 +121,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerClientQueryOptions)
   IPC_STRUCT_TRAITS_MEMBER(client_type)
   IPC_STRUCT_TRAITS_MEMBER(include_uncontrolled)
 IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_BEGIN(ServiceWorkerMsg_MessageToDocument_Params)
-  IPC_STRUCT_MEMBER(int, thread_id)
-  IPC_STRUCT_MEMBER(int, provider_id)
-  IPC_STRUCT_MEMBER(blink::mojom::ServiceWorkerObjectInfo, service_worker_info)
-  IPC_STRUCT_MEMBER(base::string16, message)
-  IPC_STRUCT_MEMBER(std::vector<blink::MessagePortChannel>, message_ports)
-IPC_STRUCT_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::PushEventPayload)
   IPC_STRUCT_TRAITS_MEMBER(data)
@@ -251,13 +238,6 @@ IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_ServiceWorkerStateChanged,
                      int /* handle_id */,
                      blink::mojom::ServiceWorkerState)
 
-// Tells the child process to set service workers for the given registration.
-IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_SetVersionAttributes,
-                     int /* thread_id */,
-                     int /* registration_handle_id */,
-                     int /* changed_mask */,
-                     content::ServiceWorkerVersionAttributes)
-
 // Informs the child process that new ServiceWorker enters the installation
 // phase.
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_UpdateFound,
@@ -281,10 +261,6 @@ IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_SetNavigationPreloadHeaderError,
                      int /* request_id */,
                      blink::mojom::ServiceWorkerErrorType,
                      std::string /* message */)
-
-// Sends MessageEvent to a client document (browser->renderer).
-IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_MessageToDocument,
-                     ServiceWorkerMsg_MessageToDocument_Params)
 
 // Notifies a client that its controller used a feature, for UseCounter
 // purposes (browser->renderer). |feature| must be one of the values from

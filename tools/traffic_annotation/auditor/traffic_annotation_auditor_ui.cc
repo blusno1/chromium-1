@@ -37,7 +37,7 @@ Options:
                       auditor's executable.
   --extractor-output  Optional path to the temporary file that extracted
                       annotations will be stored into.
-  --extracted-input   Optional path to the file that temporary extracted
+  --extractor-input   Optional path to the file that temporary extracted
                       annotations are already stored in. If this is provided,
                       clang tool is not run and this is used as input.
   --full-run          Optional flag asking the tool to run on the whole
@@ -62,6 +62,8 @@ const base::FilePath kDownstreamUpdater =
         .Append(FILE_PATH_LITERAL("traffic_annotation"))
         .Append(FILE_PATH_LITERAL("scripts"))
         .Append(FILE_PATH_LITERAL("annotations_xml_downstream_caller.py"));
+
+const std::string kCodeSearchLink("https://cs.chromium.org/chromium/src/");
 
 }  // namespace
 
@@ -180,8 +182,8 @@ bool WriteAnnotationsFile(const base::FilePath& filepath,
                           const std::vector<AnnotationInstance>& annotations) {
   std::vector<std::string> lines;
   std::string title =
-      "Unique ID\tReview by pconunsel\tEmpty Policy Justification\t"
-      "Sender\tDescription\tTrigger\tData\tDestination\tCookies Allowed\t"
+      "Unique ID\tReview by pconunsel\tSender\tDescription\tTrigger\t"
+      "Data\tDestination\tEmpty Policy Justification\tCookies Allowed\t"
       "Cookies Store\tSetting\tChrome Policy\tComments\tSource File\tHash Code";
 
   for (auto& instance : annotations) {
@@ -193,8 +195,6 @@ bool WriteAnnotationsFile(const base::FilePath& filepath,
 
     // Semantics.
     const auto semantics = instance.proto.semantics();
-    line += base::StringPrintf("\t%s",
-                               semantics.empty_policy_justification().c_str());
     line += base::StringPrintf("\t%s", semantics.sender().c_str());
     line += base::StringPrintf(
         "\t%s", UpdateTextForTSV(semantics.description()).c_str());
@@ -232,6 +232,8 @@ bool WriteAnnotationsFile(const base::FilePath& filepath,
     // Policy.
     const auto policy = instance.proto.policy();
     line +=
+        base::StringPrintf("\t%s", policy.empty_policy_justification().c_str());
+    line +=
         policy.cookies_allowed() ==
                 traffic_annotation::
                     NetworkTrafficAnnotation_TrafficPolicy_CookiesAllowed_YES
@@ -260,7 +262,8 @@ bool WriteAnnotationsFile(const base::FilePath& filepath,
 
     // Source.
     const auto source = instance.proto.source();
-    line += base::StringPrintf("\t%s:%i", source.file().c_str(), source.line());
+    line += base::StringPrintf("\t%s%s?l=%i", kCodeSearchLink.c_str(),
+                               source.file().c_str(), source.line());
 
     // Hash code.
     line += base::StringPrintf("\t%i", instance.unique_id_hash_code);
@@ -385,6 +388,8 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  std::vector<AuditorResult> errors = auditor.errors();
+
   // Test/Update annotations.xml.
   TrafficAnnotationExporter exporter(source_path);
   if (!exporter.UpdateAnnotations(
@@ -394,7 +399,9 @@ int main(int argc, char* argv[]) {
   }
   if (exporter.modified()) {
     if (test_only) {
-      printf("Error: annotation.xml needs update.\n");
+      errors.push_back(
+          AuditorResult(AuditorResult::Type::ERROR_ANNOTATIONS_XML_UPDATE,
+                        exporter.GetRequiredUpdates()));
     } else if (!exporter.SaveAnnotationsXML() ||
                !RunAnnotationDownstreamUpdater(source_path)) {
       LOG(ERROR) << "Could not update annotations XML or downstream files.";
@@ -402,13 +409,11 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  // Dump Errors and Warnings to stdout.
-  const std::vector<AuditorResult>& errors = auditor.errors();
+  // Dump Errors to stdout.
   for (const auto& error : errors) {
-    printf(
-        "%s: %s\n",
-        error.type() == AuditorResult::Type::ERROR_SYNTAX ? "Error" : "Warning",
-        error.ToText().c_str());
+    printf("%s: %s\n",
+           "Error",  // "Warning" can be used for minor nags.
+           error.ToText().c_str());
   }
 
   return 0;

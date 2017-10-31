@@ -7,6 +7,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/keyboard/container_type.h"
 #include "ui/keyboard/drag_descriptor.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_ui.h"
@@ -36,6 +37,10 @@ constexpr int kDragHandleSquareMargin = 60;
 ContainerFloatingBehavior::ContainerFloatingBehavior() {}
 ContainerFloatingBehavior::~ContainerFloatingBehavior() {}
 
+ContainerType ContainerFloatingBehavior::GetType() const {
+  return ContainerType::FLOATING;
+}
+
 void ContainerFloatingBehavior::DoHidingAnimation(
     aura::Window* container,
     ::wm::ScopedHidingAnimationSettings* animation_settings) {
@@ -61,13 +66,8 @@ void ContainerFloatingBehavior::DoShowingAnimation(
 void ContainerFloatingBehavior::InitializeShowAnimationStartingState(
     aura::Window* container) {
   aura::Window* root_window = container->GetRootWindow();
-  const gfx::Rect& display_bounds = root_window->bounds();
 
-  gfx::Size keyboard_size =
-      gfx::Size(kKeyboardWidth, container->bounds().height());
-  gfx::Point keyboard_location =
-      GetPositionForShowingKeyboard(keyboard_size, display_bounds);
-  container->SetBounds(gfx::Rect(keyboard_location, keyboard_size));
+  SetCanonicalBounds(container, root_window->bounds());
 
   gfx::Transform transform;
   transform.Translate(0, kAnimationDistance);
@@ -182,11 +182,13 @@ void ContainerFloatingBehavior::HandlePointerEvent(
   if (keyboard_bounds.height() <= 0)
     return;
 
-  if (isMouseButtonPressed && IsDragHandle(kb_offset, keyboard_bounds.size())) {
-    if (drag_descriptor_ == nullptr) {
+  if (isMouseButtonPressed &&
+      (drag_descriptor_ || IsDragHandle(kb_offset, keyboard_bounds.size()))) {
+    if (!drag_descriptor_) {
       // If there is no active drag, start a new one.
       drag_descriptor_.reset(
           new DragDescriptor(keyboard_bounds.origin(), kb_offset));
+      container->SetCapture();
     } else {
       // If there is an active drag, use it to determine the new location of the
       // keyboard.
@@ -207,13 +209,24 @@ void ContainerFloatingBehavior::HandlePointerEvent(
 
     // re-query the container for the new bounds
     SavePosition(container->bounds().origin());
-  } else if (drag_descriptor_ != nullptr) {
+  } else if (drag_descriptor_) {
     // drag has ended
     drag_descriptor_ = nullptr;
 
     // save the current bounds.
     SavePosition(keyboard_bounds.origin());
+    container->ReleaseCapture();
   }
+}
+
+void ContainerFloatingBehavior::SetCanonicalBounds(
+    aura::Window* container,
+    const gfx::Rect& display_bounds) {
+  gfx::Size keyboard_size =
+      gfx::Size(kKeyboardWidth, container->bounds().height());
+  gfx::Point keyboard_location =
+      GetPositionForShowingKeyboard(keyboard_size, display_bounds);
+  container->SetBounds(gfx::Rect(keyboard_location, keyboard_size));
 }
 
 }  //  namespace keyboard

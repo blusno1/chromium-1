@@ -81,6 +81,9 @@ extern const char kBrowserTaskSchedulerDescription[];
 extern const char kBypassAppBannerEngagementChecksName[];
 extern const char kBypassAppBannerEngagementChecksDescription[];
 
+extern const char kCommittedInterstitialsName[];
+extern const char kCommittedInterstitialsDescription[];
+
 extern const char kCaptureThumbnailOnNavigatingAwayName[];
 extern const char kCaptureThumbnailOnNavigatingAwayDescription[];
 
@@ -332,9 +335,6 @@ extern const char kEnableZeroSuggestRedirectToChromeDescription[];
 
 extern const char kEnableWasmStreamingName[];
 extern const char kEnableWasmStreamingDescription[];
-
-extern const char kEnableWebNotificationCustomLayoutsName[];
-extern const char kEnableWebNotificationCustomLayoutsDescription[];
 
 extern const char kExpensiveBackgroundTimerThrottlingName[];
 extern const char kExpensiveBackgroundTimerThrottlingDescription[];
@@ -691,6 +691,9 @@ extern const char kQuicDescription[];
 extern const char kReducedReferrerGranularityName[];
 extern const char kReducedReferrerGranularityDescription[];
 
+extern const char kRemoveUsageOfDeprecatedGaiaSigninEndpointName[];
+extern const char kRemoveUsageOfDeprecatedGaiaSigninEndpointDescription[];
+
 extern const char kRequestTabletSiteName[];
 extern const char kRequestTabletSiteDescription[];
 
@@ -801,6 +804,9 @@ extern const char kSpeculativeServiceWorkerStartOnQueryInputDescription[];
 
 extern const char kSpellingFeedbackFieldTrialName[];
 extern const char kSpellingFeedbackFieldTrialDescription[];
+
+extern const char kStopLoadingInBackgroundName[];
+extern const char kStopLoadingInBackgroundDescription[];
 
 extern const char kTLS13VariantName[];
 extern const char kTLS13VariantDescription[];
@@ -1020,6 +1026,7 @@ extern const char kChromeHomePromoDescription[];
 extern const char kChromeHomeSwipeLogicName[];
 extern const char kChromeHomeSwipeLogicDescription[];
 extern const char kChromeHomeSwipeLogicRestrictArea[];
+extern const char kChromeHomeSwipeLogicVelocity[];
 
 extern const char kChromeHomeName[];
 extern const char kChromeHomeDescription[];
@@ -1347,6 +1354,9 @@ extern const char kEnableD3DVsyncDescription[];
 extern const char kEnableDesktopIosPromotionsName[];
 extern const char kEnableDesktopIosPromotionsDescription[];
 
+extern const char kExperimentalTabControllerName[];
+extern const char kExperimentalTabControllerDescription[];
+
 extern const char kGdiTextPrinting[];
 extern const char kGdiTextPrintingDescription[];
 
@@ -1485,9 +1495,6 @@ extern const char kEnablePerUserTimezoneDescription[];
 extern const char kDisableSystemTimezoneAutomaticDetectionName[];
 extern const char kDisableSystemTimezoneAutomaticDetectionDescription[];
 
-extern const char kEnableFullscreenAppListName[];
-extern const char kEnableFullscreenAppListDescription[];
-
 extern const char kEnableBackgroundBlurName[];
 extern const char kEnableBackgroundBlurDescription[];
 
@@ -1535,9 +1542,6 @@ extern const char kFileManagerTouchModeDescription[];
 
 extern const char kFirstRunUiTransitionsName[];
 extern const char kFirstRunUiTransitionsDescription[];
-
-extern const char kFloatingVirtualKeyboardName[];
-extern const char kFloatingVirtualKeyboardDescription[];
 
 extern const char kForceEnableStylusToolsName[];
 extern const char kForceEnableStylusToolsDescription[];
@@ -1674,6 +1678,12 @@ extern const char kEnableVrShellDescription[];
 
 extern const char kVrCustomTabBrowsingName[];
 extern const char kVrCustomTabBrowsingDescription[];
+
+extern const char kVrShellExperimentalRenderingName[];
+extern const char kVrShellExperimentalRenderingDescription[];
+
+extern const char kVrLaunchIntentName[];
+extern const char kVrLaunchIntentDescription[];
 
 extern const char kWebVrAutopresentName[];
 extern const char kWebVrAutopresentDescription[];

@@ -4412,14 +4412,6 @@ _FUNCTION_INFO = {
                 'GLuint shm_offset',
     'extension': 'CHROMIUM_schedule_ca_layer',
   },
-  'SetColorSpaceForScanoutCHROMIUM': {
-    'type': 'Custom',
-    'impl_func': False,
-    'client_test': False,
-    'cmd_args': 'GLuint texture_id, GLuint shm_id, GLuint shm_offset, '
-                'GLsizei color_space_size',
-    'extension': 'CHROMIUM_schedule_ca_layer',
-  },
   'CommitOverlayPlanesCHROMIUM': {
     'impl_func': False,
     'decoder_func': 'DoCommitOverlayPlanes',
@@ -4620,6 +4612,14 @@ _FUNCTION_INFO = {
     'unit_test': False,
     'extension': 'CHROMIUM_texture_storage_image',
     'extension_flag': 'chromium_texture_storage_image',
+  },
+  'SetColorSpaceMetadataCHROMIUM': {
+    'type': 'Custom',
+    'impl_func': False,
+    'client_test': False,
+    'cmd_args': 'GLuint texture_id, GLuint shm_id, GLuint shm_offset, '
+                'GLsizei color_space_size',
+    'extension': 'CHROMIUM_color_space_metadata',
   },
 }
 
@@ -5038,6 +5038,10 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     f.write("""error::Error GLES2DecoderPassthroughImpl::Handle%(name)s(
         uint32_t immediate_data_size, const volatile void* cmd_data) {
       """ % {'name': func.name})
+    if func.IsES3():
+      f.write("""if (!feature_info_->IsWebGL2OrES3Context())
+          return error::kUnknownCommand;
+        """)
     if func.GetCmdArgs():
       f.write("""const volatile gles2::cmds::%(name)s& c =
             *static_cast<const volatile gles2::cmds::%(name)s*>(cmd_data);
@@ -5054,6 +5058,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
   def WritePassthroughServiceImplementation(self, func, f):
     """Writes the service implementation for a command."""
     self.WritePassthroughServiceFunctionHeader(func, f)
+    self.WriteHandlerExtensionCheck(func, f)
     self.WriteServiceHandlerArgGetCode(func, f)
     func.WritePassthroughHandlerValidation(f)
     self.WritePassthroughServiceFunctionDoerCall(func, f)
@@ -5064,6 +5069,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
   def WritePassthroughImmediateServiceImplementation(self, func, f):
     """Writes the service implementation for a command."""
     self.WritePassthroughServiceFunctionHeader(func, f)
+    self.WriteHandlerExtensionCheck(func, f)
     self.WriteImmediateServiceHandlerArgGetCode(func, f)
     func.WritePassthroughHandlerValidation(f)
     self.WritePassthroughServiceFunctionDoerCall(func, f)
@@ -5074,6 +5080,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
   def WritePassthroughBucketServiceImplementation(self, func, f):
     """Writes the service implementation for a command."""
     self.WritePassthroughServiceFunctionHeader(func, f)
+    self.WriteHandlerExtensionCheck(func, f)
     self.WriteBucketServiceHandlerArgGetCode(func, f)
     func.WritePassthroughHandlerValidation(f)
     self.WritePassthroughServiceFunctionDoerCall(func, f)
@@ -8234,6 +8241,7 @@ TEST_P(%(test_name)s, %(name)sInvalidArgsBadSharedMemoryId) {
   def WritePassthroughServiceImplementation(self, func, f):
     """Overrriden from TypeHandler."""
     self.WritePassthroughServiceFunctionHeader(func, f)
+    self.WriteHandlerExtensionCheck(func, f)
     self.WriteServiceHandlerArgGetCode(func, f)
 
     code = """  typedef cmds::%(func_name)s::Result Result;
@@ -9941,7 +9949,9 @@ def CreateArg(arg_string):
 class GLGenerator(object):
   """A class to generate GL command buffers."""
 
-  _function_re = re.compile(r'GL_APICALL(.*?)GL_APIENTRY (.*?) \((.*?)\);')
+  _whitespace_re = re.compile(r'^\w*$')
+  _comment_re = re.compile(r'^//.*$')
+  _function_re = re.compile(r'^GL_APICALL(.*?)GL_APIENTRY (.*?) \((.*?)\);$')
 
   def __init__(self, verbose):
     self.original_functions = []
@@ -9988,6 +9998,8 @@ class GLGenerator(object):
     with open(filename, "r") as f:
       functions = f.read()
     for line in functions.splitlines():
+      if self._whitespace_re.match(line) or self._comment_re.match(line):
+        continue
       match = self._function_re.match(line)
       if match:
         func_name = match.group(2)[2:]
@@ -10025,6 +10037,9 @@ class GLGenerator(object):
               self.AddFunction(f)
           else:
             self.AddFunction(f)
+      else:
+        self.Error("Could not parse function: %s using regex: %s" %
+                   (line, self._function_re.pattern))
 
     self.Log("Auto Generated Functions    : %d" %
              len([f for f in self.functions if f.can_auto_generate or

@@ -18,7 +18,7 @@
 #include "ui/display/display.h"
 #include "ui/display/display_layout.h"
 #include "ui/display/display_switches.h"
-#include "ui/display/manager/chromeos/touchscreen_util.h"
+#include "ui/display/manager/chromeos/touch_device_manager.h"
 #include "ui/display/manager/display_layout_store.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_manager_utilities.h"
@@ -182,7 +182,7 @@ void DisplayChangeObserver::OnDisplayModeChanged(
     displays.emplace_back(CreateManagedDisplayInfo(state, mode_info));
   }
 
-  AssociateTouchscreens(
+  display_manager_->touch_device_manager()->AssociateTouchscreens(
       &displays,
       ui::InputDeviceManager::GetInstance()->GetTouchscreenDevices());
   display_manager_->OnNativeDisplaysChanged(displays);
@@ -303,6 +303,7 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
       state->is_aspect_preserving_scaling());
   if (dpi)
     new_info.set_device_dpi(dpi);
+  new_info.set_color_space(state->color_space());
 
   ManagedDisplayInfo::ManagedDisplayModeList display_modes =
       (state->type() == DISPLAY_CONNECTION_TYPE_INTERNAL)

@@ -26,8 +26,13 @@ bool IsElementFacingCamera(const UiElement* element) {
   // result is greater than 0, it means the visible side of this element is
   // facing camera.
   gfx::Point3F center = element->GetCenter();
-  return gfx::DotProduct(-gfx::Vector3dF(center.x(), center.y(), center.z()),
-                         element->GetNormal()) > 0.f;
+  gfx::Point3F origin;
+  if (center == origin) {
+    // If the center of element is at origin, as our camera facing negative z.
+    // we only need to make sure the normal of the element have positive z.
+    return element->GetNormal().z() > 0.f;
+  }
+  return gfx::DotProduct(origin - center, element->GetNormal()) > 0.f;
 }
 
 }  // namespace
@@ -113,6 +118,21 @@ bool UiSceneManagerTest::VerifyVisibility(const std::set<UiElementName>& names,
     }
   }
   return true;
+}
+
+int UiSceneManagerTest::NumVisibleChildren(UiElementName name) const {
+  auto* root = scene_->GetUiElementByName(name);
+  EXPECT_NE(root, nullptr);
+  if (!root) {
+    return 0;
+  }
+  int visible = 0;
+  for (const auto& element : *root) {
+    if (element.IsVisible()) {
+      visible++;
+    }
+  }
+  return visible;
 }
 
 bool UiSceneManagerTest::VerifyRequiresLayout(

@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "bindings/core/v8/V8BindingForCore.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/UseCounter.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/testing/DummyPageHolder.h"
@@ -11,6 +10,7 @@
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/workers/MainThreadWorkletReportingProxy.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/TaskType.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -53,7 +53,7 @@ class MainThreadWorkletTest : public ::testing::Test {
         document->Url(), document->UserAgent(), String() /* source_code */,
         nullptr /* cached_meta_data */,
         nullptr /* content_security_policy_parsed_headers */,
-        String() /* referrer_policy */, document->GetSecurityOrigin(),
+        document->GetReferrerPolicy(), document->GetSecurityOrigin(),
         nullptr /* worker_clients */, document->AddressSpace(),
         OriginTrialContext::GetTokens(document).get(),
         nullptr /* worker_settings */, kV8CacheOptionsDefault);
@@ -109,7 +109,7 @@ TEST_F(MainThreadWorkletTest, UseCounter) {
 
 TEST_F(MainThreadWorkletTest, TaskRunner) {
   scoped_refptr<WebTaskRunner> task_runner =
-      TaskRunnerHelper::Get(TaskType::kUnthrottled, global_scope_);
+      global_scope_->GetTaskRunner(TaskType::kUnthrottled);
   EXPECT_TRUE(task_runner->RunsTasksInCurrentSequence());
 }
 

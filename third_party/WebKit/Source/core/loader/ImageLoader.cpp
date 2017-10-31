@@ -192,8 +192,8 @@ void ImageLoader::DispatchDecodeRequestsIfComplete() {
     Image* image = GetContent()->GetImage();
     frame->GetChromeClient().RequestDecode(
         frame, image->PaintImageForCurrentFrame(),
-        WTF::Bind(&ImageLoader::DecodeRequestFinished, WrapWeakPersistent(this),
-                  request->request_id()));
+        WTF::Bind(&ImageLoader::DecodeRequestFinished,
+                  WrapCrossThreadWeakPersistent(this), request->request_id()));
     request->NotifyDecodeDispatched();
   }
 }
@@ -317,8 +317,9 @@ inline void ImageLoader::DispatchErrorEvent() {
   // |pending_error_event_|) and then re-schedule a new error event here.
   // crbug.com/722500
   pending_error_event_ =
-      TaskRunnerHelper::Get(TaskType::kDOMManipulation,
-                            &GetElement()->GetDocument())
+      GetElement()
+          ->GetDocument()
+          .GetTaskRunner(TaskType::kDOMManipulation)
           ->PostCancellableTask(
               BLINK_FROM_HERE,
               WTF::Bind(&ImageLoader::DispatchPendingErrorEvent,
@@ -492,7 +493,8 @@ void ImageLoader::UpdateFromElement(UpdateFromElementBehavior update_behavior,
   // ImageResource to be populated later.
   if (loading_image_document_) {
     ResourceRequest request(ImageSourceToKURL(element_->ImageSourceURL()));
-    request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+    request.SetFetchCredentialsMode(
+        network::mojom::FetchCredentialsMode::kOmit);
     ImageResource* image_resource = ImageResource::Create(request);
     image_resource->SetStatus(ResourceStatus::kPending);
     image_resource->NotifyStartLoad();
@@ -568,7 +570,9 @@ bool ImageLoader::ShouldLoadImmediately(const KURL& url) const {
   return (IsHTMLObjectElement(element_) || IsHTMLEmbedElement(element_));
 }
 
-void ImageLoader::ImageChanged(ImageResourceContent* content, const IntRect*) {
+void ImageLoader::ImageChanged(ImageResourceContent* content,
+                               CanDeferInvalidation,
+                               const IntRect*) {
   DCHECK_EQ(content, image_content_.Get());
   if (image_complete_ || !content->IsLoading() ||
       delay_until_image_notify_finished_)
@@ -657,8 +661,9 @@ void ImageLoader::ImageNotifyFinished(ImageResourceContent* resource) {
 
   CHECK(!pending_load_event_.IsActive());
   pending_load_event_ =
-      TaskRunnerHelper::Get(TaskType::kDOMManipulation,
-                            &GetElement()->GetDocument())
+      GetElement()
+          ->GetDocument()
+          .GetTaskRunner(TaskType::kDOMManipulation)
           ->PostCancellableTask(
               BLINK_FROM_HERE,
               WTF::Bind(&ImageLoader::DispatchPendingLoadEvent,

@@ -30,6 +30,7 @@
 #include "content/browser/webrtc/webrtc_eventlog_host.h"
 #include "content/common/associated_interface_registry_impl.h"
 #include "content/common/associated_interfaces.mojom.h"
+#include "content/common/child_control.mojom.h"
 #include "content/common/content_export.h"
 #include "content/common/indexed_db/indexed_db.mojom.h"
 #include "content/common/media/media_stream.mojom.h"
@@ -214,7 +215,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void PurgeAndSuspend() override;
   void Resume() override;
   mojom::Renderer* GetRendererInterface() override;
-  resource_coordinator::ResourceCoordinatorInterface*
+  resource_coordinator::ProcessResourceCoordinator*
   GetProcessResourceCoordinator() override;
 
   void SetIsNeverSuitableForReuse() override;
@@ -753,6 +754,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   std::unique_ptr<OffscreenCanvasProviderImpl> offscreen_canvas_provider_;
 
+  mojom::ChildControlPtr child_control_interface_;
   mojom::RouteProviderAssociatedPtr remote_route_provider_;
   mojom::RendererAssociatedPtr renderer_interface_;
   mojo::Binding<mojom::RendererHost> renderer_host_binding_;
@@ -761,7 +763,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // determine if if a process should be backgrounded.
   int media_stream_count_ = 0;
 
-  std::unique_ptr<resource_coordinator::ResourceCoordinatorInterface>
+  std::unique_ptr<resource_coordinator::ProcessResourceCoordinator>
       process_resource_coordinator_;
 
   // A WeakPtrFactory which is reset every time Cleanup() runs. Used to vend

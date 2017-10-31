@@ -158,6 +158,7 @@ RenderWidgetHostView* GetRenderWidgetHostViewToUse(
                    consumed:(BOOL)consumed;
 - (void)processedGestureScrollEvent:(const blink::WebGestureEvent&)event
                            consumed:(BOOL)consumed;
+- (void)processedOverscroll:(const ui::DidOverscrollParams&)params;
 - (void)keyEvent:(NSEvent*)theEvent wasKeyEquivalent:(BOOL)equiv;
 - (void)windowDidChangeBackingProperties:(NSNotification*)notification;
 - (void)windowChangedGlobalFrame:(NSNotification*)notification;
@@ -1420,6 +1421,8 @@ bool RenderWidgetHostViewMac::HasAcceleratedSurface(
 void RenderWidgetHostViewMac::FocusedNodeChanged(
     bool is_editable_node,
     const gfx::Rect& node_bounds_in_screen) {
+  [cocoa_view_ cancelComposition];
+
   // If the Mac Zoom feature is enabled, update it with the bounds of the
   // current focused node so that it can ensure that it's scrolled into view.
   // Don't do anything if it's an editable node, as this will be handled by
@@ -1514,6 +1517,11 @@ void RenderWidgetHostViewMac::GestureEventAck(
     default:
       break;
   }
+}
+
+void RenderWidgetHostViewMac::DidOverscroll(
+    const ui::DidOverscrollParams& params) {
+  [cocoa_view_ processedOverscroll:params];
 }
 
 std::unique_ptr<SyntheticGestureTarget>
@@ -1867,6 +1875,10 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
                            consumed:(BOOL)consumed {
   [responderDelegate_ rendererHandledGestureScrollEvent:event
                                                consumed:consumed];
+}
+
+- (void)processedOverscroll:(const ui::DidOverscrollParams&)params {
+  [responderDelegate_ rendererHandledOverscrollEvent:params];
 }
 
 - (BOOL)respondsToSelector:(SEL)selector {

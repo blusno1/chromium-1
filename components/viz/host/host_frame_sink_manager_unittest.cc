@@ -16,6 +16,7 @@
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/surface_manager.h"
+#include "components/viz/test/fake_host_frame_sink_client.h"
 #include "components/viz/test/mock_compositor_frame_sink_client.h"
 #include "services/viz/privileged/interfaces/compositing/frame_sink_manager.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -45,19 +46,6 @@ SurfaceId MakeSurfaceId(const FrameSinkId& frame_sink_id, uint32_t local_id) {
 SurfaceInfo MakeSurfaceInfo(const SurfaceId& surface_id) {
   return SurfaceInfo(surface_id, 1.f, gfx::Size(1, 1));
 }
-
-// A fake (do-nothing) implementation of HostFrameSinkClient.
-class FakeHostFrameSinkClient : public HostFrameSinkClient {
- public:
-  FakeHostFrameSinkClient() = default;
-  ~FakeHostFrameSinkClient() override = default;
-
-  // HostFrameSinkClient implementation.
-  void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FakeHostFrameSinkClient);
-};
 
 // A mock implementation of mojom::FrameSinkManager.
 class MockFrameSinkManagerImpl : public FrameSinkManagerImpl {
@@ -550,6 +538,48 @@ TEST_F(HostFrameSinkManagerRemoteTest, RestartOnGpuCrash) {
   }
 
   EXPECT_TRUE(IsBoundToFrameSinkManager());
+}
+
+// Verify that HostFrameSinkManager does early return when trying to send
+// hit-test data after HitTestQuery was deleted.
+TEST_F(HostFrameSinkManagerRemoteTest, DeletedHitTestQuery) {
+  FakeHostFrameSinkClient host_client;
+
+  // Register a FrameSinkId, and create a RootCompositorFrameSink, which should
+  // create a HitTestQuery.
+  host().RegisterFrameSinkId(kFrameSinkChild1, &host_client);
+  mojom::CompositorFrameSinkAssociatedPtrInfo
+      compositor_frame_sink_associated_info;
+  MockCompositorFrameSinkClient compositor_frame_sink_client;
+  mojom::DisplayPrivateAssociatedPtr display_private;
+  host().CreateRootCompositorFrameSink(
+      kFrameSinkChild1, 0 /* surface_handle */,
+      RendererSettings() /* renderer_settings */,
+      MakeRequest(&compositor_frame_sink_associated_info),
+      compositor_frame_sink_client.BindInterfacePtr(),
+      MakeRequest(&display_private));
+
+  EXPECT_TRUE(DisplayHitTestQueryExists(kFrameSinkChild1));
+
+  // Verify RootCompositorFrameSink was created on other end of message pipe.
+  {
+    base::RunLoop run_loop;
+    EXPECT_CALL(impl(), MockCreateRootCompositorFrameSink(kFrameSinkChild1))
+        .WillOnce(InvokeClosure(run_loop.QuitClosure()));
+    run_loop.Run();
+  }
+
+  GetFrameSinkManagerClient()->SwitchActiveAggregatedHitTestRegionList(
+      kFrameSinkChild1, 0);
+  // Continue to send hit-test data to HitTestQuery associated with
+  // kFrameSinkChild1.
+
+  host().InvalidateFrameSinkId(kFrameSinkChild1);
+  // Invalidating kFrameSinkChild1 would delete the corresponding HitTestQuery,
+  // so further msgs to that HitTestQuery should be dropped.
+  EXPECT_FALSE(DisplayHitTestQueryExists(kFrameSinkChild1));
+  GetFrameSinkManagerClient()->SwitchActiveAggregatedHitTestRegionList(
+      kFrameSinkChild1, 1);
 }
 
 }  // namespace viz

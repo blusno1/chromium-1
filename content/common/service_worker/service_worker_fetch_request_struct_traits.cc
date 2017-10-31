@@ -10,51 +10,11 @@
 
 namespace mojo {
 
-using blink::mojom::FetchCredentialsMode;
 using blink::mojom::FetchRedirectMode;
-using blink::mojom::FetchRequestMode;
 using blink::mojom::RequestContextFrameType;
 using blink::mojom::RequestContextType;
 using blink::mojom::ServiceWorkerFetchType;
-
-FetchCredentialsMode
-EnumTraits<FetchCredentialsMode, content::FetchCredentialsMode>::ToMojom(
-    content::FetchCredentialsMode input) {
-  switch (input) {
-    case content::FETCH_CREDENTIALS_MODE_OMIT:
-      return FetchCredentialsMode::OMIT;
-    case content::FETCH_CREDENTIALS_MODE_SAME_ORIGIN:
-      return FetchCredentialsMode::SAME_ORIGIN;
-    case content::FETCH_CREDENTIALS_MODE_INCLUDE:
-      return FetchCredentialsMode::INCLUDE;
-    case content::FETCH_CREDENTIALS_MODE_PASSWORD:
-      return FetchCredentialsMode::PASSWORD;
-  }
-
-  NOTREACHED();
-  return FetchCredentialsMode::OMIT;
-}
-
-bool EnumTraits<FetchCredentialsMode, content::FetchCredentialsMode>::FromMojom(
-    FetchCredentialsMode input,
-    content::FetchCredentialsMode* out) {
-  switch (input) {
-    case FetchCredentialsMode::OMIT:
-      *out = content::FETCH_CREDENTIALS_MODE_OMIT;
-      return true;
-    case FetchCredentialsMode::SAME_ORIGIN:
-      *out = content::FETCH_CREDENTIALS_MODE_SAME_ORIGIN;
-      return true;
-    case FetchCredentialsMode::INCLUDE:
-      *out = content::FETCH_CREDENTIALS_MODE_INCLUDE;
-      return true;
-    case FetchCredentialsMode::PASSWORD:
-      *out = content::FETCH_CREDENTIALS_MODE_PASSWORD;
-      return true;
-  }
-
-  return false;
-}
+using network::mojom::FetchRequestMode;
 
 FetchRedirectMode
 EnumTraits<FetchRedirectMode, content::FetchRedirectMode>::ToMojom(
@@ -84,50 +44,6 @@ bool EnumTraits<FetchRedirectMode, content::FetchRedirectMode>::FromMojom(
       return true;
     case FetchRedirectMode::MANUAL:
       *out = content::FetchRedirectMode::MANUAL_MODE;
-      return true;
-  }
-
-  return false;
-}
-
-FetchRequestMode
-EnumTraits<FetchRequestMode, content::FetchRequestMode>::ToMojom(
-    content::FetchRequestMode input) {
-  switch (input) {
-    case content::FETCH_REQUEST_MODE_SAME_ORIGIN:
-      return FetchRequestMode::SAME_ORIGIN;
-    case content::FETCH_REQUEST_MODE_NO_CORS:
-      return FetchRequestMode::NO_CORS;
-    case content::FETCH_REQUEST_MODE_CORS:
-      return FetchRequestMode::CORS;
-    case content::FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT:
-      return FetchRequestMode::CORS_WITH_FORCED_PREFLIGHT;
-    case content::FETCH_REQUEST_MODE_NAVIGATE:
-      return FetchRequestMode::NAVIGATE;
-  }
-
-  NOTREACHED();
-  return FetchRequestMode::NO_CORS;
-}
-
-bool EnumTraits<FetchRequestMode, content::FetchRequestMode>::FromMojom(
-    FetchRequestMode input,
-    content::FetchRequestMode* out) {
-  switch (input) {
-    case FetchRequestMode::SAME_ORIGIN:
-      *out = content::FETCH_REQUEST_MODE_SAME_ORIGIN;
-      return true;
-    case FetchRequestMode::NO_CORS:
-      *out = content::FETCH_REQUEST_MODE_NO_CORS;
-      return true;
-    case FetchRequestMode::CORS:
-      *out = content::FETCH_REQUEST_MODE_CORS;
-      return true;
-    case FetchRequestMode::CORS_WITH_FORCED_PREFLIGHT:
-      *out = content::FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT;
-      return true;
-    case FetchRequestMode::NAVIGATE:
-      *out = content::FETCH_REQUEST_MODE_NAVIGATE;
       return true;
   }
 
@@ -428,6 +344,8 @@ bool StructTraits<blink::mojom::FetchAPIRequestDataView,
   blink::mojom::BlobPtr blob = data.TakeBlob<blink::mojom::BlobPtr>();
   if (blob)
     out->blob = base::MakeRefCounted<storage::BlobHandle>(std::move(blob));
+  out->cache_mode = data.cache_mode();
+  out->keepalive = data.keepalive();
   out->is_reload = data.is_reload();
   return true;
 }

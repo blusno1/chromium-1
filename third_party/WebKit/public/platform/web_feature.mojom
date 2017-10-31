@@ -508,7 +508,6 @@ enum WebFeature {
   // The above items are available in M44 branch.
 
   kV8SVGSVGElement_GetElementById_Method = 778,
-  kElementCreateShadowRootMultiple = 779,
   kV8MessageChannel_Constructor = 780,
   kV8MessagePort_PostMessage_Method = 781,
   kV8MessagePort_Start_Method = 782,
@@ -1732,6 +1731,19 @@ enum WebFeature {
   kBatteryStatusInsecureOrigin = 2199,
   kBatteryStatusCrossOrigin = 2200,
   kBatteryStatusSameOriginABA = 2201,
+  kWebAudioValueSetterIsSetValue = 2202,
+  kHasIDClassTagAttribute = 2203,
+  kHasBeforeOrAfterPseudoElement = 2204,
+  kShapeOutsideMaybeAffectedInlineSize = 2205,
+  kShapeOutsideMaybeAffectedInlinePosition = 2206,
+  kGamepadVibrationActuator = 2207,
+  kMicrophoneDisabledByFeaturePolicyEstimate = 2208,
+  kCameraDisabledByFeaturePolicyEstimate = 2209,
+  kMidiDisabledByFeaturePolicy = 2210,
+  kDocumentGetPreferredStylesheetSet = 2211,
+  kDocumentGetSelectedStylesheetSet = 2212,
+  kDocumentSetSelectedStylesheetSet = 2213,
+
   // Add new features immediately above this line. Don't change assigned
   // numbers of any item, and don't reuse removed slots.
   // Also, run update_use_counter_feature_enum.py in

@@ -60,6 +60,7 @@
 #include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "platform/weborigin/SecurityPolicy.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebContentSettingsClient.h"
@@ -70,6 +71,7 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
 #include "public/web/WebDevToolsAgent.h"
 #include "public/web/WebSettings.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -120,13 +122,13 @@ void WebSharedWorkerImpl::OnShadowPageInitialized() {
       client_->CreateServiceWorkerNetworkProvider());
   main_script_loader_ = WorkerScriptLoader::Create();
 
-  WebURLRequest::FetchRequestMode fetch_request_mode =
-      WebURLRequest::kFetchRequestModeSameOrigin;
-  WebURLRequest::FetchCredentialsMode fetch_credentials_mode =
-      WebURLRequest::kFetchCredentialsModeSameOrigin;
+  network::mojom::FetchRequestMode fetch_request_mode =
+      network::mojom::FetchRequestMode::kSameOrigin;
+  network::mojom::FetchCredentialsMode fetch_credentials_mode =
+      network::mojom::FetchCredentialsMode::kSameOrigin;
   if ((static_cast<KURL>(url_)).ProtocolIsData()) {
-    fetch_request_mode = WebURLRequest::kFetchRequestModeNoCORS;
-    fetch_credentials_mode = WebURLRequest::kFetchCredentialsModeInclude;
+    fetch_request_mode = network::mojom::FetchRequestMode::kNoCORS;
+    fetch_credentials_mode = network::mojom::FetchCredentialsMode::kInclude;
   }
 
   main_script_loader_->LoadAsynchronously(
@@ -312,6 +314,12 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
 
   ContentSecurityPolicy* content_security_policy =
       main_script_loader_->ReleaseContentSecurityPolicy();
+  ReferrerPolicy referrer_policy = kReferrerPolicyDefault;
+  if (!main_script_loader_->GetReferrerPolicy().IsNull()) {
+    SecurityPolicy::ReferrerPolicyFromHeaderValue(
+        main_script_loader_->GetReferrerPolicy(),
+        kDoNotSupportReferrerPolicyLegacyKeywords, &referrer_policy);
+  }
   auto worker_settings = std::make_unique<WorkerSettings>(
       shadow_page_->GetDocument()->GetFrame()->GetSettings());
   auto global_scope_creation_params =
@@ -320,8 +328,8 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
           nullptr /* cached_meta_data */,
           content_security_policy ? content_security_policy->Headers().get()
                                   : nullptr,
-          main_script_loader_->GetReferrerPolicy(), starter_origin,
-          worker_clients, main_script_loader_->ResponseAddressSpace(),
+          referrer_policy, starter_origin, worker_clients,
+          main_script_loader_->ResponseAddressSpace(),
           main_script_loader_->OriginTrialTokens(), std::move(worker_settings),
           kV8CacheOptionsDefault, std::move(pending_interface_provider_));
 

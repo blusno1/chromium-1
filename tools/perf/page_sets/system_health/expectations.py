@@ -68,16 +68,10 @@ class SystemHealthMobileCommonExpectations(expectations.StoryExpectations):
                       'crbug.com/657433')
     self.DisableStory('browse:news:toi', [expectations.ALL_ANDROID],
                       'crbug.com/728081')
-    self.DisableStory('browse:shopping:lazada', [expectations.ANDROID_NEXUS5],
-                      'crbug.com/778108')
-    self.DisableStory('load:tools:weather', [expectations.ANDROID_NEXUS5],
-                      'crbug.com/778108')
     self.DisableStory(
         'load:tools:drive',
         [expectations.ANDROID_NEXUS5X, expectations.ANDROID_WEBVIEW],
         'crbug.com/738854')
-    self.DisableStory('load:news:irctc', [expectations.ANDROID_SVELTE],
-                      'crbug.com/778115')
     # TODO(rnephew): This disabling should move to CanRunOnBrowser.
     self.DisableStory('browse:chrome:omnibox',
                       [expectations.ANDROID_WEBVIEW],

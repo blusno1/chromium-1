@@ -9,6 +9,11 @@
 
 namespace flag_descriptions {
 
+const char kStopLoadingInBackgroundName[] = "Stop loading in background";
+const char kStopLoadingInBackgroundDescription[] =
+    "Stop loading tasks and loading "
+    "resources, in the background, after certain grace time.";
+
 const char kAccelerated2dCanvasName[] = "Accelerated 2D canvas";
 const char kAccelerated2dCanvasDescription[] =
     "Enables the use of the GPU to perform 2d canvas rendering instead of "
@@ -88,6 +93,11 @@ const char kBypassAppBannerEngagementChecksDescription[] =
     "hasn't been shown recently. This allows developers to test that other "
     "eligibility requirements for showing app banners, such as having a "
     "manifest, are met.";
+
+const char kCommittedInterstitialsName[] = "Committed Interstitials";
+const char kCommittedInterstitialsDescription[] =
+    "Use committed error pages instead of transient navigation entries "
+    "for interstitial error pages (e.g. certificate errors).";
 
 const char kCaptureThumbnailOnNavigatingAwayName[] =
     "Capture page thumbnail on navigating away";
@@ -512,12 +522,6 @@ const char kEnableWasmStreamingName[] =
     "WebAssembly streaming compile/instantiate support.";
 const char kEnableWasmStreamingDescription[] =
     "WebAssembly.{compile|instantiate} taking a Response as parameter.";
-
-const char kEnableWebNotificationCustomLayoutsName[] =
-    "Enable custom layouts for Web Notifications.";
-const char kEnableWebNotificationCustomLayoutsDescription[] =
-    "Enable custom layouts for Web Notifications. They will have subtle layout "
-    "improvements that are otherwise not possible.";
 
 const char kExpensiveBackgroundTimerThrottlingName[] =
     "Throttle expensive background timers";
@@ -1113,6 +1117,13 @@ const char kReducedReferrerGranularityDescription[] =
     "reduce the amount of information in the 'referer' header for cross-origin "
     "requests.";
 
+const char kRemoveUsageOfDeprecatedGaiaSigninEndpointName[] =
+    "Remove usage of the deprecated GAIA sign-in endpoint";
+const char kRemoveUsageOfDeprecatedGaiaSigninEndpointDescription[] =
+    "The Gaia sign-in endpoint used for full-tab sign-in page is deprecated. "
+    "This flags controls wheter it should no longer be used during a sign-in "
+    " flow.";
+
 const char kRequestTabletSiteName[] =
     "Request tablet site option in the settings menu";
 const char kRequestTabletSiteDescription[] =
@@ -1649,6 +1660,7 @@ const char kChromeHomeSwipeLogicName[] = "Chrome Home Swipe Logic";
 const char kChromeHomeSwipeLogicDescription[] =
     "Various swipe logic options for Chrome Home for sheet expansion.";
 const char kChromeHomeSwipeLogicRestrictArea[] = "Restrict swipable area";
+const char kChromeHomeSwipeLogicVelocity[] = "Velocity suppression model";
 
 const char kChromeHomeBottomNavLabelsName[] =
     "Chrome Home bottom navigation menu item labels.";
@@ -2200,6 +2212,10 @@ const char kEnableDesktopIosPromotionsDescription[] =
     "Enable Desktop to iOS promotions, and allow users to see them if they are "
     "eligible.";
 
+const char kExperimentalTabControllerName[] = "Experimental tab controller.";
+const char kExperimentalTabControllerDescription[] =
+    "Enable controller for highly experimental tab policies.";
+
 const char kGdiTextPrinting[] = "GDI Text Printing";
 const char kGdiTextPrintingDescription[] =
     "Use GDI to print text as simply text";
@@ -2409,11 +2425,6 @@ const char kDisableSystemTimezoneAutomaticDetectionName[] =
 const char kDisableSystemTimezoneAutomaticDetectionDescription[] =
     "Disable system timezone automatic detection device policy.";
 
-const char kEnableFullscreenAppListName[] = "Enable The Peeking Launcher";
-const char kEnableFullscreenAppListDescription[] =
-    "The peeking launcher UI supports touch and provides more space for "
-    "upcoming features.";
-
 const char kEnableBackgroundBlurName[] = "Enable background blur.";
 const char kEnableBackgroundBlurDescription[] =
     "Enables background blur for the Peeking Launcher, Lock Screen, and Tab "
@@ -2487,10 +2498,6 @@ const char kFirstRunUiTransitionsName[] =
     "Animated transitions in the first-run tutorial";
 const char kFirstRunUiTransitionsDescription[] =
     "Transitions during first-run tutorial are animated.";
-
-const char kFloatingVirtualKeyboardName[] = "Floating virtual keyboard.";
-const char kFloatingVirtualKeyboardDescription[] =
-    "Enable/Disable floating virtual keyboard.";
 
 const char kForceEnableStylusToolsName[] = "Force enable stylus features";
 const char kForceEnableStylusToolsDescription[] =
@@ -2717,6 +2724,17 @@ const char kVrCustomTabBrowsingName[] = "Enable Custom Tab browsing in VR.";
 const char kVrCustomTabBrowsingDescription[] =
     "Allow browsing with a VR headset in a Custom Tab if available for this "
     "device.";
+
+const char kVrShellExperimentalRenderingName[] =
+    "Enable Chrome VR experimental rendering "
+    "features.";
+const char kVrShellExperimentalRenderingDescription[] =
+    "Turns on experimental rendering features for Chrome VR, like power saving "
+    "rendering modes.";
+
+const char kVrLaunchIntentName[] = "Enable VR intents";
+const char kVrLaunchIntentDescription[] =
+    "Allow intents to launch Chrome in VR mode.";
 
 const char kWebVrAutopresentName[] = "Enable WebVr auto presentation";
 const char kWebVrAutopresentDescription[] =

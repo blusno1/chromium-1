@@ -8,7 +8,7 @@
 #include "core/css/CSSSelectorList.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParserContext.h"
-#include "core/css/parser/CSSParserObserverWrapper.h"
+#include "core/css/parser/CSSParserObserver.h"
 #include "core/css/parser/CSSParserScopedTokenBuffer.h"
 #include "core/css/parser/CSSParserTokenStream.h"
 #include "core/frame/Deprecation.h"
@@ -38,10 +38,10 @@ CSSSelectorList CSSSelectorParser::ConsumeSelector(
     CSSParserTokenStream& stream,
     const CSSParserContext* context,
     StyleSheetContents* style_sheet,
-    CSSParserObserverWrapper* wrapper) {
+    CSSParserObserver* observer) {
   CSSSelectorParser parser(context, style_sheet);
   stream.ConsumeWhitespace();
-  CSSSelectorList result = parser.ConsumeComplexSelectorList(stream, wrapper);
+  CSSSelectorList result = parser.ConsumeComplexSelectorList(stream, observer);
   parser.RecordUsageAndDeprecations(result);
   return result;
 }
@@ -73,7 +73,7 @@ CSSSelectorList CSSSelectorParser::ConsumeComplexSelectorList(
 
 CSSSelectorList CSSSelectorParser::ConsumeComplexSelectorList(
     CSSParserTokenStream& stream,
-    CSSParserObserverWrapper* wrapper) {
+    CSSParserObserver* observer) {
   Vector<std::unique_ptr<CSSParserSelector>> selector_list;
 
   while (true) {
@@ -96,10 +96,8 @@ CSSSelectorList CSSSelectorParser::ConsumeComplexSelectorList(
     if (!selector || failed_parsing_ || !complex_selector.AtEnd())
       return CSSSelectorList();
 
-    if (wrapper) {
-      wrapper->Observer().ObserveSelector(selector_offset_start,
-                                          selector_offset_end);
-    }
+    if (observer)
+      observer->ObserveSelector(selector_offset_start, selector_offset_end);
 
     selector_list.push_back(std::move(selector));
     if (stream.Peek().GetType() == kLeftBraceToken)
@@ -290,7 +288,6 @@ bool IsSimpleSelectorValidAfterPseudoElement(
 std::unique_ptr<CSSParserSelector> CSSSelectorParser::ConsumeCompoundSelector(
     CSSParserTokenRange& range) {
   std::unique_ptr<CSSParserSelector> compound_selector;
-
   AtomicString namespace_prefix;
   AtomicString element_name;
   CSSSelector::PseudoType compound_pseudo_element = CSSSelector::kPseudoUnknown;
@@ -334,6 +331,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::ConsumeCompoundSelector(
     }
     if (namespace_uri == DefaultNamespace())
       namespace_prefix = g_null_atom;
+    context_->Count(WebFeature::kHasIDClassTagAttribute);
     return CSSParserSelector::Create(
         QualifiedName(namespace_prefix, element_name, namespace_uri));
   }
@@ -419,6 +417,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::ConsumeId(
   selector->SetMatch(CSSSelector::kId);
   AtomicString value = range.Consume().Value().ToAtomicString();
   selector->SetValue(value, IsQuirksModeBehavior(context_->MatchMode()));
+  context_->Count(WebFeature::kHasIDClassTagAttribute);
   return selector;
 }
 
@@ -433,6 +432,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::ConsumeClass(
   selector->SetMatch(CSSSelector::kClass);
   AtomicString value = range.Consume().Value().ToAtomicString();
   selector->SetValue(value, IsQuirksModeBehavior(context_->MatchMode()));
+  context_->Count(WebFeature::kHasIDClassTagAttribute);
   return selector;
 }
 
@@ -467,6 +467,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::ConsumeAttribute(
   if (block.AtEnd()) {
     selector->SetAttribute(qualified_name, CSSSelector::kCaseSensitive);
     selector->SetMatch(CSSSelector::kAttributeSet);
+    context_->Count(WebFeature::kHasIDClassTagAttribute);
     return selector;
   }
 
@@ -481,6 +482,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::ConsumeAttribute(
 
   if (!block.AtEnd())
     return nullptr;
+  context_->Count(WebFeature::kHasIDClassTagAttribute);
   return selector;
 }
 
@@ -506,6 +508,12 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::ConsumePseudo(
   AtomicString value = token.Value().ToAtomicString().LowerASCII();
   bool has_arguments = token.GetType() == kFunctionToken;
   selector->UpdatePseudoType(value, *context_, has_arguments, context_->Mode());
+
+  if (selector->Match() == CSSSelector::kPseudoElement &&
+      (selector->GetPseudoType() == CSSSelector::kPseudoBefore ||
+       selector->GetPseudoType() == CSSSelector::kPseudoAfter)) {
+    context_->Count(WebFeature::kHasBeforeOrAfterPseudoElement);
+  }
 
   if (selector->Match() == CSSSelector::kPseudoElement &&
       disallow_pseudo_elements_)
@@ -1004,7 +1012,7 @@ void CSSSelectorParser::RecordUsageAndDeprecations(
       }
       if (feature != WebFeature::kNumberOfFeatures) {
         if (!Deprecation::DeprecationMessage(feature).IsEmpty() &&
-            style_sheet_->AnyOwnerDocument()) {
+            style_sheet_ && style_sheet_->AnyOwnerDocument()) {
           Deprecation::CountDeprecation(*style_sheet_->AnyOwnerDocument(),
                                         feature);
         } else {

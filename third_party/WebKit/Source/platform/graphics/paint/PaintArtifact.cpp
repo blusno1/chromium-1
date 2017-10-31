@@ -30,12 +30,11 @@ void ComputeChunkBoundsAndOpaqueness(const DisplayItemList& display_items,
         continue;
       const auto& drawing = static_cast<const DrawingDisplayItem&>(item);
       if (drawing.GetPaintRecord() && drawing.KnownToBeOpaque()) {
-        // TODO(pdr): It may be too conservative to round in to the
-        // EnclosedIntRect.
-        SkIRect conservative_rounded_rect;
-        const SkRect& record_bounds = drawing.GetPaintRecordBounds();
-        record_bounds.roundIn(&conservative_rounded_rect);
-        known_to_be_opaque_region.op(conservative_rounded_rect,
+        // TODO(wkorman): Confirm the visual rect is in the right
+        // space. It looks correct now, and was perhaps incorrect
+        // previously?
+        LayoutRect visual_rect = drawing.VisualRect();
+        known_to_be_opaque_region.op(SkIRect(IntRect(visual_rect)),
                                      SkRegion::kUnion_Op);
       }
     }
@@ -79,13 +78,14 @@ size_t PaintArtifact::ApproximateUnsharedMemoryUsage() const {
          paint_chunks_.capacity() * sizeof(paint_chunks_[0]);
 }
 
-void PaintArtifact::Replay(GraphicsContext& graphics_context) const {
-  TRACE_EVENT0("blink,benchmark", "PaintArtifact::replay");
+void PaintArtifact::Replay(GraphicsContext& graphics_context,
+                           const PropertyTreeState& replay_state) const {
   if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
+    TRACE_EVENT0("blink,benchmark", "PaintArtifact::replay");
     for (const DisplayItem& display_item : display_item_list_)
       display_item.Replay(graphics_context);
   } else {
-    Replay(*graphics_context.Canvas());
+    Replay(*graphics_context.Canvas(), replay_state);
   }
 }
 

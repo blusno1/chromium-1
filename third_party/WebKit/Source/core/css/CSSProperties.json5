@@ -269,9 +269,6 @@
     // Tweaks how we choose defaults for getter, setter, initial and type_name.
     // For example, setting this to BlendMode will make us use a setter of
     // setBlendMode
-    // - initial
-    // The initial value accessor on the ComputedStyle, defaults to
-    // e.g. initialBoxShadow
     // - getter
     // The ComputedStyle getter, defaults to e.g. borderBottomLeft
     // - setter
@@ -284,8 +281,6 @@
     getter: {
     },
     setter: {
-    },
-    initial: {
     },
     type_name: {
     },
@@ -1692,7 +1687,6 @@
       api_methods: ["ParseSingleValue"],
       interpolable: true,
       inherited: true,
-      initial: "InitialLetterWordSpacing",
       converter: "ConvertSpacing",
     },
     {
@@ -2284,8 +2278,8 @@
       type_name: "ScrollBehavior",
     },
     {
-      name: "scroll-boundary-behavior-x",
-      api_class: "CSSPropertyAPIScrollBoundaryBehavior",
+      name: "overscroll-behavior-x",
+      api_class: "CSSPropertyAPIOverscrollBehavior",
       runtime_flag: "CSSScrollBoundaryBehavior",
       field_template: "keyword",
       keywords: ["auto", "contain", "none"],
@@ -2293,8 +2287,8 @@
       type_name: "EScrollBoundaryBehavior",
     },
     {
-      name: "scroll-boundary-behavior-y",
-      api_class: "CSSPropertyAPIScrollBoundaryBehavior",
+      name: "overscroll-behavior-y",
+      api_class: "CSSPropertyAPIOverscrollBehavior",
       runtime_flag: "CSSScrollBoundaryBehavior",
       field_template: "keyword",
       keywords: ["auto", "contain", "none"],
@@ -2386,7 +2380,6 @@
       runtime_flag: "CSSScrollSnapPoints",
       include_paths: ["platform/Length.h"],
       typedom_types: ["Length", "Percent"],
-      initial: "InitialScrollPadding",
       type_name: "Length",
       converter: "ConvertLength",
       direction_aware_options: {
@@ -2401,7 +2394,6 @@
       runtime_flag: "CSSScrollSnapPoints",
       include_paths: ["platform/Length.h"],
       typedom_types: ["Length", "Percent"],
-      initial: "InitialScrollPadding",
       type_name: "Length",
       converter: "ConvertLength",
       direction_aware_options: {
@@ -2416,7 +2408,6 @@
       runtime_flag: "CSSScrollSnapPoints",
       include_paths: ["platform/Length.h"],
       typedom_types: ["Length", "Percent"],
-      initial: "InitialScrollPadding",
       type_name: "Length",
       converter: "ConvertLength",
       direction_aware_options: {
@@ -2431,7 +2422,6 @@
       runtime_flag: "CSSScrollSnapPoints",
       include_paths: ["platform/Length.h"],
       typedom_types: ["Length", "Percent"],
-      initial: "InitialScrollPadding",
       type_name: "Length",
       converter: "ConvertLength",
       direction_aware_options: {
@@ -2485,7 +2475,6 @@
       api_methods: ["ParseSingleValue"],
       runtime_flag: "CSSScrollSnapPoints",
       include_paths: ["platform/Length.h"],
-      initial: "InitialScrollSnapMargin",
       type_name: "Length",
       converter: "ConvertLength",
       direction_aware_options: {
@@ -2499,7 +2488,6 @@
       api_methods: ["ParseSingleValue"],
       runtime_flag: "CSSScrollSnapPoints",
       include_paths: ["platform/Length.h"],
-      initial: "InitialScrollSnapMargin",
       type_name: "Length",
       converter: "ConvertLength",
       direction_aware_options: {
@@ -2513,7 +2501,6 @@
       api_methods: ["ParseSingleValue"],
       runtime_flag: "CSSScrollSnapPoints",
       include_paths: ["platform/Length.h"],
-      initial: "InitialScrollSnapMargin",
       type_name: "Length",
       converter: "ConvertLength",
       direction_aware_options: {
@@ -2527,7 +2514,6 @@
       api_methods: ["ParseSingleValue"],
       runtime_flag: "CSSScrollSnapPoints",
       include_paths: ["platform/Length.h"],
-      initial: "InitialScrollSnapMargin",
       type_name: "Length",
       converter: "ConvertLength",
       direction_aware_options: {
@@ -3458,8 +3444,8 @@
       field_template: "keyword",
       keywords: ["logical", "visual"],
       default_value: "logical",
+      name_for_methods: "RtlOrdering",
       setter: "SetRtlOrdering",
-      initial: "InitialRtlOrdering",
       type_name: "EOrder",
     },
     {
@@ -3670,7 +3656,6 @@
       api_methods: ["ParseSingleValue"],
       interpolable: true,
       inherited: true,
-      initial: "InitialLetterWordSpacing",
       converter: "ConvertSpacing",
     },
     // UAs must treat 'word-wrap' as an alternate name for the 'overflow-wrap'
@@ -3931,6 +3916,7 @@
     {
       name: "-webkit-logical-width",
       api_class: "CSSPropertyAPIInlineSizeOrLogicalWidth",
+      api_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "width",
         shorthand_for_physical_side: "CSSProperty",
@@ -3939,6 +3925,7 @@
     {
       name: "-webkit-logical-height",
       api_class: "CSSPropertyAPIBlockSizeOrLogicalHeight",
+      api_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "height",
         shorthand_for_physical_side: "CSSProperty",
@@ -3947,6 +3934,7 @@
     {
       name: "-webkit-min-logical-width",
       api_class: "CSSPropertyAPIMinInlineSizeOrMinLogicalWidth",
+      api_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "width",
         shorthand_for_physical_side: "CSSPropertyMin",
@@ -3955,6 +3943,7 @@
     {
       name: "-webkit-min-logical-height",
       api_class: "CSSPropertyAPIMinBlockSizeOrMinLogicalHeight",
+      api_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "height",
         shorthand_for_physical_side: "CSSPropertyMin",
@@ -4318,8 +4307,8 @@
       api_methods: ["ParseShorthand"],
     },
     {
-      name: "scroll-boundary-behavior",
-      longhands: ["scroll-boundary-behavior-x", "scroll-boundary-behavior-y"],
+      name: "overscroll-behavior",
+      longhands: ["overscroll-behavior-x", "overscroll-behavior-y"],
       api_class: true,
       api_methods: ["ParseShorthand"],
       runtime_flag: "CSSScrollBoundaryBehavior",

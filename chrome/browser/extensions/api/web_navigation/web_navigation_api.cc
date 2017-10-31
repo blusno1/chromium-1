@@ -388,6 +388,8 @@ void WebNavigationTabObserver::DidOpenRequestedURL(
 
   WebNavigationAPI* api = WebNavigationAPI::GetFactoryInstance()->Get(
       web_contents()->GetBrowserContext());
+  if (!api)
+    return;  // Possible in unit tests.
   WebNavigationEventRouter* router = api->web_navigation_event_router_.get();
   if (!router)
     return;
@@ -453,7 +455,7 @@ void WebNavigationTabObserver::HandleError(
   helpers::DispatchOnErrorOccurred(navigation_handle);
 }
 
-// See also NavigationController::IsURLInPageNavigation.
+// See also NavigationController::IsURLSameDocumentNavigation.
 bool WebNavigationTabObserver::IsReferenceFragmentNavigation(
     content::RenderFrameHost* render_frame_host,
     const GURL& url) {

@@ -42,7 +42,6 @@ class FilePath;
 namespace content {
 class ColorChooser;
 class JavaScriptDialogManager;
-class PageState;
 class RenderFrameHost;
 class RenderWidgetHost;
 class SessionStorageNamespace;
@@ -238,15 +237,6 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Returns true if the context menu operation was handled by the delegate.
   virtual bool HandleContextMenu(const content::ContextMenuParams& params);
-
-  // Opens source view for given WebContents that is navigated to the given
-  // page url.
-  virtual void ViewSourceForTab(WebContents* source, const GURL& page_url);
-
-  // Opens source view for the given subframe.
-  virtual void ViewSourceForFrame(WebContents* source,
-                                  const GURL& url,
-                                  const PageState& page_state);
 
   // Allows delegates to handle keyboard events before sending to the renderer.
   // See enum for description of return values.
@@ -502,22 +492,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   // delegate doesn't provide a size, the current WebContentsView's size will be
   // used.
   virtual gfx::Size GetSizeForNewRenderView(WebContents* web_contents) const;
-
-  // Notification that validation of a form displayed by the |web_contents|
-  // has failed. There can only be one message per |web_contents| at a time.
-  virtual void ShowValidationMessage(WebContents* web_contents,
-                                     const gfx::Rect& anchor_in_root_view,
-                                     const base::string16& main_text,
-                                     const base::string16& sub_text) {}
-
-  // Notification that the delegate should hide any showing form validation
-  // message.
-  virtual void HideValidationMessage(WebContents* web_contents) {}
-
-  // Notification that the form element that triggered the validation failure
-  // has moved.
-  virtual void MoveValidationMessage(WebContents* web_contents,
-                                     const gfx::Rect& anchor_in_root_view) {}
 
   // Returns true if the WebContents is never visible.
   virtual bool IsNeverVisible(WebContents* web_contents);

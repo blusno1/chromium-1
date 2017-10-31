@@ -97,11 +97,13 @@
 #include "content/renderer/content_security_policy_util.h"
 #include "content/renderer/context_menu_params_builder.h"
 #include "content/renderer/devtools/devtools_agent.h"
+#include "content/renderer/devtools/devtools_frontend_impl.h"
 #include "content/renderer/dom_automation_controller.h"
 #include "content/renderer/effective_connection_type_helper.h"
 #include "content/renderer/external_popup_menu.h"
 #include "content/renderer/frame_owner_properties.h"
 #include "content/renderer/gpu/gpu_benchmarking_extension.h"
+#include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/history_entry.h"
 #include "content/renderer/history_serialization.h"
 #include "content/renderer/image_downloader/image_downloader_impl.h"
@@ -168,6 +170,7 @@
 #include "ppapi/features/features.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/service_manager/public/interfaces/interface_provider.mojom.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "storage/common/data_element.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
@@ -535,7 +538,8 @@ CommonNavigationParams MakeCommonNavigationParams(
       static_cast<PreviewsState>(info.url_request.GetPreviewsState()),
       base::TimeTicks::Now(), info.url_request.HttpMethod().Latin1(),
       GetRequestBodyForWebURLRequest(info.url_request), source_location,
-      should_check_main_world_csp, false /* started_from_context_menu */);
+      should_check_main_world_csp, false /* started_from_context_menu */,
+      info.url_request.HasUserGesture());
 }
 
 WebFrameLoadType ReloadFrameLoadTypeFor(
@@ -1005,14 +1009,16 @@ blink::WebLocalFrame* RenderFrameImpl::UniqueNameFrameAdapter::GetWebFrame()
 RenderFrameImpl* RenderFrameImpl::Create(
     RenderViewImpl* render_view,
     int32_t routing_id,
+    service_manager::mojom::InterfaceProviderPtr interface_provider,
     const base::UnguessableToken& devtools_frame_token) {
   DCHECK(routing_id != MSG_ROUTING_NONE);
-  CreateParams params(render_view, routing_id, devtools_frame_token);
+  CreateParams params(render_view, routing_id, std::move(interface_provider),
+                      devtools_frame_token);
 
   if (g_create_render_frame_impl)
-    return g_create_render_frame_impl(params);
+    return g_create_render_frame_impl(std::move(params));
   else
-    return new RenderFrameImpl(params);
+    return new RenderFrameImpl(std::move(params));
 }
 
 // static
@@ -1033,6 +1039,7 @@ RenderFrameImpl* RenderFrameImpl::FromRoutingID(int routing_id) {
 RenderFrameImpl* RenderFrameImpl::CreateMainFrame(
     RenderViewImpl* render_view,
     int32_t routing_id,
+    service_manager::mojom::InterfaceProviderPtr interface_provider,
     int32_t widget_routing_id,
     bool hidden,
     const ScreenInfo& screen_info,
@@ -1043,8 +1050,9 @@ RenderFrameImpl* RenderFrameImpl::CreateMainFrame(
   // A main frame RenderFrame must have a RenderWidget.
   DCHECK_NE(MSG_ROUTING_NONE, widget_routing_id);
 
-  RenderFrameImpl* render_frame =
-      RenderFrameImpl::Create(render_view, routing_id, devtools_frame_token);
+  RenderFrameImpl* render_frame = RenderFrameImpl::Create(
+      render_view, routing_id, std::move(interface_provider),
+      devtools_frame_token);
   render_frame->InitializeBlameContext(nullptr);
   WebLocalFrame* web_frame = WebLocalFrame::CreateMainFrame(
       render_view->webview(), render_frame,
@@ -1066,6 +1074,7 @@ RenderFrameImpl* RenderFrameImpl::CreateMainFrame(
 // static
 void RenderFrameImpl::CreateFrame(
     int routing_id,
+    service_manager::mojom::InterfaceProviderPtr interface_provider,
     int proxy_routing_id,
     int opener_routing_id,
     int parent_routing_id,
@@ -1099,8 +1108,9 @@ void RenderFrameImpl::CreateFrame(
       previous_sibling_web_frame = previous_sibling_proxy->web_frame();
 
     // Create the RenderFrame and WebLocalFrame, linking the two.
-    render_frame = RenderFrameImpl::Create(parent_proxy->render_view(),
-                                           routing_id, devtools_frame_token);
+    render_frame = RenderFrameImpl::Create(
+        parent_proxy->render_view(), routing_id, std::move(interface_provider),
+        devtools_frame_token);
     render_frame->InitializeBlameContext(FromRoutingID(parent_routing_id));
     render_frame->unique_name_helper_.set_propagated_name(
         replicated_state.unique_name);
@@ -1129,6 +1139,7 @@ void RenderFrameImpl::CreateFrame(
       return;
 
     render_frame = RenderFrameImpl::Create(proxy->render_view(), routing_id,
+                                           std::move(interface_provider),
                                            devtools_frame_token);
     render_frame->InitializeBlameContext(nullptr);
     render_frame->proxy_routing_id_ = proxy_routing_id;
@@ -1220,8 +1231,24 @@ blink::WebURL RenderFrameImpl::OverrideFlashEmbedWithHTML(
   return GetContentClient()->renderer()->OverrideFlashEmbedWithHTML(url);
 }
 
+// RenderFrameImpl::CreateParams --------------------------------------------
+
+RenderFrameImpl::CreateParams::CreateParams(
+    RenderViewImpl* render_view,
+    int32_t routing_id,
+    service_manager::mojom::InterfaceProviderPtr interface_provider,
+    const base::UnguessableToken& devtools_frame_token)
+    : render_view(render_view),
+      routing_id(routing_id),
+      interface_provider(std::move(interface_provider)),
+      devtools_frame_token(devtools_frame_token) {}
+RenderFrameImpl::CreateParams::~CreateParams() = default;
+RenderFrameImpl::CreateParams::CreateParams(CreateParams&&) = default;
+RenderFrameImpl::CreateParams& RenderFrameImpl::CreateParams::operator=(
+    CreateParams&&) = default;
+
 // RenderFrameImpl ----------------------------------------------------------
-RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
+RenderFrameImpl::RenderFrameImpl(CreateParams params)
     : frame_(NULL),
       is_main_frame_(true),
       unique_name_frame_adapter_(this),
@@ -1269,10 +1296,10 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
       devtools_frame_token_(
           blink::WebString::FromUTF8(params.devtools_frame_token.ToString())),
       weak_factory_(this) {
-  service_manager::mojom::InterfaceProviderPtr remote_interfaces;
-  pending_remote_interface_provider_request_ = MakeRequest(&remote_interfaces);
-  remote_interfaces_.reset(new service_manager::InterfaceProvider);
-  remote_interfaces_->Bind(std::move(remote_interfaces));
+  // The InterfaceProvider to access Mojo services exposed by the RFHI must be
+  // provided at construction time. See: https://crbug.com/729021/.
+  CHECK(params.interface_provider.is_bound());
+  remote_interfaces_.Bind(std::move(params.interface_provider));
   blink_interface_registry_.reset(
       new BlinkInterfaceRegistryImpl(registry_.GetWeakPtr()));
 
@@ -1374,7 +1401,7 @@ void RenderFrameImpl::Initialize() {
   new PepperBrowserConnection(this);
 #endif
   shared_worker_repository_ =
-      base::MakeUnique<SharedWorkerRepository>(GetInterfaceProvider());
+      std::make_unique<SharedWorkerRepository>(GetInterfaceProvider());
   GetWebFrame()->SetSharedWorkerRepositoryClient(
       shared_worker_repository_.get());
 
@@ -1414,7 +1441,7 @@ void RenderFrameImpl::Initialize() {
 
 void RenderFrameImpl::InitializeBlameContext(RenderFrameImpl* parent_frame) {
   DCHECK(!blame_context_);
-  blame_context_ = base::MakeUnique<FrameBlameContext>(this, parent_frame);
+  blame_context_ = std::make_unique<FrameBlameContext>(this, parent_frame);
   blame_context_->Initialize();
 }
 
@@ -1804,13 +1831,9 @@ void RenderFrameImpl::BindMediaEngagement(
 
 void RenderFrameImpl::BindFrame(
     const service_manager::BindSourceInfo& browser_info,
-    mojom::FrameRequest request,
-    mojom::FrameHostInterfaceBrokerPtr frame_host_interface_broker) {
+    mojom::FrameRequest request) {
   browser_info_ = browser_info;
   frame_binding_.Bind(std::move(request));
-  frame_host_interface_broker_ = std::move(frame_host_interface_broker);
-  frame_host_interface_broker_->GetInterfaceProvider(
-      std::move(pending_remote_interface_provider_request_));
 }
 
 void RenderFrameImpl::BindFrameBindingsControl(
@@ -2239,10 +2262,10 @@ void RenderFrameImpl::JavaScriptIsolatedWorldRequest::Completed(
         std::unique_ptr<base::Value> result_value(
             converter.FromV8Value(value, context));
         list.Append(result_value ? std::move(result_value)
-                                 : base::MakeUnique<base::Value>());
+                                 : std::make_unique<base::Value>());
       }
     } else {
-      list.Set(0, base::MakeUnique<base::Value>());
+      list.Set(0, std::make_unique<base::Value>());
     }
     render_frame_impl_.get()->Send(
         new FrameHostMsg_JavaScriptExecuteResponse(routing_id_, id_, list));
@@ -2267,9 +2290,9 @@ void RenderFrameImpl::HandleJavascriptExecutionResult(
       std::unique_ptr<base::Value> result_value(
           converter.FromV8Value(result, context));
       list.Set(0, result_value ? std::move(result_value)
-                               : base::MakeUnique<base::Value>());
+                               : std::make_unique<base::Value>());
     } else {
-      list.Set(0, base::MakeUnique<base::Value>());
+      list.Set(0, std::make_unique<base::Value>());
     }
     Send(new FrameHostMsg_JavaScriptExecuteResponse(routing_id_, id, list));
   }
@@ -2553,7 +2576,7 @@ bool RenderFrameImpl::ScheduleFileChooser(
   }
 
   file_chooser_completions_.push_back(
-      base::MakeUnique<PendingFileChooser>(params, completion));
+      std::make_unique<PendingFileChooser>(params, completion));
   if (file_chooser_completions_.size() == 1) {
     // Actually show the browse dialog when this is the first request.
     Send(new FrameHostMsg_RunFileChooser(routing_id_, params));
@@ -2772,7 +2795,7 @@ void RenderFrameImpl::BindLocalInterface(
 }
 
 service_manager::InterfaceProvider* RenderFrameImpl::GetRemoteInterfaces() {
-  return remote_interfaces_.get();
+  return &remote_interfaces_;
 }
 
 AssociatedInterfaceRegistry*
@@ -2872,8 +2895,7 @@ void RenderFrameImpl::EnsureMojoBuiltinsAreAvailable(
                              mojo::edk::js::Support::GetModule(isolate));
   registry->AddBuiltinModule(
       isolate, InterfaceProviderJsWrapper::kPerFrameModuleName,
-      InterfaceProviderJsWrapper::Create(
-          isolate, context, remote_interfaces_.get())
+      InterfaceProviderJsWrapper::Create(isolate, context, &remote_interfaces_)
           .ToV8());
   registry->AddBuiltinModule(
       isolate, InterfaceProviderJsWrapper::kPerProcessModuleName,
@@ -3029,8 +3051,8 @@ void RenderFrameImpl::CommitNavigation(
   // If the request was initiated in the context of a user gesture then make
   // sure that the navigation also executes in the context of a user gesture.
   std::unique_ptr<blink::WebScopedUserGesture> gesture(
-      request_params.has_user_gesture ? new blink::WebScopedUserGesture(frame_)
-                                      : nullptr);
+      common_params.has_user_gesture ? new blink::WebScopedUserGesture(frame_)
+                                     : nullptr);
 
   browser_side_navigation_pending_ = false;
   browser_side_navigation_pending_url_ = GURL();
@@ -3122,7 +3144,7 @@ RenderFrameImpl::CreateApplicationCacheHost(
   NavigationStateImpl* navigation_state =
       static_cast<NavigationStateImpl*>(document_state->navigation_state());
 
-  return base::MakeUnique<RendererWebApplicationCacheHostImpl>(
+  return std::make_unique<RendererWebApplicationCacheHostImpl>(
       RenderViewImpl::FromWebView(frame_->View()), client,
       RenderThreadImpl::current()->appcache_dispatcher()->backend_proxy(),
       navigation_state->request_params().appcache_host_id, routing_id_);
@@ -3146,19 +3168,29 @@ RenderFrameImpl::CreateWorkerFetchContext() {
       ServiceWorkerNetworkProvider::FromWebServiceWorkerNetworkProvider(
           web_provider);
   mojom::ServiceWorkerWorkerClientRequest service_worker_client_request;
+  mojom::ServiceWorkerContainerHostPtrInfo container_host_ptr_info;
+  ServiceWorkerProviderContext* provider_context = provider->context();
   // Some sandboxed iframes are not allowed to use service worker so don't have
   // a real service worker provider, so the provider context is null.
-  if (provider->context()) {
+  if (provider_context) {
     service_worker_client_request =
-        provider->context()->CreateWorkerClientRequest();
+        provider_context->CreateWorkerClientRequest();
+    // TODO(horo): Use this host pointer also when S13nServiceWorker is not
+    // enabled once we support navigator.serviceWorker on dedicated workers:
+    // crbug.com/371690. Currently we use this only to call
+    // GetControllerServiceWorker() from the worker thread if S13nServiceWorker
+    // is enabled.
+    if (ServiceWorkerUtils::IsServicificationEnabled())
+      container_host_ptr_info = provider_context->CloneContainerHostPtrInfo();
   }
 
   ChildURLLoaderFactoryGetter* url_loader_factory_getter =
       GetDefaultURLLoaderFactoryGetter();
   DCHECK(url_loader_factory_getter);
   std::unique_ptr<WorkerFetchContextImpl> worker_fetch_context =
-      base::MakeUnique<WorkerFetchContextImpl>(
+      std::make_unique<WorkerFetchContextImpl>(
           std::move(service_worker_client_request),
+          std::move(container_host_ptr_info),
           url_loader_factory_getter->GetClonedInfo());
 
   worker_fetch_context->set_parent_frame_id(routing_id_);
@@ -3166,10 +3198,11 @@ RenderFrameImpl::CreateWorkerFetchContext() {
       frame_->GetDocument().SiteForCookies());
   worker_fetch_context->set_is_secure_context(
       frame_->GetDocument().IsSecureContext());
-    worker_fetch_context->set_service_worker_provider_id(
-        provider->provider_id());
-    worker_fetch_context->set_is_controlled_by_service_worker(
-        provider->IsControlledByServiceWorker());
+  worker_fetch_context->set_service_worker_provider_id(provider->provider_id());
+  worker_fetch_context->set_is_controlled_by_service_worker(
+      provider->IsControlledByServiceWorker());
+  worker_fetch_context->set_origin_url(
+      GURL(frame_->GetDocument().Url()).GetOrigin());
   for (auto& observer : observers_)
     observer.WillCreateWorkerFetchContext(worker_fetch_context.get());
   return std::move(worker_fetch_context);
@@ -3222,13 +3255,12 @@ RenderFrameImpl::CreateServiceWorkerProvider() {
     // The context can be null when the frame is sandboxed.
     return nullptr;
   }
-  return base::MakeUnique<WebServiceWorkerProviderImpl>(
+  return std::make_unique<WebServiceWorkerProviderImpl>(
       ChildThreadImpl::current()->thread_safe_sender(), provider->context());
 }
 
 service_manager::InterfaceProvider* RenderFrameImpl::GetInterfaceProvider() {
-  DCHECK(remote_interfaces_);
-  return remote_interfaces_.get();
+  return &remote_interfaces_;
 }
 
 void RenderFrameImpl::DidAccessInitialDocument() {
@@ -3266,6 +3298,7 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
   // Synchronously notify the browser of a child frame creation to get the
   // routing_id for the RenderFrame.
   int child_routing_id = MSG_ROUTING_NONE;
+  mojo::MessagePipeHandle child_interface_provider_handle;
   base::UnguessableToken devtools_frame_token;
   FrameHostMsg_CreateChildFrame_Params params;
   params.parent_routing_id = routing_id_;
@@ -3293,6 +3326,7 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
       ConvertWebFrameOwnerPropertiesToFrameOwnerProperties(
           frame_owner_properties);
   Send(new FrameHostMsg_CreateChildFrame(params, &child_routing_id,
+                                         &child_interface_provider_handle,
                                          &devtools_frame_token));
 
   // Allocation of routing id failed, so we can't create a child frame. This can
@@ -3301,6 +3335,12 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
   // RenderProcessHost, but the renderer process hasn't quit yet.
   if (child_routing_id == MSG_ROUTING_NONE)
     return nullptr;
+
+  CHECK(child_interface_provider_handle.is_valid());
+  service_manager::mojom::InterfaceProviderPtr child_interface_provider;
+  child_interface_provider.Bind(
+      service_manager::mojom::InterfaceProviderPtrInfo(
+          mojo::ScopedMessagePipeHandle(child_interface_provider_handle), 0u));
 
   // This method is always called by local frames, never remote frames.
 
@@ -3312,7 +3352,8 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
 
   // Create the RenderFrame and WebLocalFrame, linking the two.
   RenderFrameImpl* child_render_frame = RenderFrameImpl::Create(
-      render_view_, child_routing_id, devtools_frame_token);
+      render_view_, child_routing_id, std::move(child_interface_provider),
+      devtools_frame_token);
   child_render_frame->unique_name_helper_.set_propagated_name(
       params.frame_unique_name);
   child_render_frame->InitializeBlameContext(this);
@@ -3849,8 +3890,17 @@ void RenderFrameImpl::DidCommitProvisionalLoad(
   // Navigations that change the document represent a new content source.  Keep
   // track of that on the widget to help the browser process detect when stale
   // compositor frames are being shown after a commit.
-  if (is_main_frame_ && !navigation_state->WasWithinSameDocument())
+  if (is_main_frame_ && !navigation_state->WasWithinSameDocument()) {
     GetRenderWidget()->IncrementContentSourceId();
+
+    // Update the URL used to key Ukm metrics in the compositor if the
+    // navigation is not in the same document, which represents a new source
+    // URL.
+    // Note that this is only done for the main frame since the metrics for all
+    // frames are keyed to the main frame's URL.
+    if (GetRenderWidget()->compositor())
+      GetRenderWidget()->compositor()->SetURLForUkm(GetLoadingUrl());
+  }
 
   // When we perform a new navigation, we need to update the last committed
   // session history entry with state for the page we are leaving. Do this
@@ -5070,7 +5120,7 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
   }
 
   std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params> params =
-      base::MakeUnique<FrameHostMsg_DidCommitProvisionalLoad_Params>();
+      std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>();
   params->http_status_code = response.HttpStatusCode();
   params->url_is_unreachable = document_loader->HasUnreachableURL();
   params->method = "GET";
@@ -6204,7 +6254,7 @@ void RenderFrameImpl::NavigateInternal(
   bool has_history_navigation_in_frame = false;
 
 #if defined(OS_ANDROID)
-  request.SetHasUserGesture(request_params.has_user_gesture);
+  request.SetHasUserGesture(common_params.has_user_gesture);
 #endif
 
   if (browser_side_navigation) {
@@ -6469,7 +6519,7 @@ void RenderFrameImpl::InitializeUserMediaClient() {
   DCHECK(!web_user_media_client_);
   web_user_media_client_ = new UserMediaClientImpl(
       this, RenderThreadImpl::current()->GetPeerConnectionDependencyFactory(),
-      base::MakeUnique<MediaStreamDispatcher>(this),
+      std::make_unique<MediaStreamDispatcher>(this),
       render_thread->GetWorkerTaskRunner());
   registry_.AddInterface(
       base::Bind(&MediaDevicesListenerImpl::Create, GetRoutingID()));
@@ -6540,10 +6590,10 @@ void RenderFrameImpl::BeginNavigation(const NavigationPolicyInfo& info) {
   // TODO(clamy): Data urls should not be sent back to the browser either.
   // These values are assumed on the browser side for navigations. These checks
   // ensure the renderer has the correct values.
-  DCHECK_EQ(FETCH_REQUEST_MODE_NAVIGATE,
-            GetFetchRequestModeForWebURLRequest(info.url_request));
-  DCHECK_EQ(FETCH_CREDENTIALS_MODE_INCLUDE,
-            GetFetchCredentialsModeForWebURLRequest(info.url_request));
+  DCHECK_EQ(network::mojom::FetchRequestMode::kNavigate,
+            info.url_request.GetFetchRequestMode());
+  DCHECK_EQ(network::mojom::FetchCredentialsMode::kInclude,
+            info.url_request.GetFetchCredentialsMode());
   DCHECK(GetFetchRedirectModeForWebURLRequest(info.url_request) ==
          FetchRedirectMode::MANUAL_MODE);
   DCHECK(frame_->Parent() ||
@@ -6573,7 +6623,6 @@ void RenderFrameImpl::BeginNavigation(const NavigationPolicyInfo& info) {
 
   BeginNavigationParams begin_navigation_params(
       GetWebURLRequestHeadersAsString(info.url_request), load_flags,
-      info.url_request.HasUserGesture(),
       info.url_request.GetServiceWorkerMode() !=
           blink::WebURLRequest::ServiceWorkerMode::kAll,
       GetRequestContextTypeForWebURLRequest(info.url_request),
@@ -6840,6 +6889,9 @@ void RenderFrameImpl::RegisterMojoInterfaces() {
 
   registry_.AddInterface(
       base::Bind(&RenderFrameImpl::BindWidget, weak_factory_.GetWeakPtr()));
+
+  GetAssociatedInterfaceRegistry()->AddInterface(base::Bind(
+      &DevToolsFrontendImpl::CreateMojoService, base::Unretained(this)));
 
   if (!frame_->Parent()) {
     // Only main frame have ImageDownloader service.

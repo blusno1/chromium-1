@@ -413,7 +413,7 @@ void ChildThreadImpl::ConnectChannel(
   mojo::ScopedMessagePipeHandle handle =
       mojo::MakeRequest(&bootstrap).PassMessagePipe();
   service_manager_connection_->AddConnectionFilter(
-      base::MakeUnique<ChannelBootstrapFilter>(bootstrap.PassInterface()));
+      std::make_unique<ChannelBootstrapFilter>(bootstrap.PassInterface()));
 
   channel_->Init(
       IPC::ChannelMojo::CreateClientFactory(
@@ -470,11 +470,14 @@ void ChildThreadImpl::Init(const Options& options) {
   thread_safe_sender_ = new ThreadSafeSender(
       message_loop_->task_runner(), sync_message_filter_.get());
 
-  auto registry = base::MakeUnique<service_manager::BinderRegistry>();
+  auto registry = std::make_unique<service_manager::BinderRegistry>();
   registry->AddInterface(base::Bind(&ChildHistogramFetcherFactoryImpl::Create),
                          GetIOTaskRunner());
+  registry->AddInterface(base::Bind(&ChildThreadImpl::OnChildControlRequest,
+                                    base::Unretained(this)),
+                         base::ThreadTaskRunnerHandle::Get());
   GetServiceManagerConnection()->AddConnectionFilter(
-      base::MakeUnique<SimpleConnectionFilter>(std::move(registry)));
+      std::make_unique<SimpleConnectionFilter>(std::move(registry)));
 
   InitTracing();
 
@@ -507,7 +510,7 @@ void ChildThreadImpl::Init(const Options& options) {
   // not create the power monitor.
   if (!base::PowerMonitor::Get() && service_manager_connection_) {
     auto power_monitor_source =
-        base::MakeUnique<device::PowerMonitorBroadcastSource>(
+        std::make_unique<device::PowerMonitorBroadcastSource>(
             GetConnector(), GetIOTaskRunner());
     power_monitor_.reset(
         new base::PowerMonitor(std::move(power_monitor_source)));
@@ -595,7 +598,7 @@ void ChildThreadImpl::InitTracing() {
       ChildProcess::current()->io_task_runner()));
 
   chrome_trace_event_agent_ =
-      base::MakeUnique<tracing::ChromeTraceEventAgent>(GetConnector());
+      std::make_unique<tracing::ChromeTraceEventAgent>(GetConnector());
 }
 
 ChildThreadImpl::~ChildThreadImpl() {
@@ -704,7 +707,7 @@ std::unique_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     return nullptr;
   }
 
-  return base::MakeUnique<base::SharedMemory>(shared_buf, false);
+  return std::make_unique<base::SharedMemory>(shared_buf, false);
 }
 
 #if defined(OS_LINUX)
@@ -715,24 +718,6 @@ void ChildThreadImpl::SetThreadPriority(base::PlatformThreadId id,
 #endif
 
 bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(ChildThreadImpl, msg)
-    IPC_MESSAGE_HANDLER(ChildProcessMsg_Shutdown, OnShutdown)
-#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
-    IPC_MESSAGE_HANDLER(ChildProcessMsg_SetIPCLoggingEnabled,
-                        OnSetIPCLoggingEnabled)
-#endif
-    IPC_MESSAGE_HANDLER(ChildProcessMsg_SetProcessBackgrounded,
-                        OnProcessBackgrounded)
-    IPC_MESSAGE_HANDLER(ChildProcessMsg_PurgeAndSuspend,
-                        OnProcessPurgeAndSuspend)
-    IPC_MESSAGE_HANDLER(ChildProcessMsg_Resume, OnProcessResume)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-
-  if (handled)
-    return true;
-
   if (msg.routing_id() == MSG_ROUTING_CONTROL)
     return OnControlMessageReceived(msg);
 
@@ -763,31 +748,23 @@ bool ChildThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {
   return false;
 }
 
-void ChildThreadImpl::OnProcessBackgrounded(bool backgrounded) {
-  // Set timer slack to maximum on main thread when in background.
-  base::TimerSlack timer_slack = base::TIMER_SLACK_NONE;
-  if (backgrounded)
-    timer_slack = base::TIMER_SLACK_MAXIMUM;
-  base::MessageLoop::current()->SetTimerSlack(timer_slack);
-}
-
-void ChildThreadImpl::OnProcessPurgeAndSuspend() {
-}
-
-void ChildThreadImpl::OnProcessResume() {}
-
-void ChildThreadImpl::OnShutdown() {
+void ChildThreadImpl::ProcessShutdown() {
   base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
+void ChildThreadImpl::SetIPCLoggingEnabled(bool enable) {
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
-void ChildThreadImpl::OnSetIPCLoggingEnabled(bool enable) {
   if (enable)
     IPC::Logging::GetInstance()->Enable();
   else
     IPC::Logging::GetInstance()->Disable();
-}
 #endif  //  IPC_MESSAGE_LOG_ENABLED
+}
+
+void ChildThreadImpl::OnChildControlRequest(
+    mojom::ChildControlRequest request) {
+  child_control_bindings_.AddBinding(this, std::move(request));
+}
 
 ChildThreadImpl* ChildThreadImpl::current() {
   return g_lazy_tls.Pointer()->Get();

@@ -1025,6 +1025,14 @@ const void* ThreadActivityTracker::GetBaseAddress() {
   return header_;
 }
 
+void ThreadActivityTracker::ClearDataChangedForTesting() {
+  header_->data_unchanged.store(2, std::memory_order_relaxed);
+}
+
+bool ThreadActivityTracker::WasDataChangedForTesting() {
+  return !header_->data_unchanged.load(std::memory_order_relaxed);
+}
+
 void ThreadActivityTracker::SetOwningProcessIdForTesting(int64_t pid,
                                                          int64_t stamp) {
   header_->owner.SetOwningProcessIdForTesting(pid, stamp);
@@ -1406,7 +1414,8 @@ void GlobalActivityTracker::RecordProcessLaunch(
     // TODO(bcwhite): Measure this in UMA.
     NOTREACHED() << "Process #" << process_id
                  << " was previously recorded as \"launched\""
-                 << " with no corresponding exit.";
+                 << " with no corresponding exit.\n"
+                 << known_processes_[pid];
     known_processes_.erase(pid);
   }
 

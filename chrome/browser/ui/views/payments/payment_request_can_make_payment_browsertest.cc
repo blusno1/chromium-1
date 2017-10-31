@@ -342,6 +342,9 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCanMakePaymentQueryPMITest,
 // NotSupportedError to avoid user fingerprinting.
 IN_PROC_BROWSER_TEST_F(PaymentRequestCanMakePaymentQueryPMITest,
                        QueryQuotaForPaymentAppsInIncognitoMode) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kServiceWorkerPaymentApps);
+
   SetIncognito();
 
   CallCanMakePayment(CheckFor::ALICE_PAY);

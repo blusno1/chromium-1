@@ -27,6 +27,7 @@
 #include "media/base/media.h"
 #include "media/media_features.h"
 #include "net/cookies/cookie_monster.h"
+#include "third_party/WebKit/public/platform/InterfaceRegistry.h"
 #include "third_party/WebKit/public/platform/WebConnectionType.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebNetworkStateNotifier.h"
@@ -104,7 +105,7 @@ class WebURLLoaderFactoryWithMock : public blink::WebURLLoaderFactory {
     DCHECK(platform_);
     // This loader should be used only for process-local resources such as
     // data URLs.
-    auto default_loader = base::MakeUnique<content::WebURLLoaderImpl>(
+    auto default_loader = std::make_unique<content::WebURLLoaderImpl>(
         nullptr, task_runner, nullptr);
     return platform_->GetURLLoaderMockFactory()->CreateURLLoader(
         std::move(default_loader));
@@ -158,7 +159,8 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport()
   // Initialize mojo firstly to enable Blink initialization to use it.
   InitializeMojo();
 
-  blink::Initialize(this);
+  blink::Initialize(this,
+                    blink::InterfaceRegistry::GetEmptyInterfaceRegistry());
   blink::SetLayoutTestMode(true);
   blink::WebRuntimeFeatures::EnableDatabase(true);
   blink::WebRuntimeFeatures::EnableNotifications(true);
@@ -296,7 +298,7 @@ TestBlinkWebUnitTestSupport::CreateFlingAnimationCurve(
     blink::WebGestureDevice device_source,
     const blink::WebFloatPoint& velocity,
     const blink::WebSize& cumulative_scroll) {
-  return base::MakeUnique<WebGestureCurveMock>(velocity, cumulative_scroll);
+  return std::make_unique<WebGestureCurveMock>(velocity, cumulative_scroll);
 }
 
 blink::WebURLLoaderMockFactory*
@@ -345,7 +347,7 @@ class TestWebRTCCertificateGenerator
             pem_private_key.Utf8(), pem_certificate.Utf8()));
     if (!certificate)
       return nullptr;
-    return base::MakeUnique<RTCCertificate>(certificate);
+    return std::make_unique<RTCCertificate>(certificate);
   }
 };
 
@@ -355,7 +357,7 @@ class TestWebRTCCertificateGenerator
 std::unique_ptr<blink::WebRTCCertificateGenerator>
 TestBlinkWebUnitTestSupport::CreateRTCCertificateGenerator() {
 #if BUILDFLAG(ENABLE_WEBRTC)
-  return base::MakeUnique<TestWebRTCCertificateGenerator>();
+  return std::make_unique<TestWebRTCCertificateGenerator>();
 #else
   return nullptr;
 #endif

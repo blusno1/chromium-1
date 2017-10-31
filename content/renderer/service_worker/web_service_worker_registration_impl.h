@@ -104,14 +104,11 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
   blink::WebServiceWorkerRegistrationProxy* Proxy() override;
   blink::WebURL Scope() const override;
   void Update(
-      blink::WebServiceWorkerProvider* provider,
       std::unique_ptr<WebServiceWorkerUpdateCallbacks> callbacks) override;
-  void Unregister(blink::WebServiceWorkerProvider* provider,
-                  std::unique_ptr<WebServiceWorkerUnregistrationCallbacks>
+  void Unregister(std::unique_ptr<WebServiceWorkerUnregistrationCallbacks>
                       callbacks) override;
   void EnableNavigationPreload(
       bool enable,
-      blink::WebServiceWorkerProvider* provider,
       std::unique_ptr<WebEnableNavigationPreloadCallbacks> callbacks) override;
   void GetNavigationPreloadState(
       blink::WebServiceWorkerProvider* provider,
@@ -135,6 +132,13 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
   explicit WebServiceWorkerRegistrationImpl(
       blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info);
   ~WebServiceWorkerRegistrationImpl() override;
+
+  // Implements blink::mojom::ServiceWorkerRegistrationObject.
+  void SetVersionAttributes(
+      int changed_mask,
+      blink::mojom::ServiceWorkerObjectInfoPtr installing,
+      blink::mojom::ServiceWorkerObjectInfoPtr waiting,
+      blink::mojom::ServiceWorkerObjectInfoPtr active) override;
 
   // RefCounted traits implementation, rather than delete |impl| directly, calls
   // |impl->DetachAndMaybeDestroy()| to notify that the last reference to it has
@@ -163,7 +167,7 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
   // -     |kDetached| --> |kAttachedAndBound|
   //   When |this| is in |kDetached| state, if an inflight
   //   ServiceWorkerRegistrationObjectInfo for the same JavaScript registration
-  //   object arrived, |this| is resued to be provided to Blink. In such a case
+  //   object arrived, |this| is reused to be provided to Blink. In such a case
   //   AttachForServiceWorkerGlobalScope() or AttachForServiceWorkerClient()
   //   sets |state_| to |kAttachedAndBound|.
   enum class LifecycleState {

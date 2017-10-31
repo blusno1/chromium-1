@@ -90,6 +90,7 @@
 #include "content/common/input_messages.h"
 #include "content/common/inter_process_time_ticks_converter.h"
 #include "content/common/navigation_params.h"
+#include "content/common/navigation_subresource_loader_params.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/site_isolation_policy.h"
@@ -138,8 +139,8 @@
 #include "services/device/public/interfaces/vibration_manager.mojom.h"
 #include "services/device/public/interfaces/wake_lock.mojom.h"
 #include "services/device/public/interfaces/wake_lock_context.mojom.h"
+#include "services/resource_coordinator/public/cpp/frame_resource_coordinator.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
-#include "services/resource_coordinator/public/cpp/resource_coordinator_interface.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/shape_detection/public/interfaces/barcodedetection.mojom.h"
@@ -269,7 +270,7 @@ class RemoterFactoryImpl final : public media::mojom::RemoterFactory {
                    int routing_id,
                    media::mojom::RemoterFactoryRequest request) {
     mojo::MakeStrongBinding(
-        base::MakeUnique<RemoterFactoryImpl>(process_id, routing_id),
+        std::make_unique<RemoterFactoryImpl>(process_id, routing_id),
         std::move(request));
   }
 
@@ -289,9 +290,9 @@ class RemoterFactoryImpl final : public media::mojom::RemoterFactory {
 };
 #endif  // BUILDFLAG(ENABLE_MEDIA_REMOTING)
 
-void CreateResourceCoordinatorFrameInterface(
+void CreateFrameResourceCoordinator(
     RenderFrameHostImpl* render_frame_host,
-    resource_coordinator::mojom::CoordinationUnitRequest request) {
+    resource_coordinator::mojom::FrameCoordinationUnitRequest request) {
   render_frame_host->GetFrameResourceCoordinator()->AddBinding(
       std::move(request));
 }
@@ -415,7 +416,7 @@ void CreateMediaPlayerRenderer(int process_id,
                                RenderFrameHostDelegate* delegate,
                                media::mojom::RendererRequest request) {
   std::unique_ptr<MediaPlayerRenderer> renderer =
-      base::MakeUnique<MediaPlayerRenderer>(process_id, routing_id,
+      std::make_unique<MediaPlayerRenderer>(process_id, routing_id,
                                             delegate->GetAsWebContents());
 
   // base::Unretained is safe here because the lifetime of the MediaPlayerRender
@@ -502,10 +503,10 @@ RenderFrameHostImpl::RenderFrameHostImpl(SiteInstance* site_instance,
       has_selection_(false),
       is_audible_(false),
       last_navigation_previews_state_(PREVIEWS_UNSPECIFIED),
-      frame_host_interface_broker_binding_(this),
       frame_host_associated_binding_(this),
       waiting_for_init_(renderer_initiated_creation),
       has_focused_editable_element_(false),
+      interface_provider_binding_(this),
       weak_ptr_factory_(this) {
   frame_tree_->AddRenderViewHostRef(render_view_host_);
   GetProcess()->AddRoute(routing_id_, this);
@@ -531,6 +532,7 @@ RenderFrameHostImpl::RenderFrameHostImpl(SiteInstance* site_instance,
   }
 
   SetUpMojoIfNeeded();
+
   swapout_event_monitor_timeout_.reset(new TimeoutMonitor(base::Bind(
       &RenderFrameHostImpl::OnSwappedOut, weak_ptr_factory_.GetWeakPtr())));
   beforeunload_timeout_.reset(
@@ -1152,7 +1154,11 @@ bool RenderFrameHostImpl::CreateRenderFrame(int proxy_routing_id,
 
   DCHECK(GetProcess()->HasConnection());
 
+  service_manager::mojom::InterfaceProviderPtr interface_provider;
+  BindInterfaceProviderRequest(mojo::MakeRequest(&interface_provider));
+
   mojom::CreateFrameParamsPtr params = mojom::CreateFrameParams::New();
+  params->interface_provider = std::move(interface_provider);
   params->routing_id = routing_id_;
   params->proxy_routing_id = proxy_routing_id;
   params->opener_routing_id = opener_routing_id;
@@ -1280,8 +1286,7 @@ void RenderFrameHostImpl::OnAudibleStateChanged(bool is_audible) {
     GetProcess()->OnMediaStreamRemoved();
   is_audible_ = is_audible;
 
-  GetFrameResourceCoordinator()->SetProperty(
-      resource_coordinator::mojom::PropertyType::kAudible, is_audible_);
+  GetFrameResourceCoordinator()->SetAudibility(is_audible_);
 }
 
 void RenderFrameHostImpl::OnDidAddMessageToConsole(
@@ -1318,6 +1323,8 @@ void RenderFrameHostImpl::OnDidAddMessageToConsole(
 
 void RenderFrameHostImpl::OnCreateChildFrame(
     int new_routing_id,
+    service_manager::mojom::InterfaceProviderRequest
+        new_interface_provider_provider_request,
     blink::WebTreeScopeType scope,
     const std::string& frame_name,
     const std::string& frame_unique_name,
@@ -1326,6 +1333,7 @@ void RenderFrameHostImpl::OnCreateChildFrame(
     const FrameOwnerProperties& frame_owner_properties) {
   // TODO(lukasza): Call ReceivedBadMessage when |frame_unique_name| is empty.
   DCHECK(!frame_unique_name.empty());
+  DCHECK(new_interface_provider_provider_request.is_pending());
 
   // The RenderFrame corresponding to this host sent an IPC message to create a
   // child, but by the time we get here, it's possible for the host to have been
@@ -1334,9 +1342,11 @@ void RenderFrameHostImpl::OnCreateChildFrame(
   if (!is_active() || !IsCurrent() || !render_frame_created_)
     return;
 
-  // |new_routing_id| and |devtools_frame_token| were generated on the browser's
-  // IO thread and not taken from the renderer process.
+  // |new_routing_id|, |new_interface_provider_provider_request|, and
+  // |devtools_frame_token| were generated on the browser's IO thread and not
+  // taken from the renderer process.
   frame_tree_->AddFrame(frame_tree_node_, GetProcess()->GetID(), new_routing_id,
+                        std::move(new_interface_provider_provider_request),
                         scope, frame_name, frame_unique_name,
                         devtools_frame_token, frame_policy,
                         frame_owner_properties);
@@ -1506,8 +1516,7 @@ void RenderFrameHostImpl::DidCommitProvisionalLoad(
   // navigating already and sent it before hearing the FrameMsg_Stop message.
   // Treat this as an implicit beforeunload ack to allow the pending navigation
   // to continue.
-  if (is_waiting_for_beforeunload_ack_ &&
-      unload_ack_is_for_navigation_ &&
+  if (is_waiting_for_beforeunload_ack_ && unload_ack_is_for_navigation_ &&
       !GetParent()) {
     base::TimeTicks approx_renderer_start_time = send_before_unload_start_time_;
     OnBeforeUnloadACK(true, approx_renderer_start_time, base::TimeTicks::Now());
@@ -1845,6 +1854,7 @@ void RenderFrameHostImpl::OnRenderProcessGone(int status, int exit_code) {
   // reset.
   SetRenderFrameCreated(false);
   InvalidateMojoConnection();
+  interface_provider_binding_.Close();
 
   // Execute any pending AX tree snapshot callbacks with an empty response,
   // since we're never going to get a response from this renderer.
@@ -1993,10 +2003,8 @@ void RenderFrameHostImpl::OnRunJavaScriptDialog(
     const GURL& frame_url,
     JavaScriptDialogType dialog_type,
     IPC::Message* reply_msg) {
-  if (dialog_type == JavaScriptDialogType::JAVASCRIPT_DIALOG_TYPE_ALERT) {
-    GetFrameResourceCoordinator()->SendEvent(
-        resource_coordinator::mojom::Event::kAlertFired);
-  }
+  if (dialog_type == JavaScriptDialogType::JAVASCRIPT_DIALOG_TYPE_ALERT)
+    GetFrameResourceCoordinator()->OnAlertFired();
 
   if (IsWaitingForUnloadACK()) {
     SendJavaScriptDialogReply(reply_msg, true, base::string16());
@@ -2164,6 +2172,10 @@ bool RenderFrameHostImpl::IsFeatureEnabled(
     blink::WebFeaturePolicyFeature feature) {
   return feature_policy_ && feature_policy_->IsFeatureEnabledForOrigin(
                                 feature, GetLastCommittedOrigin());
+}
+
+void RenderFrameHostImpl::ViewSource() {
+  delegate_->ViewSource(this);
 }
 
 void RenderFrameHostImpl::OnDidAccessInitialDocument() {
@@ -2343,7 +2355,7 @@ void RenderFrameHostImpl::OnBeginNavigation(
     return;
 
   if (waiting_for_init_) {
-    pendinging_navigate_ = base::MakeUnique<PendingNavigation>(
+    pendinging_navigate_ = std::make_unique<PendingNavigation>(
         validated_params, validated_begin_params);
     return;
   }
@@ -2747,6 +2759,16 @@ void RenderFrameHostImpl::OnRequestOverlayRoutingToken() {
                                            *overlay_routing_token_));
 }
 
+void RenderFrameHostImpl::BindInterfaceProviderRequest(
+    service_manager::mojom::InterfaceProviderRequest
+        interface_provider_request) {
+  DCHECK(!interface_provider_binding_.is_bound());
+  DCHECK(interface_provider_request.is_pending());
+  interface_provider_binding_.Bind(FilterRendererExposedInterfaces(
+      mojom::kNavigation_FrameSpec, GetProcess()->GetID(),
+      std::move(interface_provider_request)));
+}
+
 void RenderFrameHostImpl::OnShowCreatedWindow(int pending_widget_routing_id,
                                               WindowOpenDisposition disposition,
                                               const gfx::Rect& initial_rect,
@@ -2863,12 +2885,18 @@ void RenderFrameHostImpl::CreateNewWindow(
 
   // The view, widget, and frame should all be routable now.
   DCHECK(RenderViewHost::FromID(render_process_id, render_view_route_id));
-  RenderFrameHost* rfh =
-      RenderFrameHost::FromID(GetProcess()->GetID(), main_frame_route_id);
+  RenderFrameHostImpl* rfh =
+      RenderFrameHostImpl::FromID(GetProcess()->GetID(), main_frame_route_id);
   DCHECK(rfh);
+
+  service_manager::mojom::InterfaceProviderPtr main_frame_interface_provider;
+  rfh->BindInterfaceProviderRequest(
+      mojo::MakeRequest(&main_frame_interface_provider));
+
   mojom::CreateNewWindowReplyPtr reply = mojom::CreateNewWindowReply::New(
       render_view_route_id, main_frame_route_id, main_frame_widget_route_id,
-      cloned_namespace->id(), rfh->GetDevToolsFrameToken());
+      std::move(main_frame_interface_provider), cloned_namespace->id(),
+      rfh->GetDevToolsFrameToken());
   std::move(callback).Run(mojom::CreateNewWindowStatus::kSuccess,
                           std::move(reply));
 }
@@ -2887,7 +2915,7 @@ void RenderFrameHostImpl::IssueKeepAliveHandle(
 
   if (!keep_alive_handle_factory_) {
     keep_alive_handle_factory_ =
-        base::MakeUnique<KeepAliveHandleFactory>(GetProcess());
+        std::make_unique<KeepAliveHandleFactory>(GetProcess());
   }
   keep_alive_handle_factory_->Create(std::move(request));
 }
@@ -3004,8 +3032,8 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
   }
 
   if (resource_coordinator::IsResourceCoordinatorEnabled()) {
-    registry_->AddInterface(base::Bind(&CreateResourceCoordinatorFrameInterface,
-                                       base::Unretained(this)));
+    registry_->AddInterface(
+        base::Bind(&CreateFrameResourceCoordinator, base::Unretained(this)));
   }
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -3074,10 +3102,16 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
         base::Bind(&InputInjectorImpl::Create, weak_ptr_factory_.GetWeakPtr()));
   }
 
-  registry_->AddInterface(base::Bind(&media::VideoDecodeStatsRecorder::Create));
-
   registry_->AddInterface(
       base::BindRepeating(GetRestrictedCookieManager, base::Unretained(this)));
+
+  // Only save decode stats when on-the-record.
+  if (!GetSiteInstance()->GetBrowserContext()->IsOffTheRecord()) {
+    media::VideoDecodePerfHistory* video_perf_history =
+        GetSiteInstance()->GetBrowserContext()->GetVideoDecodePerfHistory();
+    registry_->AddInterface(base::BindRepeating(
+        &media::VideoDecodeStatsRecorder::Create, video_perf_history));
+  }
 }
 
 void RenderFrameHostImpl::ResetWaitingState() {
@@ -3184,11 +3218,11 @@ void RenderFrameHostImpl::NavigateToInterstitialURL(const GURL& data_url) {
       GURL(), GURL(), PREVIEWS_OFF, base::TimeTicks::Now(), "GET", nullptr,
       base::Optional<SourceLocation>(),
       CSPDisposition::CHECK /* should_check_main_world_csp */,
-      false /* started_from_context_menu */);
+      false /* started_from_context_menu */, false /* has_user_gesture */);
   if (IsBrowserSideNavigationEnabled()) {
     CommitNavigation(nullptr, nullptr, mojo::ScopedDataPipeConsumerHandle(),
                      common_params, RequestNavigationParams(), false,
-                     mojom::URLLoaderFactoryPtrInfo());
+                     base::nullopt);
   } else {
     Navigate(common_params, StartNavigationParams(), RequestNavigationParams());
   }
@@ -3339,7 +3373,7 @@ void RenderFrameHostImpl::CommitNavigation(
     const CommonNavigationParams& common_params,
     const RequestNavigationParams& request_params,
     bool is_view_source,
-    mojom::URLLoaderFactoryPtrInfo subresource_url_loader_factory_info) {
+    base::Optional<SubresourceLoaderParams> subresource_loader_params) {
   TRACE_EVENT2("navigation", "RenderFrameHostImpl::CommitNavigation",
                "frame_tree_node", frame_tree_node_->frame_tree_node_id(), "url",
                common_params.url.possibly_invalid_spec());
@@ -3379,18 +3413,11 @@ void RenderFrameHostImpl::CommitNavigation(
   const ResourceResponseHead head = response ?
       response->head : ResourceResponseHead();
   mojom::URLLoaderFactoryPtr default_subresource_url_loader_factory;
-  // TODO(scottmg): Pass a factory for SW, etc. once we have one.
   if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-    if (!subresource_url_loader_factory_info.is_valid()) {
-      const auto& schemes = URLDataManagerBackend::GetWebUISchemes();
-      if (std::find(schemes.begin(), schemes.end(),
-                    common_params.url.scheme()) != schemes.end()) {
-        default_subresource_url_loader_factory =
-            CreateWebUIURLLoader(frame_tree_node_);
-      }
-    } else {
+    if (subresource_loader_params &&
+        subresource_loader_params->loader_factory_info.is_valid()) {
       default_subresource_url_loader_factory.Bind(
-          std::move(subresource_url_loader_factory_info));
+          std::move(subresource_loader_params->loader_factory_info));
     }
   }
   GetNavigationControl()->CommitNavigation(
@@ -3459,8 +3486,8 @@ void RenderFrameHostImpl::SetUpMojoIfNeeded() {
   if (registry_.get())
     return;
 
-  associated_registry_ = base::MakeUnique<AssociatedInterfaceRegistryImpl>();
-  registry_ = base::MakeUnique<service_manager::BinderRegistry>();
+  associated_registry_ = std::make_unique<AssociatedInterfaceRegistryImpl>();
+  registry_ = std::make_unique<service_manager::BinderRegistry>();
 
   auto make_binding = [](RenderFrameHostImpl* impl,
                          mojom::FrameHostAssociatedRequest request) {
@@ -3472,11 +3499,7 @@ void RenderFrameHostImpl::SetUpMojoIfNeeded() {
   RegisterMojoInterfaces();
   mojom::FrameFactoryPtr frame_factory;
   BindInterface(GetProcess(), &frame_factory);
-
-  mojom::FrameHostInterfaceBrokerPtr broker_proxy;
-  frame_host_interface_broker_binding_.Bind(mojo::MakeRequest(&broker_proxy));
-  frame_factory->CreateFrame(routing_id_, MakeRequest(&frame_),
-                             std::move(broker_proxy));
+  frame_factory->CreateFrame(routing_id_, MakeRequest(&frame_));
 
   service_manager::mojom::InterfaceProviderPtr remote_interfaces;
   frame_->GetInterfaceProvider(mojo::MakeRequest(&remote_interfaces));
@@ -3494,8 +3517,8 @@ void RenderFrameHostImpl::InvalidateMojoConnection() {
   registry_.reset();
 
   frame_.reset();
-  frame_host_interface_broker_binding_.Close();
   frame_bindings_control_.reset();
+  frame_host_associated_binding_.Close();
   navigation_control_.reset();
 
   // Disconnect with ImageDownloader Mojo service in RenderFrame.
@@ -3614,24 +3637,23 @@ RenderFrameHostImpl::GetMojoImageDownloader() {
   return mojo_image_downloader_;
 }
 
-resource_coordinator::ResourceCoordinatorInterface*
+resource_coordinator::FrameResourceCoordinator*
 RenderFrameHostImpl::GetFrameResourceCoordinator() {
   if (frame_resource_coordinator_)
     return frame_resource_coordinator_.get();
 
   if (!resource_coordinator::IsResourceCoordinatorEnabled()) {
     frame_resource_coordinator_ =
-        base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
-            nullptr, resource_coordinator::CoordinationUnitType::kFrame);
+        std::make_unique<resource_coordinator::FrameResourceCoordinator>(
+            nullptr);
   } else {
     auto* connection = ServiceManagerConnection::GetForProcess();
     frame_resource_coordinator_ =
-        base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
-            connection ? connection->GetConnector() : nullptr,
-            resource_coordinator::CoordinationUnitType::kFrame);
+        std::make_unique<resource_coordinator::FrameResourceCoordinator>(
+            connection ? connection->GetConnector() : nullptr);
   }
   if (parent_) {
-    parent_->GetFrameResourceCoordinator()->AddChild(
+    parent_->GetFrameResourceCoordinator()->AddChildFrame(
         *frame_resource_coordinator_);
   }
   return frame_resource_coordinator_.get();
@@ -3804,14 +3826,6 @@ void RenderFrameHostImpl::FilesSelectedInChooser(
 
 bool RenderFrameHostImpl::HasSelection() {
   return has_selection_;
-}
-
-void RenderFrameHostImpl::GetInterfaceProvider(
-    service_manager::mojom::InterfaceProviderRequest interfaces) {
-  interface_provider_bindings_.AddBinding(
-      this, FilterRendererExposedInterfaces(mojom::kNavigation_FrameSpec,
-                                            GetProcess()->GetID(),
-                                            std::move(interfaces)));
 }
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
@@ -4065,7 +4079,7 @@ WebBluetoothServiceImpl* RenderFrameHostImpl::CreateWebBluetoothService(
   // |binding_| which may run the error handler. |binding_| can't run the error
   // handler after it's destroyed so it can't run after the RFHI is destroyed.
   auto web_bluetooth_service =
-      base::MakeUnique<WebBluetoothServiceImpl>(this, std::move(request));
+      std::make_unique<WebBluetoothServiceImpl>(this, std::move(request));
   web_bluetooth_service->SetClientConnectionErrorHandler(
       base::Bind(&RenderFrameHostImpl::DeleteWebBluetoothService,
                  base::Unretained(this), web_bluetooth_service.get()));
@@ -4329,7 +4343,7 @@ RenderFrameHostImpl::GetJavaRenderFrameHost() {
           GetUserData(kRenderFrameHostAndroidKey));
   if (!render_frame_host_android) {
     service_manager::mojom::InterfaceProviderPtr interface_provider_ptr;
-    java_interface_registry_ = base::MakeUnique<JavaInterfaceProvider>(
+    java_interface_registry_ = std::make_unique<JavaInterfaceProvider>(
         base::Bind(&RenderFrameHostImpl::ForwardGetInterfaceToRenderFrame,
                    weak_ptr_factory_.GetWeakPtr()),
         mojo::MakeRequest(&interface_provider_ptr));

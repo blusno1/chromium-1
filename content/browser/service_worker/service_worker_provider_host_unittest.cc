@@ -135,12 +135,12 @@ class ServiceWorkerProviderHostTest : public testing::Test {
     return host_raw;
   }
 
-  void Register(mojom::ServiceWorkerContainerHost* container_host,
-                GURL pattern,
-                GURL worker_url,
-                const base::Optional<blink::mojom::ServiceWorkerErrorType>&
-                    expected = base::nullopt) {
-    blink::mojom::ServiceWorkerErrorType error;
+  blink::mojom::ServiceWorkerErrorType Register(
+      mojom::ServiceWorkerContainerHost* container_host,
+      GURL pattern,
+      GURL worker_url) {
+    blink::mojom::ServiceWorkerErrorType error =
+        blink::mojom::ServiceWorkerErrorType::kUnknown;
     auto options = blink::mojom::ServiceWorkerRegistrationOptions::New(pattern);
     container_host->Register(
         worker_url, std::move(options),
@@ -148,53 +148,52 @@ class ServiceWorkerProviderHostTest : public testing::Test {
                           blink::mojom::ServiceWorkerErrorType error,
                           const base::Optional<std::string>& error_msg,
                           blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
-                              registration,
-                          const base::Optional<ServiceWorkerVersionAttributes>&
-                              attributes) { *out_error = error; },
+                              registration) { *out_error = error; },
                        &error));
     base::RunLoop().RunUntilIdle();
-    if (expected)
-      EXPECT_EQ(*expected, error);
+    return error;
   }
 
-  void GetRegistration(
+  blink::mojom::ServiceWorkerErrorType GetRegistration(
       mojom::ServiceWorkerContainerHost* container_host,
       GURL document_url,
-      const base::Optional<blink::mojom::ServiceWorkerErrorType>& expected =
-          base::nullopt) {
-    blink::mojom::ServiceWorkerErrorType error;
+      blink::mojom::ServiceWorkerRegistrationObjectInfoPtr* out_info =
+          nullptr) {
+    blink::mojom::ServiceWorkerErrorType error =
+        blink::mojom::ServiceWorkerErrorType::kUnknown;
     container_host->GetRegistration(
         document_url,
-        base::BindOnce([](blink::mojom::ServiceWorkerErrorType* out_error,
-                          blink::mojom::ServiceWorkerErrorType error,
-                          const base::Optional<std::string>& error_msg,
-                          blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
-                              registration,
-                          const base::Optional<ServiceWorkerVersionAttributes>&
-                              attributes) { *out_error = error; },
-                       &error));
+        base::BindOnce(
+            [](blink::mojom::ServiceWorkerErrorType* out_error,
+               blink::mojom::ServiceWorkerRegistrationObjectInfoPtr* out_info,
+               blink::mojom::ServiceWorkerErrorType error,
+               const base::Optional<std::string>& error_msg,
+               blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
+                   registration) {
+              *out_error = error;
+              if (out_info)
+                *out_info = std::move(registration);
+            },
+            &error, out_info));
     base::RunLoop().RunUntilIdle();
-    if (expected)
-      EXPECT_EQ(*expected, error);
+    return error;
   }
 
-  void GetRegistrations(
-      mojom::ServiceWorkerContainerHost* container_host,
-      const base::Optional<blink::mojom::ServiceWorkerErrorType>& expected =
-          base::nullopt) {
-    blink::mojom::ServiceWorkerErrorType error;
+  blink::mojom::ServiceWorkerErrorType GetRegistrations(
+      mojom::ServiceWorkerContainerHost* container_host) {
+    blink::mojom::ServiceWorkerErrorType error =
+        blink::mojom::ServiceWorkerErrorType::kUnknown;
     container_host->GetRegistrations(base::BindOnce(
         [](blink::mojom::ServiceWorkerErrorType* out_error,
            blink::mojom::ServiceWorkerErrorType error,
            const base::Optional<std::string>& error_msg,
            base::Optional<std::vector<
-               blink::mojom::ServiceWorkerRegistrationObjectInfoPtr>> infos,
-           const base::Optional<std::vector<ServiceWorkerVersionAttributes>>&
-               attrs) { *out_error = error; },
+               blink::mojom::ServiceWorkerRegistrationObjectInfoPtr>> infos) {
+          *out_error = error;
+        },
         &error));
     base::RunLoop().RunUntilIdle();
-    if (expected)
-      EXPECT_EQ(*expected, error);
+    return error;
   }
 
   void OnMojoError(const std::string& error) { bad_messages_.push_back(error); }
@@ -475,6 +474,10 @@ class MockServiceWorkerContainer : public mojom::ServiceWorkerContainer {
                      bool should_notify_controllerchange) override {
     was_set_controller_called_ = true;
   }
+  void PostMessageToClient(
+      blink::mojom::ServiceWorkerObjectInfoPtr controller,
+      const base::string16& message,
+      std::vector<mojo::ScopedMessagePipeHandle> message_pipes) override {}
 
   bool was_set_controller_called() const { return was_set_controller_called_; }
 
@@ -496,7 +499,7 @@ TEST_F(ServiceWorkerProviderHostTest, Controller) {
                                      true /* is_parent_frame_secure */);
   remote_endpoints_.emplace_back();
   remote_endpoints_.back().BindWithProviderHostInfo(&info);
-  auto container = base::MakeUnique<MockServiceWorkerContainer>(
+  auto container = std::make_unique<MockServiceWorkerContainer>(
       std::move(*remote_endpoints_.back().client_request()));
 
   // Create an active version and then start the navigation.
@@ -536,7 +539,7 @@ TEST_F(ServiceWorkerProviderHostTest, ActiveIsNotController) {
                                      true /* is_parent_frame_secure */);
   remote_endpoints_.emplace_back();
   remote_endpoints_.back().BindWithProviderHostInfo(&info);
-  auto container = base::MakeUnique<MockServiceWorkerContainer>(
+  auto container = std::make_unique<MockServiceWorkerContainer>(
       std::move(*remote_endpoints_.back().client_request()));
 
   // Create an installing version and then start the navigation.
@@ -576,14 +579,15 @@ TEST_F(ServiceWorkerProviderHostTest,
   ServiceWorkerRemoteProviderEndpoint remote_endpoint =
       PrepareServiceWorkerProviderHost(GURL("https://www.example.com/foo"));
 
-  Register(remote_endpoint.host_ptr()->get(), GURL("https://www.example.com/"),
-           GURL("https://www.example.com/bar"),
-           blink::mojom::ServiceWorkerErrorType::kDisabled);
-  GetRegistration(remote_endpoint.host_ptr()->get(),
-                  GURL("https://www.example.com/"),
-                  blink::mojom::ServiceWorkerErrorType::kDisabled);
-  GetRegistrations(remote_endpoint.host_ptr()->get(),
-                   blink::mojom::ServiceWorkerErrorType::kDisabled);
+  EXPECT_EQ(blink::mojom::ServiceWorkerErrorType::kDisabled,
+            Register(remote_endpoint.host_ptr()->get(),
+                     GURL("https://www.example.com/"),
+                     GURL("https://www.example.com/bar")));
+  EXPECT_EQ(blink::mojom::ServiceWorkerErrorType::kDisabled,
+            GetRegistration(remote_endpoint.host_ptr()->get(),
+                            GURL("https://www.example.com/")));
+  EXPECT_EQ(blink::mojom::ServiceWorkerErrorType::kDisabled,
+            GetRegistrations(remote_endpoint.host_ptr()->get()));
 
   SetBrowserClientForTesting(old_browser_client);
 }
@@ -592,18 +596,20 @@ TEST_F(ServiceWorkerProviderHostTest, Register_HTTPS) {
   ServiceWorkerRemoteProviderEndpoint remote_endpoint =
       PrepareServiceWorkerProviderHost(GURL("https://www.example.com/foo"));
 
-  Register(remote_endpoint.host_ptr()->get(), GURL("https://www.example.com/"),
-           GURL("https://www.example.com/bar"),
-           blink::mojom::ServiceWorkerErrorType::kNone);
+  EXPECT_EQ(blink::mojom::ServiceWorkerErrorType::kNone,
+            Register(remote_endpoint.host_ptr()->get(),
+                     GURL("https://www.example.com/"),
+                     GURL("https://www.example.com/bar")));
 }
 
 TEST_F(ServiceWorkerProviderHostTest, Register_NonSecureTransportLocalhost) {
   ServiceWorkerRemoteProviderEndpoint remote_endpoint =
       PrepareServiceWorkerProviderHost(GURL("http://127.0.0.3:81/foo"));
 
-  Register(remote_endpoint.host_ptr()->get(), GURL("http://127.0.0.3:81/bar"),
-           GURL("http://127.0.0.3:81/baz"),
-           blink::mojom::ServiceWorkerErrorType::kNone);
+  EXPECT_EQ(blink::mojom::ServiceWorkerErrorType::kNone,
+            Register(remote_endpoint.host_ptr()->get(),
+                     GURL("http://127.0.0.3:81/bar"),
+                     GURL("http://127.0.0.3:81/baz")));
 }
 
 TEST_F(ServiceWorkerProviderHostTest, Register_InvalidScopeShouldFail) {
@@ -763,13 +769,31 @@ TEST_F(ServiceWorkerProviderHostTest, EarlyContextDeletion) {
   EXPECT_TRUE(remote_endpoint.host_ptr()->encountered_error());
 }
 
-TEST_F(ServiceWorkerProviderHostTest, GetRegistration_SameOrigin) {
+TEST_F(ServiceWorkerProviderHostTest, GetRegistration_Success) {
   ServiceWorkerRemoteProviderEndpoint remote_endpoint =
       PrepareServiceWorkerProviderHost(GURL("https://www.example.com/foo"));
 
-  GetRegistration(remote_endpoint.host_ptr()->get(),
-                  GURL("https://www.example.com/"),
-                  blink::mojom::ServiceWorkerErrorType::kNone);
+  const GURL kScope("https://www.example.com/");
+  EXPECT_EQ(blink::mojom::ServiceWorkerErrorType::kNone,
+            Register(remote_endpoint.host_ptr()->get(), kScope,
+                     GURL("https://www.example.com/sw.js")));
+  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info;
+  EXPECT_EQ(blink::mojom::ServiceWorkerErrorType::kNone,
+            GetRegistration(remote_endpoint.host_ptr()->get(), kScope, &info));
+  ASSERT_TRUE(info);
+  EXPECT_EQ(kScope, info->options->scope);
+}
+
+TEST_F(ServiceWorkerProviderHostTest,
+       GetRegistration_NotFoundShouldReturnNull) {
+  ServiceWorkerRemoteProviderEndpoint remote_endpoint =
+      PrepareServiceWorkerProviderHost(GURL("https://www.example.com/foo"));
+
+  blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info;
+  EXPECT_EQ(blink::mojom::ServiceWorkerErrorType::kNone,
+            GetRegistration(remote_endpoint.host_ptr()->get(),
+                            GURL("https://www.example.com/"), &info));
+  EXPECT_FALSE(info);
 }
 
 TEST_F(ServiceWorkerProviderHostTest, GetRegistration_CrossOriginShouldFail) {
@@ -806,8 +830,8 @@ TEST_F(ServiceWorkerProviderHostTest, GetRegistrations_SecureOrigin) {
   ServiceWorkerRemoteProviderEndpoint remote_endpoint =
       PrepareServiceWorkerProviderHost(GURL("https://www.example.com/foo"));
 
-  GetRegistrations(remote_endpoint.host_ptr()->get(),
-                   blink::mojom::ServiceWorkerErrorType::kNone);
+  EXPECT_EQ(blink::mojom::ServiceWorkerErrorType::kNone,
+            GetRegistrations(remote_endpoint.host_ptr()->get()));
 }
 
 TEST_F(ServiceWorkerProviderHostTest,

@@ -1023,26 +1023,6 @@
             ]
         }
     ],
-    "DataReductionProxyUseQuic": [
-        {
-            "platforms": [
-                "android",
-                "chromeos",
-                "linux",
-                "mac",
-                "win"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "params": {
-                        "enable_quic_non_core_proxies": "true",
-                        "enable_warmup": "true"
-                    }
-                }
-            ]
-        }
-    ],
     "DecoupleTranslateLanguage": [
         {
             "platforms": [
@@ -2536,6 +2516,21 @@
             ]
         }
     ],
+    "PersistentNotificationInStandalonePwa": [
+        {
+            "platforms": [
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "pwa-persistent-notification"
+                    ]
+                }
+            ]
+        }
+    ],
     "PhysicalWeb": [
         {
             "platforms": [
@@ -2887,6 +2882,25 @@
             ]
         }
     ],
+    "S13nSafeBrowsingParallelUrlCheck": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "CanaryDev_Enabled",
+                    "enable_features": [
+                        "S13nSafeBrowsingParallelUrlCheck"
+                    ]
+                }
+            ]
+        }
+    ],
     "SRTExperimentalEngineTrial": [
         {
             "platforms": [
@@ -2992,6 +3006,23 @@
                 },
                 {
                     "name": "Control"
+                }
+            ]
+        }
+    ],
+    "SafeBrowsingAtRiskAccountFlagging": [
+        {
+            "platforms": [
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "SyncPasswordReuseEvent"
+                    ]
                 }
             ]
         }
@@ -3128,7 +3159,7 @@
             ]
         }
     ],
-    "SerializeCoreAudioPauseResume": [
+    "SerializeCoreAudioPauseAndResumeDuringSystemSleep": [
         {
             "platforms": [
                 "mac"
@@ -3263,6 +3294,24 @@
             ]
         }
     ],
+    "SignInProcessIsolation": [
+        {
+            "platforms": [
+                "chromeos",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled_50_20171026",
+                    "enable_features": [
+                        "sign-in-process-isolation"
+                    ]
+                }
+            ]
+        }
+    ],
     "SimpleCacheTrial": [
         {
             "platforms": [
@@ -3319,6 +3368,25 @@
             ]
         }
     ],
+    "StabilityDebugging": [
+        {
+            "platforms": [
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "params": {
+                        "collect_postmortem": "false",
+                        "init_flush": "true"
+                    },
+                    "enable_features": [
+                        "StabilityDebugging"
+                    ]
+                }
+            ]
+        }
+    ],
     "SubresourceFilter": [
         {
             "platforms": [
@@ -3355,24 +3423,6 @@
                     "name": "Enabled",
                     "enable_features": [
                         "SuperfishInterstitial"
-                    ]
-                }
-            ]
-        }
-    ],
-    "SyncPasswordReuseEvent": [
-        {
-            "platforms": [
-                "chromeos",
-                "linux",
-                "mac",
-                "win"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "SyncPasswordReuseEvent"
                     ]
                 }
             ]
@@ -3699,6 +3749,25 @@
                     "params": {
                         "min_required_storage_for_update_mb": "500"
                     }
+                }
+            ]
+        }
+    ],
+    "UseMojoAudioOutputStreamFactory": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "UseMojoAudioOutputStreamFactory",
+                    "enable_features": [
+                        "UseMojoAudioOutputStreamFactory"
+                    ]
                 }
             ]
         }

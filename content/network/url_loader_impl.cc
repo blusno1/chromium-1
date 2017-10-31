@@ -226,17 +226,17 @@ std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
     switch (element.type()) {
       case ResourceRequestBody::Element::TYPE_BYTES:
         element_readers.push_back(
-            base::MakeUnique<BytesElementReader>(body, element));
+            std::make_unique<BytesElementReader>(body, element));
         break;
       case ResourceRequestBody::Element::TYPE_FILE:
-        element_readers.push_back(base::MakeUnique<FileElementReader>(
+        element_readers.push_back(std::make_unique<FileElementReader>(
             body, file_task_runner, element));
         break;
       case ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM:
-        NOTIMPLEMENTED();
+        CHECK(false) << "Should never be reached";
         break;
       case ResourceRequestBody::Element::TYPE_BLOB: {
-        NOTREACHED();
+        CHECK(false) << "Network service always uses DATA_PIPE for blobs.";
         break;
       }
       case ResourceRequestBody::Element::TYPE_DATA_PIPE: {
@@ -256,7 +256,7 @@ std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
     }
   }
 
-  return base::MakeUnique<net::ElementsUploadDataStream>(
+  return std::make_unique<net::ElementsUploadDataStream>(
       std::move(element_readers), body->identifier());
 }
 
@@ -305,7 +305,7 @@ URLLoaderImpl::URLLoaderImpl(
         CreateUploadDataStream(request.request_body.get(), task_runner.get()));
 
     if (request.enable_upload_progress) {
-      upload_progress_tracker_ = base::MakeUnique<UploadProgressTracker>(
+      upload_progress_tracker_ = std::make_unique<UploadProgressTracker>(
           FROM_HERE,
           base::BindRepeating(&URLLoaderImpl::SendUploadProgress,
                               base::Unretained(this)),
@@ -322,6 +322,9 @@ URLLoaderImpl::URLLoaderImpl(
     url_request_->SetResponseHeadersCallback(base::Bind(
         &URLLoaderImpl::SetRawResponseHeaders, base::Unretained(this)));
   }
+
+  AttachAcceptHeader(request.resource_type, url_request_.get());
+
   url_request_->Start();
 }
 

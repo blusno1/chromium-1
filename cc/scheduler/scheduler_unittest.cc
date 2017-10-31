@@ -215,6 +215,10 @@ class FakeSchedulerClient : public SchedulerClient,
     PushAction("RemoveObserver(this)");
   }
 
+  size_t CompositedAnimationsCount() const override { return 0; }
+  size_t MainThreadAnimationsCount() const override { return 0; }
+  size_t MainThreadCompositableAnimationsCount() const override { return 0; }
+
  protected:
   bool InsideBeginImplFrameCallback(bool state) {
     return inside_begin_impl_frame_ == state;
@@ -3214,21 +3218,16 @@ TEST_F(SchedulerTest, NoLayerTreeFrameSinkCreationWhileCommitPending) {
   EXPECT_ACTIONS("ScheduledActionBeginLayerTreeFrameSinkCreation");
 }
 
-TEST_F(SchedulerTest, ImplSideInvalidationsInDeadline) {
+TEST_F(SchedulerTest, ImplSideInvalidationInsideImplFrame) {
   SetUpScheduler(EXTERNAL_BFS);
 
-  // Request an impl-side invalidation and trigger the deadline. Ensure that the
-  // invalidation runs inside the deadline.
+  // Request an impl-side invalidation. Ensure that it runs before the deadline.
   bool needs_first_draw_on_activation = true;
   scheduler_->SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
   client_->Reset();
   EXPECT_SCOPED(AdvanceFrame());
-  EXPECT_ACTIONS("WillBeginImplFrame");
-
-  // Deadline.
-  client_->Reset();
-  task_runner_->RunTasksWhile(client_->InsideBeginImplFrame(true));
-  EXPECT_ACTIONS("ScheduledActionPerformImplSideInvalidation");
+  EXPECT_ACTIONS("WillBeginImplFrame",
+                 "ScheduledActionPerformImplSideInvalidation");
 }
 
 TEST_F(SchedulerTest, ImplSideInvalidationsMergedWithCommit) {
@@ -3620,6 +3619,21 @@ TEST_F(SchedulerTest, CriticalBeginMainFrameToActivateIsFast) {
       now_src_->NowTicks() + interval, interval, viz::BeginFrameArgs::NORMAL);
   fake_external_begin_frame_source_->TestOnBeginFrame(args);
   EXPECT_TRUE(scheduler_->ImplLatencyTakesPriority());
+}
+
+TEST_F(SchedulerTest, WaitForAllPipelineStagesSkipsMissedBeginFrames) {
+  scheduler_settings_.wait_for_all_pipeline_stages_before_draw = true;
+  SetUpScheduler(EXTERNAL_BFS);
+
+  scheduler_->SetNeedsRedraw();
+
+  base::TimeDelta interval = base::TimeDelta::FromMilliseconds(16);
+  now_src_->Advance(interval);
+  viz::BeginFrameArgs args = viz::BeginFrameArgs::Create(
+      BEGINFRAME_FROM_HERE, 0u, 1u, now_src_->NowTicks(),
+      now_src_->NowTicks() + interval, interval, viz::BeginFrameArgs::MISSED);
+  fake_external_begin_frame_source_->TestOnBeginFrame(args);
+  EXPECT_FALSE(client_->IsInsideBeginImplFrame());
 }
 
 }  // namespace

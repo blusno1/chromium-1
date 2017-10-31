@@ -34,7 +34,7 @@ class CORE_EXPORT NGLineBoxFragmentBuilder final
   void SetMetrics(const NGLineHeightMetrics&);
   const NGLineHeightMetrics& Metrics() const { return metrics_; }
 
-  void AddPositionedFloat(const NGPositionedFloat&);
+  void SwapPositionedFloats(Vector<NGPositionedFloat>*);
 
   // Set the break token for the fragment to build.
   // A finished break token will be attached if not set.
@@ -95,6 +95,7 @@ class CORE_EXPORT NGLineBoxFragmentBuilder final
     Vector<Child, 16> children_;
   };
 
+  // Add all items in ChildList. Skips null Child if any.
   void AddChildren(ChildList&);
 
   // Creates the fragment. Can only be called once.

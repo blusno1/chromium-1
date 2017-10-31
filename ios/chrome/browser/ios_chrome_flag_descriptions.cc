@@ -35,6 +35,11 @@ const char kDragAndDropDescription[] = "Enable support for drag and drop.";
 const char kExternalSearchName[] = "External Search";
 const char kExternalSearchDescription[] = "Enable support for External Search.";
 
+const char kHistoryBatchUpdatesFilterName[] = "History Single Batch Filtering";
+const char kHistoryBatchUpdatesFilterDescription[] =
+    "When enabled History inserts and deletes history items in the same "
+    "BatchUpdates block.";
+
 const char kInProductHelpDemoModeName[] = "In-Product Help Demo Mode";
 const char kInProductHelpDemoModeDescription[] =
     "When enabled, in-product help promotions occur exactly once per cold "
@@ -45,12 +50,6 @@ const char kInProductHelpDemoModeDescription[] =
 const char kMarkHttpAsName[] = "Mark non-secure origins as non-secure";
 const char kMarkHttpAsDescription[] = "Change the UI treatment for HTTP pages";
 const char kMarkHttpAsDangerous[] = "Always mark HTTP as actively dangerous";
-
-const char kMailtoPromptForUserChoiceName[] =
-    "Mailto Handler Prompt for User Choice";
-const char kMailtoPromptForUserChoiceDescription[] =
-    "Enable prompt for user to choose a mail client app when user taps on a "
-    "mailto:// URL link.";
 
 const char kOmniboxUIElideSuggestionUrlAfterHostName[] =
     "Hide the path, query, and ref of omnibox suggestions";
@@ -78,6 +77,16 @@ extern const char kSafeAreaCompatibleToolbarName[] =
     "Safe Area Compatible Toolbar";
 extern const char kSafeAreaCompatibleToolbarDescription[] =
     "When enabled, the toolbar resizes itself when the safe area changes.";
+
+const char kShareCanonicalURLName[] = "Share Canonical URL";
+const char kShareCanonicalURLDescription[] =
+    "When enabled, the current page's canonical URL is shared (if it exists) "
+    "instead of the visible URL.";
+
+const char kSlimNavigationManagerName[] = "Use Slim Navigation Manager";
+const char kSlimNavigationManagerDescription[] =
+    "When enabled, uses the experimental slim navigation manager that provides "
+    "better compatibility with HTML navigation spec.";
 
 const char kTabSwitcherPresentsBVCName[] = "TabSwitcher Presents BVC";
 const char kTabSwitcherPresentsBVCDescription[] =

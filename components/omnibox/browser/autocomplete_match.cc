@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
+#include "components/omnibox/browser/features.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/search_engines/template_url.h"
@@ -28,7 +29,7 @@
 #include "ui/gfx/vector_icon_types.h"
 #include "url/third_party/mozilla/url_parse.h"
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if (!defined(OS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !defined(OS_IOS)
 #include "components/omnibox/browser/vector_icons.h"  // nogncheck
 #include "components/vector_icons/vector_icons.h"     // nogncheck
 #endif
@@ -185,7 +186,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
 
 // static
 const gfx::VectorIcon& AutocompleteMatch::TypeToVectorIcon(Type type) {
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if (!defined(OS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !defined(OS_IOS)
   switch (type) {
     case Type::URL_WHAT_YOU_TYPED:
     case Type::HISTORY_URL:
@@ -690,30 +691,10 @@ void AutocompleteMatch::InlineTailPrefix(const base::string16& common_prefix) {
     // Shift existing styles.
     for (ACMatchClassification& classification : contents_class)
       classification.offset += common_prefix.size();
-    // Prefix with dim text.
-    contents_class.insert(contents_class.begin(),
-                          ACMatchClassification(0, ACMatchClassification::DIM));
-  } else if (base::StartsWith(contents, common_prefix,
-                              base::CompareCase::SENSITIVE)) {
-    // Prefix with dim text.
-    contents_class.insert(contents_class.begin(),
-                          ACMatchClassification(0, ACMatchClassification::DIM));
-    // Find last one that overlaps or starts at common prefix.
-    size_t i = 1;
-    while (i < contents_class.size() &&
-           contents_class[i].offset <= common_prefix.size())
-      ++i;
-    if (i > 1) {
-      // Erase any in-between.
-      contents_class.erase(contents_class.begin() + 1,
-                           contents_class.begin() + i - 1);
-      // Make this classification start after common prefix.
-      contents_class[1].offset = common_prefix.size();
-      // If |common_prefix| and |contents| are equal, we'll end up with a
-      // classification that's outside the range of the string. Remove it here.
-      if (contents_class[1].offset >= contents.size())
-        contents_class.erase(contents_class.begin() + 1, contents_class.end());
-    }
+    // Prefix with invisible text.
+    contents_class.insert(
+        contents_class.begin(),
+        ACMatchClassification(0, ACMatchClassification::INVISIBLE));
   }
 }
 

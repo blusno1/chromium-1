@@ -6,6 +6,7 @@
 #define NGOffsetMapping_h
 
 #include "core/CoreExport.h"
+#include "core/editing/Forward.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashMap.h"
@@ -15,6 +16,7 @@
 
 namespace blink {
 
+class LayoutObject;
 class Node;
 
 enum class NGOffsetMappingUnitType { kIdentity, kCollapsed, kExpanded };
@@ -53,6 +55,9 @@ class CORE_EXPORT NGOffsetMappingUnit {
   unsigned TextContentEnd() const { return text_content_end_; }
 
   unsigned ConvertDOMOffsetToTextContent(unsigned) const;
+
+  unsigned ConvertTextContentToFirstDOMOffset(unsigned) const;
+  unsigned ConvertTextContentToLastDOMOffset(unsigned) const;
 
  private:
   const NGOffsetMappingUnitType type_ = NGOffsetMappingUnitType::kIdentity;
@@ -99,13 +104,28 @@ class CORE_EXPORT NGOffsetMapping {
   const RangeMap& GetRanges() const { return ranges_; }
   const String& GetText() const { return text_; }
 
+  // ------ Mapping APIs from DOM to text content ------
+
   // TODO(xiaochengh): Change the functions to take Positions instead of (node,
   // offset) pairs.
 
-  // Returns the NGOffsetMappingUnit that contains the given offset in the DOM
-  // node. If there are multiple qualifying units, returns the last one.
-  const NGOffsetMappingUnit* GetMappingUnitForDOMOffset(const Node&,
-                                                        unsigned) const;
+  // Note: any Position passed to the APIs must be in either of the two types:
+  // 1. Offset-in-anchor in text node
+  // 2. Before/After-anchor of BR or atomic inline
+  // TODO(crbug.com/776843): support non-atomic inlines
+  static bool AcceptsPosition(const Position&);
+
+  // Returns the mapping object of the block laying out the given position.
+  static const NGOffsetMapping* GetFor(const Position&);
+
+  // Returns the mapping object of the block containing the given legacy
+  // LayoutObject, if it's laid out with NG. This makes the retrieval of the
+  // mapping object easier when we are holding LayoutObject instead of Node.
+  static const NGOffsetMapping* GetFor(const LayoutObject*);
+
+  // Returns the NGOffsetMappingUnit that contains the given position.
+  // If there are multiple qualifying units, returns the last one.
+  const NGOffsetMappingUnit* GetMappingUnitForPosition(const Position&) const;
 
   // Returns all NGOffsetMappingUnits whose DOM ranges has non-empty (but
   // possibly collapsed) intersections with the passed in DOM offset range.
@@ -113,35 +133,42 @@ class CORE_EXPORT NGOffsetMapping {
                                                       unsigned,
                                                       unsigned) const;
 
-  // Returns the text content offset corresponding to the given DOM offset.
-  // Returns nullopt when the DOM offset is not in the inlines.
-  Optional<unsigned> GetTextContentOffset(const Node&, unsigned) const;
+  // Returns the text content offset corresponding to the given position.
+  // Returns nullopt when the position is not laid out in this block.
+  Optional<unsigned> GetTextContentOffset(const Position&) const;
 
-  // Starting from the given DOM offset in the node, finds the first non-
-  // collapsed character and returns the offset before it; Or returns nullopt if
-  // such a character does not exist.
-  Optional<unsigned> StartOfNextNonCollapsedCharacter(const Node&,
-                                                      unsigned offset) const;
+  // Starting from the given position, searches for non-collapsed content in
+  // the same node in forward/backward direction and returns the position
+  // before/after it; Returns null if there is no more non-collapsed content in
+  // the same node.
+  Position StartOfNextNonCollapsedContent(const Position&) const;
+  Position EndOfLastNonCollapsedContent(const Position&) const;
 
-  // Starting from the given DOM offset in the node, reversely finds the first
-  // non-collapsed character and returns the offset after it; Or returns nullopt
-  // if such a character does not exist.
-  Optional<unsigned> EndOfLastNonCollapsedCharacter(const Node&,
-                                                    unsigned offset) const;
+  // Returns true if the position is right before/after non-collapsed content.
+  // Note that false is returned if the position is already at node end/start.
+  bool IsBeforeNonCollapsedContent(const Position&) const;
+  bool IsAfterNonCollapsedContent(const Position&) const;
 
-  // Returns true if the offset is right before a non-collapsed character. If
-  // the offset is at the end of the node, returns false.
-  bool IsBeforeNonCollapsedCharacter(const Node&, unsigned offset) const;
-
-  // Returns true if the offset is right after a non-collapsed character. If the
-  // offset is at the beginning of the node, returns false.
-  bool IsAfterNonCollapsedCharacter(const Node&, unsigned offset) const;
-
-  // Maps the given DOM offset to text content, and then returns the text
+  // Maps the given position to text content, and then returns the text
   // content character before the offset. Returns nullopt if it does not exist.
-  Optional<UChar> GetCharacterBefore(const Node&, unsigned offset) const;
+  Optional<UChar> GetCharacterBefore(const Position&) const;
 
-  // TODO(xiaochengh): Add APIs for reverse mapping.
+  // ------ Mapping APIs from text content to DOM ------
+
+  // These APIs map a text content offset to DOM positions, or return null when
+  // both characters next to the offset are in generated content (list markers,
+  // ::before/after, generated BiDi control characters, ...). The returned
+  // position is either offset in a text node, or before/after an atomic inline
+  // (IMG, BR, ...).
+  // Note 1: there can be multiple positions mapped to the same offset when,
+  // for example, there are collapsed whitespaces. Hence, we have two APIs to
+  // return the first/last one of them.
+  // Note 2: there is a corner case where Shadow DOM changes the ordering of
+  // nodes in the flat tree, so that they are not laid out in the same order as
+  // in the DOM tree. In this case, "first" and "last" position are defined on
+  // the layout order, aka the flat tree order.
+  Position GetFirstPosition(unsigned) const;
+  Position GetLastPosition(unsigned) const;
 
  private:
   UnitVector units_;
@@ -150,8 +177,6 @@ class CORE_EXPORT NGOffsetMapping {
 
   DISALLOW_COPY_AND_ASSIGN(NGOffsetMapping);
 };
-
-const NGOffsetMapping* GetNGOffsetMappingFor(const Node&, unsigned);
 
 }  // namespace blink
 

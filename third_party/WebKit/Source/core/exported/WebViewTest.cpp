@@ -500,7 +500,7 @@ TEST_P(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent) {
   SkCanvas canvas(bitmap);
   canvas.clear(kAlphaRed);
 
-  PaintRecordBuilder builder(FloatRect(0, 0, kWidth, kHeight));
+  PaintRecordBuilder builder;
 
   // Paint the root of the main frame in the way that CompositedLayerMapping
   // would.
@@ -4204,6 +4204,40 @@ TEST_P(WebViewTest, PreferredSizeWithGrid) {
   WebSize size = web_view->ContentsPreferredMinimumSize();
   EXPECT_EQ(100, size.width);
   EXPECT_EQ(100, size.height);
+}
+
+TEST_P(WebViewTest, PreferredSizeWithGridMinWidth) {
+  WebViewImpl* web_view = web_view_helper_.Initialize();
+  WebURL base_url = URLTestHelpers::ToKURL("http://example.com/");
+  FrameTestHelpers::LoadHTMLString(web_view->MainFrameImpl(),
+                                   R"HTML(<!DOCTYPE html>
+    <body style="margin: 0px;">
+      <div style="display: inline-grid; min-width: 200px;">
+        <div>item</div>
+      </div>
+    </body>
+                                   )HTML",
+                                   base_url);
+
+  WebSize size = web_view->ContentsPreferredMinimumSize();
+  EXPECT_EQ(200, size.width);
+}
+
+TEST_P(WebViewTest, PreferredSizeWithGridMinWidthFlexibleTracks) {
+  WebViewImpl* web_view = web_view_helper_.Initialize();
+  WebURL base_url = URLTestHelpers::ToKURL("http://example.com/");
+  FrameTestHelpers::LoadHTMLString(web_view->MainFrameImpl(),
+                                   R"HTML(<!DOCTYPE html>
+    <body style="margin: 0px;">
+      <div style="display: inline-grid; min-width: 200px; grid-template-columns: 1fr;">
+        <div>item</div>
+      </div>
+    </body>
+                                   )HTML",
+                                   base_url);
+
+  WebSize size = web_view->ContentsPreferredMinimumSize();
+  EXPECT_EQ(200, size.width);
 }
 
 class UnhandledTapWebViewClient : public FrameTestHelpers::TestWebViewClient {

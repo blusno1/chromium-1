@@ -45,20 +45,20 @@ class FakeSessionManagerClient : public SessionManagerClient {
   void NotifyLockScreenShown() override;
   void NotifyLockScreenDismissed() override;
   void RetrieveActiveSessions(ActiveSessionsCallback callback) override;
-  void RetrieveDevicePolicy(const RetrievePolicyCallback& callback) override;
+  void RetrieveDevicePolicy(RetrievePolicyCallback callback) override;
   RetrievePolicyResponseType BlockingRetrieveDevicePolicy(
       std::string* policy_out) override;
   void RetrievePolicyForUser(const cryptohome::Identification& cryptohome_id,
-                             const RetrievePolicyCallback& callback) override;
+                             RetrievePolicyCallback callback) override;
   RetrievePolicyResponseType BlockingRetrievePolicyForUser(
       const cryptohome::Identification& cryptohome_id,
       std::string* policy_out) override;
   void RetrievePolicyForUserWithoutSession(
       const cryptohome::Identification& cryptohome_id,
-      const RetrievePolicyCallback& callback) override;
+      RetrievePolicyCallback callback) override;
   void RetrieveDeviceLocalAccountPolicy(
       const std::string& account_id,
-      const RetrievePolicyCallback& callback) override;
+      RetrievePolicyCallback callback) override;
   RetrievePolicyResponseType BlockingRetrieveDeviceLocalAccountPolicy(
       const std::string& account_id,
       std::string* policy_out) override;
@@ -73,7 +73,7 @@ class FakeSessionManagerClient : public SessionManagerClient {
   bool SupportsRestartToApplyUserFlags() const override;
   void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
                        const std::vector<std::string>& flags) override;
-  void GetServerBackedStateKeys(const StateKeysCallback& callback) override;
+  void GetServerBackedStateKeys(StateKeysCallback callback) override;
 
   void StartArcInstance(ArcStartupMode startup_mode,
                         const cryptohome::Identification& cryptohome_id,

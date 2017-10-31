@@ -49,9 +49,6 @@ Resource* PreloadRequest::Start(Document* document) {
   resource_request.SetRequestContext(ResourceFetcher::DetermineRequestContext(
       resource_type_, is_image_set_, false));
 
-  if (resource_type_ == Resource::kScript)
-    MaybeDisallowFetchForDocWrittenScript(resource_request, defer_, *document);
-
   ResourceLoaderOptions options;
   options.initiator_info = initiator_info;
   FetchParameters params(resource_request, options);
@@ -65,17 +62,17 @@ Resource* PreloadRequest::Start(Document* document) {
 
   if (script_type_ == ScriptType::kModule) {
     DCHECK_EQ(resource_type_, Resource::kScript);
-    WebURLRequest::FetchCredentialsMode credentials_mode =
-        WebURLRequest::kFetchCredentialsModeOmit;
+    network::mojom::FetchCredentialsMode credentials_mode =
+        network::mojom::FetchCredentialsMode::kOmit;
     switch (cross_origin_) {
       case kCrossOriginAttributeNotSet:
-        credentials_mode = WebURLRequest::kFetchCredentialsModeOmit;
+        credentials_mode = network::mojom::FetchCredentialsMode::kOmit;
         break;
       case kCrossOriginAttributeAnonymous:
-        credentials_mode = WebURLRequest::kFetchCredentialsModeSameOrigin;
+        credentials_mode = network::mojom::FetchCredentialsMode::kSameOrigin;
         break;
       case kCrossOriginAttributeUseCredentials:
-        credentials_mode = WebURLRequest::kFetchCredentialsModeInclude;
+        credentials_mode = network::mojom::FetchCredentialsMode::kInclude;
         break;
     }
     params.SetCrossOriginAccessControl(document->GetSecurityOrigin(),
@@ -112,6 +109,12 @@ Resource* PreloadRequest::Start(Document* document) {
         FetchParameters::SpeculativePreloadType::kInserted;
   }
   params.SetSpeculativePreloadType(speculative_preload_type, discovery_time_);
+
+  if (resource_type_ == Resource::kScript) {
+    MaybeDisallowFetchForDocWrittenScript(params, *document);
+    // We intentionally ignore the returned value, because we don't resend
+    // the async request to the blocked script here.
+  }
 
   return document->Loader()->StartPreload(resource_type_, params);
 }

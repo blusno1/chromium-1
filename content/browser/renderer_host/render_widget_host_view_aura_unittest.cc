@@ -86,6 +86,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/ime/input_method.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/compositor.h"
@@ -413,7 +414,7 @@ class FakeDelegatedFrameHostClientAura : public DelegatedFrameHostClientAura,
   std::unique_ptr<ui::CompositorLock> GetCompositorLock(
       ui::CompositorLockClient* client) override {
     resize_locked_ = compositor_locked_ = true;
-    return base::MakeUnique<ui::CompositorLock>(nullptr,
+    return std::make_unique<ui::CompositorLock>(nullptr,
                                                 weak_ptr_factory_.GetWeakPtr());
   }
   // CompositorResizeLockClient implemention. Overrides from
@@ -460,7 +461,7 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     viz::mojom::CompositorFrameSinkClientRequest client_request =
         mojo::MakeRequest(&renderer_compositor_frame_sink_ptr_);
     renderer_compositor_frame_sink_ =
-        base::MakeUnique<FakeRendererCompositorFrameSink>(
+        std::make_unique<FakeRendererCompositorFrameSink>(
             std::move(sink), std::move(client_request));
     DidCreateNewRendererCompositorFrameSink(
         renderer_compositor_frame_sink_ptr_.get());
@@ -601,7 +602,7 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
                                           int32_t routing_id) {
     mojom::WidgetPtr widget;
     std::unique_ptr<MockWidgetImpl> widget_impl =
-        base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+        std::make_unique<MockWidgetImpl>(mojo::MakeRequest(&widget));
 
     return new MockRenderWidgetHostImpl(delegate, process, routing_id,
                                         std::move(widget_impl),
@@ -1626,6 +1627,22 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCompositionText) {
                                    gfx::Range::InvalidRange(), 4, 4));
 
   view_->ImeCancelComposition();
+  EXPECT_FALSE(view_->has_composition_text_);
+}
+
+// Checks that we reset has_composition_text_ to false upon when the focused
+// node is changed.
+TEST_F(RenderWidgetHostViewAuraTest, FocusedNodeChanged) {
+  view_->InitAsChild(nullptr);
+  view_->Show();
+  ActivateViewForTextInputManager(view_, ui::TEXT_INPUT_TYPE_TEXT);
+
+  ui::CompositionText composition_text;
+  composition_text.text = base::ASCIIToUTF16("hello");
+  view_->SetCompositionText(composition_text);
+  EXPECT_TRUE(view_->has_composition_text_);
+
+  view_->FocusedNodeChanged(true, gfx::Rect());
   EXPECT_FALSE(view_->has_composition_text_);
 }
 
@@ -3860,11 +3877,12 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventPositionsArentRounded) {
 void RenderWidgetHostViewAuraOverscrollTest::WheelNotPreciseScrollEvent() {
   SetUpOverscrollEnvironment();
 
-  // Simulate wheel events.
+  // Simulate wheel event. Does not cross start threshold.
   SimulateWheelEventPossiblyIncludingPhase(
       -5, 0, 0, false, WebMouseWheelEvent::kPhaseBegan);  // sent directly
+  // Simulate wheel event. Crosses start threshold.
   SimulateWheelEventPossiblyIncludingPhase(
-      -60, 1, 0, false, WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      -70, 1, 0, false, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   MockWidgetInputHandler::MessageVector events =
@@ -3920,17 +3938,18 @@ TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
 void RenderWidgetHostViewAuraOverscrollTest::WheelScrollEventOverscrolls() {
   SetUpOverscrollEnvironment();
 
-  // Simulate wheel events.
+  // Simulate wheel events. Do not cross start threshold.
   SimulateWheelEventPossiblyIncludingPhase(
       -5, 0, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SimulateWheelEventPossiblyIncludingPhase(
-      -1, 1, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      -10, 1, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   SimulateWheelEventPossiblyIncludingPhase(
       -10, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
       -15, -1, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
+  // Simulate wheel events. Cross start threshold.
   SimulateWheelEventPossiblyIncludingPhase(
       -30, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
@@ -3971,8 +3990,8 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollEventOverscrolls() {
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
   EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
-  EXPECT_EQ(-81.f, overscroll_delta_x());
-  EXPECT_EQ(-31.f, overscroll_delegate()->delta_x());
+  EXPECT_EQ(-90.f, overscroll_delta_x());
+  EXPECT_EQ(-30.f, overscroll_delegate()->delta_x());
   EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
   events = GetAndResetDispatchedMessages();
   EXPECT_EQ(0U, events.size());
@@ -4003,17 +4022,18 @@ void RenderWidgetHostViewAuraOverscrollTest::
     WheelScrollConsumedDoNotHorizOverscroll() {
   SetUpOverscrollEnvironment();
 
-  // Simulate wheel events.
+  // Simulate wheel events. Do not cross start threshold.
   SimulateWheelEventPossiblyIncludingPhase(
       -5, 0, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SimulateWheelEventPossiblyIncludingPhase(
-      -1, -1, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      -10, -1, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   SimulateWheelEventPossiblyIncludingPhase(
       -10, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
       -15, -1, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
+  // Simulate wheel events. Cross start threshold.
   SimulateWheelEventPossiblyIncludingPhase(
       -30, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
@@ -4133,7 +4153,7 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollOverscrollToggle() {
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Scroll some more to initiate an overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(40, 0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(50, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
   if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
     events = ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
@@ -4150,7 +4170,7 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollOverscrollToggle() {
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
   EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
-  EXPECT_EQ(60.f, overscroll_delta_x());
+  EXPECT_EQ(70.f, overscroll_delta_x());
   EXPECT_EQ(10.f, overscroll_delegate()->delta_x());
   EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
 
@@ -4185,7 +4205,7 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollOverscrollToggle() {
   // Continue to scroll in the reverse direction enough to initiate overscroll
   // in that direction. However, overscroll should not be initiated as the
   // overscroll mode is locked to east mode.
-  SimulateWheelEventPossiblyIncludingPhase(-55, 0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(-65, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
   events = GetAndResetDispatchedMessages();
   EXPECT_EQ("MouseWheel", GetMessageNames(events));
@@ -4210,7 +4230,7 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollOverscrollToggle() {
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
-  EXPECT_EQ(-95.f, overscroll_delta_x());
+  EXPECT_EQ(-105.f, overscroll_delta_x());
   EXPECT_EQ(0.f, overscroll_delegate()->delta_x());
   EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
 }
@@ -4264,7 +4284,7 @@ void RenderWidgetHostViewAuraOverscrollTest::ScrollEventsOverscrollWithFling() {
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Scroll some more to initiate an overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(30, 0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(40, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
   if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
     ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
@@ -4281,7 +4301,7 @@ void RenderWidgetHostViewAuraOverscrollTest::ScrollEventsOverscrollWithFling() {
   EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
 
-  EXPECT_EQ(60.f, overscroll_delta_x());
+  EXPECT_EQ(70.f, overscroll_delta_x());
   EXPECT_EQ(10.f, overscroll_delegate()->delta_x());
   EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
   events = GetAndResetDispatchedMessages();
@@ -4358,7 +4378,7 @@ void RenderWidgetHostViewAuraOverscrollTest::
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Scroll some more to initiate an overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(30, 0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(40, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
   if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
     ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
@@ -4376,7 +4396,7 @@ void RenderWidgetHostViewAuraOverscrollTest::
   EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
 
-  EXPECT_EQ(60.f, overscroll_delta_x());
+  EXPECT_EQ(70.f, overscroll_delta_x());
   EXPECT_EQ(10.f, overscroll_delegate()->delta_x());
   EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
   events = GetAndResetDispatchedMessages();
@@ -5154,9 +5174,9 @@ void RenderWidgetHostViewAuraOverscrollTest::OverscrollMouseMoveCompletion() {
   SetUpOverscrollEnvironment();
 
   SimulateWheelEventPossiblyIncludingPhase(
-      5, 0, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
+      -5, 0, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SimulateWheelEventPossiblyIncludingPhase(
-      -1, 0, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      -10, 0, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   SimulateWheelEventPossiblyIncludingPhase(
       -10, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
@@ -6437,6 +6457,19 @@ TEST_F(InputMethodStateAuraTest, ImeCancelCompositionForAllViews) {
     // The composition must have been canceled.
     EXPECT_FALSE(has_composition_text());
   }
+}
+
+// This test verifies that when the focused node is changed,
+// RenderWidgetHostViewAura will tell InputMethodAuraLinux to cancel the current
+// composition.
+TEST_F(InputMethodStateAuraTest, ImeFocusedNodeChanged) {
+  ActivateViewForTextInputManager(tab_view(), ui::TEXT_INPUT_TYPE_TEXT);
+  // There is no composition in the beginning.
+  EXPECT_FALSE(has_composition_text());
+  SetHasCompositionTextToTrue();
+  tab_view()->FocusedNodeChanged(true, gfx::Rect());
+  // The composition must have been canceled.
+  EXPECT_FALSE(has_composition_text());
 }
 
 }  // namespace content

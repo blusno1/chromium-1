@@ -322,8 +322,12 @@ static_library("util") {
 test("crashpad_util_test") {
   sources = [
     "file/delimited_file_reader_test.cc",
+    "file/directory_reader_test.cc",
     "file/file_io_test.cc",
     "file/file_reader_test.cc",
+    "file/filesystem_test.cc",
+    "file/filesystem_test_util.cc",
+    "file/filesystem_test_util.h",
     "file/string_file_test.cc",
     "mac/launchd_test.mm",
     "mac/mac_util_test.mm",
@@ -414,23 +418,19 @@ test("crashpad_util_test") {
   ]
 
   if (is_win) {
-    deps += [
+    data_deps = [
       ":crashpad_util_test_process_info_test_child",
       ":crashpad_util_test_safe_terminate_process_test_child",
     ]
     libs = [ "rpcrt4.lib" ]
-  } else {
-    # These tests use symbolic links, which require admin priviledges on
-    # Windows before Windows 10.
-    sources += [
-      "file/directory_reader_test.cc",
-      "file/filesystem_test.cc",
-      "file/filesystem_test_util.cc",
-      "file/filesystem_test_util.h",
-    ]
   }
 
   include_dirs = [ ".." ]
+
+  data = [
+    "net/http_transport_test_server.py",
+    "net/testdata/",
+  ]
 }
 
 if (is_win) {

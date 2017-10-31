@@ -180,10 +180,11 @@ class TestResourceDispatcherHostDelegate final
     ADD_FAILURE() << "RequestComplete should not be called.";
   }
 
-  PreviewsState GetPreviewsState(const net::URLRequest& url_request,
-                                 content::ResourceContext* resource_context,
-                                 PreviewsState previews_to_allow) override {
-    ADD_FAILURE() << "GetPreviewsState should not be called.";
+  PreviewsState DeterminePreviewsState(
+      const net::URLRequest& url_request,
+      content::ResourceContext* resource_context,
+      PreviewsState previews_to_allow) override {
+    ADD_FAILURE() << "DeterminePreviewsState should not be called.";
     return PREVIEWS_UNSPECIFIED;
   }
 
@@ -267,7 +268,7 @@ class MojoAsyncResourceHandlerWithStubOperations
       UploadProgressTracker::UploadProgressReportCallback callback) override {
     DCHECK(!upload_progress_tracker_);
 
-    auto upload_progress_tracker = base::MakeUnique<FakeUploadProgressTracker>(
+    auto upload_progress_tracker = std::make_unique<FakeUploadProgressTracker>(
         from_here, std::move(callback), request(), task_runner_);
     upload_progress_tracker_ = upload_progress_tracker.get();
     return std::move(upload_progress_tracker);
@@ -350,7 +351,7 @@ class MojoAsyncResourceHandlerTestBase {
 
     ResourceRequest request;
     base::WeakPtr<mojo::StrongBinding<mojom::URLLoaderFactory>> weak_binding =
-        mojo::MakeStrongBinding(base::MakeUnique<TestURLLoaderFactory>(),
+        mojo::MakeStrongBinding(std::make_unique<TestURLLoaderFactory>(),
                                 mojo::MakeRequest(&url_loader_factory_));
 
     url_loader_factory_->CreateLoaderAndStart(
@@ -455,7 +456,7 @@ class MojoAsyncResourceHandlerUploadTest
  protected:
   MojoAsyncResourceHandlerUploadTest()
       : MojoAsyncResourceHandlerTestBase(
-            base::MakeUnique<DummyUploadDataStream>()) {}
+            std::make_unique<DummyUploadDataStream>()) {}
 };
 
 TEST_F(MojoAsyncResourceHandlerTest, InFlightRequests) {

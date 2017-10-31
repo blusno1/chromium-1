@@ -309,7 +309,8 @@ const base::Feature kMultidevice{"Multidevice",
 // Enables the use of native notification centers instead of using the Message
 // Center for displaying the toasts.
 #if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MACOSX) || defined(OS_ANDROID) || \
+    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 const base::Feature kNativeNotifications{"NativeNotifications",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
 #else
@@ -404,6 +405,12 @@ const base::Feature kPushMessagingBackgroundMode{
 const base::Feature kPwaMinimalUi{"PwaMinimalUi",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
+#if !defined(OS_ANDROID)
+const base::Feature kRemoveUsageOfDeprecatedGaiaSigninEndpoint{
+    "RemoveUsageOfDeprecatedGaiaSigninEndpoint",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if defined(OS_CHROMEOS)
 // Runtime flag that indicates whether this leak detector should be enabled in
 // the current instance of Chrome.
@@ -489,6 +496,20 @@ const base::Feature kUseGoogleLocalNtp{"UseGoogleLocalNtp",
 const base::Feature kVoiceSearchOnLocalNtp{"VoiceSearchOnLocalNtp",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
+
+// Enables VR UI.
+const base::Feature kVrShell {
+  "VrShell",
+#if defined(OS_ANDROID)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
+
+// Turns on experimental rendering features for VR browsing.
+const base::Feature kVrShellExperimentalRendering{
+    "VrShellExperimentalRendering", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_CHROMEOS)
 // Enables or disables the opt-in IME menu in the language settings page.

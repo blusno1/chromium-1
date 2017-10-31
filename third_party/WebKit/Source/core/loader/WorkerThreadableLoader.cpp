@@ -31,7 +31,6 @@
 #include "core/loader/WorkerThreadableLoader.h"
 
 #include <memory>
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/ThreadableLoadingContext.h"
 #include "core/timing/WorkerGlobalScopePerformance.h"
@@ -48,6 +47,7 @@
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/debug/Alias.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -237,8 +237,7 @@ void WorkerThreadableLoader::Start(const ResourceRequest& original_request) {
 
   WorkerThread* worker_thread = worker_global_scope_->GetThread();
   scoped_refptr<WebTaskRunner> worker_loading_task_runner =
-      TaskRunnerHelper::Get(TaskType::kUnspecedLoading,
-                            worker_global_scope_.Get());
+      worker_global_scope_->GetTaskRunner(TaskType::kUnspecedLoading);
   parent_frame_task_runners_->Get(TaskType::kUnspecedLoading)
       ->PostTask(
           BLINK_FROM_HERE,
@@ -263,13 +262,13 @@ void WorkerThreadableLoader::Start(const ResourceRequest& original_request) {
     return;
   }
 
-  for (const auto& task : event_with_tasks->Take()) {
+  for (auto& task : event_with_tasks->Take()) {
     // Store the program counter where the task is posted from, and alias
     // it to ensure it is stored in the crash dump.
     const void* program_counter = task.location_.program_counter();
     WTF::debug::Alias(&program_counter);
 
-    task.task_();
+    std::move(task.task_).Run();
   }
 }
 

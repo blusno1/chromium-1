@@ -8,39 +8,122 @@
 #include "bindings/core/v8/ScriptStreamer.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
+#include "core/dom/DocumentWriteIntervention.h"
 #include "core/dom/ScriptLoader.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "core/loader/SubresourceIntegrityHelper.h"
+#include "core/loader/resource/ScriptResource.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/loader/fetch/MemoryCache.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
-ClassicPendingScript* ClassicPendingScript::Create(ScriptElementBase* element,
-                                                   ScriptResource* resource) {
-  CHECK(resource);
-  return new ClassicPendingScript(element, resource, TextPosition());
+ClassicPendingScript* ClassicPendingScript::Fetch(
+    const KURL& url,
+    Document& element_document,
+    const ScriptFetchOptions& options,
+    const WTF::TextEncoding& encoding,
+    ScriptElementBase* element,
+    FetchParameters::DeferOption defer) {
+  // Step 1. Let request be the result of creating a potential-CORS request
+  // given url, ... [spec text]
+  ResourceRequest resource_request(url);
+
+  // Step 1. ... "script", ... [spec text]
+  ResourceLoaderOptions resource_loader_options;
+  resource_loader_options.initiator_info.name = element->InitiatorName();
+  FetchParameters params(resource_request, resource_loader_options);
+
+  // Step 1. ... and CORS setting. [spec text]
+  //
+  // Instead of using CrossOriginAttributeValue that corresponds to |CORS
+  // setting|, we use ScriptFetchOptions::CredentialsMode().
+  // We shouldn't call SetCrossOriginAccessControl() if CredentialsMode() is
+  // kFetchCredentialsModeOmit, because in that case the request should be
+  // no-cors, while SetCrossOriginAccessControl(kFetchCredentialsModeOmit)
+  // would result in a cors request.
+  if (options.CredentialsMode() !=
+      network::mojom::FetchCredentialsMode::kOmit) {
+    params.SetCrossOriginAccessControl(element_document.GetSecurityOrigin(),
+                                       options.CredentialsMode());
+  }
+
+  // Step 3. Set up the classic script request given request and options. [spec
+  // text]
+  //
+  // https://html.spec.whatwg.org/multipage/webappapis.html#set-up-the-classic-script-request
+  // Set request's cryptographic nonce metadata to options's cryptographic
+  // nonce, [spec text]
+  params.SetContentSecurityPolicyNonce(options.Nonce());
+
+  // its integrity metadata to options's integrity metadata, [spec text]
+  params.SetIntegrityMetadata(options.GetIntegrityMetadata());
+  params.MutableResourceRequest().SetFetchIntegrity(
+      options.GetIntegrityAttributeValue());
+
+  // and its parser metadata to options's parser metadata. [spec text]
+  params.SetParserDisposition(options.ParserState());
+
+  params.SetCharset(encoding);
+
+  // This DeferOption logic is only for classic scripts, as we always set
+  // |kLazyLoad| for module scripts in ModuleScriptLoader.
+  params.SetDefer(defer);
+
+  // [Intervention]
+  // For users on slow connections, we want to avoid blocking the parser in
+  // the main frame on script loads inserted via document.write, since it can
+  // add significant delays before page content is displayed on the screen.
+  auto* client_for_intervention =
+      MaybeDisallowFetchForDocWrittenScript(params, element_document);
+
+  ClassicPendingScript* pending_script = new ClassicPendingScript(
+      element, TextPosition(), options, true /* is_external */);
+  ScriptResource* resource =
+      ScriptResource::Fetch(params, element_document.Fetcher());
+  if (!resource)
+    return nullptr;
+  pending_script->SetResource(resource);
+  pending_script->CheckState();
+  if (client_for_intervention)
+    client_for_intervention->SetResource(resource);
+  return pending_script;
 }
 
-ClassicPendingScript* ClassicPendingScript::Create(
+ClassicPendingScript* ClassicPendingScript::CreateExternalForTest(
     ScriptElementBase* element,
-    const TextPosition& starting_position) {
-  return new ClassicPendingScript(element, nullptr, starting_position);
+    ScriptResource* resource) {
+  DCHECK(resource);
+  ClassicPendingScript* pending_script = new ClassicPendingScript(
+      element, TextPosition(), ScriptFetchOptions(), true /* is_external */);
+  pending_script->SetResource(resource);
+  pending_script->CheckState();
+  return pending_script;
+}
+
+ClassicPendingScript* ClassicPendingScript::CreateInline(
+    ScriptElementBase* element,
+    const TextPosition& starting_position,
+    const ScriptFetchOptions& options) {
+  ClassicPendingScript* pending_script = new ClassicPendingScript(
+      element, starting_position, options, false /* is_external */);
+  pending_script->CheckState();
+  return pending_script;
 }
 
 ClassicPendingScript::ClassicPendingScript(
     ScriptElementBase* element,
-    ScriptResource* resource,
-    const TextPosition& starting_position)
+    const TextPosition& starting_position,
+    const ScriptFetchOptions& options,
+    bool is_external)
     : PendingScript(element, starting_position),
-      is_external_(resource),
-      ready_state_(resource ? kWaitingForResource : kReady),
+      options_(options),
+      is_external_(is_external),
+      ready_state_(is_external ? kWaitingForResource : kReady),
       integrity_failure_(false),
       is_currently_streaming_(false) {
   CHECK(GetElement());
-  SetResource(resource);
-  CheckState();
   MemoryCoordinator::Instance().RegisterClient(this);
 }
 
@@ -177,19 +260,10 @@ ClassicScript* ClassicPendingScript::GetSource(const KURL& document_url,
   DCHECK(IsReady());
 
   error_occurred = ErrorOccurred();
-  const ScriptLoader* loader = GetElement()->Loader();
-  // Here, we use the nonce snapshot at "#prepare-a-script".
-  // Note that |loader| may be nullptr if ScriptStreamerTest.
-  const String& nonce = loader ? loader->Nonce() : String();
-  const ParserDisposition parser_state = (loader && loader->IsParserInserted())
-                                             ? kParserInserted
-                                             : kNotParserInserted;
-  ScriptFetchOptions fetch_options(nonce, parser_state,
-                                   WebURLRequest::kFetchCredentialsModeOmit);
   if (!is_external_) {
     ScriptSourceCode source_code(GetElement()->TextFromChildren(), document_url,
                                  StartingPosition());
-    return ClassicScript::Create(source_code, fetch_options);
+    return ClassicScript::Create(source_code, options_);
   }
 
   DCHECK(GetResource()->IsLoaded());
@@ -197,7 +271,7 @@ ClassicScript* ClassicPendingScript::GetSource(const KURL& document_url,
                         !streamer_->StreamingSuppressed();
   ScriptSourceCode source_code(streamer_ready ? streamer_ : nullptr,
                                GetResource());
-  return ClassicScript::Create(source_code, fetch_options);
+  return ClassicScript::Create(source_code, options_);
 }
 
 void ClassicPendingScript::SetStreamer(ScriptStreamer* streamer) {
@@ -263,7 +337,7 @@ void ClassicPendingScript::AdvanceReadyState(ReadyState new_ready_state) {
       // start streaming by work done within the callback. (crbug.com/754360)
       WTF::Closure done = std::move(streamer_done_);
       if (done)
-        done();
+        std::move(done).Run();
       is_currently_streaming_ = false;
     }
   }
@@ -338,12 +412,12 @@ bool ClassicPendingScript::StartStreamingIfPossible(
   if (ready_state_ == kReady) {
     ScriptStreamer::StartStreamingLoadedScript(
         this, streamer_type, document->GetFrame()->GetSettings(), script_state,
-        TaskRunnerHelper::Get(task_type, document));
+        document->GetTaskRunner(task_type));
     success = streamer_ && !streamer_->IsStreamingFinished();
   } else {
     ScriptStreamer::StartStreaming(
         this, streamer_type, document->GetFrame()->GetSettings(), script_state,
-        TaskRunnerHelper::Get(task_type, document));
+        document->GetTaskRunner(task_type));
     success = streamer_;
   }
 

@@ -217,7 +217,8 @@ class NET_EXPORT_PRIVATE HttpCache::Writers {
   bool ContainsOnlyIdleWriters() const;
 
   // Returns true if its worth marking the entry as truncated.
-  bool CanResume() const;
+  // TODO(shivanisha): Refactor this so that it could be const.
+  bool ShouldTruncate();
 
   // Invoked for truncating the entry either internally within DoLoop or through
   // the API RemoveTransaction.
@@ -239,7 +240,6 @@ class NET_EXPORT_PRIVATE HttpCache::Writers {
   void EraseTransaction(Transaction* transaction, int result);
   TransactionMap::iterator EraseTransaction(TransactionMap::iterator it,
                                             int result);
-
   void SetCacheCallback(bool success, const TransactionSet& make_readers);
 
   // IO Completion callback function.
