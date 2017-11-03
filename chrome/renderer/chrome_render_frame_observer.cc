@@ -25,7 +25,6 @@
 #include "chrome/common/render_messages.h"
 #include "chrome/renderer/prerender/prerender_helper.h"
 #include "chrome/renderer/safe_browsing/phishing_classifier_delegate.h"
-#include "chrome/renderer/searchbox/searchbox_extension.h"
 #include "chrome/renderer/web_apps.h"
 #include "components/translate/content/renderer/translate_helper.h"
 #include "content/public/common/associated_interface_provider.h"
@@ -54,6 +53,10 @@
 #include "ui/gfx/geometry/size_f.h"
 #include "url/gurl.h"
 
+#if !defined(OS_ANDROID)
+#include "chrome/renderer/searchbox/searchbox_extension.h"
+#endif  // !defined(OS_ANDROID)
+
 #if BUILDFLAG(ENABLE_PRINTING)
 #include "components/printing/common/print_messages.h"
 #include "components/printing/renderer/print_render_frame_helper.h"
@@ -73,6 +76,7 @@ static const size_t kMaxIndexChars = 65535;
 
 // Constants for UMA statistic collection.
 static const char kTranslateCaptureText[] = "Translate.CaptureText";
+static const char kTranslatePageCaptured[] = "Translate.PageCaptured";
 
 // For a page that auto-refreshes, we still show the bubble, if
 // the refresh delay is less than this value (in seconds).
@@ -368,10 +372,12 @@ void ChromeRenderFrameObserver::DidCommitProvisionalLoad(
 }
 
 void ChromeRenderFrameObserver::DidClearWindowObject() {
+#if !defined(OS_ANDROID)
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(switches::kInstantProcess))
     SearchBoxExtension::Install(render_frame()->GetWebFrame());
+#endif  // !defined(OS_ANDROID)
 }
 
 void ChromeRenderFrameObserver::CapturePageText(TextCaptureType capture_type) {
@@ -412,8 +418,10 @@ void ChromeRenderFrameObserver::CapturePageText(TextCaptureType capture_type) {
 
   // We should run language detection only once. Parsing finishes before
   // the page loads, so let's pick that timing.
-  if (translate_helper_ && capture_type == PRELIMINARY_CAPTURE)
+  if (translate_helper_ && capture_type == PRELIMINARY_CAPTURE) {
+    SCOPED_UMA_HISTOGRAM_TIMER(kTranslatePageCaptured);
     translate_helper_->PageCaptured(contents);
+  }
 
   TRACE_EVENT0("renderer", "ChromeRenderFrameObserver::CapturePageText");
 

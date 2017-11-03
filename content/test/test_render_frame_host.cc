@@ -37,8 +37,7 @@ namespace content {
 
 TestRenderFrameHostCreationObserver::TestRenderFrameHostCreationObserver(
     WebContents* web_contents)
-    : WebContentsObserver(web_contents), last_created_frame_(NULL) {
-}
+    : WebContentsObserver(web_contents), last_created_frame_(nullptr) {}
 
 TestRenderFrameHostCreationObserver::~TestRenderFrameHostCreationObserver() {
 }
@@ -61,12 +60,12 @@ class TestRenderFrameHost::NavigationInterceptor
                         const CommonNavigationParams& common_params,
                         const RequestNavigationParams& request_params,
                         mojo::ScopedDataPipeConsumerHandle body_data,
-                        mojom::URLLoaderFactoryPtr
-                            default_subresource_url_loader_factory) override {
+                        base::Optional<URLLoaderFactoryBundle>
+                            subresource_loader_factories) override {
     frame_host_->GetProcess()->set_did_frame_commit_navigation(true);
     frame_host_->GetInternalNavigationControl()->CommitNavigation(
         head, body_url, common_params, request_params, std::move(body_data),
-        std::move(default_subresource_url_loader_factory));
+        std::move(subresource_loader_factories));
   }
 
  private:
@@ -94,7 +93,8 @@ TestRenderFrameHost::TestRenderFrameHost(SiteInstance* site_instance,
                           widget_routing_id,
                           flags,
                           false),
-      child_creation_observer_(delegate ? delegate->GetAsWebContents() : NULL),
+      child_creation_observer_(delegate ? delegate->GetAsWebContents()
+                                        : nullptr),
       contents_mime_type_("text/html"),
       simulate_history_list_was_cleared_(false),
       last_commit_was_error_page_(false) {}
@@ -109,6 +109,12 @@ TestRenderViewHost* TestRenderFrameHost::GetRenderViewHost() {
 
 MockRenderProcessHost* TestRenderFrameHost::GetProcess() {
   return static_cast<MockRenderProcessHost*>(RenderFrameHostImpl::GetProcess());
+}
+
+void TestRenderFrameHost::AddMessageToConsole(ConsoleMessageLevel level,
+                                              const std::string& message) {
+  console_messages_.push_back(message);
+  RenderFrameHostImpl::AddMessageToConsole(level, message);
 }
 
 void TestRenderFrameHost::InitializeRenderFrameIfNeeded() {
@@ -303,6 +309,10 @@ void TestRenderFrameHost::SimulateFeaturePolicyHeader(
   header[0].matches_all_origins = false;
   header[0].origins = whitelist;
   OnDidSetFeaturePolicyHeader(header);
+}
+
+const std::vector<std::string>& TestRenderFrameHost::GetConsoleMessages() {
+  return console_messages_;
 }
 
 void TestRenderFrameHost::SendNavigate(int nav_entry_id,

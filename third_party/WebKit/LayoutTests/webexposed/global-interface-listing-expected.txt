@@ -794,6 +794,7 @@ interface CSSStyleSheet : StyleSheet
     method removeRule
 interface CSSStyleValue
     static method parse
+    static method parseAll
     attribute @@toStringTag
     method constructor
     method toString
@@ -1821,6 +1822,7 @@ interface Element : Node
     method attachShadow
     method before
     method closest
+    method computedStyleMap
     method constructor
     method createShadowRoot
     method getAnimations
@@ -4484,6 +4486,7 @@ interface NetworkInformation : EventTarget
     getter onchange
     getter ontypechange
     getter rtt
+    getter saveData
     getter type
     method constructor
     setter onchange
@@ -9281,7 +9284,6 @@ interface webkitURL
     method focus
     method gc
     method getComputedStyle
-    method getComputedStyleMap
     method getSelection
     method matchMedia
     method moveBy

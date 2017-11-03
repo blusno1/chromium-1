@@ -291,9 +291,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kDisable3DAPIs,
     prefs::kDisable3DAPIs,
     base::Value::Type::BOOLEAN },
-  { key::kDisablePluginFinder,
-    prefs::kDisablePluginFinder,
-    base::Value::Type::BOOLEAN },
   { key::kDiskCacheSize,
     prefs::kDiskCacheSize,
     base::Value::Type::INTEGER },
@@ -338,6 +335,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::BOOLEAN },
   { key::kAllowFileSelectionDialogs,
     prefs::kAllowFileSelectionDialogs,
+    base::Value::Type::BOOLEAN },
+  { key::kPromptForDownloadLocation,
+    prefs::kPromptForDownload,
     base::Value::Type::BOOLEAN },
 
   // First run import.

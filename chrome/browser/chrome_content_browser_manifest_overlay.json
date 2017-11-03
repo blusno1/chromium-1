@@ -36,6 +36,7 @@
         "chrome": [ "input_device_controller" ],
         "content_browser": [ "profiling_client" ],
         "device": [ "device:fingerprint" ],
+        "file_util": [ "zip_file" ],
         "identity": [ "identity_manager" ],
         // Only used in classic ash case.
         "local_state": [ "pref_client" ],
@@ -48,7 +49,7 @@
         "pdf_to_pwg_raster_converter": [ "converter" ],
         "preferences": [ "pref_client", "pref_control" ],
         "ui": [
-          "display_controller",
+          "display_dev",
           "ime_registrar",
           "input_device_controller",
           "window_manager"

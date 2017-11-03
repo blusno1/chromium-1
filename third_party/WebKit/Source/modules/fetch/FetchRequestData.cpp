@@ -6,7 +6,6 @@
 
 #include "core/dom/ExecutionContext.h"
 #include "core/loader/ThreadableLoader.h"
-#include "modules/credentialmanager/PasswordCredential.h"
 #include "modules/fetch/BlobBytesConsumer.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/BytesConsumer.h"
@@ -17,6 +16,7 @@
 #include "platform/network/http_names.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
+#include "third_party/WebKit/Source/modules/fetch/FormDataBytesConsumer.h"
 
 namespace blink {
 
@@ -33,7 +33,12 @@ FetchRequestData* FetchRequestData::Create(
   for (HTTPHeaderMap::const_iterator it = web_request.Headers().begin();
        it != web_request.Headers().end(); ++it)
     request->header_list_->Append(it->key, it->value);
-  if (web_request.GetBlobDataHandle()) {
+  if (scoped_refptr<EncodedFormData> body = web_request.Body()) {
+    request->SetBuffer(new BodyStreamBuffer(
+        script_state,
+        new FormDataBytesConsumer(ExecutionContext::From(script_state),
+                                  std::move(body))));
+  } else if (web_request.GetBlobDataHandle()) {
     request->SetBuffer(new BodyStreamBuffer(
         script_state,
         new BlobBytesConsumer(ExecutionContext::From(script_state),
@@ -70,7 +75,6 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->mime_type_ = mime_type_;
   request->integrity_ = integrity_;
   request->keepalive_ = keepalive_;
-  request->attached_credential_ = attached_credential_;
   return request;
 }
 
@@ -110,13 +114,6 @@ FetchRequestData::FetchRequestData()
       redirect_(WebURLRequest::kFetchRedirectModeFollow),
       response_tainting_(kBasicTainting),
       keepalive_(false) {}
-
-void FetchRequestData::SetCredentials(
-    network::mojom::FetchCredentialsMode credentials) {
-  credentials_ = credentials;
-  if (credentials_ != network::mojom::FetchCredentialsMode::kPassword)
-    attached_credential_ = nullptr;
-}
 
 void FetchRequestData::Trace(blink::Visitor* visitor) {
   visitor->Trace(buffer_);

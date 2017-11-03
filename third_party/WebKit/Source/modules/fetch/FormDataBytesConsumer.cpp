@@ -134,20 +134,10 @@ class ComplexFormDataBytesConsumer final : public BytesConsumer {
           break;
         }
         case FormDataElement::kEncodedBlob:
-          if (element.optional_blob_data_handle_)
+          if (element.optional_blob_data_handle_) {
             blob_data->AppendBlob(element.optional_blob_data_handle_, 0,
                                   element.optional_blob_data_handle_->size());
-          break;
-        case FormDataElement::kEncodedFileSystemURL:
-          if (element.file_length_ < 0) {
-            form_data_ = nullptr;
-            blob_bytes_consumer_ = BytesConsumer::CreateErrored(
-                Error("Cannot determine a file size"));
-            return;
           }
-          blob_data->AppendFileSystemURL(
-              element.file_system_url_, element.file_start_,
-              element.file_length_, element.expected_file_modification_time_);
           break;
       }
     }

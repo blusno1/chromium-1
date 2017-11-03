@@ -25,30 +25,17 @@ WebNotificationDelegate::WebNotificationDelegate(
 
 WebNotificationDelegate::~WebNotificationDelegate() {}
 
-bool WebNotificationDelegate::SettingsClick() {
-#if !defined(OS_CHROMEOS)
-  NotificationCommon::OpenNotificationSettings(profile_);
-  return true;
+void WebNotificationDelegate::SettingsClick() {
+#if defined(OS_CHROMEOS)
+  NOTREACHED();
 #else
-  return false;
+  NotificationCommon::OpenNotificationSettings(profile_);
 #endif
-}
-
-bool WebNotificationDelegate::ShouldDisplaySettingsButton() {
-  return notification_type_ != NotificationCommon::EXTENSION;
 }
 
 void WebNotificationDelegate::DisableNotification() {
   DCHECK_NE(notification_type_, NotificationCommon::EXTENSION);
   DesktopNotificationProfileUtil::DenyPermission(profile_, origin_);
-}
-
-bool WebNotificationDelegate::ShouldDisplayOverFullscreen() const {
-  NotificationDisplayService* display_service =
-      NotificationDisplayServiceFactory::GetForProfile(profile_);
-
-  return display_service->ShouldDisplayOverFullscreen(origin_,
-                                                      notification_type_);
 }
 
 void WebNotificationDelegate::Close(bool by_user) {

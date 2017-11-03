@@ -105,7 +105,7 @@ class BlobRegistryImplTest : public testing::Test {
         std::vector<URLRequestAutoMountHandler>(), data_dir_.GetPath(),
         FileSystemOptions(FileSystemOptions::PROFILE_MODE_INCOGNITO,
                           std::vector<std::string>(), nullptr));
-    registry_impl_ = base::MakeUnique<BlobRegistryImpl>(context_.get(),
+    registry_impl_ = base::MakeUnique<BlobRegistryImpl>(context_->AsWeakPtr(),
                                                         file_system_context_);
     auto delegate = base::MakeUnique<MockDelegate>();
     delegate_ptr_ = delegate.get();
@@ -930,6 +930,49 @@ TEST_F(BlobRegistryImplTest,
 
   // Now cause construction to fail, if it would still be going on.
   request = nullptr;
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0u, BlobsUnderConstruction());
+}
+
+TEST_F(BlobRegistryImplTest,
+       Register_DefereferencedWhileBuildingBeforeResolvingDeps) {
+  const std::string kId = "id";
+  const std::string kData = "hello world";
+  const std::string kDepId = "dep-id";
+
+  // Create future blob.
+  auto blob_handle = context_->AddFutureBlob(kDepId, "", "");
+  blink::mojom::BlobPtr referenced_blob;
+  mojo::MakeStrongBinding(base::MakeUnique<MockBlob>(kDepId),
+                          MakeRequest(&referenced_blob));
+
+  // Create mojo blob depending on future blob.
+  std::vector<blink::mojom::DataElementPtr> elements;
+  elements.push_back(
+      blink::mojom::DataElement::NewBlob(blink::mojom::DataElementBlob::New(
+          std::move(referenced_blob), 0, kData.size())));
+
+  blink::mojom::BlobPtr blob;
+  EXPECT_TRUE(registry_->Register(MakeRequest(&blob), kId, "", "",
+                                  std::move(elements)));
+
+  EXPECT_TRUE(bad_messages_.empty());
+
+  EXPECT_TRUE(context_->registry().HasEntry(kId));
+  EXPECT_TRUE(context_->GetBlobDataFromUUID(kId)->IsBeingBuilt());
+  EXPECT_EQ(1u, BlobsUnderConstruction());
+
+  // Now drop all references to the blob.
+  blob.reset();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(context_->registry().HasEntry(kId));
+
+  // Now cause construction to complete, if it would still be going on.
+  BlobDataBuilder builder(kDepId);
+  builder.AppendData(kData);
+  context_->BuildPreregisteredBlob(
+      builder, BlobStorageContext::TransportAllowedCallback());
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0u, BlobsUnderConstruction());
 }

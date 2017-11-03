@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.partnercustomizations;
 
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ProviderInfo;
@@ -14,17 +13,22 @@ import android.os.AsyncTask;
 import android.text.TextUtils;
 
 import org.chromium.base.CommandLine;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksReader;
+import org.chromium.chrome.browser.util.UrlUtilities;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.annotation.Nullable;
 
 /**
  * Reads and caches partner browser customizations information if it exists.
@@ -33,8 +37,11 @@ public class PartnerBrowserCustomizations {
     private static final String TAG = "PartnerCustomize";
     private static final String PROVIDER_AUTHORITY = "com.android.partnerbrowsercustomizations";
 
+    private static final int HOMEPAGE_URL_MAX_LENGTH = 1000;
     // Private homepage structure.
+    @VisibleForTesting
     static final String PARTNER_HOMEPAGE_PATH = "homepage";
+    @VisibleForTesting
     static final String PARTNER_DISABLE_BOOKMARKS_EDITING_PATH = "disablebookmarksediting";
     @VisibleForTesting
     static final String PARTNER_DISABLE_INCOGNITO_MODE_PATH = "disableincognitomode";
@@ -45,7 +52,55 @@ public class PartnerBrowserCustomizations {
     private static volatile boolean sIncognitoModeDisabled;
     private static volatile boolean sBookmarksEditingDisabled;
     private static boolean sIsInitialized;
-    private static List<Runnable> sInitializeAsyncCallbacks = new ArrayList<Runnable>();
+    private static List<Runnable> sInitializeAsyncCallbacks = new ArrayList<>();
+
+    /** Provider of partner customizations. */
+    public interface Provider {
+        @Nullable
+        String getHomepage();
+
+        boolean isIncognitoModeDisabled();
+        boolean isBookmarksEditingDisabled();
+    }
+
+    /** Partner customizations provided by ContentProvider package. */
+    public static class ProviderPackage implements Provider {
+        @Override
+        public String getHomepage() {
+            String homepage = null;
+            Cursor cursor = ContextUtils.getApplicationContext().getContentResolver().query(
+                    buildQueryUri(PARTNER_HOMEPAGE_PATH), null, null, null, null);
+            if (cursor != null && cursor.moveToFirst() && cursor.getColumnCount() == 1) {
+                homepage = cursor.getString(0);
+            }
+            if (cursor != null) cursor.close();
+            return homepage;
+        }
+
+        @Override
+        public boolean isIncognitoModeDisabled() {
+            boolean disabled = false;
+            Cursor cursor = ContextUtils.getApplicationContext().getContentResolver().query(
+                    buildQueryUri(PARTNER_DISABLE_INCOGNITO_MODE_PATH), null, null, null, null);
+            if (cursor != null && cursor.moveToFirst() && cursor.getColumnCount() == 1) {
+                disabled = cursor.getInt(0) == 1;
+            }
+            if (cursor != null) cursor.close();
+            return disabled;
+        }
+
+        @Override
+        public boolean isBookmarksEditingDisabled() {
+            boolean disabled = false;
+            Cursor cursor = ContextUtils.getApplicationContext().getContentResolver().query(
+                    buildQueryUri(PARTNER_DISABLE_BOOKMARKS_EDITING_PATH), null, null, null, null);
+            if (cursor != null && cursor.moveToFirst() && cursor.getColumnCount() == 1) {
+                disabled = cursor.getInt(0) == 1;
+            }
+            if (cursor != null) cursor.close();
+            return disabled;
+        }
+    }
 
     /**
      * @return True if the partner homepage content provider exists and enabled. Note that The data
@@ -115,6 +170,7 @@ public class PartnerBrowserCustomizations {
      */
     public static void initializeAsync(final Context context, long timeoutMs) {
         sIsInitialized = false;
+        Provider provider = AppHooks.get().getCustomizationProvider();
         // Setup an initializing async task.
         final AsyncTask<Void, Void, Void> initializeAsyncTask =
                 new AsyncTask<Void, Void, Void>() {
@@ -123,18 +179,12 @@ public class PartnerBrowserCustomizations {
 
             private void refreshHomepage() {
                 try {
-                    ContentResolver contentResolver = context.getContentResolver();
-                    Cursor cursor = contentResolver.query(
-                            buildQueryUri(PARTNER_HOMEPAGE_PATH), null, null, null, null);
-                    if (cursor != null && cursor.moveToFirst() && cursor.getColumnCount() == 1
-                            && !isCancelled()) {
-                        if (TextUtils.isEmpty(sHomepage)
-                                || !sHomepage.equals(cursor.getString(0))) {
-                            mHomepageUriChanged = true;
-                        }
-                        sHomepage = cursor.getString(0);
+                    String homepage = provider.getHomepage();
+                    if (!isValidHomepage(homepage)) homepage = null;
+                    if (!TextUtils.equals(sHomepage, homepage)) {
+                        mHomepageUriChanged = true;
                     }
-                    if (cursor != null) cursor.close();
+                    sHomepage = homepage;
                 } catch (Exception e) {
                     Log.w(TAG, "Partner homepage provider URL read failed : ", e);
                 }
@@ -142,15 +192,7 @@ public class PartnerBrowserCustomizations {
 
             private void refreshIncognitoModeDisabled() {
                 try {
-                    ContentResolver contentResolver = context.getContentResolver();
-                    Cursor cursor = contentResolver.query(
-                            buildQueryUri(PARTNER_DISABLE_INCOGNITO_MODE_PATH),
-                                    null, null, null, null);
-                    if (cursor != null && cursor.moveToFirst() && cursor.getColumnCount() == 1
-                            && !isCancelled()) {
-                        sIncognitoModeDisabled = cursor.getInt(0) == 1;
-                    }
-                    if (cursor != null) cursor.close();
+                    sIncognitoModeDisabled = provider.isIncognitoModeDisabled();
                 } catch (Exception e) {
                     Log.w(TAG, "Partner disable incognito mode read failed : ", e);
                 }
@@ -158,19 +200,13 @@ public class PartnerBrowserCustomizations {
 
             private void refreshBookmarksEditingDisabled() {
                 try {
-                    ContentResolver contentResolver = context.getContentResolver();
-                    Cursor cursor = contentResolver.query(
-                            buildQueryUri(PARTNER_DISABLE_BOOKMARKS_EDITING_PATH),
-                                    null, null, null, null);
-                    if (cursor != null && cursor.moveToFirst() && cursor.getColumnCount() == 1
-                            && !isCancelled()) {
-                        boolean bookmarksEditingDisabled = cursor.getInt(0) == 1;
-                        if (bookmarksEditingDisabled != sBookmarksEditingDisabled) {
-                            mDisablePartnerBookmarksShim = true;
-                        }
-                        sBookmarksEditingDisabled = bookmarksEditingDisabled;
+                    boolean disabled = provider.isBookmarksEditingDisabled();
+                    // Only need to disable it once.
+                    if (disabled != sBookmarksEditingDisabled) {
+                        assert disabled;
+                        mDisablePartnerBookmarksShim = true;
                     }
-                    if (cursor != null) cursor.close();
+                    sBookmarksEditingDisabled = disabled;
                 } catch (Exception e) {
                     Log.w(TAG, "Partner disable bookmarks editing read failed : ", e);
                 }
@@ -184,7 +220,7 @@ public class PartnerBrowserCustomizations {
                             || !ChromeVersionInfo.isStableBuild();
                     if (!systemOrPreStable) {
                         // Only allow partner customization if this browser is a system package, or
-                        // forced for testing purposes.
+                        // is in pre-stable channels.
                         return null;
                     }
 
@@ -235,7 +271,7 @@ public class PartnerBrowserCustomizations {
                 sInitializeAsyncCallbacks.clear();
 
                 if (mHomepageUriChanged) {
-                    HomepageManager.getInstance(context).notifyHomepageUpdated();
+                    HomepageManager.getInstance().notifyHomepageUpdated();
                 }
 
                 // Disable partner bookmarks editing if necessary.
@@ -295,5 +331,17 @@ public class PartnerBrowserCustomizations {
             return commandLine.getSwitchValue(ChromeSwitches.PARTNER_HOMEPAGE_FOR_TESTING);
         }
         return sHomepage;
+    }
+
+    private static boolean isValidHomepage(String url) {
+        if (!UrlUtilities.isHttpOrHttps(url)) {
+            Log.w(TAG, "The scheme in homepage URL \"%s\" is not allowed.", url);
+            return false;
+        }
+        if (url.length() > HOMEPAGE_URL_MAX_LENGTH) {
+            Log.w(TAG, "The homepage URL \"%s\" is too long.", url);
+            return false;
+        }
+        return true;
     }
 }

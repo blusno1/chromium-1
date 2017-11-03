@@ -164,7 +164,7 @@ bool MakePepperFlashPluginInfo(const base::FilePath& flash_path,
   plugin_info->is_out_of_process = out_of_process;
   plugin_info->path = flash_path;
   plugin_info->name = content::kFlashPluginName;
-  plugin_info->permissions = chrome::kPepperFlashPermissions;
+  plugin_info->permissions = kPepperFlashPermissions;
 
   // The description is like "Shockwave Flash 10.2 r154".
   plugin_info->description = base::StringPrintf("%s %d.%d r%d",
@@ -321,7 +321,7 @@ bool FlashComponentInstallerPolicy::VerifyInstallation(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) const {
   base::Version unused;
-  return chrome::CheckPepperFlashManifest(manifest, &unused);
+  return CheckPepperFlashManifest(manifest, &unused);
 }
 
 // The base directory on Windows looks like:
@@ -375,11 +375,11 @@ void RegisterPepperFlashComponent(ComponentUpdateService* cus) {
     return;
 #endif  // defined(OS_CHROMEOS)
 
-  std::unique_ptr<ComponentInstallerPolicy> policy(
-      new FlashComponentInstallerPolicy);
+  std::unique_ptr<ComponentInstallerPolicy> policy =
+      std::make_unique<FlashComponentInstallerPolicy>();
   // |cus| will take ownership of |installer| during installer->Register(cus).
   ComponentInstaller* installer = new ComponentInstaller(std::move(policy));
-  installer->Register(cus, base::Closure());
+  installer->Register(cus, base::OnceClosure());
 #endif  // defined(GOOGLE_CHROME_BUILD)
 }
 

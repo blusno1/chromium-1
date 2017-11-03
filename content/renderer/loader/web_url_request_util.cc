@@ -377,16 +377,12 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
                 : -1,
             element.expected_modification_time().ToDoubleT());
         break;
-      case ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM:
-        http_body.AppendFileSystemURLRange(
-            element.filesystem_url(), element.offset(),
-            (element.length() != std::numeric_limits<uint64_t>::max())
-                ? element.length()
-                : -1,
-            element.expected_modification_time().ToDoubleT());
-        break;
       case ResourceRequestBody::Element::TYPE_BLOB:
         http_body.AppendBlob(WebString::FromASCII(element.blob_uuid()));
+        break;
+      case ResourceRequestBody::Element::TYPE_DATA_PIPE:
+        // TODO(falken): Implement this.
+        NOTIMPLEMENTED() << "data pipe";
         break;
       case ResourceRequestBody::Element::TYPE_BYTES_DESCRIPTION:
       case ResourceRequestBody::Element::TYPE_DISK_CACHE_ENTRY:

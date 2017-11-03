@@ -32,8 +32,6 @@ cr.define('extensions', function() {
   const Manager = Polymer({
     is: 'extensions-manager',
 
-    behaviors: [I18nBehavior],
-
     properties: {
       /** @type {extensions.Toolbar} */
       toolbar: Object,
@@ -249,6 +247,24 @@ cr.define('extensions', function() {
     },
 
     /**
+     * Categorizes |items| to apps and extensions and initializes those lists.
+     * This is faster than calling |addItem| multiple times.
+     * @param {!Array<!chrome.developerPrivate.ExtensionInfo>} items
+     */
+    initAppsAndExtensions(items) {
+      items.sort(compareExtensions);
+      let apps = [];
+      let extensions = [];
+      for (let i of items) {
+        let list = this.getListId_(i) === 'apps' ? apps : extensions;
+        list.push(i);
+      }
+
+      this.apps = apps;
+      this.extensions = extensions;
+    },
+
+    /**
      * Creates and adds a new extensions-item element to the list, inserting it
      * into its sorted position in the relevant section.
      * @param {!chrome.developerPrivate.ExtensionInfo} item The extension
@@ -302,6 +318,12 @@ cr.define('extensions', function() {
       // We should never try and remove a non-existent item.
       assert(index >= 0);
       this.splice(listId, index, 1);
+      if ((this.currentPage_.page == Page.DETAILS ||
+           this.currentPage_.page == Page.ERRORS) &&
+          this.currentPage_.extensionId == item.id) {
+        // Leave the details page (the 'list' page is a fine choice).
+        extensions.navigation.navigateTo({page: Page.LIST});
+      }
     },
 
     /**

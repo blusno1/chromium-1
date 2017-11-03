@@ -37,8 +37,6 @@ static_library("safe_browsing") {
     "chrome_cleaner/srt_client_info_win.h",
     "chrome_cleaner/srt_field_trial_win.cc",
     "chrome_cleaner/srt_field_trial_win.h",
-    "chrome_cleaner/srt_global_error_win.cc",
-    "chrome_cleaner/srt_global_error_win.h",
     "safe_browsing_tab_observer.cc",
     "safe_browsing_tab_observer.h",
     "url_checker_delegate_impl.cc",
@@ -256,7 +254,7 @@ static_library("safe_browsing") {
         "services_delegate_stub.cc",
         "services_delegate_stub.h",
       ]
-      deps += [ "//components/safe_browsing/db:safe_browsing_mobile" ]
+      deps += [ "//components/safe_browsing/android:safe_browsing_mobile" ]
     }
   }
 }

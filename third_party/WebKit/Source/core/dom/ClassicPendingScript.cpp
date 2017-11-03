@@ -32,7 +32,7 @@ ClassicPendingScript* ClassicPendingScript::Fetch(
 
   // Step 1. ... "script", ... [spec text]
   ResourceLoaderOptions resource_loader_options;
-  resource_loader_options.initiator_info.name = element->InitiatorName();
+  resource_loader_options.initiator_info.name = "script";
   FetchParameters params(resource_request, resource_loader_options);
 
   // Step 1. ... and CORS setting. [spec text]
@@ -404,29 +404,19 @@ bool ClassicPendingScript::StartStreamingIfPossible(
                        ? TaskType::kNetworking
                        : TaskType::kNetworkingControl;
 
-  DCHECK_EQ(ready_state_ == kReady, GetResource()->IsLoaded());
   DCHECK(!streamer_);
   DCHECK(!IsCurrentlyStreaming());
   DCHECK(!streamer_done_);
-  bool success = false;
-  if (ready_state_ == kReady) {
-    ScriptStreamer::StartStreamingLoadedScript(
-        this, streamer_type, document->GetFrame()->GetSettings(), script_state,
-        document->GetTaskRunner(task_type));
-    success = streamer_ && !streamer_->IsStreamingFinished();
-  } else {
-    ScriptStreamer::StartStreaming(
-        this, streamer_type, document->GetFrame()->GetSettings(), script_state,
-        document->GetTaskRunner(task_type));
-    success = streamer_;
-  }
+  ScriptStreamer::StartStreaming(
+      this, streamer_type, document->GetFrame()->GetSettings(), script_state,
+      document->GetTaskRunner(task_type));
+  bool success = streamer_ && !streamer_->IsStreamingFinished();
 
   // If we have successfully started streaming, we are required to call the
   // callback.
   DCHECK_EQ(success, IsCurrentlyStreaming());
-  if (success) {
+  if (success)
     streamer_done_ = std::move(done);
-  }
   return success;
 }
 

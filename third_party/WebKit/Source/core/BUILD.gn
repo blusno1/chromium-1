@@ -1429,6 +1429,7 @@ jumbo_source_set("unit_tests") {
     "dom/MutationObserverTest.cpp",
     "dom/NodeTest.cpp",
     "dom/NthIndexCacheTest.cpp",
+    "dom/PausableObjectTest.cpp",
     "dom/RangeTest.cpp",
     "dom/ScriptModuleResolverImplTest.cpp",
     "dom/ScriptRunnerTest.cpp",
@@ -1437,7 +1438,6 @@ jumbo_source_set("unit_tests") {
     "dom/ShadowDOMV0Test.cpp",
     "dom/SpaceSplitStringTest.cpp",
     "dom/StaticRangeTest.cpp",
-    "dom/SuspendableObjectTest.cpp",
     "dom/TextTest.cpp",
     "dom/TreeScopeTest.cpp",
     "dom/UserGestureIndicatorTest.cpp",
@@ -1565,6 +1565,7 @@ jumbo_source_set("unit_tests") {
     "imagebitmap/ImageBitmapTest.cpp",
     "input/EventHandlerTest.cpp",
     "input/ImeOnFocusTest.cpp",
+    "input/PointerEventManagerTest.cpp",
     "input/ScrollBoundaryBehaviorTest.cpp",
     "input/TouchActionTest.cpp",
     "input/TouchEventManagerTest.cpp",
@@ -1639,6 +1640,7 @@ jumbo_source_set("unit_tests") {
     "loader/DocumentLoaderTest.cpp",
     "loader/FrameFetchContextTest.cpp",
     "loader/IdlenessDetectorTest.cpp",
+    "loader/InteractiveDetectorTest.cpp",
     "loader/LinkLoaderTest.cpp",
     "loader/MixedContentCheckerTest.cpp",
     "loader/PingLoaderTest.cpp",
@@ -1847,6 +1849,7 @@ if (!is_win) {
       "//third_party/WebKit/Source/platform:blink_fuzzer_test_support",
       "//third_party/libprotobuf-mutator",
     ]
+    dict = "//third_party/WebKit/Source/core/css/css.dict"
   }
 
   proto_library("css_proto") {

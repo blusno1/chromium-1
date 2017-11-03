@@ -1457,6 +1457,10 @@ const char kUseDdljsonApiName[] = "Use new ddljson API for Doodles";
 const char kUseDdljsonApiDescription[] =
     "Enables the new ddljson API to fetch Doodles for the NTP.";
 
+const char kUseModernMediaControlsName[] = "New Media Controls";
+const char kUseModernMediaControlsDescription[] =
+    "Enables the new style native media controls.";
+
 const char kUserActivationV2Name[] = "User Activation v2";
 const char kUserActivationV2Description[] =
     "Enable simple user activation for APIs that are otherwise controlled by "
@@ -2020,10 +2024,6 @@ const char kPayWithGoogleV1Description[] =
     "Enable Pay with Google integration into Web Payments with API version "
     "'1'.";
 
-const char kProgressBarThrottleName[] = "Android progress update throttling.";
-const char kProgressBarThrottleDescription[] =
-    "Limit the maximum progress update to make progress appear smoother.";
-
 const char kProgressBarCompletionName[] =
     "Android phone page load progress bar completion time.";
 const char kProgressBarCompletionDescription[] =
@@ -2541,6 +2541,10 @@ const char kMultideviceName[] = "Enable multidevice features";
 const char kMultideviceDescription[] =
     "Enables UI for controlling multidevice features.";
 
+const char kNativeSambaName[] = "Native Samba Client";
+const char kNativeSambaDescription[] =
+    "If enabled, allows connections to a Samba share via Files app";
+
 const char kNetworkPortalNotificationName[] =
     "Notifications about captive portals";
 const char kNetworkPortalNotificationDescription[] =
@@ -2802,6 +2806,11 @@ const char kAshDisableSmoothScreenRotationName[] =
     "Disable smooth rotation animations.";
 const char kAshDisableSmoothScreenRotationDescription[] =
     "Disable smooth rotation animations.";
+
+const char kAshEnableKeyboardShortcutViewerName[] =
+    "Enable keyboard shortcut viewer.";
+const char kAshEnableKeyboardShortcutViewerDescription[] =
+    "Enable keyboard shortcut viewer.";
 
 const char kAshEnableMirroredScreenName[] = "Enable mirrored screen mode.";
 const char kAshEnableMirroredScreenDescription[] =

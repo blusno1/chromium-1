@@ -28,7 +28,7 @@ BackgroundFetchJobController::BackgroundFetchJobController(
       finished_callback_(std::move(finished_callback)),
       weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  data_manager_->SetController(registration_id, this);
+  data_manager_->SetDatabaseClient(registration_id, this);
 }
 
 void BackgroundFetchJobController::InitializeRequestStatus(
@@ -44,7 +44,7 @@ void BackgroundFetchJobController::InitializeRequestStatus(
 
 BackgroundFetchJobController::~BackgroundFetchJobController() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  data_manager_->SetController(registration_id_, nullptr);
+  data_manager_->SetDatabaseClient(registration_id_, nullptr);
 }
 
 void BackgroundFetchJobController::Start() {
@@ -147,10 +147,10 @@ void BackgroundFetchJobController::AbortFromUser() {
   Abort(false /* cancel_download */);
 }
 
-void BackgroundFetchJobController::UpdateUI(const std::string& title) {
+void BackgroundFetchJobController::UpdateJobTitle(const std::string& title) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  delegate_proxy_->UpdateUI(registration_id_.unique_id(), title);
+  delegate_proxy_->UpdateJobTitle(registration_id_.unique_id(), title);
 }
 
 uint64_t BackgroundFetchJobController::GetInProgressDownloadedBytes() {

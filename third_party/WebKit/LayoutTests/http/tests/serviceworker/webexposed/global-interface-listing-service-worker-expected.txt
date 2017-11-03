@@ -797,6 +797,7 @@ interface NetworkInformation : EventTarget
     getter onchange
     getter ontypechange
     getter rtt
+    getter saveData
     getter type
     method constructor
     setter onchange
@@ -2503,6 +2504,7 @@ interface WorkerGlobalScope : EventTarget
     attribute @@toStringTag
     getter caches
     getter crypto
+    getter fonts
     getter indexedDB
     getter isSecureContext
     getter location

@@ -11,7 +11,6 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -53,6 +52,9 @@ const char kUploadCardRequestPath[] =
 const char kUploadCardRequestFormat[] =
     "requestContentType=application/json; charset=utf-8&request=%s"
     "&s7e_1_pan=%s&s7e_13_cvc=%s";
+const char kUploadCardRequestFormatWithoutCvc[] =
+    "requestContentType=application/json; charset=utf-8&request=%s"
+    "&s7e_1_pan=%s";
 
 const char kTokenServiceConsumerId[] = "wallet_client";
 const char kPaymentsOAuth2Scope[] =
@@ -181,7 +183,7 @@ void SetActiveExperiments(const std::vector<const char*>& active_experiments,
     return;
 
   std::unique_ptr<base::ListValue> active_chrome_experiments(
-      base::MakeUnique<base::ListValue>());
+      std::make_unique<base::ListValue>());
   for (const char* it : active_experiments)
     active_chrome_experiments->AppendString(it);
 
@@ -341,7 +343,8 @@ class UploadCardRequest : public PaymentsRequest {
   std::string GetRequestContent() override {
     base::DictionaryValue request_dict;
     request_dict.SetString("encrypted_pan", "__param:s7e_1_pan");
-    request_dict.SetString("encrypted_cvc", "__param:s7e_13_cvc");
+    if (!request_details_.cvc.empty())
+      request_dict.SetString("encrypted_cvc", "__param:s7e_13_cvc");
     request_dict.SetKey("risk_data_encoded",
                         BuildRiskDictionary(request_details_.risk_data));
 
@@ -384,13 +387,21 @@ class UploadCardRequest : public PaymentsRequest {
         AutofillType(CREDIT_CARD_NUMBER), app_locale);
     std::string json_request;
     base::JSONWriter::Write(request_dict, &json_request);
-    std::string request_content = base::StringPrintf(
-        kUploadCardRequestFormat,
-        net::EscapeUrlEncodedData(json_request, true).c_str(),
-        net::EscapeUrlEncodedData(base::UTF16ToASCII(pan), true).c_str(),
-        net::EscapeUrlEncodedData(base::UTF16ToASCII(request_details_.cvc),
-                                  true)
-            .c_str());
+    std::string request_content;
+    if (request_details_.cvc.empty()) {
+      request_content = base::StringPrintf(
+          kUploadCardRequestFormatWithoutCvc,
+          net::EscapeUrlEncodedData(json_request, true).c_str(),
+          net::EscapeUrlEncodedData(base::UTF16ToASCII(pan), true).c_str());
+    } else {
+      request_content = base::StringPrintf(
+          kUploadCardRequestFormat,
+          net::EscapeUrlEncodedData(json_request, true).c_str(),
+          net::EscapeUrlEncodedData(base::UTF16ToASCII(pan), true).c_str(),
+          net::EscapeUrlEncodedData(base::UTF16ToASCII(request_details_.cvc),
+                                    true)
+              .c_str());
+    }
     VLOG(3) << "savecard request body: " << request_content;
     return request_content;
   }
@@ -460,7 +471,7 @@ void PaymentsClient::UnmaskCard(
     const PaymentsClient::UnmaskRequestDetails& request_details) {
   DCHECK(unmask_delegate_);
   IssueRequest(
-      base::MakeUnique<UnmaskCardRequest>(request_details, unmask_delegate_),
+      std::make_unique<UnmaskCardRequest>(request_details, unmask_delegate_),
       true);
 }
 
@@ -469,7 +480,7 @@ void PaymentsClient::GetUploadDetails(
     const std::vector<const char*>& active_experiments,
     const std::string& app_locale) {
   DCHECK(save_delegate_);
-  IssueRequest(base::MakeUnique<GetUploadDetailsRequest>(
+  IssueRequest(std::make_unique<GetUploadDetailsRequest>(
                    addresses, active_experiments, app_locale, save_delegate_),
                false);
 }
@@ -478,7 +489,7 @@ void PaymentsClient::UploadCard(
     const PaymentsClient::UploadRequestDetails& request_details) {
   DCHECK(save_delegate_);
   IssueRequest(
-      base::MakeUnique<UploadCardRequest>(request_details, save_delegate_),
+      std::make_unique<UploadCardRequest>(request_details, save_delegate_),
       true);
 }
 

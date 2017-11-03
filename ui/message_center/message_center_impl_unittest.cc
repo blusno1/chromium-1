@@ -24,7 +24,7 @@
 #include "ui/message_center/message_center_types.h"
 #include "ui/message_center/notification_blocker.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
 
 using base::UTF8ToUTF16;
@@ -94,9 +94,6 @@ class MessageCenterImplTest : public testing::Test,
   }
 
   MessageCenter* message_center() const { return message_center_; }
-  NotifierSettingsObserver* notifier_settings_observer() const {
-    return static_cast<NotifierSettingsObserver*>(message_center_impl());
-  }
   MessageCenterImpl* message_center_impl() const {
     return reinterpret_cast<MessageCenterImpl*>(message_center_);
   }
@@ -737,24 +734,19 @@ TEST_F(MessageCenterImplTest, NotifierEnabledChanged) {
       CreateSimpleNotificationWithNotifierId("id2-5", "app2")));
   ASSERT_EQ(8u, message_center()->NotificationCount());
 
-  // Enabling an extension should have no effect on the count.
-  notifier_settings_observer()->NotifierEnabledChanged(
-      NotifierId(NotifierId::APPLICATION, "app1"), true);
-  ASSERT_EQ(8u, message_center()->NotificationCount());
-
   // Removing all of app2's notifications should only leave app1's.
-  notifier_settings_observer()->NotifierEnabledChanged(
-      NotifierId(NotifierId::APPLICATION, "app2"), false);
+  message_center()->RemoveNotificationsForNotifierId(
+      NotifierId(NotifierId::APPLICATION, "app2"));
   ASSERT_EQ(3u, message_center()->NotificationCount());
 
   // Removal operations should be idempotent.
-  notifier_settings_observer()->NotifierEnabledChanged(
-      NotifierId(NotifierId::APPLICATION, "app2"), false);
+  message_center()->RemoveNotificationsForNotifierId(
+      NotifierId(NotifierId::APPLICATION, "app2"));
   ASSERT_EQ(3u, message_center()->NotificationCount());
 
   // Now we remove the remaining notifications.
-  notifier_settings_observer()->NotifierEnabledChanged(
-      NotifierId(NotifierId::APPLICATION, "app1"), false);
+  message_center()->RemoveNotificationsForNotifierId(
+      NotifierId(NotifierId::APPLICATION, "app1"));
   ASSERT_EQ(0u, message_center()->NotificationCount());
 }
 

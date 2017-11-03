@@ -33,6 +33,7 @@ extern const char kImportantSitesDialogHistory[];
 extern const char kLastProfileResetTimestamp[];
 extern const char kChromeCleanerResetPending[];
 #endif
+extern const char kUserLanguageProfile[];
 extern const char kNewTabPageLocationOverride[];
 extern const char kProfileIconVersion[];
 extern const char kRestoreOnStartup[];
@@ -527,7 +528,6 @@ extern const char kWasRestarted[];
 #endif
 
 extern const char kDisableExtensions[];
-extern const char kDisablePluginFinder[];
 
 extern const char kNtpAppPageNames[];
 extern const char kNtpCollapsedForeignSessions[];

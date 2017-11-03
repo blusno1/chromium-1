@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.crash;
 
+import android.app.ActivityManager;
+import android.app.ActivityManager.RunningAppProcessInfo;
+import android.content.Context;
 import android.util.Log;
 
 import org.chromium.base.BuildInfo;
@@ -11,12 +14,15 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.MainDex;
+import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.UUID;
 
 /**
@@ -27,7 +33,7 @@ import java.util.UUID;
 @MainDex
 public class PureJavaExceptionReporter {
     // report fields, please keep the name sync with MIME blocks in breakpad_linux.cc
-    public static final String CHANNEL = "Channel";
+    public static final String CHANNEL = "channel";
     public static final String VERSION = "ver";
     public static final String PRODUCT = "prod";
     public static final String ANDROID_BUILD_ID = "android_build_id";
@@ -63,6 +69,26 @@ public class PureJavaExceptionReporter {
     public static void reportJavaException(Throwable javaException) {
         PureJavaExceptionReporter reporter = new PureJavaExceptionReporter();
         reporter.createAndUploadReport(javaException);
+    }
+
+    /**
+     * Detect if the current process is isolated.
+     *
+     * @return whether the process is isolated, or null if cannot determine.
+     */
+    @SuppressFBWarnings("NP_BOOLEAN_RETURN_NULL")
+    public static Boolean detectIsIsolatedProcess() {
+        try {
+            Method isIsolatedMethod = android.os.Process.class.getMethod("isIsolated");
+            Object retVal = isIsolatedMethod.invoke(null);
+            if (retVal == null || !(retVal instanceof Boolean)) {
+                return null;
+            }
+            return (Boolean) retVal;
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException
+                | NoSuchMethodException | SecurityException e) {
+            return null;
+        }
     }
 
     @VisibleForTesting
@@ -106,9 +132,14 @@ public class PureJavaExceptionReporter {
             mMinidumpFileStream = null;
             return;
         }
+        String processName = detectCurrentProcessName();
+        if (processName == null || !processName.contains(":")) {
+            processName = "browser";
+        }
+
         String[] allInfo = BuildInfo.getAll();
         addPairedString(PRODUCT, "Chrome_Android");
-        addPairedString(PROCESS_TYPE, "browser");
+        addPairedString(PROCESS_TYPE, processName);
         addPairedString(DEVICE, allInfo[BuildInfo.DEVICE_INDEX]);
         addPairedString(VERSION, ChromeVersionInfo.getProductVersion());
         addPairedString(CHANNEL, getChannel());
@@ -151,6 +182,24 @@ public class PureJavaExceptionReporter {
             return "stable";
         }
         return "";
+    }
+
+    private static String detectCurrentProcessName() {
+        try {
+            int pid = android.os.Process.myPid();
+
+            ActivityManager manager =
+                    (ActivityManager) ContextUtils.getApplicationContext().getSystemService(
+                            Context.ACTIVITY_SERVICE);
+            for (RunningAppProcessInfo processInfo : manager.getRunningAppProcesses()) {
+                if (processInfo.pid == pid) {
+                    return processInfo.processName;
+                }
+            }
+            return null;
+        } catch (SecurityException e) {
+            return null;
+        }
     }
 
     @VisibleForTesting

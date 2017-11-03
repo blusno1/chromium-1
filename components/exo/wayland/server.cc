@@ -19,13 +19,11 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stylus-tools-unstable-v1-server-protocol.h>
-#include <stylus-unstable-v1-server-protocol.h>
 #include <stylus-unstable-v2-server-protocol.h>
 #include <viewporter-server-protocol.h>
 #include <vsync-feedback-unstable-v1-server-protocol.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol-core.h>
-#include <xdg-shell-unstable-v5-server-protocol.h>
 #include <xdg-shell-unstable-v6-server-protocol.h>
 
 #include <algorithm>
@@ -652,7 +650,6 @@ void linux_buffer_params_add(wl_client* client,
   if (!inserted.second) {  // The plane was already there.
     wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_SET,
                            "plane already set");
-    return;
   }
 }
 
@@ -837,7 +834,8 @@ void linux_dmabuf_create_params(wl_client* client,
       std::make_unique<LinuxBufferParams>(GetUserDataAs<Display>(resource));
 
   wl_resource* linux_buffer_params_resource =
-      wl_resource_create(client, &zwp_linux_buffer_params_v1_interface, 2, id);
+      wl_resource_create(client, &zwp_linux_buffer_params_v1_interface,
+                         wl_resource_get_version(resource), id);
 
   SetImplementation(linux_buffer_params_resource,
                     &linux_buffer_params_implementation,
@@ -847,12 +845,15 @@ void linux_dmabuf_create_params(wl_client* client,
 const struct zwp_linux_dmabuf_v1_interface linux_dmabuf_implementation = {
     linux_dmabuf_destroy, linux_dmabuf_create_params};
 
+const uint32_t linux_dmabuf_version = 2;
+
 void bind_linux_dmabuf(wl_client* client,
                        void* data,
                        uint32_t version,
                        uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, version, id);
+      wl_resource_create(client, &zwp_linux_dmabuf_v1_interface,
+                         std::min(version, linux_dmabuf_version), id);
 
   wl_resource_set_implementation(resource, &linux_dmabuf_implementation, data,
                                  nullptr);
@@ -1259,6 +1260,51 @@ void bind_output(wl_client* client, void* data, uint32_t version, uint32_t id) {
 ////////////////////////////////////////////////////////////////////////////////
 // xdg_positioner_interface:
 
+struct WaylandPositioner {
+  // Calculate and return position from current state.
+  gfx::Point CalculatePosition() const {
+    gfx::Point position;
+
+    if (anchor & ZXDG_POSITIONER_V6_ANCHOR_LEFT)
+      position.set_x(anchor_rect.x());
+    else if (anchor & ZXDG_POSITIONER_V6_ANCHOR_RIGHT)
+      position.set_x(anchor_rect.right());
+    else
+      position.set_x(anchor_rect.CenterPoint().x());
+
+    if (anchor & ZXDG_POSITIONER_V6_ANCHOR_TOP)
+      position.set_y(anchor_rect.y());
+    else if (anchor & ZXDG_POSITIONER_V6_ANCHOR_BOTTOM)
+      position.set_y(anchor_rect.bottom());
+    else
+      position.set_y(anchor_rect.CenterPoint().y());
+
+    gfx::Vector2d gravity_offset;
+
+    if (gravity & ZXDG_POSITIONER_V6_GRAVITY_LEFT)
+      gravity_offset.set_x(size.width());
+    else if (gravity & ZXDG_POSITIONER_V6_GRAVITY_RIGHT)
+      gravity_offset.set_x(0);
+    else
+      gravity_offset.set_x(size.width() / 2);
+
+    if (gravity & ZXDG_POSITIONER_V6_GRAVITY_TOP)
+      gravity_offset.set_y(size.height());
+    else if (gravity & ZXDG_POSITIONER_V6_GRAVITY_BOTTOM)
+      gravity_offset.set_y(0);
+    else
+      gravity_offset.set_y(size.height() / 2);
+
+    return position + offset - gravity_offset;
+  }
+
+  gfx::Size size;
+  gfx::Rect anchor_rect;
+  uint32_t anchor = ZXDG_POSITIONER_V6_ANCHOR_NONE;
+  uint32_t gravity = ZXDG_POSITIONER_V6_GRAVITY_NONE;
+  gfx::Vector2d offset;
+};
+
 void xdg_positioner_v6_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
@@ -1267,7 +1313,13 @@ void xdg_positioner_v6_set_size(wl_client* client,
                                 wl_resource* resource,
                                 int32_t width,
                                 int32_t height) {
-  NOTIMPLEMENTED();
+  if (width < 1 || height < 1) {
+    wl_resource_post_error(resource, ZXDG_POSITIONER_V6_ERROR_INVALID_INPUT,
+                           "width and height must be positive and non-zero");
+    return;
+  }
+
+  GetUserDataAs<WaylandPositioner>(resource)->size = gfx::Size(width, height);
 }
 
 void xdg_positioner_v6_set_anchor_rect(wl_client* client,
@@ -1276,19 +1328,44 @@ void xdg_positioner_v6_set_anchor_rect(wl_client* client,
                                        int32_t y,
                                        int32_t width,
                                        int32_t height) {
-  NOTIMPLEMENTED();
+  if (width < 1 || height < 1) {
+    wl_resource_post_error(resource, ZXDG_POSITIONER_V6_ERROR_INVALID_INPUT,
+                           "width and height must be positive and non-zero");
+    return;
+  }
+
+  GetUserDataAs<WaylandPositioner>(resource)->anchor_rect =
+      gfx::Rect(x, y, width, height);
 }
 
 void xdg_positioner_v6_set_anchor(wl_client* client,
                                   wl_resource* resource,
                                   uint32_t anchor) {
-  NOTIMPLEMENTED();
+  if (((anchor & ZXDG_POSITIONER_V6_ANCHOR_LEFT) &&
+       (anchor & ZXDG_POSITIONER_V6_ANCHOR_RIGHT)) ||
+      ((anchor & ZXDG_POSITIONER_V6_ANCHOR_TOP) &&
+       (anchor & ZXDG_POSITIONER_V6_ANCHOR_BOTTOM))) {
+    wl_resource_post_error(resource, ZXDG_POSITIONER_V6_ERROR_INVALID_INPUT,
+                           "same-axis values are not allowed");
+    return;
+  }
+
+  GetUserDataAs<WaylandPositioner>(resource)->anchor = anchor;
 }
 
 void xdg_positioner_v6_set_gravity(wl_client* client,
                                    wl_resource* resource,
                                    uint32_t gravity) {
-  NOTIMPLEMENTED();
+  if (((gravity & ZXDG_POSITIONER_V6_GRAVITY_LEFT) &&
+       (gravity & ZXDG_POSITIONER_V6_GRAVITY_RIGHT)) ||
+      ((gravity & ZXDG_POSITIONER_V6_GRAVITY_TOP) &&
+       (gravity & ZXDG_POSITIONER_V6_GRAVITY_BOTTOM))) {
+    wl_resource_post_error(resource, ZXDG_POSITIONER_V6_ERROR_INVALID_INPUT,
+                           "same-axis values are not allowed");
+    return;
+  }
+
+  GetUserDataAs<WaylandPositioner>(resource)->gravity = gravity;
 }
 
 void xdg_positioner_v6_set_constraint_adjustment(
@@ -1302,7 +1379,7 @@ void xdg_positioner_v6_set_offset(wl_client* client,
                                   wl_resource* resource,
                                   int32_t x,
                                   int32_t y) {
-  NOTIMPLEMENTED();
+  GetUserDataAs<WaylandPositioner>(resource)->offset = gfx::Vector2d(x, y);
 }
 
 const struct zxdg_positioner_v6_interface xdg_positioner_v6_implementation = {
@@ -1401,14 +1478,16 @@ void xdg_toplevel_v6_set_max_size(wl_client* client,
                                   wl_resource* resource,
                                   int32_t width,
                                   int32_t height) {
-  NOTIMPLEMENTED();
+  GetUserDataAs<ShellSurface>(resource)->SetMaximumSize(
+      gfx::Size(width, height));
 }
 
 void xdg_toplevel_v6_set_min_size(wl_client* client,
                                   wl_resource* resource,
                                   int32_t width,
                                   int32_t height) {
-  NOTIMPLEMENTED();
+  GetUserDataAs<ShellSurface>(resource)->SetMinimumSize(
+      gfx::Size(width, height));
 }
 
 void xdg_toplevel_v6_set_maximized(wl_client* client, wl_resource* resource) {
@@ -1446,13 +1525,6 @@ const struct zxdg_toplevel_v6_interface xdg_toplevel_v6_implementation = {
 ////////////////////////////////////////////////////////////////////////////////
 // xdg_popup_interface:
 
-void xdg_popup_v5_destroy(wl_client* client, wl_resource* resource) {
-  wl_resource_destroy(resource);
-}
-
-const struct xdg_popup_interface xdg_popup_v5_implementation = {
-    xdg_popup_v5_destroy};
-
 void xdg_popup_v6_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
@@ -1469,140 +1541,6 @@ const struct zxdg_popup_v6_interface xdg_popup_v6_implementation = {
 
 ////////////////////////////////////////////////////////////////////////////////
 // xdg_surface_interface:
-
-int XdgSurfaceV5ResizeComponent(uint32_t edges) {
-  switch (edges) {
-    case XDG_SURFACE_RESIZE_EDGE_TOP:
-      return HTTOP;
-    case XDG_SURFACE_RESIZE_EDGE_BOTTOM:
-      return HTBOTTOM;
-    case XDG_SURFACE_RESIZE_EDGE_LEFT:
-      return HTLEFT;
-    case XDG_SURFACE_RESIZE_EDGE_TOP_LEFT:
-      return HTTOPLEFT;
-    case XDG_SURFACE_RESIZE_EDGE_BOTTOM_LEFT:
-      return HTBOTTOMLEFT;
-    case XDG_SURFACE_RESIZE_EDGE_RIGHT:
-      return HTRIGHT;
-    case XDG_SURFACE_RESIZE_EDGE_TOP_RIGHT:
-      return HTTOPRIGHT;
-    case XDG_SURFACE_RESIZE_EDGE_BOTTOM_RIGHT:
-      return HTBOTTOMRIGHT;
-    default:
-      return HTBOTTOMRIGHT;
-  }
-}
-
-void xdg_surface_v5_destroy(wl_client* client, wl_resource* resource) {
-  wl_resource_destroy(resource);
-}
-
-void xdg_surface_v5_set_parent(wl_client* client,
-                               wl_resource* resource,
-                               wl_resource* parent) {
-  if (!parent) {
-    GetUserDataAs<ShellSurface>(resource)->SetParent(nullptr);
-    return;
-  }
-
-  // This is a noop if parent has not been mapped.
-  ShellSurface* shell_surface = GetUserDataAs<ShellSurface>(parent);
-  if (shell_surface->GetWidget())
-    GetUserDataAs<ShellSurface>(resource)->SetParent(shell_surface);
-}
-
-void xdg_surface_v5_set_title(wl_client* client,
-                              wl_resource* resource,
-                              const char* title) {
-  GetUserDataAs<ShellSurface>(resource)
-      ->SetTitle(base::string16(base::UTF8ToUTF16(title)));
-}
-
-void xdg_surface_v5_set_add_id(wl_client* client,
-                               wl_resource* resource,
-                               const char* app_id) {
-  GetUserDataAs<ShellSurface>(resource)->SetApplicationId(app_id);
-}
-
-void xdg_surface_v5_show_window_menu(wl_client* client,
-                                     wl_resource* resource,
-                                     wl_resource* seat,
-                                     uint32_t serial,
-                                     int32_t x,
-                                     int32_t y) {
-  NOTIMPLEMENTED();
-}
-
-void xdg_surface_v5_move(wl_client* client,
-                         wl_resource* resource,
-                         wl_resource* seat,
-                         uint32_t serial) {
-  GetUserDataAs<ShellSurface>(resource)->Move();
-}
-
-void xdg_surface_v5_resize(wl_client* client,
-                           wl_resource* resource,
-                           wl_resource* seat,
-                           uint32_t serial,
-                           uint32_t edges) {
-  int component = XdgSurfaceV5ResizeComponent(edges);
-  if (component != HTNOWHERE)
-    GetUserDataAs<ShellSurface>(resource)->Resize(component);
-}
-
-void xdg_surface_v5_ack_configure(wl_client* client,
-                                  wl_resource* resource,
-                                  uint32_t serial) {
-  GetUserDataAs<ShellSurface>(resource)->AcknowledgeConfigure(serial);
-}
-
-void xdg_surface_v5_set_window_geometry(wl_client* client,
-                                        wl_resource* resource,
-                                        int32_t x,
-                                        int32_t y,
-                                        int32_t width,
-                                        int32_t height) {
-  GetUserDataAs<ShellSurface>(resource)
-      ->SetGeometry(gfx::Rect(x, y, width, height));
-}
-
-void xdg_surface_v5_set_maximized(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->Maximize();
-}
-
-void xdg_surface_v5_unset_maximized(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->Restore();
-}
-
-void xdg_surface_v5_set_fullscreen(wl_client* client,
-                                   wl_resource* resource,
-                                   wl_resource* output) {
-  GetUserDataAs<ShellSurface>(resource)->SetFullscreen(true);
-}
-
-void xdg_surface_v5_unset_fullscreen(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->SetFullscreen(false);
-}
-
-void xdg_surface_v5_set_minimized(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->Minimize();
-}
-
-const struct xdg_surface_interface xdg_surface_v5_implementation = {
-    xdg_surface_v5_destroy,
-    xdg_surface_v5_set_parent,
-    xdg_surface_v5_set_title,
-    xdg_surface_v5_set_add_id,
-    xdg_surface_v5_show_window_menu,
-    xdg_surface_v5_move,
-    xdg_surface_v5_resize,
-    xdg_surface_v5_ack_configure,
-    xdg_surface_v5_set_window_geometry,
-    xdg_surface_v5_set_maximized,
-    xdg_surface_v5_unset_maximized,
-    xdg_surface_v5_set_fullscreen,
-    xdg_surface_v5_unset_fullscreen,
-    xdg_surface_v5_set_minimized};
 
 void xdg_surface_v6_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -1684,8 +1622,8 @@ void HandleXdgPopupV6CloseCallback(wl_resource* resource) {
 void xdg_surface_v6_get_popup(wl_client* client,
                               wl_resource* resource,
                               uint32_t id,
-                              wl_resource* parent,
-                              wl_resource* positioner) {
+                              wl_resource* parent_resource,
+                              wl_resource* positioner_resource) {
   ShellSurface* shell_surface = GetUserDataAs<ShellSurface>(resource);
   if (shell_surface->enabled()) {
     wl_resource_post_error(resource, ZXDG_SURFACE_V6_ERROR_ALREADY_CONSTRUCTED,
@@ -1693,6 +1631,24 @@ void xdg_surface_v6_get_popup(wl_client* client,
     return;
   }
 
+  ShellSurface* parent = GetUserDataAs<ShellSurface>(parent_resource);
+  if (!parent->enabled()) {
+    wl_resource_post_error(resource, ZXDG_SURFACE_V6_ERROR_NOT_CONSTRUCTED,
+                           "popup parent not constructed");
+    return;
+  }
+
+  gfx::Point position = GetUserDataAs<WaylandPositioner>(positioner_resource)
+                            ->CalculatePosition();
+  // |position| is relative to the parent's origin, and |origin| is in screen
+  // coordinates.
+  gfx::Point origin = position;
+  wm::ConvertPointToScreen(parent->GetWidget()->GetNativeWindow(), &origin);
+  shell_surface->SetParent(parent);
+  shell_surface->SetOrigin(origin);
+  shell_surface->SetBoundsMode(ShellSurface::BoundsMode::FIXED);
+  shell_surface->SetActivatable(false);
+  shell_surface->SetCanMinimize(false);
   shell_surface->SetEnabled(true);
 
   wl_resource* xdg_popup_resource =
@@ -1729,171 +1685,6 @@ const struct zxdg_surface_v6_interface xdg_surface_v6_implementation = {
 ////////////////////////////////////////////////////////////////////////////////
 // xdg_shell_interface:
 
-void xdg_shell_v5_destroy(wl_client* client, wl_resource* resource) {
-  // Nothing to do here.
-}
-
-// Currently implemented version of the unstable xdg-shell interface.
-#define XDG_SHELL_VERSION 5
-static_assert(XDG_SHELL_VERSION == XDG_SHELL_VERSION_CURRENT,
-              "Interface version doesn't match implementation version");
-
-void xdg_shell_v5_use_unstable_version(wl_client* client,
-                                       wl_resource* resource,
-                                       int32_t version) {
-  if (version > XDG_SHELL_VERSION) {
-    wl_resource_post_error(resource, 1,
-                           "xdg-shell version not implemented yet.");
-  }
-}
-
-void HandleXdgSurfaceV5CloseCallback(wl_resource* resource) {
-  xdg_surface_send_close(resource);
-  wl_client_flush(wl_resource_get_client(resource));
-}
-
-void AddXdgSurfaceV5State(wl_array* states, xdg_surface_state state) {
-  xdg_surface_state* value = static_cast<xdg_surface_state*>(
-      wl_array_add(states, sizeof(xdg_surface_state)));
-  DCHECK(value);
-  *value = state;
-}
-
-uint32_t HandleXdgSurfaceV5ConfigureCallback(
-    wl_resource* resource,
-    const gfx::Size& size,
-    ash::mojom::WindowStateType state_type,
-    bool resizing,
-    bool activated,
-    const gfx::Vector2d& origin_offset) {
-  wl_array states;
-  wl_array_init(&states);
-  if (state_type == ash::mojom::WindowStateType::MAXIMIZED)
-    AddXdgSurfaceV5State(&states, XDG_SURFACE_STATE_MAXIMIZED);
-  if (state_type == ash::mojom::WindowStateType::FULLSCREEN)
-    AddXdgSurfaceV5State(&states, XDG_SURFACE_STATE_FULLSCREEN);
-  if (resizing)
-    AddXdgSurfaceV5State(&states, XDG_SURFACE_STATE_RESIZING);
-  if (activated)
-    AddXdgSurfaceV5State(&states, XDG_SURFACE_STATE_ACTIVATED);
-  uint32_t serial = wl_display_next_serial(
-      wl_client_get_display(wl_resource_get_client(resource)));
-  xdg_surface_send_configure(resource, size.width(), size.height(), &states,
-                             serial);
-  wl_client_flush(wl_resource_get_client(resource));
-  wl_array_release(&states);
-  return serial;
-}
-
-void xdg_shell_v5_get_xdg_surface(wl_client* client,
-                                  wl_resource* resource,
-                                  uint32_t id,
-                                  wl_resource* surface) {
-  std::unique_ptr<ShellSurface> shell_surface =
-      GetUserDataAs<Display>(resource)->CreateShellSurface(
-          GetUserDataAs<Surface>(surface));
-  if (!shell_surface) {
-    wl_resource_post_error(resource, XDG_SHELL_ERROR_ROLE,
-                           "surface has already been assigned a role");
-    return;
-  }
-
-  wl_resource* xdg_surface_resource =
-      wl_resource_create(client, &xdg_surface_interface, 1, id);
-
-  shell_surface->set_close_callback(
-      base::Bind(&HandleXdgSurfaceV5CloseCallback,
-                 base::Unretained(xdg_surface_resource)));
-
-  shell_surface->set_configure_callback(
-      base::Bind(&HandleXdgSurfaceV5ConfigureCallback,
-                 base::Unretained(xdg_surface_resource)));
-
-  SetImplementation(xdg_surface_resource, &xdg_surface_v5_implementation,
-                    std::move(shell_surface));
-}
-
-void HandleXdgPopupV5CloseCallback(wl_resource* resource) {
-  xdg_popup_send_popup_done(resource);
-  wl_client_flush(wl_resource_get_client(resource));
-}
-
-void xdg_shell_v5_get_xdg_popup(wl_client* client,
-                                wl_resource* resource,
-                                uint32_t id,
-                                wl_resource* surface,
-                                wl_resource* parent,
-                                wl_resource* seat,
-                                uint32_t serial,
-                                int32_t x,
-                                int32_t y) {
-  // Parent widget can be found by locating the closest ancestor with a widget.
-  views::Widget* parent_widget = nullptr;
-  aura::Window* parent_window = GetUserDataAs<Surface>(parent)->window();
-  while (parent_window) {
-    parent_widget = views::Widget::GetWidgetForNativeWindow(parent_window);
-    if (parent_widget)
-      break;
-    parent_window = parent_window->parent();
-  }
-
-  // Early out if parent widget was not found or is not associated with a
-  // shell surface.
-  if (!parent_widget ||
-      !ShellSurface::GetMainSurface(parent_widget->GetNativeWindow())) {
-    wl_resource_post_error(resource, XDG_SHELL_ERROR_INVALID_POPUP_PARENT,
-                           "invalid popup parent surface");
-    return;
-  }
-
-  // TODO(reveman): Automatically close popup when clicking outside the
-  // popup window.
-  std::unique_ptr<ShellSurface> shell_surface =
-      GetUserDataAs<Display>(resource)->CreatePopupShellSurface(
-          GetUserDataAs<Surface>(surface),
-          // Shell surface widget delegate implementation of GetContentsView()
-          // returns a pointer to the shell surface instance.
-          static_cast<ShellSurface*>(
-              parent_widget->widget_delegate()->GetContentsView()),
-          gfx::Point(x, y));
-  if (!shell_surface) {
-    wl_resource_post_error(resource, XDG_SHELL_ERROR_ROLE,
-                           "surface has already been assigned a role");
-    return;
-  }
-
-  wl_resource* xdg_popup_resource =
-      wl_resource_create(client, &xdg_popup_interface, 1, id);
-
-  shell_surface->set_close_callback(base::Bind(
-      &HandleXdgPopupV5CloseCallback, base::Unretained(xdg_popup_resource)));
-
-  SetImplementation(xdg_popup_resource, &xdg_popup_v5_implementation,
-                    std::move(shell_surface));
-}
-
-void xdg_shell_v5_pong(wl_client* client,
-                       wl_resource* resource,
-                       uint32_t serial) {
-  NOTIMPLEMENTED();
-}
-
-const struct xdg_shell_interface xdg_shell_v5_implementation = {
-    xdg_shell_v5_destroy, xdg_shell_v5_use_unstable_version,
-    xdg_shell_v5_get_xdg_surface, xdg_shell_v5_get_xdg_popup,
-    xdg_shell_v5_pong};
-
-void bind_xdg_shell_v5(wl_client* client,
-                       void* data,
-                       uint32_t version,
-                       uint32_t id) {
-  wl_resource* resource =
-      wl_resource_create(client, &xdg_shell_interface, 1, id);
-
-  wl_resource_set_implementation(resource, &xdg_shell_v5_implementation, data,
-                                 nullptr);
-}
-
 void xdg_shell_v6_destroy(wl_client* client, wl_resource* resource) {
   // Nothing to do here.
 }
@@ -1901,12 +1692,25 @@ void xdg_shell_v6_destroy(wl_client* client, wl_resource* resource) {
 void xdg_shell_v6_create_positioner(wl_client* client,
                                     wl_resource* resource,
                                     uint32_t id) {
-  wl_resource* xdg_positioner_resource =
+  wl_resource* positioner_resource =
       wl_resource_create(client, &zxdg_positioner_v6_interface, 1, id);
 
-  wl_resource_set_implementation(xdg_positioner_resource,
-                                 &xdg_positioner_v6_implementation, nullptr,
-                                 nullptr);
+  SetImplementation(positioner_resource, &xdg_positioner_v6_implementation,
+                    std::make_unique<WaylandPositioner>());
+}
+
+uint32_t HandleXdgSurfaceV6ConfigureCallback(
+    wl_resource* resource,
+    const gfx::Size& size,
+    ash::mojom::WindowStateType state_type,
+    bool resizing,
+    bool activated,
+    const gfx::Vector2d& origin_offset) {
+  uint32_t serial = wl_display_next_serial(
+      wl_client_get_display(wl_resource_get_client(resource)));
+  zxdg_surface_v6_send_configure(resource, serial);
+  wl_client_flush(wl_resource_get_client(resource));
+  return serial;
 }
 
 void xdg_shell_v6_get_xdg_surface(wl_client* client,
@@ -1928,6 +1732,10 @@ void xdg_shell_v6_get_xdg_surface(wl_client* client,
 
   wl_resource* xdg_surface_resource =
       wl_resource_create(client, &zxdg_surface_v6_interface, 1, id);
+
+  shell_surface->set_configure_callback(
+      base::Bind(&HandleXdgSurfaceV6ConfigureCallback,
+                 base::Unretained(xdg_surface_resource)));
 
   SetImplementation(xdg_surface_resource, &xdg_surface_v6_implementation,
                     std::move(shell_surface));
@@ -2751,14 +2559,23 @@ class WaylandDataSourceDelegate : public DataSourceDelegate {
     wl_data_source_send_cancelled(data_source_resource_);
   }
   void OnDndDropPerformed() override {
-    wl_data_source_send_dnd_drop_performed(data_source_resource_);
+    if (wl_resource_get_version(data_source_resource_) >=
+        WL_DATA_SOURCE_DND_DROP_PERFORMED_SINCE_VERSION) {
+      wl_data_source_send_dnd_drop_performed(data_source_resource_);
+    }
   }
   void OnDndFinished() override {
-    wl_data_source_send_dnd_finished(data_source_resource_);
+    if (wl_resource_get_version(data_source_resource_) >=
+        WL_DATA_SOURCE_DND_FINISHED_SINCE_VERSION) {
+      wl_data_source_send_dnd_finished(data_source_resource_);
+    }
   }
   void OnAction(DndAction dnd_action) override {
-    wl_data_source_send_action(data_source_resource_,
-                               WaylandDataDeviceManagerDndAction(dnd_action));
+    if (wl_resource_get_version(data_source_resource_) >=
+        WL_DATA_SOURCE_ACTION_SINCE_VERSION) {
+      wl_data_source_send_action(data_source_resource_,
+                                 WaylandDataDeviceManagerDndAction(dnd_action));
+    }
   }
 
  private:
@@ -2802,13 +2619,19 @@ class WaylandDataOfferDelegate : public DataOfferDelegate {
   }
   void OnSourceActions(
       const base::flat_set<DndAction>& source_actions) override {
-    wl_data_offer_send_source_actions(
-        data_offer_resource_,
-        WaylandDataDeviceManagerDndActions(source_actions));
+    if (wl_resource_get_version(data_offer_resource_) >=
+        WL_DATA_OFFER_SOURCE_ACTIONS_SINCE_VERSION) {
+      wl_data_offer_send_source_actions(
+          data_offer_resource_,
+          WaylandDataDeviceManagerDndActions(source_actions));
+    }
   }
   void OnAction(DndAction action) override {
-    wl_data_offer_send_action(data_offer_resource_,
-                              WaylandDataDeviceManagerDndAction(action));
+    if (wl_resource_get_version(data_offer_resource_) >=
+        WL_DATA_OFFER_ACTION_SINCE_VERSION) {
+      wl_data_offer_send_action(data_offer_resource_,
+                                WaylandDataDeviceManagerDndAction(action));
+    }
   }
 
  private:
@@ -2868,7 +2691,8 @@ class WaylandDataDeviceDelegate : public DataDeviceDelegate {
   }
   DataOffer* OnDataOffer() override {
     wl_resource* data_offer_resource =
-        wl_resource_create(client_, &wl_data_offer_interface, 1, 0);
+        wl_resource_create(client_, &wl_data_offer_interface,
+                           wl_resource_get_version(data_device_resource_), 0);
     std::unique_ptr<DataOffer> data_offer = std::make_unique<DataOffer>(
         new WaylandDataOfferDelegate(data_offer_resource));
     data_offer->SetProperty(kDataOfferResourceKey, data_offer_resource);
@@ -2940,8 +2764,8 @@ const struct wl_data_device_interface data_device_implementation = {
 void data_device_manager_create_data_source(wl_client* client,
                                             wl_resource* resource,
                                             uint32_t id) {
-  wl_resource* data_source_resource =
-      wl_resource_create(client, &wl_data_device_interface, 1, id);
+  wl_resource* data_source_resource = wl_resource_create(
+      client, &wl_data_device_interface, wl_resource_get_version(resource), id);
   SetImplementation(data_source_resource, &data_source_implementation,
                     std::make_unique<DataSource>(
                         new WaylandDataSourceDelegate(data_source_resource)));
@@ -2952,8 +2776,8 @@ void data_device_manager_get_data_device(wl_client* client,
                                          uint32_t id,
                                          wl_resource* seat_resource) {
   Display* display = GetUserDataAs<Display>(resource);
-  wl_resource* data_device_resource =
-      wl_resource_create(client, &wl_data_device_interface, 1, id);
+  wl_resource* data_device_resource = wl_resource_create(
+      client, &wl_data_device_interface, wl_resource_get_version(resource), id);
   SetImplementation(data_device_resource, &data_device_implementation,
                     display->CreateDataDevice(new WaylandDataDeviceDelegate(
                         client, data_device_resource)));
@@ -2964,12 +2788,15 @@ const struct wl_data_device_manager_interface
         data_device_manager_create_data_source,
         data_device_manager_get_data_device};
 
+const uint32_t data_device_manager_version = 3;
+
 void bind_data_device_manager(wl_client* client,
                               void* data,
                               uint32_t version,
                               uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &wl_data_device_manager_interface, 1, id);
+      wl_resource_create(client, &wl_data_device_manager_interface,
+                         std::min(version, data_device_manager_version), id);
   wl_resource_set_implementation(resource, &data_device_manager_implementation,
                                  data, nullptr);
 }
@@ -4215,47 +4042,6 @@ void bind_pointer_gestures(wl_client* client,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// pointer_stylus interface (deprecated)
-// TODO(denniskempin): Remove once client no longer depends on this interface.
-
-void pointer_stylus_destroy_DEPRECATED(wl_client* client,
-                                       wl_resource* resource) {
-  wl_resource_destroy(resource);
-}
-
-const struct zcr_pointer_stylus_v1_interface
-    pointer_stylus_implementation_DEPRECATED = {
-        pointer_stylus_destroy_DEPRECATED};
-
-////////////////////////////////////////////////////////////////////////////////
-// stylus_v1 interface (deprecated):
-// TODO(denniskempin): Remove once client no longer depends on this interface.
-
-void stylus_get_pointer_stylus_DEPRECATED(wl_client* client,
-                                          wl_resource* resource,
-                                          uint32_t id,
-                                          wl_resource* pointer_resource) {
-  wl_resource* stylus_resource =
-      wl_resource_create(client, &zcr_pointer_stylus_v1_interface, 1, id);
-  wl_resource_set_implementation(stylus_resource,
-                                 &pointer_stylus_implementation_DEPRECATED,
-                                 nullptr, nullptr);
-}
-
-const struct zcr_stylus_v1_interface stylus_v1_implementation_DEPRECATED = {
-    stylus_get_pointer_stylus_DEPRECATED};
-
-void bind_stylus_v1_DEPRECATED(wl_client* client,
-                               void* data,
-                               uint32_t version,
-                               uint32_t id) {
-  wl_resource* resource =
-      wl_resource_create(client, &zcr_stylus_v1_interface, version, id);
-  wl_resource_set_implementation(resource, &stylus_v1_implementation_DEPRECATED,
-                                 data, nullptr);
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // keyboard_device_configuration interface:
 
 class WaylandKeyboardDeviceConfigurationDelegate
@@ -4275,9 +4061,12 @@ class WaylandKeyboardDeviceConfigurationDelegate
     }
   }
 
+  // Overridden from KeyboardObserver:
   void OnKeyboardDestroying(Keyboard* keyboard) override {
     keyboard_ = nullptr;
   }
+
+  // Overridden from KeyboardDeviceConfigurationDelegate:
   void OnKeyboardTypeChanged(bool is_physical) override {
     zcr_keyboard_device_configuration_v1_send_type_change(
         resource_,
@@ -4321,7 +4110,8 @@ void keyboard_configuration_get_keyboard_device_configuration(
   }
 
   wl_resource* keyboard_device_configuration_resource = wl_resource_create(
-      client, &zcr_keyboard_device_configuration_v1_interface, 1, id);
+      client, &zcr_keyboard_device_configuration_v1_interface,
+      wl_resource_get_version(resource), id);
 
   SetImplementation(
       keyboard_device_configuration_resource,
@@ -4334,12 +4124,15 @@ const struct zcr_keyboard_configuration_v1_interface
     keyboard_configuration_implementation = {
         keyboard_configuration_get_keyboard_device_configuration};
 
+const uint32_t keyboard_configuration_version = 2;
+
 void bind_keyboard_configuration(wl_client* client,
                                  void* data,
                                  uint32_t version,
                                  uint32_t id) {
-  wl_resource* resource = wl_resource_create(
-      client, &zcr_keyboard_configuration_v1_interface, version, id);
+  wl_resource* resource =
+      wl_resource_create(client, &zcr_keyboard_configuration_v1_interface,
+                         std::min(version, keyboard_configuration_version), id);
   wl_resource_set_implementation(
       resource, &keyboard_configuration_implementation, data, nullptr);
 }
@@ -4524,8 +4317,8 @@ Server::Server(Display* display)
                    compositor_version, display_, bind_compositor);
   wl_global_create(wl_display_.get(), &wl_shm_interface, 1, display_, bind_shm);
 #if defined(USE_OZONE)
-  wl_global_create(wl_display_.get(), &zwp_linux_dmabuf_v1_interface, 2,
-                   display_, bind_linux_dmabuf);
+  wl_global_create(wl_display_.get(), &zwp_linux_dmabuf_v1_interface,
+                   linux_dmabuf_version, display_, bind_linux_dmabuf);
 #endif
   wl_global_create(wl_display_.get(), &wl_subcompositor_interface, 1, display_,
                    bind_subcompositor);
@@ -4533,14 +4326,13 @@ Server::Server(Display* display)
                    bind_shell);
   wl_global_create(wl_display_.get(), &wl_output_interface, output_version,
                    display_, bind_output);
-  wl_global_create(wl_display_.get(), &xdg_shell_interface, 1, display_,
-                   bind_xdg_shell_v5);
   wl_global_create(wl_display_.get(), &zxdg_shell_v6_interface, 1, display_,
                    bind_xdg_shell_v6);
   wl_global_create(wl_display_.get(), &zcr_vsync_feedback_v1_interface, 1,
                    display_, bind_vsync_feedback);
-  wl_global_create(wl_display_.get(), &wl_data_device_manager_interface, 1,
-                   display_, bind_data_device_manager);
+  wl_global_create(wl_display_.get(), &wl_data_device_manager_interface,
+                   data_device_manager_version, display_,
+                   bind_data_device_manager);
   wl_global_create(wl_display_.get(), &wl_seat_interface, seat_version,
                    display_, bind_seat);
   wl_global_create(wl_display_.get(), &wp_viewporter_interface, 1, display_,
@@ -4557,14 +4349,13 @@ Server::Server(Display* display)
                    bind_aura_shell);
   wl_global_create(wl_display_.get(), &zcr_gaming_input_v2_interface, 1,
                    display_, bind_gaming_input);
-  wl_global_create(wl_display_.get(), &zcr_stylus_v1_interface, 2, display_,
-                   bind_stylus_v1_DEPRECATED);
   wl_global_create(wl_display_.get(), &zcr_stylus_v2_interface, 1, display_,
                    bind_stylus_v2);
   wl_global_create(wl_display_.get(), &zwp_pointer_gestures_v1_interface, 1,
                    display_, bind_pointer_gestures);
   wl_global_create(wl_display_.get(), &zcr_keyboard_configuration_v1_interface,
-                   2, display_, bind_keyboard_configuration);
+                   keyboard_configuration_version, display_,
+                   bind_keyboard_configuration);
   wl_global_create(wl_display_.get(), &zcr_stylus_tools_v1_interface, 1,
                    display_, bind_stylus_tools);
   wl_global_create(wl_display_.get(), &zcr_keyboard_extension_v1_interface, 1,

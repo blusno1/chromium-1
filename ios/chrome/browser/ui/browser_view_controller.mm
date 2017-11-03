@@ -96,7 +96,8 @@
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
 #import "ios/chrome/browser/snapshots/snapshot_overlay.h"
 #import "ios/chrome/browser/snapshots/snapshot_overlay_provider.h"
-#import "ios/chrome/browser/ssl/ios_captive_portal_blocking_page_delegate.h"
+#import "ios/chrome/browser/ssl/captive_portal_detector_tab_helper.h"
+#import "ios/chrome/browser/ssl/captive_portal_detector_tab_helper_delegate.h"
 #import "ios/chrome/browser/store_kit/store_kit_tab_helper.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
@@ -116,7 +117,6 @@
 #import "ios/chrome/browser/ui/browser_container_view.h"
 #import "ios/chrome/browser/ui/browser_view_controller_dependency_factory.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
-#import "ios/chrome/browser/ui/captive_portal/captive_portal_login_coordinator.h"
 #import "ios/chrome/browser/ui/chrome_web_view_factory.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
@@ -372,11 +372,11 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
 @interface BrowserViewController ()<ActivityServicePresentation,
                                     AppRatingPromptDelegate,
+                                    CaptivePortalDetectorTabHelperDelegate,
                                     CRWNativeContentProvider,
                                     CRWWebStateDelegate,
                                     DialogPresenterDelegate,
                                     FullScreenControllerDelegate,
-                                    IOSCaptivePortalBlockingPageDelegate,
                                     KeyCommandsPlumbing,
                                     NetExportTabHelperDelegate,
                                     ManageAccountsDelegate,
@@ -418,9 +418,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
   // Controller for edge swipe gestures for page and tab navigation.
   SideSwipeController* _sideSwipeController;
-
-  // Handles displaying the captive portal login page.
-  CaptivePortalLoginCoordinator* _captivePortalLoginCoordinator;
 
   // Handles displaying the context menu for all form factors.
   ContextMenuCoordinator* _contextMenuCoordinator;
@@ -2471,7 +2468,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
 - (void)installDelegatesForTab:(Tab*)tab {
   DCHECK_NE(tab.webState->GetDelegate(), _webStateDelegate.get());
   // Unregistration happens when the Tab is removed from the TabModel.
-  tab.iOSCaptivePortalBlockingPageDelegate = self;
 
   // TODO(crbug.com/777557): do not pass the dispatcher to PasswordTabHelper.
   if (PasswordTabHelper* passwordTabHelper =
@@ -2507,6 +2503,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   PrintTabHelper::CreateForWebState(tab.webState, self);
   RepostFormTabHelper::CreateForWebState(tab.webState, self);
   NetExportTabHelper::CreateForWebState(tab.webState, self);
+  CaptivePortalDetectorTabHelper::CreateForWebState(tab.webState, self);
 
   if (AccountConsistencyService* accountConsistencyService =
           ios::AccountConsistencyServiceFactory::GetForBrowserState(
@@ -2517,7 +2514,6 @@ bubblePresenterForFeature:(const base::Feature&)feature
 
 - (void)uninstallDelegatesForTab:(Tab*)tab {
   DCHECK_EQ(tab.webState->GetDelegate(), _webStateDelegate.get());
-  tab.iOSCaptivePortalBlockingPageDelegate = nil;
 
   // TODO(crbug.com/777557): do not pass the dispatcher to PasswordTabHelper.
   if (PasswordTabHelper* passwordTabHelper =
@@ -5243,12 +5239,10 @@ bubblePresenterForFeature:(const base::Feature&)feature
 
 #pragma mark - CaptivePortalDetectorTabHelperDelegate
 
-- (void)captivePortalBlockingPage:(IOSCaptivePortalBlockingPage*)blockingPage
-            connectWithLandingURL:(GURL)landingURL {
-  _captivePortalLoginCoordinator = [[CaptivePortalLoginCoordinator alloc]
-      initWithBaseViewController:self
-                      landingURL:landingURL];
-  [_captivePortalLoginCoordinator start];
+- (void)captivePortalDetectorTabHelper:
+            (CaptivePortalDetectorTabHelper*)tabHelper
+                 connectWithLandingURL:(const GURL&)landingURL {
+  [self addSelectedTabWithURL:landingURL transition:ui::PAGE_TRANSITION_TYPED];
 }
 
 #pragma mark - PageInfoPresentation

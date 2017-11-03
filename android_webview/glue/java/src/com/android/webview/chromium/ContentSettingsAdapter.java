@@ -19,7 +19,7 @@ import org.chromium.base.annotations.SuppressFBWarnings;
  * Type adaptation layer between {@link android.webkit.WebSettings} and
  * {@link org.chromium.android_webview.AwSettings}.
  */
-@SuppressWarnings("deprecation")
+@SuppressWarnings({"deprecation", "NoSynchronizedMethodCheck"})
 @SuppressFBWarnings("CHROMIUM_SYNCHRONIZED_METHOD")
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
 public class ContentSettingsAdapter extends android.webkit.WebSettings {
@@ -611,10 +611,12 @@ public class ContentSettingsAdapter extends android.webkit.WebSettings {
         return mAwSettings.getOffscreenPreRaster();
     }
 
+    @Override
     public void setDisabledActionModeMenuItems(int menuItems) {
         mAwSettings.setDisabledActionModeMenuItems(menuItems);
     }
 
+    @Override
     public int getDisabledActionModeMenuItems() {
         return mAwSettings.getDisabledActionModeMenuItems();
     }

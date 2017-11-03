@@ -34,9 +34,11 @@
 
 namespace blink {
 
-class SuspendableObject;
 class ContextLifecycleObserver;
 class ExecutionContext;
+class PausableObject;
+
+using SuspendableObject = PausableObject;
 
 class CORE_EXPORT ContextLifecycleNotifier
     : public LifecycleNotifier<ExecutionContext, ContextLifecycleObserver> {
@@ -57,7 +59,7 @@ class CORE_EXPORT ContextLifecycleNotifier
   ContextLifecycleNotifier() {}
 
 #if DCHECK_IS_ON()
-  bool Contains(SuspendableObject*) const;
+  bool Contains(PausableObject*) const;
 #endif
 };
 

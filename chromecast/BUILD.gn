@@ -44,6 +44,11 @@ group("all") {
   testonly = true
 }
 
+# This is a config which is applied on all cast_* targets (which should be all
+# code under chromecast/).
+config("cast_config") {
+}
+
 # A list of all public test() binaries. This is an organizational target that
 # cannot be depended upon or built directly. Build cast_test_lists instead.
 cast_test_group("cast_tests") {
@@ -190,7 +195,7 @@ cast_test_group("cast_tests") {
     if (target_os == "linux") {
       if (is_cast_desktop_build) {
         # Disable PartitionAllocTest.RepeatedReturnNullDirect (b/67975693)
-        gtest_excludes += [ "PartitionAlloc.RepeatedReturnNullDirect" ]
+        gtest_excludes += [ "PartitionAllocTest.RepeatedReturnNullDirect" ]
       } else {
         # Disable ProcessMetricsTest.GetNumberOfThreads (b/15610509)
         # Disable ProcessUtilTest.* (need to define OS_ANDROID)

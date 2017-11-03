@@ -631,7 +631,6 @@ ResourceFetcher::PrepareRequestResult ResourceFetcher::PrepareRequest(
              origin->HasSuboriginAndShouldAllowCredentialsFor(params.Url()));
         break;
       case network::mojom::FetchCredentialsMode::kInclude:
-      case network::mojom::FetchCredentialsMode::kPassword:
         allow_stored_credentials = true;
         break;
     }
@@ -654,6 +653,15 @@ Resource* ResourceFetcher::RequestResource(
   // TODO(dproy): Remove this. http://crbug.com/659666
   TRACE_EVENT1("blink", "ResourceFetcher::requestResource", "url",
                UrlForTraceEvent(params.Url()));
+
+  // TODO(crbug.com/123004): Remove once we have enough stats on data URIs that
+  // contain fragments ('#' characters).
+  if (context_) {
+    const KURL& url = params.Url();
+    if (url.HasFragmentIdentifier() && url.ProtocolIsData()) {
+      context_->RecordDataUriWithOctothorpe();
+    }
+  }
 
   ResourceRequestBlockedReason blocked_reason =
       ResourceRequestBlockedReason::kNone;

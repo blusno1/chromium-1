@@ -74,6 +74,8 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   bool IsFrameFetchContext() override { return true; }
 
+  void RecordDataUriWithOctothorpe() override;
+
   void AddAdditionalRequestHeaders(ResourceRequest&,
                                    FetchResourceType) override;
   mojom::FetchCacheMode ResourceRequestCachePolicy(
@@ -228,6 +230,11 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   Member<DocumentLoader> document_loader_;
   Member<Document> document_;
+
+  // The value of |save_data_enabled_| is read once per frame from
+  // NetworkStateNotifier, which is guarded by a mutex lock, and cached locally
+  // here for performance.
+  const bool save_data_enabled_;
 
   // Non-null only when detached.
   Member<const FrozenState> frozen_state_;

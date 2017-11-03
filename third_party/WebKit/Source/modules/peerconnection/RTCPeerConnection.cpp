@@ -471,7 +471,7 @@ RTCPeerConnection* RTCPeerConnection::Create(
 
   RTCPeerConnection* peer_connection = new RTCPeerConnection(
       context, configuration, constraints, exception_state);
-  peer_connection->SuspendIfNeeded();
+  peer_connection->PauseIfNeeded();
   if (exception_state.HadException())
     return nullptr;
 
@@ -1617,11 +1617,11 @@ ExecutionContext* RTCPeerConnection::GetExecutionContext() const {
 }
 
 void RTCPeerConnection::Suspend() {
-  dispatch_scheduled_event_runner_->Suspend();
+  dispatch_scheduled_event_runner_->Pause();
 }
 
 void RTCPeerConnection::Resume() {
-  dispatch_scheduled_event_runner_->Resume();
+  dispatch_scheduled_event_runner_->Unpause();
 }
 
 void RTCPeerConnection::ContextDestroyed(ExecutionContext*) {

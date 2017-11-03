@@ -40,8 +40,6 @@
 #include "content/browser/download/download_resource_handler.h"
 #include "content/browser/download/download_task_runner.h"
 #include "content/browser/download/parallel_download_utils.h"
-#include "content/browser/download/slow_download_http_response.h"
-#include "content/browser/download/test_download_http_response.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/download_danger_type.h"
@@ -54,6 +52,8 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
+#include "content/public/test/slow_download_http_response.h"
+#include "content/public/test/test_download_http_response.h"
 #include "content/public/test/test_file_error_injector.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -127,7 +127,7 @@ class MockDownloadManagerObserver : public DownloadManager::Observer {
     MockManagerGoingDown(manager);
 
     manager_->RemoveObserver(this);
-    manager_ = NULL;
+    manager_ = nullptr;
   }
 
   MOCK_METHOD1(MockManagerGoingDown, void(DownloadManager*));
@@ -515,20 +515,20 @@ class TestShellDownloadManagerDelegate : public ShellDownloadManagerDelegate {
 class DownloadCreateObserver : DownloadManager::Observer {
  public:
   DownloadCreateObserver(DownloadManager* manager)
-      : manager_(manager), item_(NULL) {
+      : manager_(manager), item_(nullptr) {
     manager_->AddObserver(this);
   }
 
   ~DownloadCreateObserver() override {
     if (manager_)
       manager_->RemoveObserver(this);
-    manager_ = NULL;
+    manager_ = nullptr;
   }
 
   void ManagerGoingDown(DownloadManager* manager) override {
     DCHECK_EQ(manager_, manager);
     manager_->RemoveObserver(this);
-    manager_ = NULL;
+    manager_ = nullptr;
   }
 
   void OnDownloadCreated(DownloadManager* manager,
@@ -656,32 +656,6 @@ class TestRequestPauseHandler {
   base::OnceClosure resume_callback_;
 };
 
-// Class for creating and monitoring the completed response from the server.
-class TestDownloadResponseHandler {
- public:
-  static std::unique_ptr<net::test_server::HttpResponse>
-  HandleTestDownloadRequest(
-      const TestDownloadHttpResponse::OnResponseSentCallback& callback,
-      const net::test_server::HttpRequest& request) {
-    return TestDownloadHttpResponse::Create(request, callback);
-  }
-
-  TestDownloadResponseHandler() = default;
-
-  void OnRequestCompleted(
-      std::unique_ptr<TestDownloadHttpResponse::CompletedRequest> request) {
-    completed_requests_.push_back(std::move(request));
-  }
-
-  using CompletedRequests =
-      std::vector<std::unique_ptr<TestDownloadHttpResponse::CompletedRequest>>;
-  CompletedRequests const& completed_requests() { return completed_requests_; }
-
- private:
-  CompletedRequests completed_requests_;
-  DISALLOW_COPY_AND_ASSIGN(TestDownloadResponseHandler);
-};
-
 class DownloadContentTest : public ContentBrowserTest {
  protected:
   void SetUpOnMainThread() override {
@@ -700,10 +674,7 @@ class DownloadContentTest : public ContentBrowserTest {
     embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
     embedded_test_server()->RegisterRequestHandler(
         base::Bind(&SlowDownloadHttpResponse::HandleSlowDownloadRequest));
-    embedded_test_server()->RegisterRequestHandler(
-        base::Bind(&TestDownloadResponseHandler::HandleTestDownloadRequest,
-                   base::Bind(&TestDownloadResponseHandler::OnRequestCompleted,
-                              base::Unretained(&test_response_handler_))));
+    test_response_handler_.RegisterToTestServer(embedded_test_server());
     ASSERT_TRUE(embedded_test_server()->Start());
     const std::string real_host =
         embedded_test_server()->host_port_pair().host();
@@ -888,40 +859,26 @@ class DownloadContentTest : public ContentBrowserTest {
 // Test fixture for parallel downloading.
 class ParallelDownloadTest : public DownloadContentTest {
  protected:
-  void SetUp() override {
-    field_trial_list_ = std::make_unique<base::FieldTrialList>(
-        std::make_unique<base::MockEntropyProvider>());
-    SetupConfig();
-    DownloadContentTest::SetUp();
+  ParallelDownloadTest() {}
+
+  ~ParallelDownloadTest() override {}
+
+  void SetUpOnMainThread() override {
+    std::map<std::string, std::string> params = {
+        {content::kMinSliceSizeFinchKey, "1"},
+        {content::kParallelRequestCountFinchKey,
+         base::IntToString(kTestRequestCount)},
+        {content::kParallelRequestDelayFinchKey, "0"},
+        {content::kParallelRequestRemainingTimeFinchKey, "0"}};
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        features::kParallelDownloading, params);
+    DownloadContentTest::SetUpOnMainThread();
   }
 
  private:
-  // TODO(xingliu): Use this technique in parallel download unit tests to load
-  // the finch configuration.
-  void SetupConfig() {
-    const std::string kTrialName = "trial_name";
-    const std::string kGroupName = "group_name";
-
-    std::map<std::string, std::string> params;
-    params[content::kMinSliceSizeFinchKey] = "1";
-    params[content::kParallelRequestCountFinchKey] =
-        base::IntToString(kTestRequestCount);
-    params[content::kParallelRequestDelayFinchKey] = "0";
-    params[content::kParallelRequestRemainingTimeFinchKey] = "0";
-
-    scoped_refptr<base::FieldTrial> trial =
-        base::FieldTrialList::CreateFieldTrial(kTrialName, kGroupName);
-    base::AssociateFieldTrialParams(kTrialName, kGroupName, params);
-    std::unique_ptr<base::FeatureList> feature_list =
-        std::make_unique<base::FeatureList>();
-    feature_list->RegisterFieldTrialOverride(
-        features::kParallelDownloading.name,
-        base::FeatureList::OVERRIDE_ENABLE_FEATURE, trial.get());
-    scoped_feature_list_.InitWithFeatureList(std::move(feature_list));
-  }
-
-  std::unique_ptr<base::FieldTrialList> field_trial_list_;
   base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(ParallelDownloadTest);
 };
 
 }  // namespace

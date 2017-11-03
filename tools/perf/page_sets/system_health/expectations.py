@@ -52,10 +52,6 @@ class SystemHealthDesktopMemoryExpectations(expectations.StoryExpectations):
                       [expectations.ALL], 'crbug.com/769809')
     self.DisableStory('browse:tools:maps', [expectations.ALL_MAC],
                       'crbug.com/773084')
-    self.DisableStory('load:news:wikipedia',
-                      [expectations.ALL_WIN], 'crbug.com/777931')
-    self.DisableStory('load_accessibility:media:wikipedia',
-                      [expectations.ALL_WIN], 'crbug.com/777931')
 
 
 class SystemHealthMobileCommonExpectations(expectations.StoryExpectations):
@@ -104,6 +100,8 @@ class SystemHealthMobileMemoryExpectations(expectations.StoryExpectations):
         'crbug.com/738854')
     self.DisableStory('long_running:tools:gmail-background',
                       [expectations.ANDROID_SVELTE], 'crbug.com/777355')
+    self.DisableStory('browse:social:facebook',
+                      [expectations.ANDROID_NEXUS5], 'crbug.com/780779')
     # TODO(rnephew): This disabling should move to CanRunOnBrowser.
     self.DisableStory('browse:chrome:omnibox',
                       [expectations.ANDROID_WEBVIEW],

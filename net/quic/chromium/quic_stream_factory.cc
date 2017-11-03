@@ -120,16 +120,6 @@ std::unique_ptr<base::Value> NetLogQuicConnectionMigrationTriggerCallback(
   return std::move(dict);
 }
 
-std::unique_ptr<base::Value> NetLogQuicConnectionMigrationFailureCallback(
-    QuicConnectionId connection_id,
-    std::string reason,
-    NetLogCaptureMode capture_mode) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetString("connection_id", base::Uint64ToString(connection_id));
-  dict->SetString("reason", reason);
-  return std::move(dict);
-}
-
 // Helper class that is used to log a connection migration event.
 class ScopedConnectionMigrationEventLog {
  public:
@@ -155,17 +145,6 @@ class ScopedConnectionMigrationEventLog {
 void HistogramCreateSessionFailure(enum CreateSessionFailure error) {
   UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.CreationError", error,
                             CREATION_ERROR_MAX);
-}
-
-void HistogramAndLogMigrationFailure(const NetLogWithSource& net_log,
-                                     enum QuicConnectionMigrationStatus status,
-                                     QuicConnectionId connection_id,
-                                     std::string reason) {
-  UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.ConnectionMigration", status,
-                            MIGRATION_STATUS_MAX);
-  net_log.AddEvent(NetLogEventType::QUIC_CONNECTION_MIGRATION_FAILURE,
-                   base::Bind(&NetLogQuicConnectionMigrationFailureCallback,
-                              connection_id, reason));
 }
 
 void LogPlatformNotificationInHistogram(
@@ -727,10 +706,6 @@ QuicStreamFactory::QuicStreamFactory(
       ping_timeout_(QuicTime::Delta::FromSeconds(kPingTimeoutSecs)),
       reduced_ping_timeout_(
           QuicTime::Delta::FromSeconds(reduced_ping_timeout_seconds)),
-      most_recent_path_degrading_timestamp_(base::TimeTicks()),
-      most_recent_network_disconnected_timestamp_(base::TimeTicks()),
-      most_recent_write_error_(0),
-      most_recent_write_error_timestamp_(base::TimeTicks()),
       yield_after_packets_(kQuicYieldAfterPacketsRead),
       yield_after_duration_(QuicTime::Delta::FromMilliseconds(
           kQuicYieldAfterDurationMilliseconds)),
@@ -1195,72 +1170,38 @@ void QuicStreamFactory::OnNetworkConnected(NetworkHandle network) {
 
 void QuicStreamFactory::OnNetworkMadeDefault(NetworkHandle network) {
   LogPlatformNotificationInHistogram(NETWORK_MADE_DEFAULT);
-  if (most_recent_path_degrading_timestamp_ != base::TimeTicks()) {
-    if (most_recent_network_disconnected_timestamp_ != base::TimeTicks()) {
-      // NetworkDiscconected happens before NetworkMadeDefault, the platform
-      // is dropping WiFi.
-      base::TimeTicks now = base::TimeTicks::Now();
-      base::TimeDelta disconnection_duration =
-          now - most_recent_network_disconnected_timestamp_;
-      base::TimeDelta degrading_duration =
-          now - most_recent_path_degrading_timestamp_;
-      UMA_HISTOGRAM_CUSTOM_TIMES("Net.QuicNetworkDisconnectionDuration",
-                                 disconnection_duration,
-                                 base::TimeDelta::FromMilliseconds(1),
-                                 base::TimeDelta::FromMinutes(10), 100);
-      UMA_HISTOGRAM_CUSTOM_TIMES(
-          "Net.QuicNetworkDegradingDurationTillNewNetworkMadeDefault",
-          degrading_duration, base::TimeDelta::FromMilliseconds(1),
-          base::TimeDelta::FromMinutes(10), 100);
-      most_recent_network_disconnected_timestamp_ = base::TimeTicks();
-    }
-    most_recent_path_degrading_timestamp_ = base::TimeTicks();
-  }
 
   if (!migrate_sessions_on_network_change_)
     return;
   DCHECK_NE(NetworkChangeNotifier::kInvalidNetworkHandle, network);
   ScopedConnectionMigrationEventLog scoped_event_log(net_log_,
                                                      "OnNetworkMadeDefault");
-  MaybeMigrateOrCloseSessions(network, /*close_if_cannot_migrate=*/false,
-                              scoped_event_log.net_log());
+
+  QuicStreamFactory::SessionIdMap::iterator it = all_sessions_.begin();
+  // Sessions may be deleted while iterating through the map.
+  while (it != all_sessions_.end()) {
+    QuicChromiumClientSession* session = it->first;
+    ++it;
+    session->OnNetworkMadeDefault(network, scoped_event_log.net_log());
+  }
   set_require_confirmation(true);
 }
 
 void QuicStreamFactory::OnNetworkDisconnected(NetworkHandle network) {
   LogPlatformNotificationInHistogram(NETWORK_DISCONNECTED);
-  if (most_recent_path_degrading_timestamp_ != base::TimeTicks()) {
-    most_recent_network_disconnected_timestamp_ = base::TimeTicks::Now();
-    base::TimeDelta degrading_duration =
-        most_recent_network_disconnected_timestamp_ -
-        most_recent_path_degrading_timestamp_;
-    UMA_HISTOGRAM_CUSTOM_TIMES(
-        "Net.QuicNetworkDegradingDurationTillDisconnected", degrading_duration,
-        base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromMinutes(10),
-        100);
-  }
-  if (most_recent_write_error_timestamp_ != base::TimeTicks()) {
-    base::TimeDelta write_error_to_disconnection_gap =
-        most_recent_network_disconnected_timestamp_ -
-        most_recent_write_error_timestamp_;
-    UMA_HISTOGRAM_CUSTOM_TIMES(
-        "Net.QuicNetworkGapBetweenWriteErrorAndDisconnection",
-        write_error_to_disconnection_gap, base::TimeDelta::FromMilliseconds(1),
-        base::TimeDelta::FromMinutes(10), 100);
-    UMA_HISTOGRAM_SPARSE_SLOWLY(
-        "Net.QuicSession.WriteError.NetworkDisconnected",
-        -most_recent_write_error_);
-    most_recent_write_error_ = 0;
-    most_recent_write_error_timestamp_ = base::TimeTicks();
-  }
 
   if (!migrate_sessions_on_network_change_)
     return;
   ScopedConnectionMigrationEventLog scoped_event_log(net_log_,
                                                      "OnNetworkDisconnected");
   NetworkHandle new_network = FindAlternateNetwork(network);
-  MaybeMigrateOrCloseSessions(new_network, /*close_if_cannot_migrate=*/true,
-                              scoped_event_log.net_log());
+  QuicStreamFactory::SessionIdMap::iterator it = all_sessions_.begin();
+  // Sessions may be deleted while iterating through the map.
+  while (it != all_sessions_.end()) {
+    QuicChromiumClientSession* session = it->first;
+    ++it;
+    session->OnNetworkDisconnected(new_network, scoped_event_log.net_log());
+  }
 }
 
 // This method is expected to only be called when migrating from Cellular to
@@ -1279,81 +1220,6 @@ NetworkHandle QuicStreamFactory::FindAlternateNetwork(
       return new_network;
   }
   return NetworkChangeNotifier::kInvalidNetworkHandle;
-}
-
-void QuicStreamFactory::MaybeMigrateOrCloseSessions(
-    NetworkHandle new_network,
-    bool close_if_cannot_migrate,
-    const NetLogWithSource& net_log) {
-  QuicStreamFactory::SessionIdMap::iterator it = all_sessions_.begin();
-  while (it != all_sessions_.end()) {
-    QuicChromiumClientSession* session = it->first;
-    ++it;
-    session->MaybeMigrateOrCloseSession(new_network, close_if_cannot_migrate,
-                                        net_log);
-  }
-}
-
-MigrationResult QuicStreamFactory::MaybeMigrateSingleSessionOnWriteError(
-    QuicChromiumClientSession* session,
-    int error_code) {
-  most_recent_write_error_timestamp_ = base::TimeTicks::Now();
-  most_recent_write_error_ = error_code;
-
-  const NetLogWithSource migration_net_log = NetLogWithSource::Make(
-      net_log_, NetLogSourceType::QUIC_CONNECTION_MIGRATION);
-  migration_net_log.BeginEvent(
-      NetLogEventType::QUIC_CONNECTION_MIGRATION_TRIGGERED,
-      base::Bind(&NetLogQuicConnectionMigrationTriggerCallback, "WriteError"));
-
-  MigrationResult result = session->MigrateToAlternateNetwork(
-      /*close_session_on_error*/ false, migration_net_log);
-  migration_net_log.EndEvent(
-      NetLogEventType::QUIC_CONNECTION_MIGRATION_TRIGGERED);
-  return result;
-}
-
-MigrationResult QuicStreamFactory::MaybeMigrateSingleSessionOnPathDegrading(
-    QuicChromiumClientSession* session) {
-  if (most_recent_path_degrading_timestamp_ == base::TimeTicks())
-    most_recent_path_degrading_timestamp_ = base::TimeTicks::Now();
-
-  const NetLogWithSource migration_net_log = NetLogWithSource::Make(
-      net_log_, NetLogSourceType::QUIC_CONNECTION_MIGRATION);
-  migration_net_log.BeginEvent(
-      NetLogEventType::QUIC_CONNECTION_MIGRATION_TRIGGERED,
-      base::Bind(&NetLogQuicConnectionMigrationTriggerCallback,
-                 "PathDegrading"));
-
-  MigrationResult result = MigrationResult::FAILURE;
-  if (migrate_sessions_early_) {
-    result = session->MigrateToAlternateNetwork(
-        /*close_session_on_error*/ true, migration_net_log);
-  } else {
-    HistogramAndLogMigrationFailure(
-        migration_net_log, MIGRATION_STATUS_DISABLED, session->connection_id(),
-        "Migration disabled");
-  }
-  migration_net_log.EndEvent(
-      NetLogEventType::QUIC_CONNECTION_MIGRATION_TRIGGERED);
-  return result;
-}
-
-void QuicStreamFactory::MigrateSessionToNewPeerAddress(
-    QuicChromiumClientSession* session,
-    IPEndPoint peer_address,
-    const NetLogWithSource& net_log) {
-  if (!allow_server_migration_)
-    return;
-
-  IPEndPoint old_address;
-  session->GetDefaultSocket()->GetPeerAddress(&old_address);
-  DCHECK_EQ(old_address.GetFamily(), peer_address.GetFamily());
-
-  // Specifying kInvalidNetworkHandle for the |network| parameter
-  // causes the session to use the default network for the new socket.
-  session->Migrate(NetworkChangeNotifier::kInvalidNetworkHandle, peer_address,
-                   /*close_session_on_error*/ true, net_log);
 }
 
 std::unique_ptr<DatagramClientSocket> QuicStreamFactory::CreateSocket(

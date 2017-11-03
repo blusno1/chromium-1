@@ -317,6 +317,8 @@ source_set("common") {
     "throttling_url_loader.h",
     "unique_name_helper.cc",
     "unique_name_helper.h",
+    "url_loader_factory_bundle.cc",
+    "url_loader_factory_bundle.h",
     "url_request_struct_traits.cc",
     "url_request_struct_traits.h",
     "url_schemes.cc",
@@ -431,8 +433,8 @@ source_set("common") {
   if (is_android && use_seccomp_bpf) {
     set_sources_assignment_filter([])
     sources += [
-      "//services/service_manager/sandbox/linux/sandbox_bpf_base_policy_linux.cc",
-      "//services/service_manager/sandbox/linux/sandbox_bpf_base_policy_linux.h",
+      "//services/service_manager/sandbox/linux/bpf_base_policy_linux.cc",
+      "//services/service_manager/sandbox/linux/bpf_base_policy_linux.h",
     ]
     set_sources_assignment_filter(sources_assignment_filter)
   }
@@ -510,8 +512,10 @@ source_set("common") {
   }
 
   if (!use_seccomp_bpf) {
-    if (is_linux) {
+    if (is_linux && current_cpu != "s390x" && current_cpu != "ppc64") {
       sources -= [
+        "sandbox_linux/bpf_base_policy_linux.cc",
+        "sandbox_linux/bpf_base_policy_linux.h",
         "sandbox_linux/bpf_cros_amd_gpu_policy_linux.cc",
         "sandbox_linux/bpf_cros_amd_gpu_policy_linux.h",
         "sandbox_linux/bpf_cros_arm_gpu_policy_linux.cc",
@@ -524,8 +528,6 @@ source_set("common") {
         "sandbox_linux/bpf_renderer_policy_linux.h",
         "sandbox_linux/bpf_utility_policy_linux.cc",
         "sandbox_linux/bpf_utility_policy_linux.h",
-        "sandbox_linux/sandbox_bpf_base_policy_linux.cc",
-        "sandbox_linux/sandbox_bpf_base_policy_linux.h",
       ]
     }
   }
@@ -614,6 +616,7 @@ mojom("mojo_bindings") {
     "shared_worker/shared_worker_host.mojom",
     "shared_worker/shared_worker_info.mojom",
     "storage_partition_service.mojom",
+    "url_loader_factory_bundle.mojom",
     "video_capture.mojom",
     "widget.mojom",
   ]

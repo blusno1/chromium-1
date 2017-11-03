@@ -288,40 +288,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   NetworkChangeNotifier::NetworkHandle FindAlternateNetwork(
       NetworkChangeNotifier::NetworkHandle old_network);
 
-  // Method that initiates migration of active sessions to |new_network|.
-  // If |new_network| is a valid network, sessions that can migrate are
-  // migrated to |new_network|, and sessions not bound to |new_network|
-  // are left unchanged. Sessions with non-migratable streams are closed
-  // if |close_if_cannot_migrate| is true, and continue using their current
-  // network otherwise.
-  //
-  // If |new_network| is NetworkChangeNotifier::kInvalidNetworkHandle,
-  // there is no new network to migrate sessions onto, and all sessions are
-  // closed.
-  void MaybeMigrateOrCloseSessions(
-      NetworkChangeNotifier::NetworkHandle new_network,
-      bool close_if_cannot_migrate,
-      const NetLogWithSource& net_log);
-
-  // Method that attempts migration of |session| on write error with
-  // |error_code| if |session| is active and if there is an alternate network
-  // than the one to which |session| is currently bound.
-  MigrationResult MaybeMigrateSingleSessionOnWriteError(
-      QuicChromiumClientSession* session,
-      int error_code);
-
-  // Method that attempts migration of |session| on path degrading if |session|
-  // is active and if there is an alternate network than the one to which
-  // |session| is currently bound.
-  MigrationResult MaybeMigrateSingleSessionOnPathDegrading(
-      QuicChromiumClientSession* session);
-
-  // Migrates |session| over to using |peer_address|. Causes a PING frame
-  // to be sent to the new peer address.
-  void MigrateSessionToNewPeerAddress(QuicChromiumClientSession* session,
-                                      IPEndPoint peer_address,
-                                      const NetLogWithSource& net_log);
-
   // Creates a datagram socket. |source| is the NetLogSource for the entity
   // trying to create the socket, if it has one.
   std::unique_ptr<DatagramClientSocket> CreateSocket(
@@ -355,6 +321,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   void OnCertDBChanged() override;
 
   bool require_confirmation() const { return require_confirmation_; }
+
+  bool allow_server_migration() const { return allow_server_migration_; }
 
   void set_require_confirmation(bool require_confirmation);
 
@@ -514,12 +482,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // PING timeout for connections.
   QuicTime::Delta ping_timeout_;
   QuicTime::Delta reduced_ping_timeout_;
-
-  base::TimeTicks most_recent_path_degrading_timestamp_;
-  base::TimeTicks most_recent_network_disconnected_timestamp_;
-
-  int most_recent_write_error_;
-  base::TimeTicks most_recent_write_error_timestamp_;
 
   // If more than |yield_after_packets_| packets have been read or more than
   // |yield_after_duration_| time has passed, then

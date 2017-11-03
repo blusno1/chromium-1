@@ -63,7 +63,8 @@ bool AllowedOnReload(PreviewsType type) {
 PreviewsIOData::PreviewsIOData(
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner)
-    : ui_task_runner_(ui_task_runner),
+    : blacklist_ignored_(false),
+      ui_task_runner_(ui_task_runner),
       io_task_runner_(io_task_runner),
       weak_factory_(this) {}
 
@@ -122,6 +123,11 @@ void PreviewsIOData::SetPreviewsBlacklistForTesting(
   previews_black_list_ = std::move(previews_back_list);
 }
 
+void PreviewsIOData::SetPreviewsOptimizationGuideForTesting(
+    std::unique_ptr<PreviewsOptimizationGuide> previews_opt_guide) {
+  previews_opt_guide_ = std::move(previews_opt_guide);
+}
+
 void PreviewsIOData::LogPreviewNavigation(const GURL& url,
                                           bool opt_out,
                                           PreviewsType type,
@@ -156,6 +162,15 @@ void PreviewsIOData::ClearBlackList(base::Time begin_time,
   previews_black_list_->ClearBlackList(begin_time, end_time);
 }
 
+void PreviewsIOData::SetIgnorePreviewsBlacklistDecision(bool ignored) {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+  blacklist_ignored_ = ignored;
+  ui_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&PreviewsUIService::OnIgnoreBlacklistDecisionStatusChanged,
+                 previews_ui_service_, blacklist_ignored_));
+}
+
 bool PreviewsIOData::ShouldAllowPreview(const net::URLRequest& request,
                                         PreviewsType type) const {
   return ShouldAllowPreviewAtECT(request, type,
@@ -181,13 +196,15 @@ bool PreviewsIOData::ShouldAllowPreviewAtECT(
   if (!is_enabled_callback_.Run(type))
     return false;
 
-  // The blacklist will disallow certain hosts for periods of time based on
-  // user's opting out of the preview.
-  PreviewsEligibilityReason status =
-      previews_black_list_->IsLoadedAndAllowed(request.url(), type);
-  if (status != PreviewsEligibilityReason::ALLOWED) {
-    LogPreviewDecisionMade(status, request.url(), base::Time::Now(), type);
-    return false;
+  if (!blacklist_ignored_) {
+    // The blacklist will disallow certain hosts for periods of time based on
+    // user's opting out of the preview.
+    PreviewsEligibilityReason status =
+        previews_black_list_->IsLoadedAndAllowed(request.url(), type);
+    if (status != PreviewsEligibilityReason::ALLOWED) {
+      LogPreviewDecisionMade(status, request.url(), base::Time::Now(), type);
+      return false;
+    }
   }
 
   if (effective_connection_type_threshold !=
@@ -221,6 +238,8 @@ bool PreviewsIOData::ShouldAllowPreviewAtECT(
     return false;
   }
 
+  // Check provided blacklist, if any. This type of blacklist was added for
+  // Finch provided blacklist for Client LoFi.
   if (std::find(host_blacklist_from_server.begin(),
                 host_blacklist_from_server.end(), request.url().host_piece()) !=
       host_blacklist_from_server.end()) {
@@ -228,6 +247,22 @@ bool PreviewsIOData::ShouldAllowPreviewAtECT(
         PreviewsEligibilityReason::HOST_BLACKLISTED_BY_SERVER, request.url(),
         base::Time::Now(), type);
     return false;
+  }
+
+  // Check any provided optimization guidance from the server. This data is
+  // provided through ComponentUpdater (at least originally).
+  if (params::IsOptimizationHintsEnabled()) {
+    // Optimization hints are configured. Check specific previews types that
+    // use them.
+    // TODO(dougarnett): Generalize at some point.
+    if (type == PreviewsType::NOSCRIPT) {
+      // Ensure the URL is whitelisted for NoScript.
+      if (!previews_opt_guide_ ||
+          !previews_opt_guide_->IsWhitelisted(request, type)) {
+        // TODO(dougarnett) bug 780859: Add and log eligibility reason for this.
+        return false;
+      }
+    }
   }
 
   LogPreviewDecisionMade(PreviewsEligibilityReason::ALLOWED, request.url(),

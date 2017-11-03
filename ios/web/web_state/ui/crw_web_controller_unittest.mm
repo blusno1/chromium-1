@@ -11,6 +11,7 @@
 #include "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/path_service.h"
+#include "base/scoped_observer.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -721,9 +722,9 @@ typedef WebTestWithWebController CRWWebControllerObserversTest;
 // Tests that CRWWebControllerObservers are called.
 TEST_F(CRWWebControllerObserversTest, Observers) {
   CountingObserver* observer = [[CountingObserver alloc] init];
-  EXPECT_EQ(0u, [web_controller() observerCount]);
+  EXPECT_FALSE([web_controller() hasObservers]);
   [web_controller() addObserver:observer];
-  EXPECT_EQ(1u, [web_controller() observerCount]);
+  EXPECT_TRUE([web_controller() hasObservers]);
 
   EXPECT_EQ(0, [observer pageLoadedCount]);
   [web_controller() webStateImpl]->OnPageLoaded(GURL("http://test"), false);
@@ -732,7 +733,7 @@ TEST_F(CRWWebControllerObserversTest, Observers) {
   EXPECT_EQ(1, [observer pageLoadedCount]);
 
   [web_controller() removeObserver:observer];
-  EXPECT_EQ(0u, [web_controller() observerCount]);
+  EXPECT_FALSE([web_controller() hasObservers]);
 };
 
 // Test fixture for window.open tests.
@@ -829,17 +830,23 @@ TEST_F(CRWWebControllerTitleTest, TitleChange) {
   // Observes and waits for TitleWasSet call.
   class TitleObserver : public WebStateObserver {
    public:
-    explicit TitleObserver(WebState* web_state) : WebStateObserver(web_state) {}
+    TitleObserver() = default;
+
     // Returns number of times |TitleWasSet| was called.
     int title_change_count() { return title_change_count_; }
     // WebStateObserver overrides:
     void TitleWasSet(WebState* web_state) override { title_change_count_++; }
+    void WebStateDestroyed(WebState* web_state) override { NOTREACHED(); }
 
    private:
     int title_change_count_ = 0;
+
+    DISALLOW_COPY_AND_ASSIGN(TitleObserver);
   };
 
-  TitleObserver observer(web_state());
+  TitleObserver observer;
+  ScopedObserver<WebState, WebStateObserver> scoped_observer(&observer);
+  scoped_observer.Add(web_state());
   ASSERT_EQ(0, observer.title_change_count());
 
   // Expect TitleWasSet callback after the page is loaded.
@@ -987,7 +994,6 @@ class LoadIfNecessaryTest : public WebTest {
     WebTest::SetUp();
     web_state_ = base::MakeUnique<WebStateImpl>(
         WebState::CreateParams(GetBrowserState()), GetTestSessionStorage());
-    web_state_->SetWebUsageEnabled(true);
   }
 
   void TearDown() override {

@@ -93,9 +93,7 @@ def GsutilArchiveExists(archive_name, platform):
 
 
 def MaybeUpload(args, archive_name, platform):
-  # We don't want to rewrite the file, if it already exists on the server,
-  # so -n option to gsutil is used. It will warn, if the upload was aborted.
-  gsutil_args = ['cp', '-n', '-a', 'public-read',
+  gsutil_args = ['cp', '-a', 'public-read',
                   '%s.tgz' % archive_name,
                   'gs://chromium-browser-clang-staging/%s/%s.tgz' %
                  (platform, archive_name)]
@@ -182,13 +180,6 @@ def main():
     platform = 'Win'
   else:
     platform = 'Linux_x64'
-
-  # Check if Google Cloud Storage already has the artifacts we want to build.
-  if args.upload and GsutilArchiveExists(pdir, platform):
-    print ('Desired toolchain revision %s is already available '
-           'in Google Cloud Storage:') % expected_stamp
-    print 'gs://chromium-browser-clang-staging/%s/%s.tgz' % (platform, pdir)
-    return 0
 
   with open('buildlog.txt', 'w') as log:
     Tee('Diff in llvm:\n', log)
@@ -284,6 +275,7 @@ def main():
   elif sys.platform == 'win32':
     want.extend(['lib/clang/*/lib/windows/clang_rt.asan*.dll',
                  'lib/clang/*/lib/windows/clang_rt.asan*.lib',
+                 'lib/clang/*/lib/windows/clang_rt.ubsan*.lib',
                  ])
 
   for root, dirs, files in os.walk(LLVM_RELEASE_DIR):

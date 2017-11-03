@@ -14,7 +14,6 @@ import android.text.TextUtils;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.base.PathUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.browser.ShortcutHelper;
@@ -34,14 +33,12 @@ import java.util.concurrent.TimeUnit;
 public class WebappDataStorage {
     private static final String TAG = "WebappDataStorage";
 
-    /** Path of subdirectory within cache directory which contains data for pending updates. */
-    static final String UPDATE_DIRECTORY_PATH = "webapk/update";
-
     static final String SHARED_PREFS_FILE_PREFIX = "webapp_";
     static final String KEY_SPLASH_ICON = "splash_icon";
     static final String KEY_LAST_USED = "last_used";
     static final String KEY_HAS_BEEN_LAUNCHED = "has_been_launched";
     static final String KEY_URL = "url";
+    static final String KEY_SPLASH_SCREEN_URL = "splash_screen_url";
     static final String KEY_SCOPE = "scope";
     static final String KEY_ICON = "icon";
     static final String KEY_NAME = "name";
@@ -219,6 +216,7 @@ public class WebappDataStorage {
                         KEY_THEME_COLOR, ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING),
                 mPreferences.getLong(
                         KEY_BACKGROUND_COLOR, ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING),
+                mPreferences.getString(KEY_SPLASH_SCREEN_URL, ""),
                 mPreferences.getBoolean(KEY_IS_ICON_GENERATED, false));
     }
 
@@ -257,6 +255,9 @@ public class WebappDataStorage {
         // cleared together.
         if (mPreferences.getInt(KEY_VERSION, VERSION_INVALID)
                 != ShortcutHelper.WEBAPP_SHORTCUT_VERSION) {
+            editor.putString(KEY_SPLASH_SCREEN_URL,
+                    IntentUtils.safeGetStringExtra(
+                            shortcutIntent, ShortcutHelper.EXTRA_SPLASH_SCREEN_URL));
             editor.putString(KEY_NAME, IntentUtils.safeGetStringExtra(
                         shortcutIntent, ShortcutHelper.EXTRA_NAME));
             editor.putString(KEY_SHORT_NAME, IntentUtils.safeGetStringExtra(
@@ -501,9 +502,7 @@ public class WebappDataStorage {
      * SharedPreferences.
      */
     String createAndSetUpdateRequestFilePath(WebApkInfo info) {
-        String filePath =
-                new File(new File(PathUtils.getCacheDirectory(), UPDATE_DIRECTORY_PATH), info.id())
-                        .getPath();
+        String filePath = WebappDirectoryManager.getWebApkUpdateFilePathForStorage(this).getPath();
         mPreferences.edit().putString(KEY_PENDING_UPDATE_FILE_PATH, filePath).apply();
         return filePath;
     }
@@ -532,6 +531,14 @@ public class WebappDataStorage {
                 return null;
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
+    /**
+     * Returns whether a check for whether the Web Manifest needs to be updated has occurred in the
+     * last {@link numMillis} milliseconds.
+     */
+    boolean wasCheckForUpdatesDoneInLastMs(long numMillis) {
+        return (sClock.currentTimeMillis() - getLastCheckForWebManifestUpdateTime()) < numMillis;
     }
 
     /** Returns whether we should check for update. */

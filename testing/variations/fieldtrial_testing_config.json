@@ -809,6 +809,29 @@
             ]
         }
     ],
+    "ChromeSuggestionsTuningForceTopSites": [
+        {
+            "platforms": [
+                "win",
+                "mac",
+                "chromeos",
+                "linux",
+                "ios",
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "Default"
+                },
+                {
+                    "name": "ForceTopSites",
+                    "disable_features": [
+                        "DisplaySuggestionsServiceTiles"
+                    ]
+                }
+            ]
+        }
+    ],
     "ClearOldOnDemandFavicons": [
         {
             "platforms": [
@@ -1686,7 +1709,7 @@
             ],
             "experiments": [
                 {
-                    "name": "Enabled",
+                    "name": "Enabled_Launch",
                     "enable_features": [
                         "LoadingWithMojo"
                     ]
@@ -1795,6 +1818,24 @@
                     "name": "Enabled_WithFullSupport",
                     "enable_features": [
                         "MidiManagerDynamicInstantiation"
+                    ]
+                }
+            ]
+        }
+    ],
+    "MojoCdm": [
+        {
+            "platforms": [
+                "chromeos",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "MojoCdm"
                     ]
                 }
             ]
@@ -3711,6 +3752,26 @@
             "experiments": [
                 {
                     "name": "On"
+                }
+            ]
+        }
+    ],
+    "TurnOffCompositorAnimation": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "ios",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "TurnOffCompositorAnimation"
+                    ]
                 }
             ]
         }

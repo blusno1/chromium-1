@@ -4,6 +4,9 @@
 
 /** The columns that are used to find rows that contain the keyword. */
 const KEY_COLUMNS = ['log-type', 'log-description', 'log-url'];
+const ENABLE_BLACKLIST_BUTTON = 'Enable Blacklist';
+const IGNORE_BLACKLIST_BUTTON = 'Ignore Blacklist';
+const IGNORE_BLACKLIST_MESSAGE = 'Blacklist decisions are ignored.';
 
 /**
  * Convert milliseconds to human readable date/time format.
@@ -136,8 +139,6 @@ InterventionsInternalPageImpl.prototype = {
     descriptionTd.textContent = log.description;
     tableRow.appendChild(descriptionTd);
 
-    // TODO(thanhdle): Truncate url and show full url when user clicks on it.
-    // crbug.com/773019
     let urlTd = document.createElement('td');
     urlTd.setAttribute('class', 'log-url');
     urlTd.textContent = log.url.url;
@@ -202,6 +203,23 @@ InterventionsInternalPageImpl.prototype = {
   },
 
   /**
+   * Update the page with the new value of ignored blacklist decision status.
+   *
+   * @override
+   * @param {boolean} ignored The new status of whether the previews blacklist
+   * decisions is blacklisted or not.
+   */
+  onIgnoreBlacklistDecisionStatusChanged: function(ignored) {
+    let ignoreButton = $('ignore-blacklist-button');
+    ignoreButton.textContent =
+        ignored ? ENABLE_BLACKLIST_BUTTON : IGNORE_BLACKLIST_BUTTON;
+
+    // Update the status of blacklist ignored on the page.
+    $('blacklist-ignored-status').textContent =
+        ignored ? IGNORE_BLACKLIST_MESSAGE : '';
+  },
+
+  /**
    * Update the page with the new value of estimated effective connection type.
    *
    * @override
@@ -219,6 +237,14 @@ cr.define('interventions_internals', () => {
   function init(handler) {
     pageHandler = handler;
     getPreviewsEnabled();
+
+    let ignoreButton = $('ignore-blacklist-button');
+    ignoreButton.addEventListener('click', () => {
+      // Whether the blacklist is currently ignored.
+      let ignored = (ignoreButton.textContent == ENABLE_BLACKLIST_BUTTON);
+      // Try to reverse the ignore status.
+      pageHandler.setIgnorePreviewsBlacklistDecision(!ignored);
+    });
   }
 
   /**
@@ -230,15 +256,22 @@ cr.define('interventions_internals', () => {
         .then((response) => {
           let statuses = $('previews-statuses');
 
-          // TODO(thanhdle): The statuses are not printed in alphabetic order of
-          // the key. crbug.com/772458
-          response.statuses.forEach((value, key) => {
+          // Sorting the keys by the status's description.
+          let sortedKeys = Array.from(response.statuses.keys());
+          sortedKeys.sort((a, b) => {
+            return response.statuses.get(a).description >
+                response.statuses.get(b).description;
+          });
+
+          sortedKeys.forEach((key) => {
+            let value = response.statuses.get(key);
             let message = value.description + ': ';
             message += value.enabled ? 'Enabled' : 'Disabled';
 
             assert(!$(key), 'Component ' + key + ' already existed!');
 
             let node = document.createElement('p');
+            node.setAttribute('class', 'previews-status-value');
             node.setAttribute('id', key);
             node.textContent = message;
             statuses.appendChild(node);

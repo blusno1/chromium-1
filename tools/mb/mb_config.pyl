@@ -102,7 +102,6 @@
       'Linux ChromiumOS Full': 'chromeos_with_codecs_release_bot',
 
       'chromeos-amd64-generic-rel': 'cros_chrome_sdk',
-      'chromeos-betty-rel': 'cros_chrome_sdk',
       'chromeos-daisy-rel': 'cros_chrome_sdk',
       'linux-chromeos-rel': 'chromeos_with_codecs_release_bot',
       'linux-chromeos-dbg': 'chromeos_with_codecs_debug_bot',
@@ -249,9 +248,6 @@
       'Site Isolation Android': 'android_release_bot_minimal_symbols_arm64',
       'Site Isolation Linux': 'release_trybot',
       'Site Isolation Win': 'release_trybot_x86',
-      'WebKit Linux - RandomOrder': 'release_trybot',
-      'WebKit Mac - RandomOrder': 'release_trybot',
-      'WebKit Win - RandomOrder': 'release_bot_x86_minimal_symbols',
       'Win 10 Fast Ring': 'release_trybot',
       'Windows deterministic': 'release_bot_x86_minimal_symbols',
       'Windows Clang deterministic': 'clang_release_bot_minimal_symbols_x86',
@@ -353,7 +349,6 @@
       'TSAN Release': 'tsan_disable_nacl_release_bot',
       'UBSan Release': 'ubsan_release_bot',
       'UBSan vptr Release': 'ubsan_vptr_edge_release_bot',
-      'Win ASan Release Coverage': 'asan_edge_fuzzer_v8_heap_release_bot_x86',
       'Win ASan Release Media': 'asan_fuzzer_v8_heap_chrome_with_codecs_release_bot_x86',
       'Win ASan Release': 'asan_fuzzer_v8_heap_release_bot_x86',
       'Win SyzyASAN LKGR': 'syzyasan_no_pch_release_x86',
@@ -492,7 +487,11 @@
       'Win Builder (dbg)': 'debug_bot_x86_minimal_symbols',
       'Win x64 Builder': 'release_bot_minimal_symbols',
       'Win x64 Builder (dbg)': 'debug_bot_minimal_symbols',
+      # TODO(thakis): Remove this once WinMSVC64 bots are live (the bots with
+      # unqualified names now use clang).
       'WinClang64 (dbg)': 'win_clang_release_bot',
+      'WinMSVC64': 'win_msvc_release_bot',
+      'WinMSVC64 (dbg)': 'win_msvc_debug_bot',
     },
 
     'internal.client.kitchensync': {
@@ -537,7 +536,6 @@
       'android_clang_dbg_recipe': 'android_clang_asan_errorprone_findbugs_debug_trybot',
       'android_compile_dbg': 'android_debug_trybot',
       'android_compile_mips_dbg': 'android_debug_trybot_mipsel',
-      'android_compile_rel': 'android_release_trybot',
       'android_compile_x64_dbg': 'android_debug_trybot_x64',
       'android_compile_x86_dbg': 'android_debug_trybot_x86',
       'android_coverage': 'android_debug_trybot_java_coverage',
@@ -576,7 +574,6 @@
 
     'tryserver.chromium.chromiumos': {
       'chromeos-amd64-generic-rel': 'cros_chrome_sdk',
-      'chromeos-betty-rel': 'cros_chrome_sdk',
       'chromeos-daisy-rel': 'cros_chrome_sdk',
       'linux-chromeos-rel': 'chromeos_with_codecs_release_trybot',
       'linux-chromeos-compile-dbg': 'chromeos_with_codecs_debug_bot',
@@ -719,6 +716,8 @@
       'win_chromium_syzyasan_rel': 'syzyasan_no_pch_release_x86',
       'win_chromium_x64_rel_ng': 'release_trybot_minimal_symbols',
       'win_clang': 'win_clang_release_bot',
+      'win_msvc': 'win_msvc_release_bot',
+      'win_msvc_dbg': 'win_msvc_debug_bot',
       'win_clang_dbg': 'clang_debug_trybot_x86',
       'win_clang_rel': 'clang_official_release_trybot_x86',
       'win_clang_x64_dbg': 'win_clang_debug_bot',
@@ -1015,10 +1014,6 @@
       'asan', 'edge', 'fuzzer', 'v8_heap', 'release_bot', 'hybrid',
     ],
 
-    'asan_edge_fuzzer_v8_heap_release_bot_x86': [
-      'clang', 'asan', 'edge', 'fuzzer', 'v8_heap', 'release_bot', 'x86',
-    ],
-
     'asan_edge_v8_heap_debug_bot_hybrid': [
       'asan', 'edge', 'v8_heap', 'debug_bot', 'hybrid',
     ],
@@ -1118,7 +1113,7 @@
     'clang_debug_bot_minimal_symbols_x86': [
       # Now that the default win bots use clang, use a "clang" bot to make sure
       # things stay compilable with msvc. TODO(thakis): Having a "clang" bot
-      # check that is very confusing, so rename the bot to "msvc".
+      # check that is very confusing, so rename to "msvc", crbug.com/751220
       'no_clang', 'debug_bot', 'minimal_symbols', 'x86',
     ],
 
@@ -1129,21 +1124,21 @@
     'clang_minimal_symbols_shared_release_bot_x86_dcheck': [
       # Now that the default win bots use clang, use a "clang" bot to make sure
       # things stay compilable with msvc. TODO(thakis): Having a "clang" bot
-      # check that is very confusing, so rename the bot to "msvc".
+      # check that is very confusing, so rename to "msvc", crbug.com/751220
       'no_clang', 'minimal_symbols', 'shared_release_bot', 'x86', 'dcheck_always_on',
     ],
 
     'clang_official_release_bot_minimal_symbols': [
       # Now that the default win bots use clang, use a "clang" bot to make sure
       # things stay compilable with msvc. TODO(thakis): Having a "clang" bot
-      # check that is very confusing, so rename the bot to "msvc".
+      # check that is very confusing, so rename to "msvc", crbug.com/751220
       'no_clang', 'official', 'release_bot', 'minimal_symbols',
     ],
 
     'clang_official_release_bot_minimal_symbols_x86': [
       # Now that the default win bots use clang, use a "clang" bot to make sure
       # things stay compilable with msvc. TODO(thakis): Having a "clang" bot
-      # check that is very confusing, so rename the bot to "msvc".
+      # check that is very confusing, so rename to "msvc", crbug.com/751220
       'no_clang', 'official', 'release_bot', 'minimal_symbols', 'x86',
     ],
 
@@ -1162,7 +1157,7 @@
     'clang_shared_release_bot_dcheck': [
       # Now that the default win bots use clang, use a "clang" bot to make sure
       # things stay compilable with msvc. TODO(thakis): Having a "clang" bot
-      # check that is very confusing, so rename the bot to "msvc".
+      # check that is very confusing, so rename to "msvc", crbug.com/751220
       'no_clang', 'shared_release_bot', 'dcheck_always_on',
     ],
 
@@ -1682,6 +1677,14 @@
       # things stay compilable with msvc. TODO(thakis): Having a "clang" bot
       # check that is very confusing, so rename the bot to "msvc".
       'no_clang', 'release_bot', 'minimal_symbols',
+    ],
+
+    'win_msvc_release_bot': [
+      'no_clang', 'release_bot', 'minimal_symbols',
+    ],
+
+    'win_msvc_debug_bot': [
+      'no_clang', 'debug_bot', 'minimal_symbols',
     ],
 
     # TODO(tikuta): Remove this once gcp goma backend supports all windows nacl compilers.

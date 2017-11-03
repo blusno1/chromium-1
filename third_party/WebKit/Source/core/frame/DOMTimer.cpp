@@ -105,7 +105,7 @@ DOMTimer::DOMTimer(ExecutionContext* context,
   else
     StartRepeating(interval_milliseconds, BLINK_FROM_HERE);
 
-  SuspendIfNeeded();
+  PauseIfNeeded();
   TRACE_EVENT_INSTANT1("devtools.timeline", "TimerInstall",
                        TRACE_EVENT_SCOPE_THREAD, "data",
                        InspectorTimerInstallEvent::Data(context, timeout_id,
@@ -142,7 +142,7 @@ void DOMTimer::Fired() {
   ExecutionContext* context = GetExecutionContext();
   DCHECK(context);
   context->Timers()->SetTimerNestingLevel(nesting_level_);
-  DCHECK(!context->IsContextSuspended());
+  DCHECK(!context->IsContextPaused());
   // Only the first execution of a multi-shot timer should get an affirmative
   // user gesture indicator.
   UserGestureIndicator gesture_indicator(std::move(user_gesture_token_));

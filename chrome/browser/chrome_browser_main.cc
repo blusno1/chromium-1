@@ -56,6 +56,7 @@
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
+#include "chrome/browser/component_updater/optimization_hints_component_installer.h"
 #include "chrome/browser/component_updater/origin_trials_component_installer.h"
 #include "chrome/browser/component_updater/pepper_flash_component_installer.h"
 #include "chrome/browser/component_updater/recovery_component_installer.h"
@@ -217,7 +218,7 @@
 #include "chrome/browser/downgrade/user_data_downgrade.h"
 #include "chrome/browser/first_run/upgrade_util_win.h"
 #include "chrome/browser/ui/network_profile_bubble.h"
-#include "chrome/browser/ui/views/try_chrome_dialog.h"
+#include "chrome/browser/ui/views/try_chrome_dialog_win/try_chrome_dialog.h"
 #include "chrome/browser/win/browser_util.h"
 #include "chrome/browser/win/chrome_select_file_dialog_factory.h"
 #include "chrome/install_static/install_util.h"
@@ -471,7 +472,7 @@ OSStatus KeychainCallback(SecKeychainEvent keychain_event,
 }
 #endif  // defined(OS_MACOSX)
 
-void RegisterComponentsForUpdate() {
+void RegisterComponentsForUpdate(PrefService* profile_prefs) {
   auto* const cus = g_browser_process->component_updater();
 
   if (base::FeatureList::IsEnabled(features::kImprovedRecoveryComponent))
@@ -502,6 +503,7 @@ void RegisterComponentsForUpdate() {
   whitelist_installer->RegisterComponents();
 
   RegisterSubresourceFilterComponent(cus);
+  RegisterOptimizationHintsComponent(cus, profile_prefs);
 
   base::FilePath path;
   if (PathService::Get(chrome::DIR_USER_DATA, &path)) {
@@ -1763,7 +1765,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   browser_process_->notification_ui_manager();
 
   if (!parsed_command_line().HasSwitch(switches::kDisableComponentUpdate))
-    RegisterComponentsForUpdate();
+    RegisterComponentsForUpdate(profile_->GetPrefs());
 
 #if defined(OS_ANDROID)
   variations::VariationsService* variations_service =

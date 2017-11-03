@@ -7,7 +7,6 @@
 
 #include "base/compiler_specific.h"
 #include "platform/PlatformExport.h"
-#include "platform/geometry/FloatRect.h"
 #include "platform/graphics/paint/DisplayItem.h"
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/runtime_enabled_features.h"
@@ -32,12 +31,7 @@ class PLATFORM_EXPORT DrawingDisplayItem final : public DisplayItem {
   DrawingDisplayItem(const DisplayItemClient& client,
                      Type type,
                      sk_sp<const PaintRecord> record,
-                     bool known_to_be_opaque = false)
-      : DisplayItem(client, type, sizeof(*this)),
-        record_(record && record->size() ? std::move(record) : nullptr),
-        known_to_be_opaque_(known_to_be_opaque) {
-    DCHECK(IsDrawingType(type));
-  }
+                     bool known_to_be_opaque);
 
   void Replay(GraphicsContext&) const override;
   void AppendToWebDisplayItemList(const LayoutSize& visual_rect_offset,
@@ -51,17 +45,30 @@ class PLATFORM_EXPORT DrawingDisplayItem final : public DisplayItem {
     return known_to_be_opaque_;
   }
 
+  bool Equals(const DisplayItem& other) const final;
+
  private:
 #ifndef NDEBUG
   void PropertiesAsJSON(JSONObject&) const override;
 #endif
-  bool Equals(const DisplayItem& other) const final;
 
   sk_sp<const PaintRecord> record_;
 
   // True if there are no transparent areas. Only used for SlimmingPaintV2.
   const bool known_to_be_opaque_;
 };
+
+// TODO(dcheng): Move this ctor back inline once the clang plugin is fixed.
+DISABLE_CFI_PERF
+inline DrawingDisplayItem::DrawingDisplayItem(const DisplayItemClient& client,
+                                              Type type,
+                                              sk_sp<const PaintRecord> record,
+                                              bool known_to_be_opaque = false)
+    : DisplayItem(client, type, sizeof(*this)),
+      record_(record && record->size() ? std::move(record) : nullptr),
+      known_to_be_opaque_(known_to_be_opaque) {
+  DCHECK(IsDrawingType(type));
+}
 
 }  // namespace blink
 

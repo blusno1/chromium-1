@@ -99,6 +99,7 @@ class Canvas2DLayerBridgePtr {
 class FakeGLES2InterfaceWithImageSupport : public FakeGLES2Interface {
  public:
   MOCK_METHOD0(Flush, void());
+  MOCK_METHOD2(GenTextures, void(GLsizei, GLuint*));
 
   GLuint CreateImageCHROMIUM(ClientBuffer, GLsizei, GLsizei, GLenum) override {
     return ++create_image_count_;
@@ -141,14 +142,15 @@ class Canvas2DLayerBridgeTest : public Test {
     return bridge;
   }
   void SetUp() override {
-    SharedGpuContext::SetContextProviderFactoryForTesting([this] {
-      return std::unique_ptr<WebGraphicsContext3DProvider>(
-          new FakeWebGraphicsContext3DProvider(&gl_));
-    });
+    auto factory = [](FakeGLES2Interface* gl, bool* gpu_compositing_disabled)
+        -> std::unique_ptr<WebGraphicsContext3DProvider> {
+      *gpu_compositing_disabled = false;
+      return std::make_unique<FakeWebGraphicsContext3DProvider>(gl);
+    };
+    SharedGpuContext::SetContextProviderFactoryForTesting(
+        WTF::Bind(factory, WTF::Unretained(&gl_)));
   }
-  void TearDown() override {
-    SharedGpuContext::SetContextProviderFactoryForTesting(nullptr);
-  }
+  void TearDown() override { SharedGpuContext::ResetForTesting(); }
   bool IsUnitTest() { return true; }
 
  protected:
@@ -1068,13 +1070,16 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_PrepareMailboxWhileBackgroundRendering)
 }
 
 TEST_F(Canvas2DLayerBridgeTest, DeleteGpuMemoryBufferAfterTeardown) {
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
   ScopedCanvas2dImageChromiumForTest canvas_2d_image_chromium(true);
-#endif
   ScopedTestingPlatformSupport<FakePlatformSupport> platform;
 
   viz::TextureMailbox texture_mailbox;
   std::unique_ptr<viz::SingleReleaseCallback> release_callback;
+
+  // Texture id just needs to be non-zero for image creation to work.
+  const GLint texture_id = 1;
+  EXPECT_CALL(gl_, GenTextures(1, _))
+      .WillOnce(testing::SetArgPointee<1>(texture_id));
 
   {
     Canvas2DLayerBridgePtr bridge(WTF::WrapUnique(new Canvas2DLayerBridge(
@@ -1083,15 +1088,12 @@ TEST_F(Canvas2DLayerBridgeTest, DeleteGpuMemoryBufferAfterTeardown) {
     bridge->PrepareTextureMailbox(&texture_mailbox, &release_callback);
   }
 
+  ::testing::Mock::VerifyAndClearExpectations(&gl_);
+
   bool lost_resource = false;
   release_callback->Run(gpu::SyncToken(), lost_resource);
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
   EXPECT_EQ(1u, gl_.CreateImageCount());
   EXPECT_EQ(1u, gl_.DestroyImageCount());
-#else
-  EXPECT_EQ(0u, gl_.CreateImageCount());
-  EXPECT_EQ(0u, gl_.DestroyImageCount());
-#endif
 }
 
 TEST_F(Canvas2DLayerBridgeTest, NoUnnecessaryFlushes) {

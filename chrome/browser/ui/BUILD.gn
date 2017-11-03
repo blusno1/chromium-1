@@ -17,6 +17,7 @@ import("//ppapi/features/features.gni")
 import("//printing/features/features.gni")
 import("//rlz/features/features.gni")
 import("//ui/base/ui_features.gni")
+import("//ui/views/features.gni")
 
 config("ui_warnings") {
   if (is_clang) {
@@ -74,8 +75,6 @@ split_static_library("ui") {
     "autofill/popup_view_common.h",
     "blocked_content/blocked_window_params.cc",
     "blocked_content/blocked_window_params.h",
-    "blocked_content/console_logger.cc",
-    "blocked_content/console_logger.h",
     "blocked_content/popup_blocker_tab_helper.cc",
     "blocked_content/popup_blocker_tab_helper.h",
     "blocked_content/popup_opener_tab_helper.cc",
@@ -1610,6 +1609,7 @@ split_static_library("ui") {
         "views/profiles/avatar_button.cc",
         "views/profiles/avatar_button.h",
       ]
+      deps += [ "//ui/views:features" ]
     }
 
     if (enable_dice_support) {
@@ -2468,8 +2468,10 @@ split_static_library("ui") {
       "views/status_icons/status_tray_win.cc",
       "views/status_icons/status_tray_win.h",
       "views/tabs/window_finder_win.cc",
-      "views/try_chrome_dialog.cc",
-      "views/try_chrome_dialog.h",
+      "views/try_chrome_dialog_win/arrow_border.cc",
+      "views/try_chrome_dialog_win/arrow_border.h",
+      "views/try_chrome_dialog_win/try_chrome_dialog.cc",
+      "views/try_chrome_dialog_win/try_chrome_dialog.h",
       "views/uninstall_view.cc",
       "views/uninstall_view.h",
       "webui/conflicts_handler.cc",
@@ -2957,6 +2959,8 @@ split_static_library("ui") {
         "views/location_bar/bubble_icon_view.h",
         "views/location_bar/content_setting_image_view.cc",
         "views/location_bar/content_setting_image_view.h",
+        "views/location_bar/find_bar_icon.cc",
+        "views/location_bar/find_bar_icon.h",
         "views/location_bar/icon_label_bubble_view.cc",
         "views/location_bar/icon_label_bubble_view.h",
         "views/location_bar/keyword_hint_view.cc",
@@ -3086,6 +3090,15 @@ split_static_library("ui") {
           "//services/ui/public/interfaces",
         ]
       }
+    }
+
+    if (enable_native_window_nav_buttons) {
+      sources += [
+        "views/frame/desktop_linux_browser_frame_view.cc",
+        "views/frame/desktop_linux_browser_frame_view.h",
+        "views/frame/desktop_linux_browser_frame_view_layout.cc",
+        "views/frame/desktop_linux_browser_frame_view_layout.h",
+      ]
     }
 
     if (is_desktop_linux) {
@@ -3426,6 +3439,8 @@ split_static_library("ui") {
       "extensions/extension_message_bubble_factory.h",
       "extensions/hosted_app_browser_controller.cc",
       "extensions/hosted_app_browser_controller.h",
+      "extensions/hosted_app_menu_model.cc",
+      "extensions/hosted_app_menu_model.h",
       "extensions/icon_with_badge_image_source.cc",
       "extensions/icon_with_badge_image_source.h",
       "extensions/settings_api_bubble_helpers.cc",

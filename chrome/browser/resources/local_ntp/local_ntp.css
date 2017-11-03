@@ -11,6 +11,7 @@ html {
       + 1px);
   --tile-margin: 16px;
   --tile-width: 154px;
+  height: 100%;
 }
 
 /* width >= (3 cols * (16px + 154px) - 16px + 200px) */
@@ -34,6 +35,7 @@ body {
   cursor: default;
   font-family: arial, sans-serif;
   font-size: small;
+  height: 100%;
   margin: 0;
   overflow-x: hidden;
 }
@@ -48,6 +50,9 @@ button {
 }
 
 #ntp-contents {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   margin: 0 auto;
   text-align: -webkit-center;
   width: var(--content-width);
@@ -305,12 +310,13 @@ html[dir=rtl] #fakebox-cursor {
 #fakebox-microphone {
   background: url(googlemic_clr_24px.svg) no-repeat center;
   background-size: 24px 24px;
+  bottom: 0;
   cursor: pointer;
-  height: 21px;
   padding: 22px 12px 0;
   position: absolute;
   right: 0;
-  width: 17px;
+  top: 0;
+  width: 41px;
 }
 
 html[dir=rtl] #fakebox-microphone {
@@ -342,7 +348,9 @@ body.fakebox-focused #fakebox-cursor {
 }
 
 #most-visited {
+  height: 100%;
   margin-top: 64px;
+  overflow: hidden;
   text-align: -webkit-center;
   user-select: none;
 }
@@ -358,6 +366,9 @@ body.fakebox-focused #fakebox-cursor {
    * change the corresponding values in most_visited_single.css. */
   height: calc(2*128px + 16px + 4px + 8px);
   margin: 0;
+  /* Clamp to the remaining window height, minus space for #mv-notice, which is
+     16px plus 10px each of padding on top and bottom. */
+  max-height: calc(100% - (10px + 16px + 10px));
   position: relative;
   text-align: -webkit-auto;
 }

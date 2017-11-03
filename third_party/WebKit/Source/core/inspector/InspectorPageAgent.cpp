@@ -37,6 +37,7 @@
 #include "build/build_config.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/Document.h"
+#include "core/dom/DocumentTiming.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
@@ -54,8 +55,10 @@
 #include "core/inspector/InspectorCSSAgent.h"
 #include "core/inspector/InspectorResourceContentLoader.h"
 #include "core/inspector/V8InspectorString.h"
+#include "core/layout/AdjustForAbsoluteZoom.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
+#include "core/loader/IdlenessDetector.h"
 #include "core/loader/ScheduledNavigation.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "core/loader/resource/ScriptResource.h"
@@ -86,6 +89,7 @@ static const char kPageAgentScriptsToEvaluateOnLoad[] =
     "pageAgentScriptsToEvaluateOnLoad";
 static const char kScreencastEnabled[] = "screencastEnabled";
 static const char kAutoAttachToCreatedPages[] = "autoAttachToCreatedPages";
+static const char kLifecycleEventsEnabled[] = "lifecycleEventsEnabled";
 }
 
 namespace {
@@ -143,6 +147,45 @@ Resource* CachedResource(LocalFrame* frame,
   if (!cached_resource)
     cached_resource = loader->ResourceForURL(url);
   return cached_resource;
+}
+
+std::unique_ptr<protocol::Array<String>> GetEnabledWindowFeatures(
+    const WebWindowFeatures& window_features) {
+  std::unique_ptr<protocol::Array<String>> feature_strings =
+      protocol::Array<String>::create();
+  if (window_features.x_set) {
+    feature_strings->addItem(
+        String::Format("left=%d", static_cast<int>(window_features.x)));
+  }
+  if (window_features.y_set) {
+    feature_strings->addItem(
+        String::Format("top=%d", static_cast<int>(window_features.y)));
+  }
+  if (window_features.width_set) {
+    feature_strings->addItem(
+        String::Format("width=%d", static_cast<int>(window_features.width)));
+  }
+  if (window_features.height_set) {
+    feature_strings->addItem(
+        String::Format("height=%d", static_cast<int>(window_features.height)));
+  }
+  if (window_features.menu_bar_visible)
+    feature_strings->addItem("menubar");
+  if (window_features.tool_bar_visible)
+    feature_strings->addItem("toolbar");
+  if (window_features.status_bar_visible)
+    feature_strings->addItem("status");
+  if (window_features.scrollbars_visible)
+    feature_strings->addItem("scrollbars");
+  if (window_features.resizable)
+    feature_strings->addItem("resizable");
+  if (window_features.noopener)
+    feature_strings->addItem("noopener");
+  if (window_features.background)
+    feature_strings->addItem("background");
+  if (window_features.persistent)
+    feature_strings->addItem("persistent");
+  return feature_strings;
 }
 
 }  // namespace
@@ -488,6 +531,51 @@ Response InspectorPageAgent::setAutoAttachToCreatedPages(bool auto_attach) {
   return Response::OK();
 }
 
+Response InspectorPageAgent::setLifecycleEventsEnabled(bool enabled) {
+  state_->setBoolean(PageAgentState::kLifecycleEventsEnabled, enabled);
+  if (!enabled)
+    return Response::OK();
+
+  for (LocalFrame* frame : *inspected_frames_) {
+    Document* document = frame->GetDocument();
+    DocumentLoader* loader = frame->Loader().GetDocumentLoader();
+    if (!document || !loader)
+      continue;
+
+    DocumentLoadTiming& timing = loader->GetTiming();
+    double commit_timestamp = timing.ResponseEnd();
+    if (commit_timestamp) {
+      LifecycleEvent(frame, loader, "commit", commit_timestamp);
+    }
+
+    double domcontentloaded_timestamp =
+        document->GetTiming().DomContentLoadedEventEnd();
+    if (domcontentloaded_timestamp) {
+      LifecycleEvent(frame, loader, "DOMContentLoaded",
+                     domcontentloaded_timestamp);
+    }
+
+    double load_timestamp = timing.LoadEventEnd();
+    if (load_timestamp) {
+      LifecycleEvent(frame, loader, "load", load_timestamp);
+    }
+
+    IdlenessDetector* idleness_detector = frame->GetIdlenessDetector();
+    double network_almost_idle_timestamp =
+        idleness_detector->GetNetworkAlmostIdleTime();
+    if (network_almost_idle_timestamp) {
+      LifecycleEvent(frame, loader, "networkAlmostIdle",
+                     network_almost_idle_timestamp);
+    }
+    double network_idle_timestamp = idleness_detector->GetNetworkIdleTime();
+    if (network_idle_timestamp) {
+      LifecycleEvent(frame, loader, "networkIdle", network_idle_timestamp);
+    }
+  }
+
+  return Response::OK();
+}
+
 Response InspectorPageAgent::setAdBlockingEnabled(bool enable) {
   return Response::OK();
 }
@@ -509,8 +597,13 @@ Response InspectorPageAgent::reload(
 Response InspectorPageAgent::navigate(const String& url,
                                       Maybe<String> referrer,
                                       Maybe<String> transitionType,
-                                      String* out_frame_id) {
-  *out_frame_id = IdentifiersFactory::FrameId(inspected_frames_->Root());
+                                      String* out_frame_id,
+                                      String* loader_id) {
+  LocalFrame* frame = inspected_frames_->Root();
+  DocumentLoader* loader = frame->Loader().GetDocumentLoader();
+
+  *out_frame_id = IdentifiersFactory::FrameId(frame);
+  *loader_id = IdentifiersFactory::LoaderId(loader);
   return Response::OK();
 }
 
@@ -713,16 +806,16 @@ void InspectorPageAgent::DomContentLoadedEventFired(LocalFrame* frame) {
   double timestamp = MonotonicallyIncreasingTime();
   if (frame == inspected_frames_->Root())
     GetFrontend()->domContentEventFired(timestamp);
-  GetFrontend()->lifecycleEvent(IdentifiersFactory::FrameId(frame),
-                                "DOMContentLoaded", timestamp);
+  DocumentLoader* loader = frame->Loader().GetDocumentLoader();
+  LifecycleEvent(frame, loader, "DOMContentLoaded", timestamp);
 }
 
 void InspectorPageAgent::LoadEventFired(LocalFrame* frame) {
   double timestamp = MonotonicallyIncreasingTime();
   if (frame == inspected_frames_->Root())
     GetFrontend()->loadEventFired(timestamp);
-  GetFrontend()->lifecycleEvent(IdentifiersFactory::FrameId(frame), "load",
-                                timestamp);
+  DocumentLoader* loader = frame->Loader().GetDocumentLoader();
+  LifecycleEvent(frame, loader, "load", timestamp);
 }
 
 void InspectorPageAgent::WillCommitLoad(LocalFrame*, DocumentLoader* loader) {
@@ -731,8 +824,8 @@ void InspectorPageAgent::WillCommitLoad(LocalFrame*, DocumentLoader* loader) {
     script_to_evaluate_on_load_once_ = pending_script_to_evaluate_on_load_once_;
     pending_script_to_evaluate_on_load_once_ = String();
   }
-  GetFrontend()->lifecycleEvent(IdentifiersFactory::FrameId(loader->GetFrame()),
-                                "commit", MonotonicallyIncreasingTime());
+  LifecycleEvent(loader->GetFrame(), loader, "commit",
+                 MonotonicallyIncreasingTime());
   GetFrontend()->frameNavigated(BuildObjectForFrame(loader->GetFrame()));
 }
 
@@ -801,17 +894,23 @@ void InspectorPageAgent::DidChangeViewport() {
 }
 
 void InspectorPageAgent::LifecycleEvent(LocalFrame* frame,
+                                        DocumentLoader* loader,
                                         const char* name,
                                         double timestamp) {
-  GetFrontend()->lifecycleEvent(IdentifiersFactory::FrameId(frame), name,
+  if (!loader ||
+      !state_->booleanProperty(PageAgentState::kLifecycleEventsEnabled, false))
+    return;
+  GetFrontend()->lifecycleEvent(IdentifiersFactory::FrameId(frame),
+                                IdentifiersFactory::LoaderId(loader), name,
                                 timestamp);
 }
 
 void InspectorPageAgent::PaintTiming(Document* document,
                                      const char* name,
                                      double timestamp) {
-  GetFrontend()->lifecycleEvent(
-      IdentifiersFactory::FrameId(document->GetFrame()), name, timestamp);
+  LocalFrame* frame = document->GetFrame();
+  DocumentLoader* loader = frame->Loader().GetDocumentLoader();
+  LifecycleEvent(frame, loader, name, timestamp);
 }
 
 void InspectorPageAgent::Will(const probe::UpdateLayout&) {}
@@ -840,10 +939,11 @@ void InspectorPageAgent::WindowCreated(LocalFrame* created) {
 void InspectorPageAgent::WindowOpen(Document* document,
                                     const String& url,
                                     const AtomicString& window_name,
-                                    const String& window_features,
+                                    const WebWindowFeatures& window_features,
                                     bool user_gesture) {
   GetFrontend()->windowOpen(document->CompleteURL(url).GetString(), window_name,
-                            window_features, user_gesture);
+                            GetEnabledWindowFeatures(window_features),
+                            user_gesture);
 }
 
 std::unique_ptr<protocol::Page::Frame> InspectorPageAgent::BuildObjectForFrame(
@@ -1005,11 +1105,14 @@ Response InspectorPageAgent::getLayoutMetrics(
 
   *out_visual_viewport =
       protocol::Page::VisualViewport::create()
-          .setOffsetX(AdjustScrollForAbsoluteZoom(visible_rect.X(), page_zoom))
-          .setOffsetY(AdjustScrollForAbsoluteZoom(visible_rect.Y(), page_zoom))
-          .setPageX(AdjustScrollForAbsoluteZoom(page_offset.Width(), page_zoom))
-          .setPageY(
-              AdjustScrollForAbsoluteZoom(page_offset.Height(), page_zoom))
+          .setOffsetX(
+              AdjustForAbsoluteZoom::AdjustScroll(visible_rect.X(), page_zoom))
+          .setOffsetY(
+              AdjustForAbsoluteZoom::AdjustScroll(visible_rect.Y(), page_zoom))
+          .setPageX(AdjustForAbsoluteZoom::AdjustScroll(page_offset.Width(),
+                                                        page_zoom))
+          .setPageY(AdjustForAbsoluteZoom::AdjustScroll(page_offset.Height(),
+                                                        page_zoom))
           .setClientWidth(visible_rect.Width() - scrollbar_width)
           .setClientHeight(visible_rect.Height() - scrollbar_height)
           .setScale(scale)

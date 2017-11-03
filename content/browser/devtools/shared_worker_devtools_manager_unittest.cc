@@ -54,15 +54,15 @@ class SharedWorkerDevToolsManagerTest : public testing::Test {
       : browser_thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP),
         browser_context_(new TestBrowserContext()),
         partition_(new WorkerStoragePartition(
-            BrowserContext::GetDefaultStoragePartition(browser_context_.get())->
-                GetURLRequestContext(),
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL)),
+            BrowserContext::GetDefaultStoragePartition(browser_context_.get())
+                ->GetURLRequestContext(),
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr)),
         partition_id_(*partition_.get()) {}
 
  protected:
@@ -109,7 +109,7 @@ TEST_F(SharedWorkerDevToolsManagerTest, BasicTest) {
       blink::kWebContentSecurityPolicyTypeReport, blink::kWebAddressSpacePublic,
       browser_context_->GetResourceContext(), partition_id_,
       blink::mojom::SharedWorkerCreationContextType::kNonsecure,
-      false /* data_saver_enabled */, base::UnguessableToken::Create());
+      base::UnguessableToken::Create());
 
   agent_host = manager_->GetDevToolsAgentHostForWorker(1, 1);
   EXPECT_FALSE(agent_host.get());
@@ -135,7 +135,7 @@ TEST_F(SharedWorkerDevToolsManagerTest, BasicTest) {
   CheckWorkerState(1, 2, WorkerState::WORKER_UNINSPECTED);
   manager_->WorkerDestroyed(1, 2);
   CheckWorkerState(1, 2, WorkerState::WORKER_TERMINATED);
-  agent_host = NULL;
+  agent_host = nullptr;
   CheckWorkerNotExist(1, 2);
 
   // Created -> Started -> GetDevToolsAgentHost -> Destroyed
@@ -149,7 +149,7 @@ TEST_F(SharedWorkerDevToolsManagerTest, BasicTest) {
   CheckWorkerState(1, 3, WorkerState::WORKER_UNINSPECTED);
   manager_->WorkerDestroyed(1, 3);
   CheckWorkerState(1, 3, WorkerState::WORKER_TERMINATED);
-  agent_host = NULL;
+  agent_host = nullptr;
   CheckWorkerNotExist(1, 3);
 
   // Created -> Destroyed
@@ -168,7 +168,7 @@ TEST_F(SharedWorkerDevToolsManagerTest, BasicTest) {
   CheckWorkerState(1, 5, WorkerState::WORKER_UNINSPECTED);
   manager_->WorkerDestroyed(1, 5);
   CheckWorkerState(1, 5, WorkerState::WORKER_TERMINATED);
-  agent_host = NULL;
+  agent_host = nullptr;
   CheckWorkerNotExist(1, 5);
 
   // Created -> GetDevToolsAgentHost -> Free agent_host -> Destroyed
@@ -178,7 +178,7 @@ TEST_F(SharedWorkerDevToolsManagerTest, BasicTest) {
   agent_host = manager_->GetDevToolsAgentHostForWorker(1, 6);
   EXPECT_TRUE(agent_host.get());
   CheckWorkerState(1, 6, WorkerState::WORKER_UNINSPECTED);
-  agent_host = NULL;
+  agent_host = nullptr;
   manager_->WorkerDestroyed(1, 6);
   CheckWorkerNotExist(1, 6);
 }
@@ -192,13 +192,13 @@ TEST_F(SharedWorkerDevToolsManagerTest, AttachTest) {
       blink::kWebContentSecurityPolicyTypeReport, blink::kWebAddressSpacePublic,
       browser_context_->GetResourceContext(), partition_id_,
       blink::mojom::SharedWorkerCreationContextType::kNonsecure,
-      false /* data_saver_enabled */, base::UnguessableToken::Create());
+      base::UnguessableToken::Create());
   SharedWorkerInstance instance2(
       GURL("http://example.com/w2.js"), std::string(), std::string(),
       blink::kWebContentSecurityPolicyTypeReport, blink::kWebAddressSpacePublic,
       browser_context_->GetResourceContext(), partition_id_,
       blink::mojom::SharedWorkerCreationContextType::kNonsecure,
-      false /* data_saver_enabled */, base::UnguessableToken::Create());
+      base::UnguessableToken::Create());
 
   // Created -> GetDevToolsAgentHost -> Register -> Started -> Destroyed
   std::unique_ptr<TestDevToolsClientHost> client_host1(
@@ -244,10 +244,10 @@ TEST_F(SharedWorkerDevToolsManagerTest, AttachTest) {
   EXPECT_EQ(agent_host1.get(), manager_->GetDevToolsAgentHostForWorker(2, 3));
   manager_->WorkerReadyForInspection(2, 3);
   CheckWorkerState(2, 3, WorkerState::WORKER_INSPECTED);
-  client_host1->InspectAgentHost(NULL);
+  client_host1->InspectAgentHost(nullptr);
   manager_->WorkerDestroyed(2, 3);
   CheckWorkerState(2, 3, WorkerState::WORKER_TERMINATED);
-  agent_host1 = NULL;
+  agent_host1 = nullptr;
   CheckWorkerNotExist(2, 3);
 
   // Re-created -> Destroyed
@@ -265,9 +265,9 @@ TEST_F(SharedWorkerDevToolsManagerTest, AttachTest) {
   CheckWorkerNotExist(2, 2);
   CheckWorkerState(2, 5, WorkerState::WORKER_PAUSED_FOR_REATTACH);
   EXPECT_EQ(agent_host2.get(), manager_->GetDevToolsAgentHostForWorker(2, 5));
-  client_host2->InspectAgentHost(NULL);
+  client_host2->InspectAgentHost(nullptr);
   CheckWorkerCount(1);
-  agent_host2 = NULL;
+  agent_host2 = nullptr;
   CheckWorkerCount(1);
   manager_->WorkerDestroyed(2, 5);
   CheckWorkerCount(0);
@@ -279,7 +279,7 @@ TEST_F(SharedWorkerDevToolsManagerTest, ReattachTest) {
       blink::kWebContentSecurityPolicyTypeReport, blink::kWebAddressSpacePublic,
       browser_context_->GetResourceContext(), partition_id_,
       blink::mojom::SharedWorkerCreationContextType::kNonsecure,
-      false /* data_saver_enabled */, base::UnguessableToken::Create());
+      base::UnguessableToken::Create());
   std::unique_ptr<TestDevToolsClientHost> client_host(
       new TestDevToolsClientHost());
   // Created -> GetDevToolsAgentHost -> Register -> Destroyed
@@ -294,11 +294,11 @@ TEST_F(SharedWorkerDevToolsManagerTest, ReattachTest) {
   manager_->WorkerDestroyed(3, 1);
   CheckWorkerState(3, 1, WorkerState::WORKER_TERMINATED);
   // ClientHostClosing -> Re-created -> release agent_host -> Destroyed
-  client_host->InspectAgentHost(NULL);
+  client_host->InspectAgentHost(nullptr);
   CheckWorkerState(3, 1, WorkerState::WORKER_TERMINATED);
   manager_->WorkerCreated(3, 2, instance);
   CheckWorkerState(3, 2, WorkerState::WORKER_UNINSPECTED);
-  agent_host = NULL;
+  agent_host = nullptr;
   CheckWorkerState(3, 2, WorkerState::WORKER_UNINSPECTED);
   manager_->WorkerDestroyed(3, 2);
   CheckWorkerNotExist(3, 2);
@@ -311,7 +311,7 @@ TEST_F(SharedWorkerDevToolsManagerTest, PauseOnStartTest) {
       blink::kWebContentSecurityPolicyTypeReport, blink::kWebAddressSpacePublic,
       browser_context_->GetResourceContext(), partition_id_,
       blink::mojom::SharedWorkerCreationContextType::kNonsecure,
-      false /* data_saver_enabled */, base::UnguessableToken::Create());
+      base::UnguessableToken::Create());
   std::unique_ptr<TestDevToolsClientHost> client_host(
       new TestDevToolsClientHost());
   manager_->WorkerCreated(3, 1, instance);

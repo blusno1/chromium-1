@@ -17,10 +17,6 @@ struct BindSourceInfo;
 
 namespace resource_coordinator {
 
-class CoordinationUnitBase;
-class FrameCoordinationUnitImpl;
-class PageCoordinationUnitImpl;
-
 // The TabSignalGenerator is a dedicated |CoordinationUnitGraphObserver| for
 // calculating and emitting tab-scoped signals. This observer observes Tab
 // CoordinationUnits and Frame CoordinationUnits, utilize information from the
@@ -39,15 +35,18 @@ class TabSignalGeneratorImpl : public CoordinationUnitGraphObserver,
   void OnFramePropertyChanged(const FrameCoordinationUnitImpl* frame_cu,
                               const mojom::PropertyType property_type,
                               int64_t value) override;
-  void OnPagePropertyChanged(const PageCoordinationUnitImpl* page_cu,
-                             const mojom::PropertyType property_type,
-                             int64_t value) override;
+  void OnProcessPropertyChanged(const ProcessCoordinationUnitImpl* process_cu,
+                                const mojom::PropertyType property_type,
+                                int64_t value) override;
 
   void BindToInterface(
       resource_coordinator::mojom::TabSignalGeneratorRequest request,
       const service_manager::BindSourceInfo& source_info);
 
  private:
+  void NotifyPageAlmostIdleIfPossible(
+      const FrameCoordinationUnitImpl* frame_cu);
+
   mojo::BindingSet<mojom::TabSignalGenerator> bindings_;
   mojo::InterfacePtrSet<mojom::TabSignalObserver> observers_;
 

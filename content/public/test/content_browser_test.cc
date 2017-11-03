@@ -86,6 +86,9 @@ void ContentBrowserTest::SetUp() {
   ui::InitializeInputMethodForTesting();
 #endif
 
+  // Please setup FieldTrial at SetUpOnMainThread.
+  DCHECK_EQ(base::FieldTrialList::GetFieldTrialCount(), 0u);
+
   BrowserTestBase::SetUp();
 }
 
@@ -144,17 +147,13 @@ void ContentBrowserTest::PostRunTestOnMainThread() {
 Shell* ContentBrowserTest::CreateBrowser() {
   return Shell::CreateNewWindow(
       ShellContentBrowserClient::Get()->browser_context(),
-      GURL(url::kAboutBlankURL),
-      NULL,
-      gfx::Size());
+      GURL(url::kAboutBlankURL), nullptr, gfx::Size());
 }
 
 Shell* ContentBrowserTest::CreateOffTheRecordBrowser() {
   return Shell::CreateNewWindow(
       ShellContentBrowserClient::Get()->off_the_record_browser_context(),
-      GURL(url::kAboutBlankURL),
-      NULL,
-      gfx::Size());
+      GURL(url::kAboutBlankURL), nullptr, gfx::Size());
 }
 
 }  // namespace content

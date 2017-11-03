@@ -299,14 +299,11 @@ WebDragData DropDataToWebDragData(const DropData& drop_data) {
     item_list.push_back(item);
   }
 
-  for (std::map<base::string16, base::string16>::const_iterator it =
-           drop_data.custom_data.begin();
-       it != drop_data.custom_data.end();
-       ++it) {
+  for (const auto& it : drop_data.custom_data) {
     WebDragData::Item item;
     item.storage_type = WebDragData::Item::kStorageTypeString;
-    item.string_type = WebString::FromUTF16(it->first);
-    item.string_data = WebString::FromUTF16(it->second);
+    item.string_type = WebString::FromUTF16(it.first);
+    item.string_data = WebString::FromUTF16(it.second);
     item_list.push_back(item);
   }
 
@@ -517,7 +514,7 @@ blink::WebWidget* RenderWidget::CreateWebWidget(RenderWidget* render_widget) {
     default:
       NOTREACHED();
   }
-  return NULL;
+  return nullptr;
 }
 
 void RenderWidget::CloseForFrame() {
@@ -953,15 +950,14 @@ void RenderWidget::BeginMainFrame(double frame_time_sec) {
 }
 
 void RenderWidget::RequestNewLayerTreeFrameSink(
-    bool fallback,
     const LayerTreeFrameSinkCallback& callback) {
   DCHECK(GetWebWidget());
   // For widgets that are never visible, we don't start the compositor, so we
   // never get a request for a cc::LayerTreeFrameSink.
   DCHECK(!compositor_never_visible_);
   RenderThreadImpl::current()->RequestNewLayerTreeFrameSink(
-      fallback, routing_id_, frame_swap_message_queue_,
-      GetURLForGraphicsContext3D(), callback);
+      routing_id_, frame_swap_message_queue_, GetURLForGraphicsContext3D(),
+      callback);
 }
 
 void RenderWidget::DidCommitAndDrawCompositorFrame() {
@@ -1081,7 +1077,7 @@ void RenderWidget::ObserveGestureEventAndResult(
 
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   InputHandlerManager* input_handler_manager =
-      render_thread ? render_thread->input_handler_manager() : NULL;
+      render_thread ? render_thread->input_handler_manager() : nullptr;
   if (input_handler_manager) {
     input_handler_manager->ObserveGestureEventAndResultOnMainThread(
         routing_id_, gesture_event, scroll_result);

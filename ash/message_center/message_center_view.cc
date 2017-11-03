@@ -140,11 +140,8 @@ MessageCenterView::MessageCenterView(MessageCenter* message_center,
   set_notify_enter_exit_on_child(true);
   SetBackground(views::CreateSolidBackground(kBackgroundColor));
 
-  message_center::NotifierSettingsProvider* notifier_settings_provider =
-      message_center_->GetNotifierSettingsProvider();
   button_bar_ = new MessageCenterButtonBar(
-      this, message_center, notifier_settings_provider,
-      initially_settings_visible, GetButtonBarTitle());
+      this, message_center, initially_settings_visible, GetButtonBarTitle());
   button_bar_->SetCloseAllButtonEnabled(false);
 
   const int button_height = button_bar_->GetPreferredSize().height();
@@ -171,7 +168,7 @@ MessageCenterView::MessageCenterView(MessageCenter* message_center,
   scroller_contents->AddChildView(message_list_view_.get());
   scroller_->SetContents(scroller_contents);
 
-  settings_view_ = new NotifierSettingsView(notifier_settings_provider);
+  settings_view_ = new NotifierSettingsView();
 
   no_notifications_view_ = new EmptyNotificationView();
 
@@ -533,11 +530,10 @@ void MessageCenterView::AddNotificationAt(const Notification& notification,
   MessageView* view = message_center::MessageViewFactory::Create(
       this, notification, false);  // Not top-level.
 
-  // TODO(yoshiki): Temporary disable context menu on custom notifications.
-  // See crbug.com/750307 for detail.
+  // TODO(yoshiki): Temporarily disable context menu on custom (arc)
+  // notifications. See crbug.com/750307 for details.
   if (notification.type() != message_center::NOTIFICATION_TYPE_CUSTOM &&
-      notification.delegate() &&
-      notification.delegate()->ShouldDisplaySettingsButton()) {
+      notification.should_show_settings_button()) {
     view->set_context_menu_controller(&context_menu_controller_);
   }
 

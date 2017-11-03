@@ -395,7 +395,8 @@ PaintResult PaintLayerPainter::PaintLayerContents(
                        kPaintLayerPaintingAncestorClippingMaskPhase)))) {
     painting_info.ancestor_has_clip_path_clipping = true;
 
-    LayoutRect reference_box(paint_layer_.BoxForClipPath());
+    LayoutRect reference_box(
+        paint_layer_.GetLayoutObject().LocalReferenceBoxForClipPath());
     // Note that this isn't going to work correctly if crossing a column
     // boundary. The reference box should be determined per-fragment, and hence
     // this ought to be performed after fragmentation.
@@ -852,9 +853,13 @@ PaintResult PaintLayerPainter::PaintFragmentByApplyingTransform(
   transformed_painting_info.ancestor_has_clip_path_clipping =
       painting_info.ancestor_has_clip_path_clipping;
 
-  // Remove skip root background flag when we're painting with a new root.
-  if (&paint_layer_ != painting_info.root_layer)
+  if (&paint_layer_ != painting_info.root_layer) {
+    // Remove skip root background flag when we're painting with a new root.
     paint_flags &= ~kPaintLayerPaintingSkipRootBackground;
+    // When painting a new root we are no longer painting overflow contents.
+    paint_flags &= ~kPaintLayerPaintingOverflowContents;
+    paint_flags &= ~kPaintLayerPaintingCompositingScrollingPhase;
+  }
 
   return PaintLayerContentsCompositingAllPhases(
       context, transformed_painting_info, paint_flags, kForceSingleFragment);

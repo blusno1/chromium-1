@@ -432,6 +432,13 @@
       status: "experimental",
     },
     {
+      name: "FractionalMouseEvent",
+    },
+    {
+      name: "FractionalMouseTypePointerEvent",
+      status: "experimental",
+    },
+    {
       name: "FractionalScrollOffsets",
     },
     {
@@ -557,7 +564,7 @@
     },
     {
       name: "MediaCapabilities",
-      status: "test",
+      status: "experimental",
     },
     {
       name: "MediaCapture",
@@ -684,6 +691,10 @@
     {
       name: "NetInfoRtt",
       status: "stable",
+    },
+    {
+      name: "NetInfoSaveData",
+      status: "experimental",
     },
     {
       name: "NetworkService",

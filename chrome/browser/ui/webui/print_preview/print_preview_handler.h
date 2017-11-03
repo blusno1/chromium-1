@@ -101,10 +101,6 @@ class PrintPreviewHandler
     return regenerate_preview_request_count_;
   }
 
-  // Shuts down the initiator renderer. Called when a bad IPC message is
-  // received.
-  void BadMessageReceived();
-
   // Notifies PDF Printer Handler that |path| was selected. Used for tests.
   void FileSelectedForTesting(const base::FilePath& path,
                               int index,
@@ -123,6 +119,13 @@ class PrintPreviewHandler
   // Protected so unit tests can override.
   virtual PrinterHandler* GetPrinterHandler(printing::PrinterType printer_type);
 
+  // Shuts down the initiator renderer. Called when a bad IPC message is
+  // received.
+  virtual void BadMessageReceived();
+
+  // Gets the initiator for the print preview dialog.
+  virtual content::WebContents* GetInitiator() const;
+
   // Register/unregister from notifications of changes done to the GAIA
   // cookie. Protected so unit tests can override.
   virtual void RegisterForGaiaCookieChanges();
@@ -137,6 +140,8 @@ class PrintPreviewHandler
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, GetPrinters);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, GetPrinterCapabilities);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, Print);
+  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, GetPreview);
+  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, SendPreviewUpdates);
   class AccessTokenService;
 
   content::WebContents* preview_web_contents() const;
@@ -246,9 +251,6 @@ class PrintPreviewHandler
   // Send the PDF data to the cloud to print.
   void SendCloudPrintJob(const std::string& callback_id,
                          const base::RefCountedBytes* data);
-
-  // Gets the initiator for the print preview dialog.
-  content::WebContents* GetInitiator() const;
 
   // Closes the preview dialog.
   void ClosePreviewDialog();

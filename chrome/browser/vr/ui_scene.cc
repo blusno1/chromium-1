@@ -14,6 +14,7 @@
 #include "base/values.h"
 #include "chrome/browser/vr/databinding/binding_base.h"
 #include "chrome/browser/vr/elements/draw_phase.h"
+#include "chrome/browser/vr/elements/reticle.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "ui/gfx/transform.h"
 
@@ -22,11 +23,18 @@ namespace vr {
 namespace {
 
 template <typename P>
-UiScene::Elements GetVisibleElements(UiElement* root, P predicate) {
+UiScene::Elements GetVisibleElements(UiElement* root,
+                                     UiElement* reticle_element,
+                                     P predicate) {
+  Reticle* reticle = static_cast<Reticle*>(reticle_element);
+  UiElement* target = reticle ? reticle->TargetElement() : nullptr;
   UiScene::Elements elements;
   for (auto& element : *root) {
-    if (element.IsVisible() && predicate(&element))
+    if (element.IsVisible() && predicate(&element)) {
       elements.push_back(&element);
+      if (target && target->id() == element.id())
+        elements.push_back(reticle);
+    }
   }
   return elements;
 }
@@ -182,7 +190,8 @@ UiElement* UiScene::GetUiElementByName(UiElementName name) const {
 
 UiScene::Elements UiScene::GetVisible2dBrowsingElements() const {
   return GetVisibleElements(
-      GetUiElementByName(k2dBrowsingRoot), [](UiElement* element) {
+      GetUiElementByName(k2dBrowsingRoot), GetUiElementByName(kReticle),
+      [](UiElement* element) {
         return element->draw_phase() == kPhaseForeground ||
                element->draw_phase() == kPhaseFloorCeiling ||
                element->draw_phase() == kPhaseBackground;
@@ -191,7 +200,8 @@ UiScene::Elements UiScene::GetVisible2dBrowsingElements() const {
 
 UiScene::Elements UiScene::GetVisible2dBrowsingOverlayElements() const {
   return GetVisibleElements(
-      GetUiElementByName(k2dBrowsingRoot), [](UiElement* element) {
+      GetUiElementByName(k2dBrowsingRoot), GetUiElementByName(kReticle),
+      [](UiElement* element) {
         return element->draw_phase() == kPhaseOverlayBackground ||
                element->draw_phase() == kPhaseOverlayForeground;
       });
@@ -199,7 +209,8 @@ UiScene::Elements UiScene::GetVisible2dBrowsingOverlayElements() const {
 
 UiScene::Elements UiScene::GetVisibleSplashScreenElements() const {
   return GetVisibleElements(
-      GetUiElementByName(kSplashScreenRoot), [](UiElement* element) {
+      GetUiElementByName(kSplashScreenRoot), GetUiElementByName(kReticle),
+      [](UiElement* element) {
         return element->draw_phase() == kPhaseOverlayBackground ||
                element->draw_phase() == kPhaseOverlayForeground;
       });
@@ -207,8 +218,22 @@ UiScene::Elements UiScene::GetVisibleSplashScreenElements() const {
 
 UiScene::Elements UiScene::GetVisibleWebVrOverlayForegroundElements() const {
   return GetVisibleElements(
-      GetUiElementByName(kWebVrRoot), [](UiElement* element) {
+      GetUiElementByName(kWebVrRoot), GetUiElementByName(kReticle),
+      [](UiElement* element) {
         return element->draw_phase() == kPhaseOverlayForeground;
+      });
+}
+
+UiScene::Elements UiScene::GetVisibleControllerElements() const {
+  return GetVisibleElements(
+      GetUiElementByName(kControllerGroup), nullptr, [](UiElement* element) {
+        if (element->name() == kReticle) {
+          Reticle* reticle = static_cast<Reticle*>(element);
+          // If the reticle has a non-null target element,
+          // it would have been positioned elsewhere.
+          return !reticle->TargetElement();
+        }
+        return element->draw_phase() == kPhaseForeground;
       });
 }
 
@@ -228,20 +253,6 @@ void UiScene::OnGlInitialized() {
   gl_initialized_ = true;
   for (auto& element : *root_element_)
     element.Initialize();
-}
-
-bool UiScene::ControllerWouldBeVisibleInTheSceneGraph() const {
-  UiElement* button = GetUiElementByName(kWebVrTimeoutMessageButton);
-  if (button && button->IsVisible())
-    return true;
-
-  UiElement* browsing_root = GetUiElementByName(k2dBrowsingRoot);
-  bool browsing_mode = browsing_root && browsing_root->IsVisible();
-
-  UiElement* spinner_bg = GetUiElementByName(kWebVrTimeoutSpinnerBackground);
-  bool transitioning_to_webvr = spinner_bg && spinner_bg->IsVisible();
-
-  return browsing_mode && !transitioning_to_webvr;
 }
 
 }  // namespace vr

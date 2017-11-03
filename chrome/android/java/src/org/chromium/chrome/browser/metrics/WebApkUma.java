@@ -162,11 +162,10 @@ public class WebApkUma {
                 TimeUnit.HOURS.toMillis(1), TimeUnit.DAYS.toMillis(30), TimeUnit.MILLISECONDS, 50);
     }
 
-    // TODO(ranj): Remove this function after downstream is checked in.
-    public static void logAvailableSpaceAboveLowSpaceLimitInUMA(boolean installSucceeded) {}
-
-    // TODO(ranj): Remove this function after downstream is checked in.
-    public static void logUnimportantStorageSizeInUMA() {}
+    /** Records to UMA the count of old "WebAPK update request" files. */
+    public static void recordNumberOfStaleWebApkUpdateRequestFiles(int count) {
+        RecordHistogram.recordCountHistogram("WebApk.Update.NumStaleUpdateRequestFiles", count);
+    }
 
     /**
      * Log necessary disk usage and cache size UMAs when WebAPK installation fails.
@@ -319,8 +318,9 @@ public class WebApkUma {
                 }
             }
 
+            long unimportantSiteStorageTotal = siteStorageSize - importantSiteStorageTotal;
             logSpaceUsageUMAOnDataAvailable(
-                    mAvailableSpaceInByte, mCacheSizeInByte, importantSiteStorageTotal);
+                    mAvailableSpaceInByte, mCacheSizeInByte, unimportantSiteStorageTotal);
         }
     }
 }

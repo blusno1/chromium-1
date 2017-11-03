@@ -72,8 +72,8 @@ class WebWorkerFetchContext;
 // starting up, and destroyed when the service worker stops. It is owned by
 // EmbeddedWorkerInstanceClientImpl's internal WorkerWrapper class.
 //
-// Unless otherwise noted (here or in the superclass documentation), all methods
-// are called on the worker thread.
+// Unless otherwise noted (here or in base class documentation), all methods are
+// called on the worker thread.
 class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
                                    public mojom::ServiceWorkerEventDispatcher {
  public:
@@ -290,8 +290,13 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void DispatchExtendableMessageEvent(
       mojom::ExtendableMessageEventPtr event,
       DispatchExtendableMessageEventCallback callback) override;
-  void DispatchFetchEvent(
+  void DispatchLegacyFetchEvent(
       const ServiceWorkerFetchRequest& request,
+      mojom::FetchEventPreloadHandlePtr preload_handle,
+      mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
+      DispatchFetchEventCallback callback) override;
+  void DispatchFetchEvent(
+      const ResourceRequest& request,
       mojom::FetchEventPreloadHandlePtr preload_handle,
       mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
       DispatchFetchEventCallback callback) override;
@@ -360,8 +365,8 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       std::unique_ptr<blink::WebURLResponse> response,
       std::unique_ptr<blink::WebDataConsumerHandle> data_consumer_handle);
   // Called when the navigation preload request completed. Either
-  // OnNavigationPreloadComplete() or OnNavigationPreloadError() must be called
-  // to release the preload related resources.
+  // OnNavigationPreloadComplete() or OnNavigationPreloadError() must be
+  // called to release the preload related resources.
   void OnNavigationPreloadComplete(int fetch_event_id,
                                    base::TimeTicks completion_time,
                                    int64_t encoded_data_length,
@@ -372,6 +377,10 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void OnNavigationPreloadError(
       int fetch_event_id,
       std::unique_ptr<blink::WebServiceWorkerError> error);
+
+  void SetupNavigationPreload(int fetch_event_id,
+                              const GURL& url,
+                              mojom::FetchEventPreloadHandlePtr preload_handle);
 
   base::WeakPtr<ServiceWorkerContextClient> GetWeakPtr();
 
@@ -387,7 +396,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
 
   scoped_refptr<ServiceWorkerProviderContext> provider_context_;
 
-  // Not owned; this object is destroyed when proxy_ becomes invalid.
+  // Not owned; |this| is destroyed when |proxy_| becomes invalid.
   blink::WebServiceWorkerContextProxy* proxy_;
 
   // This is bound on the worker thread.
@@ -399,11 +408,10 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       instance_host_;
 
   // This is passed to ServiceWorkerNetworkProvider when
-  // createServiceWorkerNetworkProvider is called.
+  // CreateServiceWorkerNetworkProvider is called.
   std::unique_ptr<ServiceWorkerNetworkProvider> pending_network_provider_;
 
-  // Renderer-side object corresponding to WebEmbeddedWorkerInstance.
-  // This is valid from the ctor to workerContextDestroyed.
+  // This is valid from the ctor to WorkerContextDestroyed.
   std::unique_ptr<EmbeddedWorkerInstanceClientImpl> embedded_worker_client_;
 
   blink::mojom::BlobRegistryPtr blob_registry_;

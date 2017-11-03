@@ -241,9 +241,6 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
           Chromium is unresponsive. Relaunch now?
         </message>
       </if>
-      <message name="IDS_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
-        To finish importing, close all Firefox windows.
-      </message>
       <!-- Uninstall messages -->
       <if expr="is_win">
         <message name="IDS_UNINSTALL_CLOSE_APP" desc="Message to user when uninstall detects other app instance running">
@@ -583,7 +580,7 @@ Chromium is unable to recover your settings.
 
       <!-- chrome://settings/extensions page -->
       <message name="IDS_EXTENSIONS_INCOGNITO_WARNING" desc="Warns the user that Chromium cannot prevent extensions from recording history in incognito mode. Displayed in extensions management UI after an extension is selected to be run in incognito mode.">
-        <ph name="BEGIN_BOLD">&lt;b&gt;</ph>Warning:<ph name="END_BOLD">&lt;/b&gt;</ph> Chromium cannot prevent extensions from recording your browsing history. To disable this extension in incognito mode, unselect this option.
+        Warning: Chromium cannot prevent extensions from recording your browsing history. To disable this extension in incognito mode, unselect this option.
       </message>
       <message name="IDS_EXTENSIONS_UNINSTALL" desc="The link for uninstalling extensions.">
         Remove from Chromium...
@@ -604,6 +601,10 @@ Chromium is unable to recover your settings.
       <!-- Main Chrome menu -->
       <message name="IDS_APPMENU_TOOLTIP" desc="The tooltip to show for the browser menu">
         Customize and control Chromium
+      </message>
+
+      <message name="IDS_OPEN_IN_CHROME" desc="The text label of the Open in Chrome menu item for the Hosted App app menu">
+        &amp;Open in Chromium
       </message>
 
       <if expr="use_titlecase and not chromeos">

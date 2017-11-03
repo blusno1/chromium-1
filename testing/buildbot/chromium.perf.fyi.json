@@ -83,6 +83,8 @@
     "isolated_scripts": [
       {
         "args": [
+          "--bot",
+          "swarm823-c4",
           "--builder",
           "One Buildbot Step Test Builder",
           "-v",
@@ -100,6 +102,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "id": "swarm823-c4",
               "pool": "Chrome-perf-fyi"
             }
           ],
@@ -107,17 +110,6 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 3600
-        },
-        "trigger_script": {
-          "args": [
-            "--bot-id",
-            "swarm823-c4",
-            "--bot-id",
-            "swarm846-c4",
-            "--bot-id",
-            "swarm847-c4"
-          ],
-          "script": "//tools/perf/perf_device_trigger.py"
         }
       }
     ]
@@ -142,7 +134,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -172,7 +164,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -204,7 +196,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -234,7 +226,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -266,7 +258,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -296,7 +288,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -328,7 +320,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -358,7 +350,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -390,7 +382,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -420,7 +412,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -452,7 +444,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -482,7 +474,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -514,7 +506,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -576,7 +568,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -638,7 +630,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -668,7 +660,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -700,7 +692,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -730,7 +722,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -762,7 +754,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -792,7 +784,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -824,7 +816,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -854,7 +846,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -886,7 +878,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -907,7 +899,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -937,7 +929,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -969,7 +961,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -999,7 +991,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1031,7 +1023,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1061,7 +1053,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1093,7 +1085,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1123,7 +1115,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1155,7 +1147,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1185,7 +1177,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1217,7 +1209,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1226,7 +1218,7 @@
           "-v",
           "--upload-results",
           "--browser=release_x64",
-          "--output-format=chartjson"
+          "--output-format=histograms"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dummy_benchmark.noisy_benchmark_1",
@@ -1247,7 +1239,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1256,7 +1248,7 @@
           "-v",
           "--upload-results",
           "--browser=reference",
-          "--output-format=chartjson",
+          "--output-format=histograms",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1279,7 +1271,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1288,7 +1280,7 @@
           "-v",
           "--upload-results",
           "--browser=release_x64",
-          "--output-format=chartjson"
+          "--output-format=histograms"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dummy_benchmark.stable_benchmark_1",
@@ -1309,7 +1301,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1318,7 +1310,7 @@
           "-v",
           "--upload-results",
           "--browser=reference",
-          "--output-format=chartjson",
+          "--output-format=histograms",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -1341,7 +1333,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1362,7 +1354,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1392,7 +1384,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 1200,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1424,7 +1416,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 1200,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1454,7 +1446,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1486,7 +1478,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1507,7 +1499,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1567,7 +1559,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1599,131 +1591,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "media.media_cns_cases",
-          "-v",
-          "--upload-results",
-          "--browser=release_x64",
-          "--output-format=chartjson"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "media.media_cns_cases",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build143-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 36000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "media.media_cns_cases",
-          "-v",
-          "--upload-results",
-          "--browser=reference",
-          "--output-format=chartjson",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "media.media_cns_cases.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build143-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 36000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "media.mse_cases",
-          "-v",
-          "--upload-results",
-          "--browser=release_x64",
-          "--output-format=chartjson"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "media.mse_cases",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build154-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 36000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "media.mse_cases",
-          "-v",
-          "--upload-results",
-          "--browser=reference",
-          "--output-format=chartjson",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "media.mse_cases.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:22b1",
-              "id": "build154-b1",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 36000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
-          "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1753,7 +1621,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1785,7 +1653,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1815,7 +1683,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1847,7 +1715,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1877,7 +1745,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1909,7 +1777,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1939,7 +1807,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -1971,7 +1839,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2001,7 +1869,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2033,7 +1901,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2084,7 +1952,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2114,7 +1982,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2146,7 +2014,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2176,7 +2044,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2208,7 +2076,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2238,7 +2106,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2270,7 +2138,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2300,7 +2168,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2332,7 +2200,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2362,7 +2230,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2394,7 +2262,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2424,7 +2292,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2456,7 +2324,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2486,7 +2354,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2518,7 +2386,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2548,7 +2416,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2580,7 +2448,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2610,7 +2478,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2642,7 +2510,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2672,7 +2540,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2704,7 +2572,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2734,7 +2602,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2766,7 +2634,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2828,7 +2696,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2858,7 +2726,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2890,7 +2758,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2920,7 +2788,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2952,7 +2820,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -2982,7 +2850,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3014,7 +2882,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3044,7 +2912,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3076,7 +2944,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3106,7 +2974,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3138,7 +3006,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3168,7 +3036,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3200,7 +3068,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3230,7 +3098,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3262,7 +3130,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3324,7 +3192,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3386,7 +3254,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3416,7 +3284,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3448,7 +3316,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3478,7 +3346,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3510,7 +3378,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3540,7 +3408,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3572,7 +3440,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3634,7 +3502,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3696,7 +3564,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3726,7 +3594,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3758,7 +3626,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3788,7 +3656,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3820,7 +3688,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3850,7 +3718,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3882,7 +3750,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3912,7 +3780,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3944,7 +3812,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -3965,7 +3833,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4027,7 +3895,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4057,7 +3925,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4089,7 +3957,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4119,7 +3987,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4181,7 +4049,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4211,7 +4079,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4243,7 +4111,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       }
     ]
@@ -4277,7 +4145,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4309,7 +4177,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4339,7 +4207,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4371,7 +4239,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4401,7 +4269,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4433,7 +4301,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4463,7 +4331,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4495,7 +4363,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4525,7 +4393,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4557,7 +4425,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4587,7 +4455,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4619,7 +4487,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4681,7 +4549,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4743,7 +4611,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4773,7 +4641,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4805,7 +4673,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4835,7 +4703,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4867,7 +4735,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4897,7 +4765,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4929,7 +4797,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4959,7 +4827,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -4991,7 +4859,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5021,7 +4889,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5053,7 +4921,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5083,7 +4951,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5115,7 +4983,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5145,7 +5013,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5177,7 +5045,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5207,7 +5075,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5239,7 +5107,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5269,7 +5137,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5301,7 +5169,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5310,7 +5178,7 @@
           "-v",
           "--upload-results",
           "--browser=release_x64",
-          "--output-format=chartjson"
+          "--output-format=histograms"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dummy_benchmark.noisy_benchmark_1",
@@ -5331,7 +5199,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5340,7 +5208,7 @@
           "-v",
           "--upload-results",
           "--browser=reference",
-          "--output-format=chartjson",
+          "--output-format=histograms",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5363,7 +5231,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5372,7 +5240,7 @@
           "-v",
           "--upload-results",
           "--browser=release_x64",
-          "--output-format=chartjson"
+          "--output-format=histograms"
         ],
         "isolate_name": "telemetry_perf_tests",
         "name": "dummy_benchmark.stable_benchmark_1",
@@ -5393,7 +5261,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5402,7 +5270,7 @@
           "-v",
           "--upload-results",
           "--browser=reference",
-          "--output-format=chartjson",
+          "--output-format=histograms",
           "--max-failures=5",
           "--output-trace-tag=_ref"
         ],
@@ -5425,7 +5293,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5455,7 +5323,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 1200,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5487,7 +5355,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 1200,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5517,7 +5385,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5549,7 +5417,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5609,7 +5477,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5641,131 +5509,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "media.media_cns_cases",
-          "-v",
-          "--upload-results",
-          "--browser=release_x64",
-          "--output-format=chartjson"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "media.media_cns_cases",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build207-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 36000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "media.media_cns_cases",
-          "-v",
-          "--upload-results",
-          "--browser=reference",
-          "--output-format=chartjson",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "media.media_cns_cases.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build207-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 36000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "media.mse_cases",
-          "-v",
-          "--upload-results",
-          "--browser=release_x64",
-          "--output-format=chartjson"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "media.mse_cases",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build218-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 36000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 600,
-          "upload_test_results": false
-        }
-      },
-      {
-        "args": [
-          "media.mse_cases",
-          "-v",
-          "--upload-results",
-          "--browser=reference",
-          "--output-format=chartjson",
-          "--max-failures=5",
-          "--output-trace-tag=_ref"
-        ],
-        "isolate_name": "telemetry_perf_tests",
-        "name": "media.mse_cases.reference",
-        "override_compile_targets": [
-          "telemetry_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:9874",
-              "id": "build218-b4",
-              "os": "Windows-10-10586",
-              "pool": "Chrome-perf-fyi"
-            }
-          ],
-          "expiration": 36000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": true,
-          "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5795,7 +5539,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5827,7 +5571,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5857,7 +5601,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5889,7 +5633,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5919,7 +5663,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5951,7 +5695,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -5981,7 +5725,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6013,7 +5757,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6043,7 +5787,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6075,7 +5819,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6105,7 +5849,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6135,7 +5879,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6167,7 +5911,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6197,7 +5941,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6229,7 +5973,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6259,7 +6003,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6291,7 +6035,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6321,7 +6065,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6353,7 +6097,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6383,7 +6127,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6415,7 +6159,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6445,7 +6189,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6477,7 +6221,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6507,7 +6251,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6539,7 +6283,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6569,7 +6313,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6601,7 +6345,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6631,7 +6375,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6663,7 +6407,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6693,7 +6437,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6725,7 +6469,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6755,7 +6499,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6787,7 +6531,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6849,7 +6593,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6879,7 +6623,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6911,7 +6655,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6941,7 +6685,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -6973,7 +6717,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7003,7 +6747,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7035,7 +6779,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7065,7 +6809,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7097,7 +6841,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7127,7 +6871,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7159,7 +6903,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7189,7 +6933,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7221,7 +6965,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7251,7 +6995,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7283,7 +7027,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7345,7 +7089,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7407,7 +7151,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7437,7 +7181,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7469,7 +7213,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7499,7 +7243,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7531,7 +7275,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7561,7 +7305,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7593,7 +7337,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7655,7 +7399,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7717,7 +7461,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7747,7 +7491,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7779,7 +7523,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7809,7 +7553,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7841,7 +7585,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7871,7 +7615,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7903,7 +7647,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7933,7 +7677,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -7965,7 +7709,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -8027,7 +7771,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -8057,7 +7801,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -8089,7 +7833,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -8119,7 +7863,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -8181,7 +7925,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -8211,7 +7955,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": false,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       },
       {
@@ -8243,7 +7987,7 @@
           "hard_timeout": 10800,
           "ignore_task_failure": true,
           "io_timeout": 600,
-          "upload_test_results": false
+          "upload_test_results": true
         }
       }
     ]

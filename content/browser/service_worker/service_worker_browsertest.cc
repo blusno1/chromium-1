@@ -48,6 +48,7 @@
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -139,8 +140,8 @@ void ReceivePrepareResult(bool* is_prepared) {
   *is_prepared = true;
 }
 
-base::Closure CreatePrepareReceiver(bool* is_prepared) {
-  return base::Bind(&ReceivePrepareResult, is_prepared);
+base::OnceClosure CreatePrepareReceiver(bool* is_prepared) {
+  return base::BindOnce(&ReceivePrepareResult, is_prepared);
 }
 
 void ReceiveFindRegistrationStatus(
@@ -447,7 +448,7 @@ class ServiceWorkerBrowserTest : public ContentBrowserTest {
   void TearDownOnMainThread() override {
     RunOnIOThread(
         base::Bind(&self::TearDownOnIOThread, base::Unretained(this)));
-    wrapper_ = NULL;
+    wrapper_ = nullptr;
   }
 
   // Starts the test server and navigates the renderer to an empty page. Call
@@ -577,8 +578,8 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   ~ServiceWorkerVersionBrowserTest() override {}
 
   void TearDownOnIOThread() override {
-    registration_ = NULL;
-    version_ = NULL;
+    registration_ = nullptr;
+    version_ = nullptr;
     remote_endpoints_.clear();
   }
 
@@ -866,16 +867,30 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
                        bool* prepare_result,
                        FetchResult* result) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
-    std::unique_ptr<ServiceWorkerFetchRequest> request(
-        new ServiceWorkerFetchRequest(
-            embedded_test_server()->GetURL("/service_worker/empty.html"), "GET",
-            ServiceWorkerHeaderMap(), Referrer(), false));
     version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
-    fetch_dispatcher_.reset(new ServiceWorkerFetchDispatcher(
-        std::move(request), version_.get(), RESOURCE_TYPE_MAIN_FRAME,
-        base::nullopt, net::NetLogWithSource(),
-        CreatePrepareReceiver(prepare_result),
-        CreateResponseReceiver(done, blob_context_.get(), result)));
+    GURL url = embedded_test_server()->GetURL("/service_worker/empty.html");
+    ResourceType resource_type = RESOURCE_TYPE_MAIN_FRAME;
+    base::OnceClosure prepare_callback = CreatePrepareReceiver(prepare_result);
+    ServiceWorkerFetchDispatcher::FetchCallback fetch_callback =
+        CreateResponseReceiver(done, blob_context_.get(), result);
+    if (ServiceWorkerUtils::IsServicificationEnabled()) {
+      auto request = std::make_unique<ResourceRequest>();
+      request->url = url;
+      request->method = "GET";
+      request->resource_type = resource_type;
+      fetch_dispatcher_ = std::make_unique<ServiceWorkerFetchDispatcher>(
+          std::move(request), version_, base::nullopt /* timeout */,
+          net::NetLogWithSource(), std::move(prepare_callback),
+          std::move(fetch_callback));
+    } else {
+      auto legacy_request = std::make_unique<ServiceWorkerFetchRequest>(
+          url, "GET", ServiceWorkerHeaderMap(), Referrer(),
+          false /* is_reload */);
+      fetch_dispatcher_ = std::make_unique<ServiceWorkerFetchDispatcher>(
+          std::move(legacy_request), version_, resource_type,
+          base::nullopt /* timeout */, net::NetLogWithSource(),
+          std::move(prepare_callback), std::move(fetch_callback));
+    }
     fetch_dispatcher_->Run();
   }
 
@@ -891,7 +906,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
       const ServiceWorkerResponse& actual_response,
       blink::mojom::ServiceWorkerStreamHandlePtr /* stream */,
       blink::mojom::BlobPtr /* blob */,
-      const scoped_refptr<ServiceWorkerVersion>& worker) {
+      scoped_refptr<ServiceWorkerVersion> worker) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     ASSERT_TRUE(fetch_dispatcher_);
     fetch_dispatcher_.reset();
@@ -911,9 +926,9 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
       const base::Closure& quit,
       ChromeBlobStorageContext* blob_context,
       FetchResult* result) {
-    return base::Bind(&self::ReceiveFetchResultOnIOThread,
-                      base::Unretained(this), quit,
-                      base::RetainedRef(blob_context), result);
+    return base::BindOnce(&self::ReceiveFetchResultOnIOThread,
+                          base::Unretained(this), quit,
+                          base::RetainedRef(blob_context), result);
   }
 
   void StopOnIOThread(const base::Closure& done) {
@@ -1358,6 +1373,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, FetchWithSaveData) {
   content_browser_client.set_data_saver_enabled(true);
   ContentBrowserClient* old_client =
       SetBrowserClientForTesting(&content_browser_client);
+  shell()->web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
   InstallTestHelper("/service_worker/fetch_in_install.js", SERVICE_WORKER_OK);
   SetBrowserClientForTesting(old_client);
 }
@@ -1371,6 +1387,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionOffMainThreadFetchTest,
   content_browser_client.set_data_saver_enabled(true);
   ContentBrowserClient* old_client =
       SetBrowserClientForTesting(&content_browser_client);
+  shell()->web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
   InstallTestHelper("/service_worker/fetch_in_install.js", SERVICE_WORKER_OK);
   SetBrowserClientForTesting(old_client);
 }
@@ -1384,6 +1401,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
   content_browser_client.set_data_saver_enabled(true);
   ContentBrowserClient* old_client =
       SetBrowserClientForTesting(&content_browser_client);
+  shell()->web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
   InstallTestHelper("/service_worker/generated_sw.js", SERVICE_WORKER_OK);
   SetBrowserClientForTesting(old_client);
 }
@@ -2670,16 +2688,15 @@ class CacheStorageSideDataSizeChecker
                        continuation));
   }
 
-  void OnCacheStorageOpenCallback(
-      int* result,
-      const base::Closure& continuation,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
-      CacheStorageError error) {
+  void OnCacheStorageOpenCallback(int* result,
+                                  const base::Closure& continuation,
+                                  CacheStorageCacheHandle cache_handle,
+                                  CacheStorageError error) {
     ASSERT_EQ(CACHE_STORAGE_OK, error);
     std::unique_ptr<ServiceWorkerFetchRequest> scoped_request(
         new ServiceWorkerFetchRequest());
     scoped_request->url = url_;
-    CacheStorageCache* cache = cache_handle->value();
+    CacheStorageCache* cache = cache_handle.value();
     cache->Match(
         std::move(scoped_request), CacheStorageCacheQueryParams(),
         base::BindOnce(&self::OnCacheStorageCacheMatchCallback, this, result,
@@ -2689,7 +2706,7 @@ class CacheStorageSideDataSizeChecker
   void OnCacheStorageCacheMatchCallback(
       int* result,
       const base::Closure& continuation,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
+      CacheStorageCacheHandle cache_handle,
       CacheStorageError error,
       std::unique_ptr<ServiceWorkerResponse> response,
       std::unique_ptr<storage::BlobDataHandle> blob_data_handle) {

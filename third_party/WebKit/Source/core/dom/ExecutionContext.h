@@ -56,11 +56,14 @@ class ErrorEvent;
 class EventQueue;
 class EventTarget;
 class LocalDOMWindow;
-class SuspendableObject;
+class PausableObject;
 class PublicURLManager;
 class ResourceFetcher;
 class SecurityOrigin;
 class ScriptState;
+
+using SuspendableObject = PausableObject;
+
 enum class TaskType : unsigned;
 
 enum ReasonForCallingCanExecuteScripts {
@@ -134,28 +137,28 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
 
   virtual void RemoveURLFromMemoryCache(const KURL&);
 
-  void SuspendSuspendableObjects();
-  void ResumeSuspendableObjects();
-  void StopSuspendableObjects();
+  void PausePausableObjects();
+  void UnpausePausableObjects();
+  void StopPausableObjects();
   void NotifyContextDestroyed() override;
 
-  void SuspendScheduledTasks();
-  void ResumeScheduledTasks();
+  void PauseScheduledTasks();
+  void UnpauseScheduledTasks();
 
   // TODO(haraken): Remove these methods by making the customers inherit from
-  // SuspendableObject. SuspendableObject is a standard way to observe context
+  // PausableObject. PausableObject is a standard way to observe context
   // suspension/resumption.
+  // TODO(hajimehoshi): Rename them to use the terms Pause/Unpause
   virtual bool TasksNeedSuspension() { return false; }
   virtual void TasksWereSuspended() {}
   virtual void TasksWereResumed() {}
 
-  bool IsContextSuspended() const { return is_context_suspended_; }
+  bool IsContextPaused() const { return is_context_paused_; }
   bool IsContextDestroyed() const { return is_context_destroyed_; }
 
-  // Called after the construction of an SuspendableObject to synchronize
-  // suspend
-  // state.
-  void SuspendSuspendableObjectIfNeeded(SuspendableObject*);
+  // Called after the construction of an PausableObject to synchronize
+  // pause state.
+  void PausePausableObjectIfNeeded(PausableObject*);
 
   // Gets the next id in a circular sequence from 1 to 2^31-1.
   int CircularSequentialID();
@@ -208,7 +211,7 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   bool in_dispatch_error_event_;
   HeapVector<Member<ErrorEvent>> pending_exceptions_;
 
-  bool is_context_suspended_;
+  bool is_context_paused_;
   bool is_context_destroyed_;
 
   Member<PublicURLManager> public_url_manager_;

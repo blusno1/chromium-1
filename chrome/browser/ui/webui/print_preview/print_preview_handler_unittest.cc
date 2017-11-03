@@ -11,13 +11,19 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "chrome/browser/printing/print_view_manager.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
 #include "chrome/browser/ui/webui/print_preview/printer_handler.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/printing/common/print_messages.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_controller.h"
+#include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_web_ui.h"
+#include "ipc/ipc_test_sink.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace printing {
@@ -80,55 +86,85 @@ base::Value GetPrintTicket(printing::PrinterType type, bool cloud) {
 
   // Letter
   base::Value media_size(base::Value::Type::DICTIONARY);
-  media_size.SetKey("is_default", base::Value(true));
-  media_size.SetKey("width_microns", base::Value(215900));
-  media_size.SetKey("height_microns", base::Value(279400));
-  ticket.SetKey("mediaSize", std::move(media_size));
+  media_size.SetKey(kSettingMediaSizeIsDefault, base::Value(true));
+  media_size.SetKey(kSettingMediaSizeWidthMicrons, base::Value(215900));
+  media_size.SetKey(kSettingMediaSizeHeightMicrons, base::Value(279400));
+  ticket.SetKey(kSettingMediaSize, std::move(media_size));
 
-  ticket.SetKey("pageCount", base::Value(1));
-  ticket.SetKey("landscape", base::Value(false));
-  ticket.SetKey("color", base::Value(2));  // color printing
-  ticket.SetKey("headerFooterEnabled", base::Value(false));
-  ticket.SetKey("marginsType", base::Value(0));  // default margins
-  ticket.SetKey("duplex", base::Value(1));       // LONG_EDGE
-  ticket.SetKey("copies", base::Value(1));
-  ticket.SetKey("collate", base::Value(false));
-  ticket.SetKey("shouldPrintBackgrounds", base::Value(false));
-  ticket.SetKey("shouldPrintSelectionOnly", base::Value(false));
-  ticket.SetKey("previewModifiable", base::Value(false));
-  ticket.SetKey("printToPDF",
+  ticket.SetKey(kSettingPreviewPageCount, base::Value(1));
+  ticket.SetKey(kSettingLandscape, base::Value(false));
+  ticket.SetKey(kSettingColor, base::Value(2));  // color printing
+  ticket.SetKey(kSettingHeaderFooterEnabled, base::Value(false));
+  ticket.SetKey(kSettingMarginsType, base::Value(0));  // default margins
+  ticket.SetKey(kSettingDuplexMode, base::Value(1));   // LONG_EDGE
+  ticket.SetKey(kSettingCopies, base::Value(1));
+  ticket.SetKey(kSettingCollate, base::Value(true));
+  ticket.SetKey(kSettingShouldPrintBackgrounds, base::Value(false));
+  ticket.SetKey(kSettingShouldPrintSelectionOnly, base::Value(false));
+  ticket.SetKey(kSettingPreviewModifiable, base::Value(false));
+  ticket.SetKey(kSettingPrintToPDF,
                 base::Value(!cloud && type == printing::kPdfPrinter));
-  ticket.SetKey("printWithCloudPrint", base::Value(cloud));
-  ticket.SetKey("printWithPrivet", base::Value(is_privet_printer));
-  ticket.SetKey("printWithExtension", base::Value(is_extension_printer));
-  ticket.SetKey("rasterizePDF", base::Value(false));
-  ticket.SetKey("scaleFactor", base::Value(100));
-  ticket.SetKey("dpiHorizontal", base::Value(600));
-  ticket.SetKey("dpiVertical", base::Value(600));
-  ticket.SetKey("deviceName", base::Value(kDummyPrinterName));
-  ticket.SetKey("fitToPageEnabled", base::Value(true));
-  ticket.SetKey("pageWidth", base::Value(215900));
-  ticket.SetKey("pageHeight", base::Value(279400));
-  ticket.SetKey("showSystemDialog", base::Value(false));
+  ticket.SetKey(kSettingCloudPrintDialog, base::Value(cloud));
+  ticket.SetKey(kSettingPrintWithPrivet, base::Value(is_privet_printer));
+  ticket.SetKey(kSettingPrintWithExtension, base::Value(is_extension_printer));
+  ticket.SetKey(kSettingRasterizePdf, base::Value(false));
+  ticket.SetKey(kSettingScaleFactor, base::Value(100));
+  ticket.SetKey(kSettingDpiHorizontal, base::Value(600));
+  ticket.SetKey(kSettingDpiVertical, base::Value(600));
+  ticket.SetKey(kSettingDeviceName, base::Value(kDummyPrinterName));
+  ticket.SetKey(kSettingFitToPageEnabled, base::Value(true));
+  ticket.SetKey(kSettingPageWidth, base::Value(215900));
+  ticket.SetKey(kSettingPageHeight, base::Value(279400));
+  ticket.SetKey(kSettingShowSystemDialog, base::Value(false));
 
   if (cloud)
-    ticket.SetKey("cloudPrintID", base::Value(kDummyPrinterName));
+    ticket.SetKey(kSettingCloudPrintId, base::Value(kDummyPrinterName));
 
   if (is_privet_printer || is_extension_printer) {
     base::Value capabilities(base::Value::Type::DICTIONARY);
     capabilities.SetKey("duplex", base::Value(true));  // non-empty
     std::string caps_string;
     base::JSONWriter::Write(capabilities, &caps_string);
-    ticket.SetKey("capabilities", base::Value(caps_string));
+    ticket.SetKey(kSettingCapabilities, base::Value(caps_string));
     base::Value print_ticket(base::Value::Type::DICTIONARY);
     print_ticket.SetKey("version", base::Value("1.0"));
     print_ticket.SetKey("print", base::Value());
     std::string ticket_string;
     base::JSONWriter::Write(print_ticket, &ticket_string);
-    ticket.SetKey("ticket", base::Value(ticket_string));
+    ticket.SetKey(kSettingTicket, base::Value(ticket_string));
   }
 
   return ticket;
+}
+
+base::Value GetPrintPreviewTicket(bool is_pdf) {
+  base::Value print_ticket = GetPrintTicket(kLocalPrinter, false);
+
+  // Make some modifications to match a preview print ticket.
+  print_ticket.SetKey(kSettingPageRange, base::Value());
+  print_ticket.SetKey(kIsFirstRequest, base::Value(true));
+  print_ticket.SetKey(kPreviewRequestID, base::Value(0));
+  print_ticket.SetKey(kSettingPreviewModifiable, base::Value(is_pdf));
+  print_ticket.SetKey(kSettingGenerateDraftData, base::Value(true));
+  print_ticket.RemoveKey(kSettingPageWidth);
+  print_ticket.RemoveKey(kSettingPageHeight);
+  print_ticket.RemoveKey(kSettingShowSystemDialog);
+
+  return print_ticket;
+}
+
+std::unique_ptr<base::ListValue> ConstructPreviewArgs(
+    base::StringPiece callback_id,
+    const base::Value& print_ticket) {
+  base::Value args(base::Value::Type::LIST);
+  args.GetList().emplace_back(callback_id);
+  std::string json;
+  base::JSONWriter::Write(print_ticket, &json);
+  args.GetList().emplace_back(json);
+  std::string page_count;
+  base::JSONWriter::Write(base::Value(-1), &page_count);
+  args.GetList().emplace_back(page_count);
+  return base::ListValue::From(base::Value::ToUniquePtrValue(std::move(args)));
 }
 
 class TestPrinterHandler : public PrinterHandler {
@@ -222,9 +258,11 @@ class FakePrintPreviewUI : public PrintPreviewUI {
 
 class TestPrintPreviewHandler : public PrintPreviewHandler {
  public:
-  explicit TestPrintPreviewHandler(
-      std::unique_ptr<PrinterHandler> printer_handler)
-      : test_printer_handler_(std::move(printer_handler)) {}
+  TestPrintPreviewHandler(std::unique_ptr<PrinterHandler> printer_handler,
+                          content::WebContents* initiator)
+      : bad_messages_(0),
+        test_printer_handler_(std::move(printer_handler)),
+        initiator_(initiator) {}
 
   PrinterHandler* GetPrinterHandler(PrinterType printer_type) override {
     called_for_type_.insert(printer_type);
@@ -233,6 +271,10 @@ class TestPrintPreviewHandler : public PrintPreviewHandler {
 
   void RegisterForGaiaCookieChanges() override {}
   void UnregisterForGaiaCookieChanges() override {}
+
+  void BadMessageReceived() override { bad_messages_++; }
+
+  content::WebContents* GetInitiator() const override { return initiator_; }
 
   bool CalledOnlyForType(PrinterType printer_type) {
     return (called_for_type_.size() == 1 &&
@@ -243,9 +285,13 @@ class TestPrintPreviewHandler : public PrintPreviewHandler {
 
   void reset_calls() { called_for_type_.clear(); }
 
+  int bad_messages() { return bad_messages_; }
+
  private:
+  int bad_messages_;
   base::flat_set<PrinterType> called_for_type_;
   std::unique_ptr<PrinterHandler> test_printer_handler_;
+  content::WebContents* const initiator_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPrintPreviewHandler);
 };
@@ -259,8 +305,14 @@ class PrintPreviewHandlerTest : public testing::Test {
   PrintPreviewHandlerTest() {
     TestingProfile::Builder builder;
     profile_ = builder.Build();
+    initiator_web_contents_.reset(content::WebContents::Create(
+        content::WebContents::CreateParams(profile_.get())));
+    content::WebContents* initiator = initiator_web_contents_.get();
     preview_web_contents_.reset(content::WebContents::Create(
         content::WebContents::CreateParams(profile_.get())));
+    printing::PrintViewManager::CreateForWebContents(initiator);
+    printing::PrintViewManager::FromWebContents(initiator)->PrintPreviewNow(
+        initiator->GetMainFrame(), false);
     web_ui_ = std::make_unique<content::TestWebUI>();
     web_ui_->set_web_contents(preview_web_contents_.get());
 
@@ -271,7 +323,7 @@ class PrintPreviewHandlerTest : public testing::Test {
     printer_handler_ = printer_handler.get();
 
     auto preview_handler = std::make_unique<printing::TestPrintPreviewHandler>(
-        std::move(printer_handler));
+        std::move(printer_handler), initiator);
     preview_handler->set_web_ui(web_ui());
     handler_ = preview_handler.get();
 
@@ -282,12 +334,19 @@ class PrintPreviewHandlerTest : public testing::Test {
     web_ui()->SetController(preview_ui.release());
   }
 
+  ~PrintPreviewHandlerTest() override {
+    printing::PrintViewManager::FromWebContents(initiator_web_contents_.get())
+        ->PrintPreviewDone();
+  }
+
   void Initialize() {
     // Sending this message will enable javascript, so it must always be called
     // before any other messages are sent.
-    base::ListValue list_args;
-    list_args.AppendString("test-callback-id-0");
-    handler()->HandleGetInitialSettings(&list_args);
+    base::Value args(base::Value::Type::LIST);
+    args.GetList().emplace_back("test-callback-id-0");
+    std::unique_ptr<base::ListValue> list_args =
+        base::ListValue::From(base::Value::ToUniquePtrValue(std::move(args)));
+    handler()->HandleGetInitialSettings(list_args.get());
 
     // In response to get initial settings, the initial settings are sent back
     // and a use-cloud-print event is dispatched.
@@ -351,6 +410,30 @@ class PrintPreviewHandlerTest : public testing::Test {
     EXPECT_EQ(default_printer_name, printer->GetString());
   }
 
+  IPC::TestSink& initiator_sink() {
+    content::RenderFrameHost* rfh = initiator_web_contents_->GetMainFrame();
+    auto* rph = static_cast<content::MockRenderProcessHost*>(rfh->GetProcess());
+    return rph->sink();
+  }
+
+  IPC::TestSink& preview_sink() {
+    content::RenderFrameHost* rfh = preview_web_contents_->GetMainFrame();
+    auto* rph = static_cast<content::MockRenderProcessHost*>(rfh->GetProcess());
+    return rph->sink();
+  }
+
+  base::DictionaryValue VerifyPreviewMessage() {
+    // Verify that the preview was requested from the renderer
+    EXPECT_TRUE(
+        initiator_sink().GetUniqueMessageMatching(PrintMsg_PrintPreview::ID));
+    const IPC::Message* msg =
+        initiator_sink().GetFirstMessageMatching(PrintMsg_PrintPreview::ID);
+    EXPECT_TRUE(msg);
+    PrintMsg_PrintPreview::Param param;
+    PrintMsg_PrintPreview::Read(msg, &param);
+    return std::move(std::get<0>(param));
+  }
+
   const Profile* profile() { return profile_.get(); }
   content::TestWebUI* web_ui() { return web_ui_.get(); }
   printing::TestPrintPreviewHandler* handler() { return handler_; }
@@ -361,7 +444,9 @@ class PrintPreviewHandlerTest : public testing::Test {
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<content::TestWebUI> web_ui_;
+  content::RenderViewHostTestEnabler rvh_test_enabler_;
   std::unique_ptr<content::WebContents> preview_web_contents_;
+  std::unique_ptr<content::WebContents> initiator_web_contents_;
   std::vector<printing::PrinterInfo> printers_;
   printing::TestPrinterHandler* printer_handler_;
   printing::TestPrintPreviewHandler* handler_;
@@ -392,12 +477,14 @@ TEST_F(PrintPreviewHandlerTest, GetPrinters) {
   for (size_t i = 0; i < arraysize(types); i++) {
     printing::PrinterType type = types[i];
     handler()->reset_calls();
-    base::ListValue args;
+    base::Value args(base::Value::Type::LIST);
     std::string callback_id_in =
         "test-callback-id-" + base::UintToString(i + 1);
-    args.AppendString(callback_id_in);
-    args.AppendInteger(type);
-    handler()->HandleGetPrinters(&args);
+    args.GetList().emplace_back(callback_id_in);
+    args.GetList().emplace_back(type);
+    std::unique_ptr<base::ListValue> list_args =
+        base::ListValue::From(base::Value::ToUniquePtrValue(std::move(args)));
+    handler()->HandleGetPrinters(list_args.get());
     EXPECT_TRUE(handler()->CalledOnlyForType(type));
 
     // Start with 2 calls from initial settings, then add 2 more for each loop
@@ -436,13 +523,15 @@ TEST_F(PrintPreviewHandlerTest, GetPrinterCapabilities) {
   for (size_t i = 0; i < arraysize(printing::kAllTypes); i++) {
     printing::PrinterType type = printing::kAllTypes[i];
     handler()->reset_calls();
-    base::ListValue args;
+    base::Value args(base::Value::Type::LIST);
     std::string callback_id_in =
         "test-callback-id-" + base::UintToString(i + 1);
-    args.AppendString(callback_id_in);
-    args.AppendString(printing::kDummyPrinterName);
-    args.AppendInteger(type);
-    handler()->HandleGetPrinterCapabilities(&args);
+    args.GetList().emplace_back(callback_id_in);
+    args.GetList().emplace_back(printing::kDummyPrinterName);
+    args.GetList().emplace_back(type);
+    std::unique_ptr<base::ListValue> list_args =
+        base::ListValue::From(base::Value::ToUniquePtrValue(std::move(args)));
+    handler()->HandleGetPrinterCapabilities(list_args.get());
     EXPECT_TRUE(handler()->CalledOnlyForType(type));
 
     // Start with 2 calls from initial settings, then add 1 more for each loop
@@ -463,14 +552,16 @@ TEST_F(PrintPreviewHandlerTest, GetPrinterCapabilities) {
   for (size_t i = 0; i < arraysize(printing::kAllTypes); i++) {
     printing::PrinterType type = printing::kAllTypes[i];
     handler()->reset_calls();
-    base::ListValue args;
+    base::Value args(base::Value::Type::LIST);
     std::string callback_id_in =
         "test-callback-id-" +
         base::UintToString(i + arraysize(printing::kAllTypes) + 1);
-    args.AppendString(callback_id_in);
-    args.AppendString("EmptyPrinter");
-    args.AppendInteger(type);
-    handler()->HandleGetPrinterCapabilities(&args);
+    args.GetList().emplace_back(callback_id_in);
+    args.GetList().emplace_back("EmptyPrinter");
+    args.GetList().emplace_back(type);
+    std::unique_ptr<base::ListValue> list_args =
+        base::ListValue::From(base::Value::ToUniquePtrValue(std::move(args)));
+    handler()->HandleGetPrinterCapabilities(list_args.get());
     EXPECT_TRUE(handler()->CalledOnlyForType(type));
 
     // Start with 2 calls from initial settings plus
@@ -495,15 +586,17 @@ TEST_F(PrintPreviewHandlerTest, Print) {
     printing::PrinterType type =
         cloud ? printing::kPrivetPrinter : printing::kAllTypes[i];
     handler()->reset_calls();
-    base::ListValue args;
+    base::Value args(base::Value::Type::LIST);
     std::string callback_id_in =
         "test-callback-id-" + base::UintToString(i + 1);
-    args.AppendString(callback_id_in);
+    args.GetList().emplace_back(callback_id_in);
     base::Value print_ticket = printing::GetPrintTicket(type, cloud);
     std::string json;
     base::JSONWriter::Write(print_ticket, &json);
-    args.AppendString(json);
-    handler()->HandlePrint(&args);
+    args.GetList().emplace_back(json);
+    std::unique_ptr<base::ListValue> list_args =
+        base::ListValue::From(base::Value::ToUniquePtrValue(std::move(args)));
+    handler()->HandlePrint(list_args.get());
 
     // Verify correct PrinterHandler was called or that no handler was requested
     // for local and cloud printers.
@@ -517,6 +610,18 @@ TEST_F(PrintPreviewHandlerTest, Print) {
     const content::TestWebUI::CallData& data = *web_ui()->call_data().back();
     CheckWebUIResponse(data, callback_id_in, true);
 
+    // For local printers, the Print Preview UI will respond to the resolution
+    // by sending a "hidePreview" message, which should prompt an IPC message
+    // to the renderer.
+    if (type == printing::kLocalPrinter) {
+      base::Value hide_args(base::Value::Type::LIST);
+      std::unique_ptr<base::ListValue> hide_args_ptr = base::ListValue::From(
+          base::Value::ToUniquePtrValue(std::move(hide_args)));
+      handler()->HandleHidePreview(hide_args_ptr.get());
+      EXPECT_TRUE(preview_sink().GetUniqueMessageMatching(
+          PrintMsg_PrintForPrintPreview::ID));
+    }
+
     // For cloud print, should also get the encoded data back as a string.
     if (cloud) {
       std::string print_data;
@@ -526,4 +631,97 @@ TEST_F(PrintPreviewHandlerTest, Print) {
       EXPECT_EQ(print_data, expected_data);
     }
   }
+}
+
+TEST_F(PrintPreviewHandlerTest, GetPreview) {
+  Initialize();
+
+  base::Value print_ticket = printing::GetPrintPreviewTicket(false);
+  std::unique_ptr<base::ListValue> list_args =
+      printing::ConstructPreviewArgs("test-callback-id-1", print_ticket);
+  handler()->HandleGetPreview(list_args.get());
+
+  // Verify that the preview was requested from the renderer with the
+  // appropriate settings.
+  base::DictionaryValue preview_params = VerifyPreviewMessage();
+  bool preview_id_found = false;
+  for (const auto& it : preview_params.DictItems()) {
+    if (it.first == printing::kPreviewUIID) {  // This is added by the handler.
+      preview_id_found = true;
+      continue;
+    }
+    base::Value* value_in = print_ticket.FindKey(it.first);
+    ASSERT_TRUE(value_in);
+    EXPECT_EQ(*value_in, it.second);
+  }
+  EXPECT_TRUE(preview_id_found);
+}
+
+TEST_F(PrintPreviewHandlerTest, SendPreviewUpdates) {
+  Initialize();
+
+  const char callback_id_in[] = "test-callback-id-1";
+  base::Value print_ticket = printing::GetPrintPreviewTicket(false);
+  std::unique_ptr<base::ListValue> list_args =
+      printing::ConstructPreviewArgs(callback_id_in, print_ticket);
+  handler()->HandleGetPreview(list_args.get());
+  base::DictionaryValue preview_params = VerifyPreviewMessage();
+
+  // Read the preview UI ID and request ID
+  const base::Value* request_value =
+      preview_params.FindKey(printing::kPreviewRequestID);
+  ASSERT_TRUE(request_value);
+  ASSERT_TRUE(request_value->is_int());
+  int preview_request_id = request_value->GetInt();
+
+  const base::Value* ui_value = preview_params.FindKey(printing::kPreviewUIID);
+  ASSERT_TRUE(ui_value);
+  ASSERT_TRUE(ui_value->is_int());
+  int preview_ui_id = ui_value->GetInt();
+
+  // Simulate renderer responses: PageLayoutReady, PageCountReady,
+  // PagePreviewReady, and OnPrintPreviewReady will be called in that order.
+  base::DictionaryValue layout;
+  layout.SetKey(printing::kSettingMarginTop, base::Value(34.0));
+  layout.SetKey(printing::kSettingMarginLeft, base::Value(34.0));
+  layout.SetKey(printing::kSettingMarginBottom, base::Value(34.0));
+  layout.SetKey(printing::kSettingMarginRight, base::Value(34.0));
+  layout.SetKey(printing::kSettingContentWidth, base::Value(544.0));
+  layout.SetKey(printing::kSettingContentHeight, base::Value(700.0));
+  layout.SetKey(printing::kSettingPrintableAreaX, base::Value(17));
+  layout.SetKey(printing::kSettingPrintableAreaY, base::Value(17));
+  layout.SetKey(printing::kSettingPrintableAreaWidth, base::Value(578));
+  layout.SetKey(printing::kSettingPrintableAreaHeight, base::Value(734));
+  handler()->SendPageLayoutReady(layout, false);
+
+  // Verify that page-layout-ready webUI event was fired.
+  AssertWebUIEventFired(*web_ui()->call_data().back(), "page-layout-ready");
+
+  // 1 page document. Modifiable so send default 100 scaling.
+  handler()->SendPageCountReady(1, preview_request_id, 100);
+  AssertWebUIEventFired(*web_ui()->call_data().back(), "page-count-ready");
+
+  // Page at index 0 is ready.
+  handler()->SendPagePreviewReady(0, preview_ui_id, preview_request_id);
+  AssertWebUIEventFired(*web_ui()->call_data().back(), "page-preview-ready");
+
+  // Print preview is ready.
+  handler()->OnPrintPreviewReady(preview_ui_id, preview_request_id);
+  CheckWebUIResponse(*web_ui()->call_data().back(), callback_id_in, true);
+
+  // Renderer responses have been as expected.
+  EXPECT_EQ(handler()->bad_messages(), 0);
+
+  // None of these should work since there has been no new preview request.
+  // Check that there are no new web UI messages sent.
+  size_t message_count = web_ui()->call_data().size();
+  handler()->SendPageLayoutReady(base::DictionaryValue(), false);
+  EXPECT_EQ(message_count, web_ui()->call_data().size());
+  handler()->SendPageCountReady(1, 0, -1);
+  EXPECT_EQ(message_count, web_ui()->call_data().size());
+  handler()->OnPrintPreviewReady(0, 0);
+  EXPECT_EQ(message_count, web_ui()->call_data().size());
+
+  // Handler should have tried to kill the renderer for each of these.
+  EXPECT_EQ(handler()->bad_messages(), 3);
 }

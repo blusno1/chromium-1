@@ -566,7 +566,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
                         const BeginNavigationParams& begin_params,
                         const RequestNavigationParams& request_params,
                         bool has_stale_copy_in_cache,
-                        int error_code);
+                        int error_code,
+                        const base::Optional<std::string>& error_page_content);
 
   // Sets up the Mojo connection between this instance and its associated render
   // frame if it has not yet been set up.
@@ -1260,6 +1261,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // same Previews status as the top-level frame.
   PreviewsState last_navigation_previews_state_;
 
+  bool has_committed_any_navigation_ = false;
   mojo::AssociatedBinding<mojom::FrameHost> frame_host_associated_binding_;
   mojom::FramePtr frame_;
   mojom::FrameBindingsControlAssociatedPtr frame_bindings_control_;

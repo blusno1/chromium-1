@@ -187,7 +187,7 @@ class BrowserGpuChannelHostFactoryTest : public ContentBrowserTest {
 IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest, MAYBE_Basic) {
   DCHECK(!IsChannelEstablished());
   EstablishAndWait();
-  EXPECT_TRUE(GetGpuChannel() != NULL);
+  EXPECT_TRUE(GetGpuChannel() != nullptr);
 }
 
 #if !defined(OS_ANDROID)
@@ -202,7 +202,7 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
                        MAYBE_AlreadyEstablished) {
   DCHECK(!IsChannelEstablished());
   scoped_refptr<gpu::GpuChannelHost> gpu_channel =
-      GetFactory()->EstablishGpuChannelSync();
+      GetFactory()->EstablishGpuChannelSync(nullptr);
 
   // Expect established callback immediately.
   bool event = false;

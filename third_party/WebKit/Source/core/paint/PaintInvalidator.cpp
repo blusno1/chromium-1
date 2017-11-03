@@ -17,6 +17,7 @@
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintLayerScrollableArea.h"
+#include "core/paint/ng/ng_paint_fragment.h"
 #include "platform/graphics/paint/GeometryMapper.h"
 #include "platform/wtf/Optional.h"
 
@@ -78,6 +79,20 @@ LayoutRect PaintInvalidator::MapLocalRectToVisualRectInBacking(
       // block-flow direction" for non-boxes for which we don't need to flip.)
       // TODO(wangxianzhu): Avoid containingBlock().
       object.ContainingBlock()->FlipForWritingMode(rect);
+    }
+
+    // Unite visual rect with clip path bounding rect.
+    // It is because the clip path display items are owned by the layout object
+    // who has the clip path, and uses its visual rect as bounding rect too.
+    // Usually it is done at layout object level and included as a part of
+    // local visual overflow, but clip-path can be a reference to SVG, and we
+    // have to wait until pre-paint to ensure clean layout.
+    // Note: SVG children don't need this adjustment because their visual
+    // overflow rects are already adjusted by clip path.
+    if (Optional<FloatRect> clip_path_bounding_box =
+            object.LocalClipPathBoundingBox()) {
+      Rect box(EnclosingIntRect(*clip_path_bounding_box));
+      rect.Unite(box);
     }
   }
 
@@ -549,6 +564,26 @@ void PaintInvalidator::InvalidatePaint(
         !context.painting_layer->SubtreeIsInvisible()) {
       context.subtree_flags |=
           PaintInvalidatorContext::kSubtreeInvalidationChecking;
+    }
+  }
+
+  if (RuntimeEnabledFeatures::LayoutNGEnabled() &&
+      object.IsLayoutNGBlockFlow()) {
+    // If the LayoutObject has a paint fragment, it means this LayoutObject and
+    // its descendants are painted by NG painter.
+    // In the inline NG paint phase, this is a block flow with inline children.
+    if (NGPaintFragment* paint_fragment =
+            ToLayoutBlockFlow(object).PaintFragment()) {
+      // At this point, PaintInvalidator has updated VisualRect of the
+      // LayoutObject. Update NGPaintFragment from the LayoutObject.
+      //
+      // VisualRect of descendants are not updated yet, but this code does not
+      // rely on them.
+      //
+      // TODO(kojii): When we have NGPaintFragment, we should walk
+      // NGPaintFragment tree instead, computes VisualRect from fragments,
+      // and update LayoutObject from it if needed for compat.
+      paint_fragment->UpdateVisualRectFromLayoutObject();
     }
   }
 

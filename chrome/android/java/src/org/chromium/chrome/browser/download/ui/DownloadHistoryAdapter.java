@@ -428,6 +428,9 @@ public class DownloadHistoryAdapter extends DateDividedAdapter
                     }
                     if (TextUtils.equals(item.getId(), wrapper.getId())) {
                         view.displayItem(mBackendProvider, existingWrapper);
+                        if (item.getDownloadInfo().state() == DownloadState.COMPLETE) {
+                            mSpaceDisplay.onChanged();
+                        }
                     }
                 }
 
@@ -470,6 +473,7 @@ public class DownloadHistoryAdapter extends DateDividedAdapter
     public void onAddOrReplaceDownloadSharedPreferenceEntry(final ContentId id) {
         // Alert DownloadItemViews displaying information about the item that it has changed.
         for (DownloadItemView view : mViews) {
+            if (view.getItem() == null) continue;
             if (TextUtils.equals(id.id, view.getItem().getId())) {
                 view.displayItem(mBackendProvider, view.getItem());
             }
@@ -829,6 +833,9 @@ public class DownloadHistoryAdapter extends DateDividedAdapter
                 for (DownloadItemView view : mViews) {
                     if (TextUtils.equals(item.id.id, view.getItem().getId())) {
                         view.displayItem(mBackendProvider, existingWrapper);
+                        if (item.state == OfflineItemState.COMPLETE) {
+                            mSpaceDisplay.onChanged();
+                        }
                     }
                 }
 

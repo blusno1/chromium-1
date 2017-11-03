@@ -15,7 +15,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
 
 namespace arc {
@@ -85,6 +85,10 @@ void ArcNotificationItemImpl::OnUpdatedFromAndroid(
         base::ASCIIToUTF16("\n"));
   }
   rich_data.accessible_name = accessible_name_;
+  if (IsOpeningSettingsSupported()) {
+    rich_data.settings_button_handler =
+        message_center::SettingsButtonHandler::DELEGATE;
+  }
 
   message_center::NotifierId notifier_id(
       message_center::NotifierId::SYSTEM_COMPONENT, kNotifierId);

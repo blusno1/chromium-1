@@ -370,11 +370,6 @@ class WindowSelectorTest : public AshTestBase {
 // Tests that the text field in the overview menu is repositioned and resized
 // after a screen rotation.
 TEST_F(WindowSelectorTest, OverviewScreenRotation) {
-  // TODO: fails in mash because rotation is not supported.
-  // http://crbug.com/695556
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect bounds(0, 0, 400, 300);
   std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
   std::unique_ptr<aura::Window> panel1(CreatePanelWindow(bounds));
@@ -586,10 +581,6 @@ TEST_F(WindowSelectorTest, BasicGesture) {
 // recorded when the mouse/touchscreen/keyboard are used to select a window
 // in overview mode which is different from the previously-active window.
 TEST_F(WindowSelectorTest, ActiveWindowChangedUserActionRecorded) {
-  // TODO: fails because of metrics. http://crbug.com/698129.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   base::UserActionTester user_action_tester;
   gfx::Rect bounds(0, 0, 400, 400);
   std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
@@ -1188,10 +1179,6 @@ TEST_F(WindowSelectorTest, ClickModalWindowParent) {
 // Tests that windows remain on the display they are currently on in overview
 // mode, and that the close buttons are on matching displays.
 TEST_F(WindowSelectorTest, MultipleDisplays) {
-  // TODO: Crashes in bounds_animator.cc in mash: http://crbug.com/730759
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   UpdateDisplay("600x400,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   gfx::Rect bounds1(0, 0, 400, 400);
@@ -1266,11 +1253,6 @@ TEST_F(WindowSelectorTest, Shutdown) {
 
 // Tests removing a display during overview.
 TEST_F(WindowSelectorTest, RemoveDisplay) {
-  // TODO: hits CHECK in stl as order of |ShelfModel::items_| is wrong.
-  // http://crbug.com/698878.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   UpdateDisplay("400x400,400x400");
   gfx::Rect bounds1(0, 0, 100, 100);
   gfx::Rect bounds2(450, 0, 100, 100);
@@ -1298,11 +1280,6 @@ TEST_F(WindowSelectorTest, RemoveDisplay) {
 
 // Tests removing a display during overview with NON_ZERO_DURATION animation.
 TEST_F(WindowSelectorTest, RemoveDisplayWithAnimation) {
-  // TODO: hits CHECK in stl as order of |ShelfModel::items_| is wrong.
-  // http://crbug.com/698878.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   UpdateDisplay("400x400,400x400");
   gfx::Rect bounds1(0, 0, 100, 100);
   gfx::Rect bounds2(450, 0, 100, 100);
@@ -1388,11 +1365,6 @@ TEST_F(WindowSelectorTest, CreateLabelUnderWindow) {
 // Tests that overview updates the window positions if the display orientation
 // changes.
 TEST_F(WindowSelectorTest, DisplayOrientationChanged) {
-  // TODO: fails in mash because rotation is not supported.
-  // http://crbug.com/695556
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   aura::Window* root_window = Shell::Get()->GetPrimaryRootWindow();
   UpdateDisplay("600x200");
   EXPECT_EQ("0,0 600x200", root_window->bounds().ToString());
@@ -1532,11 +1504,6 @@ TEST_F(WindowSelectorTest, BasicMultiMonitorArrowKeyNavigation) {
 // Tests first monitor when display order doesn't match left to right screen
 // positions.
 TEST_F(WindowSelectorTest, MultiMonitorReversedOrder) {
-  // TODO: SetLayoutForCurrentDisplays() needs to ported to mash.
-  // http://crbug.com/698043.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   UpdateDisplay("400x400,400x400");
   Shell::Get()->display_manager()->SetLayoutForCurrentDisplays(
       display::test::CreateDisplayLayout(display_manager(),
@@ -2065,7 +2032,6 @@ TEST_F(SplitViewWindowSelectorTest, DragOverviewWindowToSnap) {
   // Drag |window2| selector item to snap to left.
   WindowSelectorItem* selector_item2 =
       GetWindowItemForWindow(grid_index, window2.get());
-  const gfx::Point end_location2(0, 0);
   DragWindowTo(selector_item2, gfx::Point(0, 0));
 
   EXPECT_EQ(split_view_controller()->state(),
@@ -2581,6 +2547,69 @@ TEST_F(SplitViewWindowSelectorTest, SelectUnsnappableWindowInSplitView) {
   EXPECT_FALSE(split_view_controller()->IsSplitViewModeActive());
   EXPECT_FALSE(window_selector_controller()->IsSelecting());
   EXPECT_EQ(unsnappable_window.get(), wm::GetActiveWindow());
+
+  std::unique_ptr<aura::Window> window2 = CreateTestWindow();
+  ToggleOverview();
+  split_view_controller()->SnapWindow(window.get(), SplitViewController::LEFT);
+  split_view_controller()->SnapWindow(window2.get(),
+                                      SplitViewController::RIGHT);
+
+  // Split view mode should be active. Overview mode should be ended.
+  EXPECT_TRUE(split_view_controller()->IsSplitViewModeActive());
+  EXPECT_EQ(SplitViewController::BOTH_SNAPPED,
+            split_view_controller()->state());
+  EXPECT_FALSE(window_selector_controller()->IsSelecting());
+
+  ToggleOverview();
+  EXPECT_TRUE(split_view_controller()->IsSplitViewModeActive());
+  EXPECT_EQ(SplitViewController::LEFT_SNAPPED,
+            split_view_controller()->state());
+  EXPECT_TRUE(window_selector_controller()->IsSelecting());
+
+  // Now select the unsnappable window.
+  selector_item = GetWindowItemForWindow(grid_index, unsnappable_window.get());
+  GetEventGenerator().set_current_location(
+      selector_item->target_bounds().CenterPoint());
+  GetEventGenerator().ClickLeftButton();
+
+  // Split view mode should be ended. And the unsnappable window should be the
+  // active window now.
+  EXPECT_FALSE(split_view_controller()->IsSplitViewModeActive());
+  EXPECT_FALSE(window_selector_controller()->IsSelecting());
+  EXPECT_EQ(unsnappable_window.get(), wm::GetActiveWindow());
+}
+
+// Verify that when in overview mode, the selector items unsnappable indicator
+// shows up when expected.
+TEST_F(SplitViewWindowSelectorTest, OverviewUnsnappableIndicatorVisibility) {
+  // Create three windows; two normal and one unsnappable, so that when after
+  // snapping |window1| to enter split view we can test the state of each normal
+  // and unsnappable windows.
+  std::unique_ptr<aura::Window> window1(CreateTestWindow());
+  std::unique_ptr<aura::Window> window2(CreateTestWindow());
+  std::unique_ptr<aura::Window> unsnappable_window = CreateUnsnappableWindow();
+
+  ToggleOverview();
+  ASSERT_TRUE(window_selector_controller()->IsSelecting());
+
+  const int grid_index = 0;
+  WindowSelectorItem* snappable_selector_item =
+      GetWindowItemForWindow(grid_index, window2.get());
+  WindowSelectorItem* unsnappable_selector_item =
+      GetWindowItemForWindow(grid_index, unsnappable_window.get());
+
+  // Note: Using IsDrawn() instead of visible() because
+  // |cannot_snap_label_view_|'s parent (which handles the padding and rounded
+  // corners) is actually the item whose visibility gets altered.
+  EXPECT_FALSE(snappable_selector_item->cannot_snap_label_view_->IsDrawn());
+  EXPECT_FALSE(unsnappable_selector_item->cannot_snap_label_view_->IsDrawn());
+
+  // Snap the extra snappable window to enter split view mode.
+  split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
+  ASSERT_TRUE(split_view_controller()->IsSplitViewModeActive());
+
+  EXPECT_FALSE(snappable_selector_item->cannot_snap_label_view_->IsDrawn());
+  EXPECT_TRUE(unsnappable_selector_item->cannot_snap_label_view_->IsDrawn());
 }
 
 }  // namespace ash

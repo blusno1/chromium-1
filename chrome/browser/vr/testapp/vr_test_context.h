@@ -19,7 +19,6 @@ class Event;
 
 namespace vr {
 
-struct ControllerInfo;
 class Ui;
 
 // This class provides a home for the VR UI in a testapp context, and
@@ -69,13 +68,12 @@ class VrTestContext : public vr::ContentInputDelegate,
   std::unique_ptr<Ui> ui_;
   gfx::Size window_size_;
 
-  std::unique_ptr<ControllerInfo> controller_info_;
-
   gfx::Transform head_pose_;
   float head_angle_x_degrees_ = 0;
   float head_angle_y_degrees_ = 0;
   int last_drag_x_pixels_ = 0;
   int last_drag_y_pixels_ = 0;
+  bool touchpad_pressed_ = false;
 
   float view_scale_factor_ = 1.f;
 

@@ -18,7 +18,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.NormalizedAddressRequestDelegate;
@@ -828,6 +827,28 @@ public class PaymentRequestImpl
             mShippingAddressesSection.setErrorMessage(details.error);
         }
 
+        enableUserInterfaceAfterShippingAddressOrOptionUpdateEvent();
+    }
+
+    /**
+     * Called when the merchant received a new shipping address or shipping option, but did not
+     * update the payment details in response.
+     */
+    @Override
+    public void noUpdatedPaymentDetails() {
+        if (mClient == null) return;
+
+        if (mUI == null) {
+            mJourneyLogger.setAborted(AbortReason.INVALID_DATA_FROM_RENDERER);
+            disconnectFromClientWithDebugMessage(
+                    "PaymentRequestUpdateEvent fired without PaymentRequest.show()");
+            return;
+        }
+
+        enableUserInterfaceAfterShippingAddressOrOptionUpdateEvent();
+    }
+
+    private void enableUserInterfaceAfterShippingAddressOrOptionUpdateEvent() {
         if (mPaymentInformationCallback != null) {
             providePaymentInformation();
         } else {
@@ -929,33 +950,11 @@ public class PaymentRequestImpl
         methodNames.retainAll(mModifiers.keySet());
         if (methodNames.isEmpty()) return null;
 
-        // Non-AutofillPaymentInstrument has no extra data to check.
-        if (!instrument.isAutofillInstrument()) {
-            return mModifiers.get(methodNames.iterator().next());
-        }
-
-        // Checks extra data to match card type and issuer network.
-        int cardType = ((AutofillPaymentInstrument) instrument).getCard().getCardType();
-        String cardIssuerNetwork =
-                ((AutofillPaymentInstrument) instrument).getCard().getBasicCardIssuerNetwork();
         for (String methodName : methodNames) {
             PaymentDetailsModifier modifier = mModifiers.get(methodName);
-
-            if (AutofillPaymentApp.isBasicCardTypeSpecified(modifier.methodData)) {
-                Set<Integer> targetCardTypes =
-                        AutofillPaymentApp.convertBasicCardToTypes(modifier.methodData);
-                targetCardTypes.remove(CardType.UNKNOWN);
-                assert targetCardTypes.size() > 0;
-                if (!targetCardTypes.contains(cardType)) continue;
+            if (instrument.isValidForPaymentMethodData(methodName, modifier.methodData)) {
+                return modifier;
             }
-
-            Set<String> targetCardNetworks =
-                    AutofillPaymentApp.convertBasicCardToNetworks(modifier.methodData);
-            if (targetCardNetworks != null && !targetCardNetworks.contains(cardIssuerNetwork)) {
-                continue;
-            }
-
-            return modifier;
         }
 
         return null;

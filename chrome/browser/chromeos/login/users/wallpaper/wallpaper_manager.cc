@@ -365,9 +365,6 @@ const char kUsersWallpaperInfo[] = "user_wallpaper_info";
 class WallpaperManager::PendingWallpaper {
  public:
   PendingWallpaper(const base::TimeDelta delay) : weak_factory_(this) {
-    on_finish_ = std::make_unique<MovableOnDestroyCallback>(
-        base::Bind(&WallpaperManager::PendingWallpaper::OnWallpaperSet,
-                   weak_factory_.GetWeakPtr()));
     timer.Start(FROM_HERE, delay,
                 base::Bind(&WallpaperManager::PendingWallpaper::ProcessRequest,
                            weak_factory_.GetWeakPtr()));
@@ -434,12 +431,19 @@ class WallpaperManager::PendingWallpaper {
     if (manager->pending_inactive_ == this)
       manager->pending_inactive_ = NULL;
 
+    // This is "on destroy" callback that will call OnWallpaperSet() when
+    // image is loaded.
+    MovableOnDestroyCallbackHolder on_finish =
+        std::make_unique<MovableOnDestroyCallback>(
+            base::Bind(&WallpaperManager::PendingWallpaper::OnWallpaperSet,
+                       weak_factory_.GetWeakPtr()));
+
     started_load_at_ = base::Time::Now();
 
     if (default_) {
       // The most recent request is |SetDefaultWallpaper|.
       manager->DoSetDefaultWallpaper(account_id_, true /* update_wallpaper */,
-                                     std::move(on_finish_));
+                                     std::move(on_finish));
     } else if (!user_wallpaper_.isNull()) {
       // The most recent request is |SetWallpaperFromImage|.
       SetWallpaper(user_wallpaper_, info_);
@@ -451,19 +455,18 @@ class WallpaperManager::PendingWallpaper {
                          account_id_, info_, wallpaper_path_,
                          true /* update wallpaper */,
                          base::ThreadTaskRunnerHandle::Get(),
-                         base::Passed(std::move(on_finish_)),
+                         base::Passed(std::move(on_finish)),
                          manager->weak_factory_.GetWeakPtr()));
     } else if (!info_.location.empty()) {
       // The most recent request is |SetWallpaperFromInfo|.
       manager->LoadWallpaper(account_id_, info_, true /* update_wallpaper */,
-                             std::move(on_finish_));
+                             std::move(on_finish));
     } else {
       // PendingWallpaper was created but none of the four methods was called.
       // This should never happen. Do not record time in this case.
       NOTREACHED();
       started_load_at_ = base::Time();
     }
-    on_finish_.reset();
   }
 
   // This method is called by callback, when load request is finished.
@@ -498,9 +501,6 @@ class WallpaperManager::PendingWallpaper {
   // Load default wallpaper instead of user image.
   bool default_;
 
-  // This is "on destroy" callback that will call OnWallpaperSet() when
-  // image will be loaded.
-  MovableOnDestroyCallbackHolder on_finish_;
   base::OneShotTimer timer;
 
   // Load start time to calculate duration.
@@ -2229,8 +2229,8 @@ void WallpaperManager::RemovePendingWallpaperFromList(
   DCHECK(loading_.size() > 0);
   for (size_t i = 0; i < loading_.size(); ++i) {
     if (loading_[i] == finished_loading_request) {
-      loading_.erase(loading_.begin() + i);
       delete loading_[i];
+      loading_.erase(loading_.begin() + i);
       break;
     }
   }

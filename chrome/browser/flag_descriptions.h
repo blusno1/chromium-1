@@ -895,6 +895,9 @@ extern const char kUiPartialSwapDescription[];
 extern const char kUseDdljsonApiName[];
 extern const char kUseDdljsonApiDescription[];
 
+extern const char kUseModernMediaControlsName[];
+extern const char kUseModernMediaControlsDescription[];
+
 extern const char kUserActivationV2Name[];
 extern const char kUserActivationV2Description[];
 
@@ -1229,9 +1232,6 @@ extern const char kOffliningRecentPagesDescription[];
 
 extern const char kPayWithGoogleV1Name[];
 extern const char kPayWithGoogleV1Description[];
-
-extern const char kProgressBarThrottleName[];
-extern const char kProgressBarThrottleDescription[];
 
 extern const char kProgressBarCompletionName[];
 extern const char kProgressBarCompletionDescription[];
@@ -1574,6 +1574,9 @@ extern const char kMtpWriteSupportDescription[];
 extern const char kMultideviceName[];
 extern const char kMultideviceDescription[];
 
+extern const char kNativeSambaName[];
+extern const char kNativeSambaDescription[];
+
 extern const char kNetworkPortalNotificationName[];
 extern const char kNetworkPortalNotificationDescription[];
 
@@ -1728,6 +1731,9 @@ extern const char kWebrtcH264WithOpenh264FfmpegDescription[];
 
 extern const char kAshDisableSmoothScreenRotationName[];
 extern const char kAshDisableSmoothScreenRotationDescription[];
+
+extern const char kAshEnableKeyboardShortcutViewerName[];
+extern const char kAshEnableKeyboardShortcutViewerDescription[];
 
 extern const char kAshEnableMirroredScreenName[];
 extern const char kAshEnableMirroredScreenDescription[];

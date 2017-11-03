@@ -104,10 +104,6 @@ TEST_F('InterventionsInternalsUITest', 'DisplayCorrectStatuses', function() {
   test('DisplayCorrectStatuses', () => {
     // Setup testPageHandler behavior.
     let testMap = new Map();
-    testMap.set('params1', {
-      description: 'Params 1',
-      enabled: true,
-    });
     testMap.set('params2', {
       description: 'Params 2',
       enabled: false,
@@ -115,6 +111,10 @@ TEST_F('InterventionsInternalsUITest', 'DisplayCorrectStatuses', function() {
     testMap.set('params3', {
       description: 'Param 3',
       enabled: false,
+    });
+    testMap.set('params1', {
+      description: 'Params 1',
+      enabled: true,
     });
 
     window.testPageHandler.setTestingMap(testMap);
@@ -131,6 +131,12 @@ TEST_F('InterventionsInternalsUITest', 'DisplayCorrectStatuses', function() {
             let actual = document.querySelector('#' + key).textContent;
             expectEquals(expected, actual);
           });
+
+          // Test correct order of statuses displayed on page.
+          let statuses = document.querySelectorAll('.previews-status-value');
+          for (let i = 1; i < statuses.length; i++) {
+            expectGE(statuses[i].textContent, statuses[i - 1].textContent);
+          }
         });
   });
 
@@ -282,6 +288,23 @@ TEST_F('InterventionsInternalsUITest', 'OnECTChanged', function() {
       let actual = $('nqe-type').textContent;
       expectEquals(type, actual);
     });
+  });
+
+  mocha.run();
+});
+
+TEST_F('InterventionsInternalsUITest', 'OnBlacklistIgnoreChange', function() {
+  test('OnBlacklistIgnoreChangeDisable', () => {
+    let pageImpl = new InterventionsInternalPageImpl(null);
+    pageImpl.onIgnoreBlacklistDecisionStatusChanged(true /* ignored */);
+    expectEquals('Enable Blacklist', $('ignore-blacklist-button').textContent);
+    expectEquals(
+        'Blacklist decisions are ignored.',
+        $('blacklist-ignored-status').textContent);
+
+    pageImpl.onIgnoreBlacklistDecisionStatusChanged(false /* ignored */);
+    expectEquals('Ignore Blacklist', $('ignore-blacklist-button').textContent);
+    expectEquals('', $('blacklist-ignored-status').textContent);
   });
 
   mocha.run();

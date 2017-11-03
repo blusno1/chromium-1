@@ -7,8 +7,10 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/instrumentation/resource_coordinator/RendererResourceCoordinator.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "public/platform/scheduler/renderer_process_type.h"
+#include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
 
 namespace blink {
 namespace scheduler {
@@ -18,7 +20,9 @@ namespace scheduler {
 #define MAIN_THREAD_LOAD_METRIC_NAME "RendererScheduler.RendererMainThreadLoad5"
 #define EXTENSIONS_MAIN_THREAD_LOAD_METRIC_NAME \
   MAIN_THREAD_LOAD_METRIC_NAME ".Extension"
-#define PER_FRAME_TYPE_METRIC_NAME "RendererScheduler.TaskDurationPerFrameType"
+#define PER_FRAME_TYPE_METRIC_NAME "RendererScheduler.TaskDurationPerFrameType2"
+
+enum class MainThreadTaskLoadState { LOW, HIGH, UNKNOWN };
 
 namespace {
 
@@ -34,11 +38,14 @@ constexpr base::TimeDelta kLongIdlePeriodDiscardingThreshold =
 
 enum class FrameThrottlingState {
   VISIBLE = 0,
-  HIDDEN = 1,
-  BACKGROUND = 2,
-  BACKGROUND_EXEMPT = 3,
+  VISIBLE_SERVICE = 1,
+  HIDDEN = 2,
+  HIDDEN_SERVICE = 3,
+  BACKGROUND = 4,
+  BACKGROUND_EXEMPT_SELF = 5,
+  BACKGROUND_EXEMPT_OTHER = 6,
 
-  COUNT = 4
+  COUNT = 7
 };
 
 enum class FrameOriginState {
@@ -58,7 +65,7 @@ FrameThrottlingState GetFrameThrottlingState(
   }
 
   if (frame_scheduler.IsExemptFromThrottling())
-    return FrameThrottlingState::BACKGROUND_EXEMPT;
+    return FrameThrottlingState::BACKGROUND_EXEMPT_SELF;
 
   return FrameThrottlingState::BACKGROUND;
 }
@@ -75,11 +82,14 @@ FrameOriginState GetFrameOriginState(const WebFrameScheduler& frame_scheduler) {
 
 }  // namespace
 
-FrameType GetFrameType(const WebFrameScheduler& frame_scheduler) {
+FrameType GetFrameType(WebFrameScheduler* frame_scheduler) {
+  if (!frame_scheduler)
+    return FrameType::NONE;
   FrameThrottlingState throttling_state =
-      GetFrameThrottlingState(frame_scheduler);
-  FrameOriginState origin_state = GetFrameOriginState(frame_scheduler);
+      GetFrameThrottlingState(*frame_scheduler);
+  FrameOriginState origin_state = GetFrameOriginState(*frame_scheduler);
   return static_cast<FrameType>(
+      static_cast<int>(FrameType::SPECIAL_CASES_COUNT) +
       static_cast<int>(origin_state) *
           static_cast<int>(FrameThrottlingState::COUNT) +
       static_cast<int>(throttling_state));
@@ -134,7 +144,8 @@ RendererMetricsHelper::RendererMetricsHelper(
       visible_task_duration_reporter(TASK_DURATION_METRIC_NAME ".Visible"),
       hidden_music_task_duration_reporter(TASK_DURATION_METRIC_NAME
                                           ".HiddenMusic"),
-      frame_type_duration_reporter(PER_FRAME_TYPE_METRIC_NAME) {
+      frame_type_duration_reporter(PER_FRAME_TYPE_METRIC_NAME),
+      main_thread_task_load_state(MainThreadTaskLoadState::UNKNOWN) {
   main_thread_load_tracker.Resume(now);
   if (renderer_backgrounded) {
     background_main_thread_load_tracker.Resume(now);
@@ -329,16 +340,30 @@ void RendererMetricsHelper::RecordTaskMetrics(MainThreadTaskQueue* queue,
     visible_task_duration_reporter.RecordTask(queue_type, duration);
   }
 
-  if (queue->GetFrameScheduler()) {
-    frame_type_duration_reporter.RecordTask(
-        GetFrameType(*queue->GetFrameScheduler()), duration);
-  }
+  frame_type_duration_reporter.RecordTask(
+      GetFrameType(queue->GetFrameScheduler()), duration);
 }
 
 void RendererMetricsHelper::RecordMainThreadTaskLoad(base::TimeTicks time,
                                                      double load) {
   int load_percentage = static_cast<int>(load * 100);
   DCHECK_LE(load_percentage, 100);
+
+  if (::resource_coordinator::IsPageAlmostIdleSignalEnabled()) {
+    static const int main_thread_task_load_low_threshold =
+        ::resource_coordinator::GetMainThreadTaskLoadLowThreshold();
+
+    // Avoid sending duplicate IPCs when the state doesn't change.
+    if (load_percentage <= main_thread_task_load_low_threshold &&
+        main_thread_task_load_state != MainThreadTaskLoadState::LOW) {
+      RendererResourceCoordinator::Get().SetMainThreadTaskLoadIsLow(true);
+      main_thread_task_load_state = MainThreadTaskLoadState::LOW;
+    } else if (load_percentage > main_thread_task_load_low_threshold &&
+               main_thread_task_load_state != MainThreadTaskLoadState::HIGH) {
+      RendererResourceCoordinator::Get().SetMainThreadTaskLoadIsLow(false);
+      main_thread_task_load_state = MainThreadTaskLoadState::HIGH;
+    }
+  }
 
   UMA_HISTOGRAM_PERCENTAGE(MAIN_THREAD_LOAD_METRIC_NAME, load_percentage);
 

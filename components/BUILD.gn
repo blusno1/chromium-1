@@ -180,6 +180,7 @@ test("components_unittests") {
       "//components/certificate_transparency:unit_tests",
       "//components/contextual_search:unit_tests",
       "//components/crash/content/app:unit_tests",
+      "//components/crash/content/browser:unit_tests",
       "//components/crash/core/common:unit_tests",
       "//components/data_reduction_proxy/content/browser:unit_tests",
       "//components/data_reduction_proxy/content/renderer:unit_tests",
@@ -200,12 +201,7 @@ test("components_unittests") {
       "//components/navigation_interception:unit_tests",
       "//components/network_error_logging:unit_tests",
       "//components/network_hints/renderer:unit_tests",
-      "//components/offline_pages/content/background_loader:unit_tests",
-      "//components/offline_pages/core:unit_tests",
-      "//components/offline_pages/core/background:unit_tests",
-      "//components/offline_pages/core/downloads:unit_tests",
-      "//components/offline_pages/core/prefetch:unit_tests",
-      "//components/offline_pages/core/request_header:unit_tests",
+      "//components/offline_pages:unit_tests",
       "//components/password_manager/content/browser:unit_tests",
       "//components/payments/content:unit_tests",
       "//components/payments/content/utility:unit_tests",
@@ -324,7 +320,7 @@ test("components_unittests") {
   if (safe_browsing_mode == 1) {
     deps += [ "//components/safe_browsing/db:unit_tests_desktop" ]
   } else if (safe_browsing_mode == 2) {
-    deps += [ "//components/safe_browsing/db:unit_tests_mobile" ]
+    deps += [ "//components/safe_browsing/android:unit_tests_mobile" ]
   }
 
   # No components should depend on Chrome.

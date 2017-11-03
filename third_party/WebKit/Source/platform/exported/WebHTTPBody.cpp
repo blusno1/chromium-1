@@ -33,6 +33,7 @@
 #include "platform/FileMetadata.h"
 #include "platform/SharedBuffer.h"
 #include "platform/network/EncodedFormData.h"
+#include "platform/network/FormDataEncoder.h"
 
 namespace blink {
 
@@ -84,13 +85,6 @@ bool WebHTTPBody::ElementAt(size_t index, Element& result) const {
       result.type = Element::kTypeBlob;
       result.blob_uuid = element.blob_uuid_;
       break;
-    case FormDataElement::kEncodedFileSystemURL:
-      result.type = Element::kTypeFileSystemURL;
-      result.file_system_url = element.file_system_url_;
-      result.file_start = element.file_start_;
-      result.file_length = element.file_length_;
-      result.modification_time = element.expected_file_modification_time_;
-      break;
     default:
       NOTREACHED();
       return false;
@@ -124,16 +118,6 @@ void WebHTTPBody::AppendFileRange(const WebString& file_path,
                             modification_time);
 }
 
-void WebHTTPBody::AppendFileSystemURLRange(const WebURL& url,
-                                           long long start,
-                                           long long length,
-                                           double modification_time) {
-  // Currently we only support filesystem URL.
-  DCHECK(KURL(url).ProtocolIs("filesystem"));
-  EnsureMutable();
-  private_->AppendFileSystemURLRange(url, start, length, modification_time);
-}
-
 void WebHTTPBody::AppendBlob(const WebString& uuid) {
   EnsureMutable();
   private_->AppendBlob(uuid, nullptr);
@@ -147,6 +131,11 @@ long long WebHTTPBody::Identifier() const {
 void WebHTTPBody::SetIdentifier(long long identifier) {
   EnsureMutable();
   return private_->SetIdentifier(identifier);
+}
+
+void WebHTTPBody::SetUniqueBoundary() {
+  EnsureMutable();
+  private_->SetBoundary(FormDataEncoder::GenerateUniqueBoundaryString());
 }
 
 bool WebHTTPBody::ContainsPasswordData() const {

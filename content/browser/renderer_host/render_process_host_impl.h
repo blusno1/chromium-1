@@ -51,6 +51,7 @@
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/interfaces/service.mojom.h"
 #include "services/ui/public/interfaces/gpu.mojom.h"
+#include "services/viz/public/interfaces/compositing/compositing_mode_watcher.mojom.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gpu_switching_observer.h"
 
@@ -387,6 +388,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // globally-used spare RenderProcessHost at any time.
   static RenderProcessHost* GetSpareRenderProcessHostForTesting();
 
+  PermissionServiceContext& permission_service_context() {
+    return *permission_service_context_;
+  };
+
  protected:
   // A proxy for our IPC::Channel that lives on the IO thread.
   std::unique_ptr<IPC::ChannelProxy> channel_;
@@ -457,6 +462,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void CreateOffscreenCanvasProvider(
       blink::mojom::OffscreenCanvasProviderRequest request);
   void BindFrameSinkProvider(mojom::FrameSinkProviderRequest request);
+  void BindCompositingModeReporter(
+      viz::mojom::CompositingModeReporterRequest request);
   void BindSharedBitmapAllocationNotifier(
       viz::mojom::SharedBitmapAllocationNotifierRequest request);
   void CreateStoragePartitionService(
@@ -772,6 +779,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
       instance_weak_factory_;
 
   FrameSinkProviderImpl frame_sink_provider_;
+  std::unique_ptr<mojo::Binding<viz::mojom::CompositingModeReporter>>
+      compositing_mode_reporter_;
 
   viz::SharedBitmapAllocationNotifierImpl
       shared_bitmap_allocation_notifier_impl_;

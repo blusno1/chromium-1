@@ -214,8 +214,9 @@ GURL ArcNavigationThrottle::GetStartingGURL() const {
   return navigation_handle()->GetStartingSiteInstance()->GetSiteURL();
 }
 
-// We received the array of app candidates to handle this URL (even the Chrome
-// app is included).
+// Receives the array of app candidates to handle this URL and decides whether a
+// preferred app should be triggered right away or ask the browser to display
+// the intent picker.
 void ArcNavigationThrottle::OnAppCandidatesReceived(
     std::vector<mojom::IntentHandlerInfoPtr> handlers) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -223,7 +224,7 @@ void ArcNavigationThrottle::OnAppCandidatesReceived(
   const GURL& url = handle->GetURL();
 
   if (!IsAppAvailable(handlers)) {
-    // This scenario shouldn't be accessed as ArcNavigatinoThrottle is created
+    // This scenario shouldn't be accessed as ArcNavigationThrottle is created
     // iff there are ARC apps which can actually handle the given URL.
     DVLOG(1) << "There are no app candidates for this URL: " << url;
     ui_displayed_ = false;
@@ -428,26 +429,6 @@ bool ArcNavigationThrottle::IsAppAvailableForTesting(
 size_t ArcNavigationThrottle::FindPreferredAppForTesting(
     const std::vector<mojom::IntentHandlerInfoPtr>& handlers) {
   return FindPreferredApp(handlers, GURL());
-}
-
-// static
-bool ArcNavigationThrottle::IsSwapElementsNeeded(
-    const std::vector<mojom::IntentHandlerInfoPtr>& handlers,
-    std::pair<size_t, size_t>* out_indices) {
-  size_t chrome_app_index = 0;
-  for (size_t i = 0; i < handlers.size(); ++i) {
-    if (ArcIntentHelperBridge::IsIntentHelperPackage(
-            handlers[i]->package_name)) {
-      chrome_app_index = i;
-      break;
-    }
-  }
-  if (chrome_app_index < ArcNavigationThrottle::kMaxAppResults)
-    return false;
-
-  *out_indices = std::make_pair(ArcNavigationThrottle::kMaxAppResults - 1,
-                                chrome_app_index);
-  return true;
 }
 
 // static

@@ -19,6 +19,8 @@
 
 namespace previews {
 
+std::string GetDescriptionForInfoBarDescription(previews::PreviewsType type);
+
 class PreviewsLoggerObserver;
 
 // Records information about previews and interventions events. The class only
@@ -62,11 +64,12 @@ class PreviewsLogger {
   virtual void RemoveObserver(PreviewsLoggerObserver* observer);
 
   // Add MessageLog using the given information. Pop out the oldest log if the
-  // size of |log_messages_| grows larger than a threshold.
-  void LogMessage(const std::string& event_type,
-                  const std::string& event_description,
-                  const GURL& url,
-                  base::Time time);
+  // size of |log_messages_| grows larger than a threshold. Virtualized in
+  // testing.
+  virtual void LogMessage(const std::string& event_type,
+                          const std::string& event_description,
+                          const GURL& url,
+                          base::Time time);
 
   // Convert |navigation| to a MessageLog, and add that message to
   // |log_messages_|. Virtualized in testing.
@@ -94,12 +97,20 @@ class PreviewsLogger {
   // testing.
   virtual void OnBlacklistCleared(base::Time time);
 
+  // Notify observers that the status of whether blacklist decisions are ignored
+  // or not. Virtualized in testing.
+  virtual void OnIgnoreBlacklistDecisionStatusChanged(bool ignored);
+
  private:
   // Keeping track of all blacklisted host to notify new observers.
   std::unordered_map<std::string, base::Time> blacklisted_hosts_;
 
   // The current user blacklisted status.
   bool user_blacklisted_status_;
+
+  // The current status of whether PreviewsBlackList decisions are ignored or
+  // not.
+  bool blacklist_ignored_;
 
   // Collection of recorded navigation log messages.
   std::list<MessageLog> navigations_logs_;

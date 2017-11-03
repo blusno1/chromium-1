@@ -29,7 +29,7 @@
 
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8BindingForCore.h"
-#include "core/dom/SuspendableObject.h"
+#include "core/dom/PausableObject.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/events/EventTarget.h"
 #include "core/events/ErrorEvent.h"
@@ -48,7 +48,7 @@ namespace blink {
 ExecutionContext::ExecutionContext()
     : circular_sequential_id_(0),
       in_dispatch_error_event_(false),
-      is_context_suspended_(false),
+      is_context_paused_(false),
       is_context_destroyed_(false),
       window_interaction_tokens_(0),
       referrer_policy_(kReferrerPolicyDefault) {}
@@ -73,15 +73,15 @@ ExecutionContext* ExecutionContext::ForRelevantRealm(
   return ToExecutionContext(info.Holder()->CreationContext());
 }
 
-void ExecutionContext::SuspendSuspendableObjects() {
-  DCHECK(!is_context_suspended_);
+void ExecutionContext::PausePausableObjects() {
+  DCHECK(!is_context_paused_);
   NotifySuspendingSuspendableObjects();
-  is_context_suspended_ = true;
+  is_context_paused_ = true;
 }
 
-void ExecutionContext::ResumeSuspendableObjects() {
-  DCHECK(is_context_suspended_);
-  is_context_suspended_ = false;
+void ExecutionContext::UnpausePausableObjects() {
+  DCHECK(is_context_paused_);
+  is_context_paused_ = false;
   NotifyResumingSuspendableObjects();
 }
 
@@ -90,24 +90,23 @@ void ExecutionContext::NotifyContextDestroyed() {
   ContextLifecycleNotifier::NotifyContextDestroyed();
 }
 
-void ExecutionContext::SuspendScheduledTasks() {
-  SuspendSuspendableObjects();
+void ExecutionContext::PauseScheduledTasks() {
+  PausePausableObjects();
   TasksWereSuspended();
 }
 
-void ExecutionContext::ResumeScheduledTasks() {
-  ResumeSuspendableObjects();
+void ExecutionContext::UnpauseScheduledTasks() {
+  UnpausePausableObjects();
   TasksWereResumed();
 }
 
-void ExecutionContext::SuspendSuspendableObjectIfNeeded(
-    SuspendableObject* object) {
+void ExecutionContext::PausePausableObjectIfNeeded(PausableObject* object) {
 #if DCHECK_IS_ON()
   DCHECK(Contains(object));
 #endif
-  // Ensure all SuspendableObjects are suspended also newly created ones.
-  if (is_context_suspended_)
-    object->Suspend();
+  // Ensure all PausableObjects are paused also newly created ones.
+  if (is_context_paused_)
+    object->Pause();
 }
 
 bool ExecutionContext::ShouldSanitizeScriptError(

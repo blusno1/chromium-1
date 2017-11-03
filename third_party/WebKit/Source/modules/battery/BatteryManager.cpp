@@ -15,7 +15,7 @@ namespace blink {
 
 BatteryManager* BatteryManager::Create(ExecutionContext* context) {
   BatteryManager* battery_manager = new BatteryManager(context);
-  battery_manager->SuspendIfNeeded();
+  battery_manager->PauseIfNeeded();
   return battery_manager;
 }
 
@@ -71,7 +71,7 @@ void BatteryManager::DidUpdateData() {
 
   Document* document = ToDocument(GetExecutionContext());
   DCHECK(document);
-  if (document->IsContextSuspended() || document->IsContextDestroyed())
+  if (document->IsContextPaused() || document->IsContextDestroyed())
     return;
 
   if (battery_status_.Charging() != old_status.Charging())

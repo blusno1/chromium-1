@@ -92,7 +92,6 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kPayWithGoogleV1,
     &kPhysicalWebFeature,
     &kPhysicalWebSharing,
-    &kProgressBarThrottleFeature,
     &kPwaImprovedSplashScreen,
     &kPwaPersistentNotification,
     &kReaderModeInCCT,
@@ -102,6 +101,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kSpecialLocaleFeature,
     &kSpecialLocaleWrapper,
     &kTabReparenting,
+    &kTrustedWebActivity,
     &kVideoPersistence,
     &kVrBrowsingFeedback,
     &kVrCustomTabBrowsing,
@@ -270,9 +270,6 @@ const base::Feature kPhysicalWebFeature{"PhysicalWeb",
 const base::Feature kPhysicalWebSharing{"PhysicalWebSharing",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kProgressBarThrottleFeature{
-    "ProgressBarThrottle", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kPwaImprovedSplashScreen{"PwaImprovedSplashScreen",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -296,6 +293,9 @@ const base::Feature kTabModalJsDialog{"TabModalJsDialog",
 
 const base::Feature kTabReparenting{"TabReparenting",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kTrustedWebActivity{"TrustedWebActivity",
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kUserMediaScreenCapturing{
     "UserMediaScreenCapturing", base::FEATURE_DISABLED_BY_DEFAULT};

@@ -95,8 +95,9 @@
 #include "content/common/renderer.mojom.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/swapped_out_messages.h"
+#include "content/common/url_loader_factory_bundle.mojom.h"
 #include "content/common/widget.mojom.h"
-#include "content/network/restricted_cookie_manager_impl.h"
+#include "content/network/restricted_cookie_manager.h"
 #include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_context.h"
@@ -154,6 +155,7 @@
 #include "ui/gfx/geometry/quad_f.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "url/url_constants.h"
 
 #if defined(OS_ANDROID)
 #include "content/browser/android/java_interfaces_impl.h"
@@ -694,7 +696,7 @@ const url::Origin& RenderFrameHostImpl::GetLastCommittedOrigin() {
 gfx::NativeView RenderFrameHostImpl::GetNativeView() {
   RenderWidgetHostView* view = render_view_host_->GetWidget()->GetView();
   if (!view)
-    return NULL;
+    return nullptr;
   return view->GetNativeView();
 }
 
@@ -1017,7 +1019,7 @@ void RenderFrameHostImpl::AccessibilityReset() {
 }
 
 void RenderFrameHostImpl::AccessibilityFatalError() {
-  browser_accessibility_manager_.reset(NULL);
+  browser_accessibility_manager_.reset(nullptr);
   if (accessibility_reset_token_)
     return;
 
@@ -1051,7 +1053,7 @@ gfx::NativeViewAccessible
       render_view_host_->GetWidget()->GetView());
   if (view)
     return view->AccessibilityGetNativeViewAccessible();
-  return NULL;
+  return nullptr;
 }
 
 void RenderFrameHostImpl::RenderProcessGone(SiteInstanceImpl* site_instance) {
@@ -1546,10 +1548,17 @@ void RenderFrameHostImpl::DidCommitProvisionalLoad(
         100);
   }
 
+  // Blocked navigations are expected to commit in the old renderer
+  // (and therefore such navigations do not go through CanCommitURL checks
+  // below).
+  bool is_blocked_navigation =
+      navigation_handle_ &&
+      navigation_handle_->GetNetErrorCode() == net::ERR_BLOCKED_BY_CLIENT;
+
   // Attempts to commit certain off-limits URL should be caught more strictly
   // than our FilterURL checks below.  If a renderer violates this policy, it
   // should be killed.
-  if (!CanCommitURL(validated_params->url)) {
+  if (!is_blocked_navigation && !CanCommitURL(validated_params->url)) {
     VLOG(1) << "Blocked URL " << validated_params->url.spec();
     // Kills the process.
     bad_message::ReceivedBadMessage(process,
@@ -1824,8 +1833,11 @@ void RenderFrameHostImpl::OnBeforeUnloadACK(
   }
 
   // If canceled, notify the delegate to cancel its pending navigation entry.
+  // This is usually redundant with the dialog closure code in WebContentsImpl's
+  // OnDialogClosed, but there may be some cases that Blink returns !proceed
+  // without showing the dialog. We also update the address bar here to be safe.
   if (!proceed)
-    render_view_host_->GetDelegate()->DidCancelLoading();
+    delegate_->DidCancelLoading();
 }
 
 bool RenderFrameHostImpl::IsWaitingForUnloadACK() const {
@@ -3384,6 +3396,9 @@ void RenderFrameHostImpl::CommitNavigation(
       FrameMsg_Navigate_Type::IsSameDocument(common_params.navigation_type) ||
       IsRendererDebugURL(common_params.url));
 
+  const bool is_first_navigation = !has_committed_any_navigation_;
+  has_committed_any_navigation_ = true;
+
   // TODO(arthursonzogni): Consider using separate methods and IPCs for
   // javascript-url navigation. Excluding this case from the general one will
   // prevent us from doing inappropriate things with javascript-url.
@@ -3392,7 +3407,7 @@ void RenderFrameHostImpl::CommitNavigation(
     GetNavigationControl()->CommitNavigation(
         ResourceResponseHead(), GURL(), common_params, request_params,
         mojo::ScopedDataPipeConsumerHandle(),
-        /*default_subresource_url_loader_factory=*/nullptr);
+        /*subresource_loader_factories=*/base::nullopt);
     return;
   }
 
@@ -3412,17 +3427,55 @@ void RenderFrameHostImpl::CommitNavigation(
   const GURL body_url = body.get() ? body->GetURL() : GURL();
   const ResourceResponseHead head = response ?
       response->head : ResourceResponseHead();
-  mojom::URLLoaderFactoryPtr default_subresource_url_loader_factory;
-  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+  const bool is_same_document =
+      FrameMsg_Navigate_Type::IsSameDocument(common_params.navigation_type);
+
+  // TODO(scottmg): Pass a factory for SW, etc. once we have one.
+  base::Optional<URLLoaderFactoryBundle> subresource_loader_factories;
+  if (base::FeatureList::IsEnabled(features::kNetworkService) &&
+      (!is_same_document || is_first_navigation)) {
+    // NOTE: On Network Service navigations, we want to ensure that a frame is
+    // given everything it will need to load any accessible subresources. We
+    // however only do this for cross-document navigations, because the
+    // alternative would be redundant effort.
+    mojom::URLLoaderFactoryPtr default_factory;
+    StoragePartitionImpl* storage_partition =
+        static_cast<StoragePartitionImpl*>(BrowserContext::GetStoragePartition(
+            GetSiteInstance()->GetBrowserContext(), GetSiteInstance()));
     if (subresource_loader_params &&
         subresource_loader_params->loader_factory_info.is_valid()) {
-      default_subresource_url_loader_factory.Bind(
+      // If the caller has supplied a default URLLoaderFactory override (for
+      // e.g. appcache, Service Worker, etc.), use that.
+      default_factory.Bind(
           std::move(subresource_loader_params->loader_factory_info));
+    } else {
+      // Otherwise default to a Network Service-backed loader from the
+      // appropriate NetworkContext.
+      storage_partition->GetNetworkContext()->CreateURLLoaderFactory(
+          mojo::MakeRequest(&default_factory), GetProcess()->GetID());
     }
+
+    DCHECK(default_factory.is_bound());
+    subresource_loader_factories.emplace();
+    subresource_loader_factories->SetDefaultFactory(std::move(default_factory));
+
+    // Everyone gets a blob loader.
+    mojom::URLLoaderFactoryPtr blob_factory;
+    storage_partition->GetBlobURLLoaderFactory()->HandleRequest(
+        mojo::MakeRequest(&blob_factory));
+    subresource_loader_factories->RegisterFactory(url::kBlobScheme,
+                                                  std::move(blob_factory));
   }
+
+  // It is imperative that cross-document navigations always provide a set of
+  // subresource ULFs when the Network Service is enabled.
+  DCHECK(!base::FeatureList::IsEnabled(features::kNetworkService) ||
+         is_same_document || !is_first_navigation ||
+         subresource_loader_factories.has_value());
+
   GetNavigationControl()->CommitNavigation(
       head, body_url, common_params, request_params, std::move(handle),
-      std::move(default_subresource_url_loader_factory));
+      std::move(subresource_loader_factories));
 
   // If a network request was made, update the Previews state.
   if (IsURLHandledByNetworkStack(common_params.url) &&
@@ -3436,7 +3489,7 @@ void RenderFrameHostImpl::CommitNavigation(
   // same-document navigation would not load any new ones for replacement.
   // The user would finish with a half loaded document.
   // See https://crbug.com/769645.
-  if (!FrameMsg_Navigate_Type::IsSameDocument(common_params.navigation_type)) {
+  if (!is_same_document) {
     // Released in OnStreamHandleConsumed().
     stream_handle_ = std::move(body);
   }
@@ -3456,7 +3509,8 @@ void RenderFrameHostImpl::FailedNavigation(
     const BeginNavigationParams& begin_params,
     const RequestNavigationParams& request_params,
     bool has_stale_copy_in_cache,
-    int error_code) {
+    int error_code,
+    const base::Optional<std::string>& error_page_content) {
   TRACE_EVENT2("navigation", "RenderFrameHostImpl::FailedNavigation",
                "frame_tree_node", frame_tree_node_->frame_tree_node_id(),
                "error", error_code);
@@ -3470,7 +3524,8 @@ void RenderFrameHostImpl::FailedNavigation(
   ResetWaitingState();
 
   Send(new FrameMsg_FailedNavigation(routing_id_, common_params, request_params,
-                                     has_stale_copy_in_cache, error_code));
+                                     has_stale_copy_in_cache, error_code,
+                                     error_page_content));
 
   RenderFrameDevToolsAgentHost::OnFailedNavigation(
       this, common_params, begin_params, static_cast<net::Error>(error_code));
@@ -3684,6 +3739,23 @@ bool RenderFrameHostImpl::CanCommitURL(const GURL& url) {
   // TODO(creis): We should also check for WebUI pages here.  Also, when the
   // out-of-process iframes implementation is ready, we should check for
   // cross-site URLs that are not allowed to commit in this process.
+
+  // WebView guests can commit any origin.
+  // This is safe, because:
+  // 1) WebView guests are in a different StoragePartition, essentially outside
+  //    the browser.
+  // 2) The user has to trust the app that's providing the webview (e.g.
+  //    Webviews don't have reliable address bars so the user has to trust that
+  //    the Webview won't contain any malicious or phishing sites).
+  // This is difficult to change, because:
+  // 1) WebView guests cannot contain OOPIFs today.
+  // 2) extensions::ProcessMap doesn't track webview accessible resources
+  //    (see WebViewTest.ReloadWebviewAccessibleResource).
+  //
+  // TODO(lukasza): https://crbug.com/614463: Removes this exception once
+  // WebView guests support OOPIFs.
+  if (GetSiteInstance()->GetSiteURL().SchemeIs(kGuestScheme))
+    return true;
 
   // Give the client a chance to disallow URLs from committing.
   return GetContentClient()->browser()->CanCommitURL(GetProcess(), url);

@@ -118,12 +118,14 @@ class CORE_EXPORT InspectorPageAgent final
   protocol::Response removeScriptToEvaluateOnNewDocument(
       const String& identifier) override;
   protocol::Response setAutoAttachToCreatedPages(bool) override;
+  protocol::Response setLifecycleEventsEnabled(bool) override;
   protocol::Response reload(Maybe<bool> bypass_cache,
                             Maybe<String> script_to_evaluate_on_load) override;
   protocol::Response navigate(const String& url,
                               Maybe<String> referrer,
                               Maybe<String> transitionType,
-                              String* frame_id) override;
+                              String* frame_id,
+                              String* loader_id) override;
   protocol::Response stopLoading() override;
   protocol::Response setAdBlockingEnabled(bool) override;
   protocol::Response getResourceTree(
@@ -171,7 +173,10 @@ class CORE_EXPORT InspectorPageAgent final
   void DidRunJavaScriptDialog();
   void DidResizeMainFrame();
   void DidChangeViewport();
-  void LifecycleEvent(LocalFrame*, const char* name, double timestamp);
+  void LifecycleEvent(LocalFrame*,
+                      DocumentLoader*,
+                      const char* name,
+                      double timestamp);
   void PaintTiming(Document*, const char* name, double timestamp);
   void Will(const probe::UpdateLayout&);
   void Did(const probe::UpdateLayout&);
@@ -181,7 +186,7 @@ class CORE_EXPORT InspectorPageAgent final
   void WindowOpen(Document*,
                   const String&,
                   const AtomicString&,
-                  const String&,
+                  const WebWindowFeatures&,
                   bool);
 
   // Inspector Controller API

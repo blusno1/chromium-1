@@ -153,14 +153,6 @@ void MessageCenterImpl::OnBlockingStateChanged(NotificationBlocker* blocker) {
     observer.OnBlockingStateChanged(blocker);
 }
 
-void MessageCenterImpl::NotifierEnabledChanged(
-    const NotifierId& notifier_id, bool enabled) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (!enabled) {
-    RemoveNotificationsForNotifierId(notifier_id);
-  }
-}
-
 void MessageCenterImpl::SetVisibility(Visibility visibility) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!iterating_);
@@ -540,12 +532,13 @@ void MessageCenterImpl::ClickOnNotificationButton(const std::string& id,
 void MessageCenterImpl::ClickOnSettingsButton(const std::string& id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!iterating_);
-  scoped_refptr<NotificationDelegate> delegate =
-      notification_list_->GetNotificationDelegate(id);
+  Notification* notification = notification_list_->GetNotificationById(id);
 
-  bool handled_by_delegate = false;
-  if (delegate.get())
-    handled_by_delegate = delegate->SettingsClick();
+  bool handled_by_delegate =
+      notification->rich_notification_data().settings_button_handler ==
+      SettingsButtonHandler::DELEGATE;
+  if (handled_by_delegate)
+    notification->delegate()->SettingsClick();
 
   {
     internal::ScopedNotificationsIterationLock lock(this);
@@ -601,19 +594,6 @@ void MessageCenterImpl::DisplayedNotification(
     for (auto& observer : observer_list_)
       observer.OnNotificationDisplayed(id, source);
   }
-}
-
-void MessageCenterImpl::SetNotifierSettingsProvider(
-    std::unique_ptr<NotifierSettingsProvider> provider) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(!settings_provider_);
-  settings_provider_ = std::move(provider);
-  settings_provider_->AddObserver(this);
-}
-
-NotifierSettingsProvider* MessageCenterImpl::GetNotifierSettingsProvider() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  return settings_provider_.get();
 }
 
 void MessageCenterImpl::SetQuietMode(bool in_quiet_mode) {

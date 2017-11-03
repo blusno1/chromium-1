@@ -54,6 +54,7 @@
 #include "components/tracing/common/tracing_switches.h"
 #include "components/viz/common/switches.h"
 #include "components/viz/host/host_frame_sink_manager.h"
+#include "components/viz/service/display_embedder/compositing_mode_reporter_impl.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/browser_thread_impl.h"
@@ -150,6 +151,7 @@
 #include "content/browser/screen_orientation/screen_orientation_delegate_android.h"
 #include "media/base/android/media_drm_bridge_client.h"
 #include "ui/android/screen_android.h"
+#include "ui/android/view_android.h"
 #include "ui/display/screen.h"
 #include "ui/gl/gl_surface.h"
 #endif
@@ -242,14 +244,6 @@
 namespace content {
 namespace {
 
-bool IsUsingMus() {
-#if defined(USE_AURA)
-  return aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS;
-#else
-  return false;
-#endif
-}
-
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID) && \
     !defined(OS_FUCHSIA)
 void SetupSandbox(const base::CommandLine& parsed_command_line) {
@@ -311,14 +305,12 @@ static void SetUpGLibLogHandler() {
   const char* const kLogDomains[] =
       { nullptr, "Gtk", "Gdk", "GLib", "GLib-GObject" };
   for (size_t i = 0; i < arraysize(kLogDomains); i++) {
-    g_log_set_handler(kLogDomains[i],
-                      static_cast<GLogLevelFlags>(G_LOG_FLAG_RECURSION |
-                                                  G_LOG_FLAG_FATAL |
-                                                  G_LOG_LEVEL_ERROR |
-                                                  G_LOG_LEVEL_CRITICAL |
-                                                  G_LOG_LEVEL_WARNING),
-                      GLibLogHandler,
-                      NULL);
+    g_log_set_handler(
+        kLogDomains[i],
+        static_cast<GLogLevelFlags>(G_LOG_FLAG_RECURSION | G_LOG_FLAG_FATAL |
+                                    G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL |
+                                    G_LOG_LEVEL_WARNING),
+        GLibLogHandler, nullptr);
   }
 }
 #endif  // defined(USE_GLIB)
@@ -454,13 +446,14 @@ GetDefaultTaskSchedulerInitParams() {
       base::SchedulerWorkerPoolParams(
           base::RecommendedMaxNumberOfThreadsInPool(8, 32, 0.3, 0),
           base::TimeDelta::FromSeconds(30)),
-      // Tasks posted to SequencedWorkerPool or BrowserThreadImpl may be
-      // redirected to this pool. Since COM STA is initialized in these
-      // environments, it must also be initialized in this pool.
       base::SchedulerWorkerPoolParams(
           base::RecommendedMaxNumberOfThreadsInPool(8, 32, 0.3, 0),
-          base::TimeDelta::FromSeconds(60),
-          base::SchedulerBackwardCompatibility::INIT_COM_STA));
+          base::TimeDelta::FromSeconds(60))
+#if defined(OS_WIN)
+          ,
+      base::TaskScheduler::InitParams::SharedWorkerPoolEnvironment::COM_MTA
+#endif  // defined(OS_WIN)
+      );
 #endif
 }
 
@@ -567,7 +560,7 @@ class HDRProxy {
 #endif
 
 // The currently-running BrowserMainLoop.  There can be one or zero.
-BrowserMainLoop* g_current_browser_main_loop = NULL;
+BrowserMainLoop* g_current_browser_main_loop = nullptr;
 
 #if defined(OS_ANDROID)
 bool g_browser_main_loop_shutting_down = false;
@@ -602,7 +595,7 @@ BrowserMainLoop::BrowserMainLoop(const MainFunctionParams& parameters)
 BrowserMainLoop::~BrowserMainLoop() {
   DCHECK_EQ(this, g_current_browser_main_loop);
   ui::Clipboard::DestroyClipboardForCurrentThread();
-  g_current_browser_main_loop = NULL;
+  g_current_browser_main_loop = nullptr;
 }
 
 void BrowserMainLoop::Init() {
@@ -686,6 +679,10 @@ void BrowserMainLoop::EarlyInitialization() {
       RenderProcessHost::SetMaxRendererProcessCount(process_limit);
     }
   }
+
+#if defined(OS_ANDROID)
+  ui::ViewAndroid::SetIsUseZoomForDSFEnabled(IsUseZoomForDSFEnabled());
+#endif
 
   if (parts_)
     parts_->PostEarlyInitialization();
@@ -922,9 +919,6 @@ int BrowserMainLoop::PreCreateThreads() {
       ChildProcessSecurityPolicyImpl::GetInstance();
   for (auto origin : origins)
     policy->AddIsolatedOrigin(origin);
-
-  EVP_set_buggy_rsa_parser(
-      base::FeatureList::IsEnabled(features::kBuggyRSAParser));
 
   return result_code_;
 }
@@ -1276,6 +1270,7 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   host_frame_sink_manager_.reset();
   frame_sink_manager_impl_.reset();
 #endif
+  compositing_mode_reporter_impl_.reset();
 
   // The device monitors are using |system_monitor_| as dependency, so delete
   // them before |system_monitor_| goes away.
@@ -1417,6 +1412,18 @@ viz::FrameSinkManagerImpl* BrowserMainLoop::GetFrameSinkManager() const {
 }
 #endif
 
+void BrowserMainLoop::GetCompositingModeReporter(
+    viz::mojom::CompositingModeReporterRequest request) {
+  bool use_viz =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableViz);
+  if (IsUsingMus() || use_viz) {
+    // TODO(danakj): Support viz/mus.
+  } else {
+    compositing_mode_reporter_bindings_.AddBinding(
+        compositing_mode_reporter_impl_.get(), std::move(request));
+  }
+}
+
 void BrowserMainLoop::StopStartupTracingTimer() {
   startup_trace_timer_.Stop();
 }
@@ -1474,7 +1481,8 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   BrowserGpuChannelHostFactory::Initialize(established_gpu_channel);
 #elif defined(USE_AURA) || defined(OS_MACOSX)
   established_gpu_channel = true;
-  if (!GpuDataManagerImpl::GetInstance()->CanUseGpuBrowserCompositor() ||
+  if (parsed_command_line_.HasSwitch(switches::kDisableGpu) ||
+      parsed_command_line_.HasSwitch(switches::kDisableGpuCompositing) ||
       parsed_command_line_.HasSwitch(switches::kDisableGpuEarlyInit) ||
       is_mus) {
     established_gpu_channel = always_uses_gpu = false;
@@ -1502,9 +1510,13 @@ int BrowserMainLoop::BrowserThreadsStarted() {
       surface_utils::ConnectWithLocalFrameSinkManager(
           host_frame_sink_manager_.get(), frame_sink_manager_impl_.get());
 
+      compositing_mode_reporter_impl_ =
+          std::make_unique<viz::CompositingModeReporterImpl>();
+
       ImageTransportFactory::SetFactory(
           std::make_unique<GpuProcessTransportFactory>(
-              BrowserGpuChannelHostFactory::instance(), GetResizeTaskRunner()));
+              BrowserGpuChannelHostFactory::instance(),
+              compositing_mode_reporter_impl_.get(), GetResizeTaskRunner()));
     }
   }
 
@@ -1558,7 +1570,8 @@ int BrowserMainLoop::BrowserThreadsStarted() {
     // network service.
     resource_dispatcher_host_.reset(new ResourceDispatcherHostImpl(
         base::Bind(&DownloadResourceHandler::Create),
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+        !parsed_command_line_.HasSwitch(switches::kDisableResourceScheduler)));
     GetContentClient()->browser()->ResourceDispatcherHostCreated();
 
     loader_delegate_.reset(new LoaderDelegateImpl());
@@ -1609,7 +1622,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   // When running the GPU thread in-process, avoid optimistically starting it
   // since creating the GPU thread races against creation of the one-and-only
   // ChildProcess instance which is created by the renderer thread.
-  if (GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(NULL) &&
+  if (GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(nullptr) &&
       !established_gpu_channel && always_uses_gpu && !UsingInProcessGpu() &&
       !is_mus) {
     TRACE_EVENT_INSTANT0("gpu", "Post task to launch GPU process",
@@ -1631,6 +1644,15 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 #endif
 
   return result_code_;
+}
+
+// static
+bool BrowserMainLoop::IsUsingMus() {
+#if defined(USE_AURA)
+  return aura::Env::GetInstance()->mode() == aura::Env::Mode::MUS;
+#else
+  return false;
+#endif
 }
 
 bool BrowserMainLoop::UsingInProcessGpu() const {

@@ -431,10 +431,13 @@ void FeatureInfo::InitializeFeatures() {
   // so the extension string is always exposed.
   AddExtensionString("GL_OES_vertex_array_object");
 
-// Texture storage image is only usable with native gpu memory buffer support.
+// Texture storage image is only usable with native gpu memory buffer support,
+// and should be disabled if we aren't supposed to use GMBs as render targets.
 #if defined(OS_MACOSX) || (defined(OS_LINUX) && defined(USE_OZONE))
-  feature_flags_.chromium_texture_storage_image = true;
-  AddExtensionString("GL_CHROMIUM_texture_storage_image");
+  if (!workarounds_.disable_gpu_memory_buffers_as_render_targets) {
+    feature_flags_.chromium_texture_storage_image = true;
+    AddExtensionString("GL_CHROMIUM_texture_storage_image");
+  }
 #endif
 
   if (!disallowed_features_.gpu_memory_manager)
@@ -881,15 +884,14 @@ void FeatureInfo::InitializeFeatures() {
   // Check for multisample support
   if (!workarounds_.disable_chromium_framebuffer_multisample) {
     bool ext_has_multisample =
-        gl::HasExtension(extensions, "GL_EXT_framebuffer_multisample") ||
+        gl::HasExtension(extensions, "GL_ARB_framebuffer_object") ||
+        (gl::HasExtension(extensions, "GL_EXT_framebuffer_multisample") &&
+         gl::HasExtension(extensions, "GL_EXT_framebuffer_blit")) ||
         gl_version_info_->is_es3 || gl_version_info_->is_desktop_core_profile;
     if (gl_version_info_->is_angle || gl_version_info_->is_swiftshader) {
-      feature_flags_.angle_framebuffer_multisample =
+      ext_has_multisample |=
           gl::HasExtension(extensions, "GL_ANGLE_framebuffer_multisample");
-      ext_has_multisample |= feature_flags_.angle_framebuffer_multisample;
     }
-    feature_flags_.use_core_framebuffer_multisample =
-        gl_version_info_->is_es3 || gl_version_info_->is_desktop_core_profile;
     if (ext_has_multisample) {
       feature_flags_.chromium_framebuffer_multisample = true;
       validators_.framebuffer_target.AddValue(GL_READ_FRAMEBUFFER_EXT);

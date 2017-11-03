@@ -26,6 +26,7 @@
           "ash::mojom::SystemTray",
           "ash::mojom::TabletModeController",
           "ash::mojom::TrayAction",
+	  "ash::mojom::VoiceInteractionController",
           "ash::mojom::VpnList",
           "ash::mojom::WallpaperController"
         ],
@@ -43,7 +44,7 @@
         "*": [ "accessibility", "app" ],
         "ash_pref_connector": [ "pref_connector" ],
         "local_state": [ "pref_client" ],
-        "ui": [ "display_test", "window_manager" ],
+        "ui": [ "display_dev", "window_manager" ],
         "touch_hud": [ "mash:launchable" ]
       }
     }

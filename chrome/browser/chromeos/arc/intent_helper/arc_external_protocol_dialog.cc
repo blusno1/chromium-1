@@ -55,6 +55,16 @@ void CloseTabIfNeeded(int render_process_host_id, int routing_id) {
     web_contents->Close();
 }
 
+// Tells whether or not Chrome is an app candidate for the current navigation.
+bool IsChromeAnAppCandidate(
+    const std::vector<mojom::IntentHandlerInfoPtr>& handlers) {
+  for (const auto& handle : handlers) {
+    if (ArcIntentHelperBridge::IsIntentHelperPackage(handle->package_name))
+      return true;
+  }
+  return false;
+}
+
 // Shows |url| in the current tab.
 void OpenUrlInChrome(int render_process_host_id,
                      int routing_id,
@@ -352,6 +362,7 @@ void OnAppIconsReceived(
   WebContents* web_contents =
       tab_util::GetWebContentsByID(render_process_host_id, routing_id);
   show_bubble_cb.Run(nullptr /* anchor_view */, web_contents, app_info,
+                     !IsChromeAnAppCandidate(handlers),
                      base::Bind(OnIntentPickerClosed, render_process_host_id,
                                 routing_id, url, base::Passed(&handlers)));
 }
@@ -398,15 +409,9 @@ void OnUrlHandlerList(int render_process_host_id,
     return;  // the |url| has been handled.
   }
 
-  // Otherwise, retrieve icons of the activities. First, swap |handler| elements
-  // to ensure Chrome is visible in the UI by default. Since this function is
-  // for handling external protocols, Chrome is rarely in the list, but if the
-  // |url| is intent: with fallback or geo:, for example, it may be.
-  std::pair<size_t, size_t> indices;
-  if (ArcNavigationThrottle::IsSwapElementsNeeded(handlers, &indices))
-    std::swap(handlers[indices.first], handlers[indices.second]);
-
-  // Then request the icons.
+  // Otherwise, retrieve icons of the activities. Since this function is for
+  // handling external protocols, Chrome is rarely in the list, but if the |url|
+  // is intent: with fallback or geo:, for example, it may be.
   std::vector<ArcIntentHelperBridge::ActivityName> activities;
   for (const auto& handler : handlers) {
     activities.emplace_back(handler->package_name, handler->activity_name);

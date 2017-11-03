@@ -98,7 +98,7 @@ VRDisplay::VRDisplay(
       display_(std::move(display)),
       submit_frame_client_binding_(this),
       display_client_binding_(this, std::move(request)) {
-  SuspendIfNeeded();  // Initialize SuspendabaleObject.
+  PauseIfNeeded();  // Initialize SuspendabaleObject.
 }
 
 VRDisplay::~VRDisplay() {}
@@ -897,7 +897,7 @@ void VRDisplay::ProcessScheduledAnimations(double timestamp) {
     return;
   }
 
-  if (doc->IsContextSuspended()) {
+  if (doc->IsContextPaused()) {
     // We are currently suspended - try ProcessScheduledAnimations again later
     // when we resume.
     return;

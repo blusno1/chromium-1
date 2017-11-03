@@ -23,13 +23,7 @@ void NotificationDelegate::ButtonClickWithReply(int button_index,
   NOTIMPLEMENTED();
 }
 
-bool NotificationDelegate::SettingsClick() {
-  return false;
-}
-
-bool NotificationDelegate::ShouldDisplaySettingsButton() {
-  return false;
-}
+void NotificationDelegate::SettingsClick() {}
 
 void NotificationDelegate::DisableNotification() {}
 
@@ -60,10 +54,6 @@ HandleNotificationButtonClickDelegate::
 void HandleNotificationButtonClickDelegate::ButtonClick(int button_index) {
   if (!button_callback_.is_null())
     button_callback_.Run(button_index);
-}
-
-bool NotificationDelegate::ShouldDisplayOverFullscreen() const {
-  return false;
 }
 
 }  // namespace message_center

@@ -2277,9 +2277,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kExperimentalKeyboardLockUiDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kExperimentalKeyboardLockUI)},
 #if defined(OS_ANDROID)
-    {"progress-bar-throttle", flag_descriptions::kProgressBarThrottleName,
-     flag_descriptions::kProgressBarThrottleDescription, kOsAndroid,
-     FEATURE_VALUE_TYPE(chrome::android::kProgressBarThrottleFeature)},
     {"progress-bar-completion", flag_descriptions::kProgressBarCompletionName,
      flag_descriptions::kProgressBarCompletionDescription, kOsAndroid,
      MULTI_VALUE_TYPE(kProgressBarCompletionChoices)},
@@ -3606,6 +3603,24 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kExperimentalTabControllerDescription, kOsWin,
      FEATURE_VALUE_TYPE(kExperimentalTabControllerFeature)},
 #endif  // defined(OS_WIN)
+
+#if defined(OS_CHROMEOS)
+    {"ash-enable-keyboard-shortcut-viewer",
+     flag_descriptions::kAshEnableKeyboardShortcutViewerName,
+     flag_descriptions::kAshEnableKeyboardShortcutViewerDescription, kOsCrOS,
+     SINGLE_VALUE_TYPE(ash::switches::kAshEnableKeyboardShortcutViewer)},
+#endif  // OS_CHROMEOS
+
+#if defined(OS_CHROMEOS)
+    {"native-samba", flag_descriptions::kNativeSambaName,
+     flag_descriptions::kNativeSambaDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(features::kNativeSamba)},
+#endif  // defined(OS_CHROMEOS)
+
+    {"enable-modern-media-controls",
+     flag_descriptions::kUseModernMediaControlsName,
+     flag_descriptions::kUseModernMediaControlsDescription, kOsAll,
+     FEATURE_VALUE_TYPE(media::kUseModernMediaControls)}
 
     // NOTE: Adding a new flag requires adding a corresponding entry to enum
     // "LoginCustomFlags" in tools/metrics/histograms/enums.xml. See "Flag

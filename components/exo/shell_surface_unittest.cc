@@ -388,6 +388,34 @@ TEST_F(ShellSurfaceTest, SetGeometry) {
             shell_surface->host_window()->bounds().ToString());
 }
 
+TEST_F(ShellSurfaceTest, SetMinimumSize) {
+  gfx::Size buffer_size(64, 64);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+
+  gfx::Size size(50, 50);
+  shell_surface->SetMinimumSize(size);
+  surface->Attach(buffer.get());
+  surface->Commit();
+  EXPECT_EQ(size, shell_surface->GetMinimumSize());
+}
+
+TEST_F(ShellSurfaceTest, SetMaximumSize) {
+  gfx::Size buffer_size(64, 64);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+
+  gfx::Size size(100, 100);
+  shell_surface->SetMaximumSize(size);
+  surface->Attach(buffer.get());
+  surface->Commit();
+  EXPECT_EQ(size, shell_surface->GetMaximumSize());
+}
+
 TEST_P(ShellSurfaceBoundsModeTest, DefaultDeviceScaleFactorForcedScaleFactor) {
   double scale = 1.5;
   display::Display::SetForceDeviceScaleFactor(scale);
@@ -699,46 +727,6 @@ TEST_F(ShellSurfaceTest, ModalWindowSetSystemModalBeforeCommit) {
   // immediately.
   shell_surface->SetSystemModal(false);
   EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
-}
-
-TEST_F(ShellSurfaceTest, PopupWindow) {
-  Surface parent_surface;
-  ShellSurface parent(&parent_surface);
-  const gfx::Rect parent_bounds(100, 100, 300, 300);
-
-  Buffer parent_buffer(
-      exo_test_helper()->CreateGpuMemoryBuffer(parent_bounds.size()));
-  parent_surface.Attach(&parent_buffer);
-  parent_surface.Commit();
-
-  parent.GetWidget()->SetBounds(parent_bounds);
-
-  Display display;
-  Surface popup_surface;
-  const gfx::Rect popup_bounds(10, 10, 100, 100);
-  std::unique_ptr<ShellSurface> popup = display.CreatePopupShellSurface(
-      &popup_surface, &parent, popup_bounds.origin());
-
-  Buffer popup_buffer(
-      exo_test_helper()->CreateGpuMemoryBuffer(popup_bounds.size()));
-  popup_surface.Attach(&popup_buffer);
-  popup_surface.Commit();
-
-  // Popup bounds are relative to parent.
-  EXPECT_EQ(gfx::Rect(parent_bounds.origin() + popup_bounds.OffsetFromOrigin(),
-                      popup_bounds.size()),
-            popup->GetWidget()->GetWindowBoundsInScreen());
-
-  const gfx::Rect geometry(5, 5, 90, 90);
-  popup->SetGeometry(geometry);
-  popup_surface.Commit();
-
-  // Popup position is fixed, and geometry is relative to it.
-  EXPECT_EQ(gfx::Rect(parent_bounds.origin() +
-                      popup_bounds.OffsetFromOrigin() +
-                      geometry.OffsetFromOrigin(),
-                      geometry.size()),
-            popup->GetWidget()->GetWindowBoundsInScreen());
 }
 
 TEST_F(ShellSurfaceTest, SurfaceShadow) {

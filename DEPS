@@ -26,6 +26,11 @@
 #  git commit -a
 #  git cl upload
 
+gclient_gn_args_file = 'src/build/config/gclient_args.gni'
+gclient_gn_args = [
+  'checkout_nacl',
+]
+
 
 vars = {
   # By default, we should check out everything needed to run on the main
@@ -34,9 +39,18 @@ vars = {
   # purposes.
   'checkout_configuration': 'default',
 
+  # Check out and download nacl by default. This can be disabled e.g. with
+  # custom_vars.
+  'checkout_nacl': True,
+
   # By default, do not check out src-internal. This can be overridden e.g. with
   # custom_vars.
   'checkout_src_internal': False,
+
+  # Fetch the additional packages and files needed to run all of the
+  # telemetry tests. This is false by default as some stuff is only
+  # privately accessible.
+  'checkout_telemetry_dependencies': False,
 
   # libaom provides support for AV1 but the bitstream is not frozen.
   'checkout_libaom': False,
@@ -59,31 +73,31 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '90dabec62f9baa912d5936254ad6e73f20e0a973',
+  'skia_revision': 'e657dc8ce6cb17136dfd21be905b97a3957e957e',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '32a6cc20a29b89674d5892ee75497d5977c887d2',
+  'v8_revision': '10cb9319f831512562cdc8fda5a96493da2e3b7e',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
-  'swarming_revision': 'fe94e7274e40e2e929cdbc8787836f70d38de1f1',
+  'swarming_revision': '5da404cf35b6541f16d8bd6cc3e506df1fda8021',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '1b605ee345902554c2ff1f747cb9360d286e664c',
+  'angle_revision': 'd255123c63c331bc32402eeeb3ecd18d6b18e97d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': '3275a099f3c199b50ff97117aa0184f3e91f8a32',
+  'buildtools_revision': 'df36429e1847e38fda6a7413ba1aa2cbafbc4a34',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling SwiftShader
   # and whatever else without interference from each other.
-  'swiftshader_revision': 'e2febff0f79aab45451c5d20e59e3b55040f2fa6',
+  'swiftshader_revision': '3e2b10936c5304477fdadfa233671738008fe154',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '994f20cfb76f4902491a94c4ef61f55705fc124d',
+  'pdfium_revision': 'd7999f6a794207842544214d015af6f06322157c',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -91,7 +105,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': '664e99a6486c293728097c661332f92bf2d847c6',
+  'boringssl_revision': '696c13bd6ab78011adfe7b775519c8b7cc82b604',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
@@ -115,7 +129,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '14715602e04a3a6e6cf79342f45d2f2595cce0f4',
+  'catapult_revision': '31a230d8b3dc6f371730cd8174224b3b9262d122',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -127,7 +141,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libprotobuf-mutator
   # and whatever else without interference from each other.
-  'libprotobuf-mutator': '52af4b0f6f55f9d8836acb605e902db49eb8e6b4',
+  'libprotobuf-mutator': '3fc43a01d721ef1bacfefed170bc22abf1b8b051',
 }
 
 # Only these hosts are allowed for dependencies in this DEPS file.
@@ -215,8 +229,10 @@ deps = {
   'src/media/cdm/api':
     Var('chromium_git') + '/chromium/cdm.git' + '@' + 'ea5df8e78fbd0a4c24cc3a1f3faefefcd1b45237',
 
-  'src/native_client':
-    Var('chromium_git') + '/native_client/src/native_client.git' + '@' + Var('nacl_revision'),
+  'src/native_client': {
+      'url': Var('chromium_git') + '/native_client/src/native_client.git' + '@' + Var('nacl_revision'),
+      'condition': 'checkout_nacl',
+  },
 
   'src/third_party/SPIRV-Tools/src':
     Var('chromium_git') + '/external/github.com/KhronosGroup/SPIRV-Tools.git' + '@' + '9166854ac93ef81b026e943ccd230fed6c8b8d3c',
@@ -239,6 +255,11 @@ deps = {
       'condition': 'checkout_android',
   },
 
+  'src/third_party/auto/src': {
+      'url': Var('chromium_git') + '/external/github.com/google/auto.git' + '@' + '71802f2ae74dae2744abd999f8434e13055c4ee3',
+      'condition': 'checkout_android',
+  },
+
   'src/third_party/bidichecker':
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
@@ -251,7 +272,7 @@ deps = {
     Var('boringssl_git') + '/boringssl.git' + '@' +  Var('boringssl_revision'),
 
   'src/third_party/breakpad/breakpad':
-    Var('chromium_git') + '/breakpad/breakpad.git' + '@' + '072f86ca83bb7138fe33f10b6380badd9ef7f065',
+    Var('chromium_git') + '/breakpad/breakpad.git' + '@' + '5dad29423e62292c6ff468cabfee4422ba55b18b',
 
   'src/third_party/catapult':
     Var('chromium_git') + '/catapult.git' + '@' + Var('catapult_revision'),
@@ -279,7 +300,7 @@ deps = {
 
   # For Linux and Chromium OS.
   'src/third_party/cros_system_api': {
-      'url': Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '47afcabaf957c013418ef2a33481ec1fe764dc94',
+      'url': Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '5fc40ab72e45c14f5d98b3b2498224079b574ebb',
       'condition': 'checkout_linux',
   },
 
@@ -289,7 +310,7 @@ deps = {
   },
 
   'src/third_party/depot_tools':
-    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '7d1c484ecd93e94c5258dc330602ac37c5efab44',
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'eba8347018794e4bc42b5171a31fa85fbe60e8ce',
 
   # DevTools node modules. Used on Linux buildbots only.
   'src/third_party/devtools-node-modules': {
@@ -311,7 +332,7 @@ deps = {
   },
 
   'src/third_party/ffmpeg':
-    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'f9e8b4275837a3859988351b70d5d1e045838da8',
+    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'c33a5ee8e7b013b43e7fa9e0224857abc21564c2',
 
   'src/third_party/findbugs': {
       'url': Var('chromium_git') + '/chromium/deps/findbugs.git' + '@' + '57f05238d3ac77ea0a194813d3065dd780c6e566',
@@ -353,7 +374,7 @@ deps = {
   # GNU binutils assembler for x86-32.
   'src/third_party/gnu_binutils': {
       'url': Var('chromium_git') + '/native_client/deps/third_party/gnu_binutils.git' + '@' + 'f4003433b61b25666565690caf3d7a7a1a4ec436',
-      'condition': 'checkout_win',
+      'condition': 'checkout_nacl and checkout_win',
   },
 
   'src/third_party/gperf': {
@@ -400,7 +421,7 @@ deps = {
     Var('chromium_git') + '/external/libaddressinput.git' + '@' + '8200a3221282582ca3291ef219257ca4be7426ca',
 
   'src/third_party/libaom/source/libaom': {
-    'url': Var('aomedia_git') + '/aom.git' + '@' +  'd9f2286e4c0bbb0fee5719d151653247939c3847',
+    'url': Var('aomedia_git') + '/aom.git' + '@' +  '7b06dd5dbf11ee1cd65b974a2e46ec33eab65375',
     'condition': 'checkout_libaom',
   },
 
@@ -440,7 +461,7 @@ deps = {
   },
 
   'src/third_party/libvpx/source/libvpx':
-    Var('chromium_git') + '/webm/libvpx.git' + '@' +  '401e6d48bfd3cbf74a41da724d05c989e207662b',
+    Var('chromium_git') + '/webm/libvpx.git' + '@' +  '3ba9a2c8b2341430b001ed531f1eedf7c9b0384f',
 
   'src/third_party/libwebm/source':
     Var('chromium_git') + '/webm/libwebm.git' + '@' + '4956b2dec65352af32dc71bab553acb631c64177',
@@ -470,7 +491,7 @@ deps = {
   # GNU binutils assembler for x86-64.
   'src/third_party/mingw-w64/mingw/bin': {
       'url': Var('chromium_git') + '/native_client/deps/third_party/mingw-w64/mingw/bin.git' + '@' + '3cc8b140b883a9fe4986d12cfd46c16a093d3527',
-      'condition': 'checkout_win',
+      'condition': 'checkout_nacl and checkout_win',
   },
 
   # Graphics buffer allocator for Chrome OS.
@@ -493,7 +514,7 @@ deps = {
   # Binaries for nacl sdk.
   'src/third_party/nacl_sdk_binaries': {
       'url': Var('chromium_git') + '/chromium/deps/nacl_sdk_binaries.git' + '@' + '759dfca03bdc774da7ecbf974f6e2b84f43699a5',
-      'condition': 'checkout_win',
+      'condition': 'checkout_nacl and checkout_win',
   },
 
   'src/third_party/netty-tcnative/src': {
@@ -605,7 +626,7 @@ deps = {
     Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '34842fa3c36988840c89f5bc6a68503175acf7d9',
 
   'src/third_party/webrtc':
-    Var('webrtc_git') + '/src.git' + '@' + '1b8205f9ee8fda98ddb66c464c7e4d8bfa49cf50', # commit position 20237
+    Var('webrtc_git') + '/src.git' + '@' + 'f3850f6933c468625511fc9e2df9aa4b9fefed89', # commit position 20528
 
   'src/third_party/xdg-utils': {
       'url': Var('chromium_git') + '/chromium/deps/xdg-utils.git' + '@' + 'd80274d5869b17b8c9067a1022e4416ee7ed5e0d',
@@ -628,7 +649,7 @@ deps = {
     Var('chromium_git') + '/v8/v8.git' + '@' +  Var('v8_revision'),
 
   'src-internal': {
-    'url': 'https://chrome-internal.googlesource.com/chrome/src-internal.git@2c1ee306751c58c05daf7a5c3756d32d8bf2d8aa',
+    'url': 'https://chrome-internal.googlesource.com/chrome/src-internal.git@b7a6d1e2d57a88133c2749b0d69eea6d073d5d22',
     'condition': 'checkout_src_internal',
   },
 }
@@ -714,6 +735,7 @@ hooks = [
     # anywhere from 30 minutes to 4 hours depending on platform to build.
     'name': 'nacltools',
     'pattern': '.',
+    'condition': 'checkout_nacl',
     'action': [
         'python',
         'src/build/download_nacl_toolchains.py',
@@ -1086,7 +1108,19 @@ hooks = [
     ],
   },
 
+  # Download Telemetry's binary dependencies via conditionals
+  {
+    'name': 'checkout_telemetry_binary_dependencies',
+    'condition': 'checkout_telemetry_dependencies',
+    'pattern': '.',
+    'action': [ 'python',
+                'src/third_party/catapult/telemetry/bin/fetch_telemetry_binary_dependencies',
+    ],
+  },
+
   # Download Telemetry's binary dependencies
+  # TODO(crbug.com/780967) - remove this once the bots are setting the
+  # `checkout_telemetry_dependencies` condition.
   {
     'name': 'fetch_telemetry_binary_dependencies',
     'pattern': '.',
@@ -1436,7 +1470,7 @@ hooks = [
     'action': [
       'python',
       'src/build/fuchsia/update_sdk.py',
-      'f6dffb2fee82a21900fc3a00261dc5844901ea9e',
+      'ff6b8e980b4e5b0c898341e8a467b9c751857e5d',
     ],
   },
 

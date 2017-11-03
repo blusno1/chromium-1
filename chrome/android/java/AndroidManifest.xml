@@ -137,7 +137,7 @@ by a child template that "extends" this file.
         <meta-data android:name="com.samsung.android.sdk.multiwindow.enable"
             android:value="true" />
 
-        {% if min_sdk_version < 24 %}
+        {% if min_sdk_version|int < 24 %}
         <meta-data android:name="com.samsung.android.sdk.multiwindow.multiinstance.enable"
             android:value="true" />
         <meta-data android:name="com.samsung.android.sdk.multiwindow.multiinstance.launchmode"
@@ -405,8 +405,13 @@ by a child template that "extends" this file.
             </intent-filter>
             {% endblock %}
         </activity>
+        <!-- TODO(crbug.com/780674): retarget .Main back to CTA for non-modern APK -->
         <activity-alias android:name="com.google.android.apps.chrome.Main"
+            {% if min_sdk_version|int < 21 %}
+            android:targetActivity="org.chromium.chrome.browser.document.ChromeLauncherActivity"
+            {% else %}
             android:targetActivity="org.chromium.chrome.browser.ChromeTabbedActivity"
+            {% endif %}
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

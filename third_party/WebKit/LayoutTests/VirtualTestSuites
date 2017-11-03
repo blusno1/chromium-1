@@ -280,7 +280,7 @@
   },
   {
     "prefix": "scalefactor200",
-    "base": "external/wpt/css-paint-api/hidpi",
+    "base": "external/wpt/css/css-paint-api/hidpi",
     "args": ["--force-device-scale-factor=2"]
   },
   {
@@ -574,5 +574,10 @@
     "prefix": "reporting",
     "base": "external/wpt/content-security-policy/reporting",
     "args": ["--enable-features=Reporting"]
+  },
+  {
+    "prefix": "mouseevent_fractional",
+    "base": "fast/events",
+    "args": ["--enable-blink-features=FractionalMouseEvent"]
   }
 ]

@@ -120,7 +120,8 @@ void InitLogging(const base::CommandLine& command_line) {
   settings.log_file = log_filename.value().c_str();
   settings.delete_old = logging::DELETE_OLD_LOG_FILE;
   logging::InitLogging(settings);
-  logging::SetLogItems(true, true, true, true);
+  logging::SetLogItems(true /* Process ID */, true /* Thread ID */,
+                       true /* Timestamp */, false /* Tick count */);
 }
 
 }  // namespace
@@ -309,7 +310,7 @@ int ShellMainDelegate::RunProcess(
   std::unique_ptr<BrowserMainRunner> browser_runner_;
 #endif
 
-  base::trace_event::TraceLog::GetInstance()->SetProcessName("Browser");
+  base::trace_event::TraceLog::GetInstance()->set_process_name("Browser");
   base::trace_event::TraceLog::GetInstance()->SetProcessSortIndex(
       kTraceEventBrowserProcessSortIndex);
 

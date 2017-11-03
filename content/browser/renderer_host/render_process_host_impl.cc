@@ -220,6 +220,10 @@
 #include "media/audio/android/audio_manager_android.h"
 #endif
 
+#if !defined(OS_ANDROID)
+#include "content/browser/compositor/image_transport_factory.h"
+#endif
+
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/windows_version.h"
@@ -362,7 +366,7 @@ class SiteProcessMap : public base::SupportsUserData::Data {
     SiteToProcessMap::iterator i = map_.find(site);
     if (i != map_.end())
       return i->second;
-    return NULL;
+    return nullptr;
   }
 
   void RemoveProcess(RenderProcessHost* host) {
@@ -827,6 +831,15 @@ class SiteProcessCountTracker : public base::SupportsUserData::Data,
         NOTREACHED();
         continue;
       }
+
+      // It's possible that |host| has become unsuitable for hosting
+      // |site_url|, for example if it was reused by a navigation to a
+      // different site, and |site_url| requires a dedicated process.  Do not
+      // allow such hosts to be reused.  See https://crbug.com/780661.
+      if (!RenderProcessHostImpl::IsSuitableHost(
+              host, host->GetBrowserContext(), site_url))
+        continue;
+
       if (host->VisibleWidgetCount())
         foreground_processes->insert(host);
       else
@@ -1788,23 +1801,17 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
 
   AddUIThreadInterface(
       registry.get(),
-      base::Bind(&PermissionServiceContext::CreateService,
-                 base::Unretained(permission_service_context_.get())));
-
-  AddUIThreadInterface(
-      registry.get(),
-      base::Bind(
-          &PaymentAppContextImpl::CreatePaymentManager,
-          base::Unretained(storage_partition_impl_->GetPaymentAppContext())));
-
-  AddUIThreadInterface(
-      registry.get(),
       base::Bind(&RenderProcessHostImpl::CreateOffscreenCanvasProvider,
                  base::Unretained(this)));
 
   AddUIThreadInterface(registry.get(),
                        base::Bind(&RenderProcessHostImpl::BindFrameSinkProvider,
                                   base::Unretained(this)));
+
+  AddUIThreadInterface(
+      registry.get(),
+      base::Bind(&RenderProcessHostImpl::BindCompositingModeReporter,
+                 base::Unretained(this)));
 
   AddUIThreadInterface(
       registry.get(),
@@ -1903,12 +1910,6 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
   registry->AddInterface(
       base::Bind(&CreateReportingServiceProxy, storage_partition_impl_));
 
-  // This is to support usage of WebSockets in cases in which there is no
-  // associated RenderFrame (e.g., Shared Workers).
-  AddUIThreadInterface(registry.get(),
-                       base::Bind(&WebSocketManager::CreateWebSocket, GetID(),
-                                  MSG_ROUTING_NONE));
-
   AddUIThreadInterface(registry.get(), base::Bind(&FieldTrialRecorder::Create));
 
   associated_interfaces_.reset(new AssociatedInterfaceRegistryImpl());
@@ -2002,6 +2003,12 @@ void RenderProcessHostImpl::CreateOffscreenCanvasProvider(
 void RenderProcessHostImpl::BindFrameSinkProvider(
     mojom::FrameSinkProviderRequest request) {
   frame_sink_provider_.Bind(std::move(request));
+}
+
+void RenderProcessHostImpl::BindCompositingModeReporter(
+    viz::mojom::CompositingModeReporterRequest request) {
+  BrowserMainLoop::GetInstance()->GetCompositingModeReporter(
+      std::move(request));
 }
 
 void RenderProcessHostImpl::BindSharedBitmapAllocationNotifier(
@@ -2515,7 +2522,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableDistanceFieldText,
     switches::kDisableFileSystem,
     switches::kDisableGestureRequirementForPresentation,
-    switches::kDisableGpuCompositing,
     switches::kDisableGpuMemoryBufferVideoFrames,
     switches::kDisableGpuVsync,
     switches::kDisableLowResTiling,
@@ -2722,6 +2728,19 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
       !browser_cmd.HasSwitch(switches::kDisableDatabases)) {
     renderer_cmd->AppendSwitch(switches::kDisableDatabases);
   }
+
+#if !defined(OS_ANDROID)
+  // If gpu compositing is not being used, tell the renderer at startup. This
+  // is inherently racey, as it may change while the renderer is being launched,
+  // but the renderer will hear about the correct state eventually. This
+  // optimizes the common case to avoid wasted work.
+  // Note: There is no ImageTransportFactory with Mash or Viz.
+  // TODO(danakj): Get this info somewhere for viz mode.
+  if (!browser_cmd.HasSwitch(switches::kIsRunningInMash) &&
+      !browser_cmd.HasSwitch(switches::kEnableViz) &&
+      ImageTransportFactory::GetInstance()->IsGpuCompositingDisabled())
+    renderer_cmd->AppendSwitch(switches::kDisableGpuCompositing);
+#endif
 
   // Add kWaitForDebugger to let renderer process wait for a debugger.
   if (browser_cmd.HasSwitch(switches::kWaitForDebuggerChildren)) {
@@ -3118,9 +3137,8 @@ void RenderProcessHostImpl::EnableAudioDebugRecordings(
 
   // Enable AEC dump for each registered consumer.
   base::FilePath file_with_extensions = GetAecDumpFilePathWithExtensions(file);
-  for (std::vector<int>::iterator it = aec_dump_consumers_.begin();
-       it != aec_dump_consumers_.end(); ++it) {
-    EnableAecDumpForId(file_with_extensions, *it);
+  for (int id : aec_dump_consumers_) {
+    EnableAecDumpForId(file_with_extensions, id);
   }
 }
 
@@ -3155,26 +3173,21 @@ void RenderProcessHostImpl::SetEchoCanceller3(bool enable) {
   // Piggybacking on AEC dumps.
   // TODO(hlundin): Change name for aec_dump_consumers_;
   // http://crbug.com/709919.
-  for (std::vector<int>::iterator it = aec_dump_consumers_.begin();
-       it != aec_dump_consumers_.end(); ++it) {
-    Send(new AudioProcessingMsg_EnableAec3(*it, enable));
+  for (int id : aec_dump_consumers_) {
+    Send(new AudioProcessingMsg_EnableAec3(id, enable));
   }
 }
 
 void RenderProcessHostImpl::SetWebRtcLogMessageCallback(
     base::Callback<void(const std::string&)> callback) {
-#if BUILDFLAG(ENABLE_WEBRTC)
   BrowserMainLoop::GetInstance()->media_stream_manager()->
       RegisterNativeLogCallback(GetID(), callback);
-#endif
 }
 
 void RenderProcessHostImpl::ClearWebRtcLogMessageCallback() {
-#if BUILDFLAG(ENABLE_WEBRTC)
   BrowserMainLoop::GetInstance()
       ->media_stream_manager()
       ->UnregisterNativeLogCallback(GetID());
-#endif
 }
 
 RenderProcessHostImpl::WebRtcStopRtpDumpCallback
@@ -3197,7 +3210,7 @@ RenderProcessHostImpl::StartRtpDump(
   }
   return stop_rtp_dump_callback_;
 }
-#endif
+#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 IPC::ChannelProxy* RenderProcessHostImpl::GetChannel() {
   return channel_.get();
@@ -3420,7 +3433,7 @@ RenderProcessHost* RenderProcessHost::GetExistingProcessHost(
     return suitable_renderers[random_index];
   }
 
-  return NULL;
+  return nullptr;
 }
 
 // static
@@ -3468,7 +3481,7 @@ RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSite(
     RecordAction(
         base::UserMetricsAction("BindingsMismatch_GetProcessHostPerSite"));
     map->RemoveProcess(host);
-    host = NULL;
+    host = nullptr;
   }
 
   return host;
@@ -3687,6 +3700,8 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
   frame_sink_provider_.Unbind();
   if (renderer_host_binding_.is_bound())
     renderer_host_binding_.Unbind();
+
+  compositing_mode_reporter_.reset();
 
   shared_bitmap_allocation_notifier_impl_.ChildDied();
 
@@ -4033,13 +4048,10 @@ void RenderProcessHostImpl::RegisterAecDumpConsumerOnUIThread(int id) {
 
 void RenderProcessHostImpl::UnregisterAecDumpConsumerOnUIThread(int id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  for (std::vector<int>::iterator it = aec_dump_consumers_.begin();
-       it != aec_dump_consumers_.end(); ++it) {
-    if (*it == id) {
-      aec_dump_consumers_.erase(it);
-      break;
-    }
-  }
+  auto it =
+      std::find(aec_dump_consumers_.begin(), aec_dump_consumers_.end(), id);
+  if (it != aec_dump_consumers_.end())
+    aec_dump_consumers_.erase(it);
 }
 
 void RenderProcessHostImpl::EnableAecDumpForId(const base::FilePath& file,

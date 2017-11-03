@@ -68,33 +68,16 @@ void ServiceWorkerDispatcher::OnMessageReceived(const IPC::Message& msg) {
   // handler in ServiceWorkerMessageFilter to release references passed from
   // the browser process in case we fail to post task to the thread.
   IPC_BEGIN_MESSAGE_MAP(ServiceWorkerDispatcher, msg)
-    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DidGetNavigationPreloadState,
-                        OnDidGetNavigationPreloadState)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DidSetNavigationPreloadHeader,
                         OnDidSetNavigationPreloadHeader)
-    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_GetNavigationPreloadStateError,
-                        OnGetNavigationPreloadStateError)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_SetNavigationPreloadHeaderError,
                         OnSetNavigationPreloadHeaderError)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_ServiceWorkerStateChanged,
                         OnServiceWorkerStateChanged)
-    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_UpdateFound,
-                        OnUpdateFound)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_CountFeature, OnCountFeature)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   DCHECK(handled) << "Unhandled message:" << msg.type();
-}
-
-void ServiceWorkerDispatcher::GetNavigationPreloadState(
-    int provider_id,
-    int64_t registration_id,
-    std::unique_ptr<WebGetNavigationPreloadStateCallbacks> callbacks) {
-  DCHECK(callbacks);
-  int request_id =
-      get_navigation_preload_state_callbacks_.Add(std::move(callbacks));
-  thread_safe_sender_->Send(new ServiceWorkerHostMsg_GetNavigationPreloadState(
-      CurrentWorkerId(), request_id, provider_id, registration_id));
 }
 
 void ServiceWorkerDispatcher::SetNavigationPreloadHeader(
@@ -154,7 +137,7 @@ ServiceWorkerDispatcher::GetOrCreateThreadSpecificInstance(
     base::SingleThreadTaskRunner* main_thread_task_runner) {
   if (g_dispatcher_tls.Pointer()->Get() == kHasBeenDeleted) {
     NOTREACHED() << "Re-instantiating TLS ServiceWorkerDispatcher.";
-    g_dispatcher_tls.Pointer()->Set(NULL);
+    g_dispatcher_tls.Pointer()->Set(nullptr);
   }
   if (g_dispatcher_tls.Pointer()->Get())
     return static_cast<ServiceWorkerDispatcher*>(
@@ -169,7 +152,7 @@ ServiceWorkerDispatcher::GetOrCreateThreadSpecificInstance(
 
 ServiceWorkerDispatcher* ServiceWorkerDispatcher::GetThreadSpecificInstance() {
   if (g_dispatcher_tls.Pointer()->Get() == kHasBeenDeleted)
-    return NULL;
+    return nullptr;
   return static_cast<ServiceWorkerDispatcher*>(
       g_dispatcher_tls.Pointer()->Get());
 }
@@ -270,20 +253,6 @@ ServiceWorkerDispatcher::GetOrCreateRegistrationForServiceWorkerClient(
   return registration;
 }
 
-void ServiceWorkerDispatcher::OnDidGetNavigationPreloadState(
-    int thread_id,
-    int request_id,
-    const NavigationPreloadState& state) {
-  WebGetNavigationPreloadStateCallbacks* callbacks =
-      get_navigation_preload_state_callbacks_.Lookup(request_id);
-  DCHECK(callbacks);
-  if (!callbacks)
-    return;
-  callbacks->OnSuccess(blink::WebNavigationPreloadState(
-      state.enabled, blink::WebString::FromUTF8(state.header)));
-  get_navigation_preload_state_callbacks_.Remove(request_id);
-}
-
 void ServiceWorkerDispatcher::OnDidSetNavigationPreloadHeader(int thread_id,
                                                               int request_id) {
   WebSetNavigationPreloadHeaderCallbacks* callbacks =
@@ -293,21 +262,6 @@ void ServiceWorkerDispatcher::OnDidSetNavigationPreloadHeader(int thread_id,
     return;
   callbacks->OnSuccess();
   set_navigation_preload_header_callbacks_.Remove(request_id);
-}
-
-void ServiceWorkerDispatcher::OnGetNavigationPreloadStateError(
-    int thread_id,
-    int request_id,
-    blink::mojom::ServiceWorkerErrorType error_type,
-    const std::string& message) {
-  WebGetNavigationPreloadStateCallbacks* callbacks =
-      get_navigation_preload_state_callbacks_.Lookup(request_id);
-  DCHECK(callbacks);
-  if (!callbacks)
-    return;
-  callbacks->OnError(
-      WebServiceWorkerError(error_type, blink::WebString::FromUTF8(message)));
-  get_navigation_preload_state_callbacks_.Remove(request_id);
 }
 
 void ServiceWorkerDispatcher::OnSetNavigationPreloadHeaderError(
@@ -336,17 +290,6 @@ void ServiceWorkerDispatcher::OnServiceWorkerStateChanged(
   WorkerObjectMap::iterator worker = service_workers_.find(handle_id);
   if (worker != service_workers_.end())
     worker->second->OnStateChanged(state);
-}
-
-void ServiceWorkerDispatcher::OnUpdateFound(
-    int thread_id,
-    int registration_handle_id) {
-  TRACE_EVENT0("ServiceWorker",
-               "ServiceWorkerDispatcher::OnUpdateFound");
-  RegistrationObjectMap::iterator found =
-      registrations_.find(registration_handle_id);
-  if (found != registrations_.end())
-    found->second->OnUpdateFound();
 }
 
 void ServiceWorkerDispatcher::OnCountFeature(int thread_id,

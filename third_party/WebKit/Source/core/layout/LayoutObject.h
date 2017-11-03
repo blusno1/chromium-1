@@ -733,6 +733,12 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return LocalSVGTransform();
   }
 
+  // Returns the reference box for clip path layout. Note the actual bounding
+  // box of the clip path can be bigger or smaller than the reference.
+  FloatRect LocalReferenceBoxForClipPath() const;
+  // Returns the bounding box of the clip path in local coordinates.
+  Optional<FloatRect> LocalClipPathBoundingBox() const;
+
   // SVG uses FloatPoint precise hit testing, and passes the point in parent
   // coordinates instead of in paint invalidation container coordinates.
   // Eventually the rest of the layout tree will move to a similar model.
@@ -2767,35 +2773,6 @@ inline void MakeMatrixRenderable(TransformationMatrix& matrix,
                                  bool has3d_rendering) {
   if (!has3d_rendering)
     matrix.MakeAffine();
-}
-
-inline int AdjustForAbsoluteZoom(int value, LayoutObject* layout_object) {
-  DCHECK(layout_object);
-  return AdjustForAbsoluteZoom(value, layout_object->StyleRef());
-}
-
-inline LayoutUnit AdjustLayoutUnitForAbsoluteZoom(LayoutUnit value,
-                                                  LayoutObject& layout_object) {
-  return AdjustLayoutUnitForAbsoluteZoom(value, layout_object.StyleRef());
-}
-
-inline void AdjustFloatQuadForAbsoluteZoom(FloatQuad& quad,
-                                           const LayoutObject& layout_object) {
-  float zoom = layout_object.StyleRef().EffectiveZoom();
-  if (zoom != 1)
-    quad.Scale(1 / zoom, 1 / zoom);
-}
-
-inline void AdjustFloatRectForAbsoluteZoom(FloatRect& rect,
-                                           const LayoutObject& layout_object) {
-  float zoom = layout_object.StyleRef().EffectiveZoom();
-  if (zoom != 1)
-    rect.Scale(1 / zoom, 1 / zoom);
-}
-
-inline double AdjustScrollForAbsoluteZoom(double value,
-                                          LayoutObject& layout_object) {
-  return AdjustScrollForAbsoluteZoom(value, layout_object.StyleRef());
 }
 
 enum class LayoutObjectSide {

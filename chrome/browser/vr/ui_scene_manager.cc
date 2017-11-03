@@ -13,6 +13,7 @@
 #include "chrome/browser/vr/databinding/vector_binding.h"
 #include "chrome/browser/vr/elements/button.h"
 #include "chrome/browser/vr/elements/content_element.h"
+#include "chrome/browser/vr/elements/controller.h"
 #include "chrome/browser/vr/elements/draw_phase.h"
 #include "chrome/browser/vr/elements/exclusive_screen_toast.h"
 #include "chrome/browser/vr/elements/exit_prompt.h"
@@ -20,8 +21,10 @@
 #include "chrome/browser/vr/elements/full_screen_rect.h"
 #include "chrome/browser/vr/elements/grid.h"
 #include "chrome/browser/vr/elements/invisible_hit_target.h"
+#include "chrome/browser/vr/elements/laser.h"
 #include "chrome/browser/vr/elements/linear_layout.h"
 #include "chrome/browser/vr/elements/rect.h"
+#include "chrome/browser/vr/elements/reticle.h"
 #include "chrome/browser/vr/elements/spinner.h"
 #include "chrome/browser/vr/elements/system_indicator.h"
 #include "chrome/browser/vr/elements/text.h"
@@ -45,7 +48,6 @@
 #include "chrome/browser/vr/ui_scene_constants.h"
 #include "chrome/browser/vr/vector_icons/vector_icons.h"
 #include "chrome/browser/vr/vr_gl_util.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -166,6 +168,7 @@ UiSceneManager::UiSceneManager(UiBrowserInterface* browser,
   CreateSplashScreen(model);
   CreateUnderDevelopmentNotice();
   CreateVoiceSearchUiGroup(model);
+  CreateController(model);
 
   ConfigureScene();
 }
@@ -267,7 +270,7 @@ void UiSceneManager::CreateSystemIndicators() {
       base::MakeUnique<LinearLayout>(LinearLayout::kRight);
   indicator_layout->set_name(kIndicatorLayout);
   indicator_layout->set_hit_testable(false);
-  indicator_layout->set_y_anchoring(YAnchoring::YTOP);
+  indicator_layout->set_y_anchoring(TOP);
   indicator_layout->SetTranslate(0, kIndicatorVerticalOffset,
                                  kIndicatorDistanceOffset);
   indicator_layout->set_margin(kIndicatorGap);
@@ -457,7 +460,7 @@ void UiSceneManager::CreateSplashScreen(Model* model) {
   timeout_text->set_draw_phase(kPhaseOverlayForeground);
   timeout_text->SetVisible(true);
   timeout_text->SetSize(kTimeoutButtonTextWidth, kTimeoutButtonTextHeight);
-  timeout_text->set_y_anchoring(YBOTTOM);
+  timeout_text->set_y_anchoring(BOTTOM);
   timeout_text->SetTranslate(0, -kTimeoutButtonTextVerticalOffset, 0);
   scene_->AddUiElement(kWebVrTimeoutMessageButton, std::move(timeout_text));
 }
@@ -474,7 +477,7 @@ void UiSceneManager::CreateUnderDevelopmentNotice() {
   text->SetTranslate(0, -kUnderDevelopmentNoticeVerticalOffsetM, 0);
   text->SetRotate(1, 0, 0, kUnderDevelopmentNoticeRotationRad);
   text->SetVisible(true);
-  text->set_y_anchoring(YAnchoring::YBOTTOM);
+  text->set_y_anchoring(BOTTOM);
   control_elements_.push_back(text.get());
   scene_->AddUiElement(kUrlBar, std::move(text));
 }
@@ -552,20 +555,23 @@ void UiSceneManager::CreateViewportAwareRoot() {
 }
 
 void UiSceneManager::CreateVoiceSearchUiGroup(Model* model) {
-  std::unique_ptr<UiElement> element;
-
-  auto voice_search_button = base::MakeUnique<Button>(
+  std::unique_ptr<UiElement> element = base::MakeUnique<Button>(
       base::Bind(&UiSceneManager::OnVoiceSearchButtonClicked,
                  base::Unretained(this)),
       base::MakeUnique<VectorIconButtonTexture>(vector_icons::kMicrophoneIcon));
-  voice_search_button_ = voice_search_button.get();
-  element = std::move(voice_search_button);
   element->set_name(kVoiceSearchButton);
   element->set_draw_phase(kPhaseForeground);
   element->SetTranslate(kVoiceSearchButtonXOffset, 0.f, 0.f);
   element->SetSize(kCloseButtonWidth, kCloseButtonHeight);
-  element->set_x_anchoring(XAnchoring::XRIGHT);
-  control_elements_.push_back(element.get());
+  element->set_x_anchoring(RIGHT);
+  element->AddBinding(base::MakeUnique<Binding<bool>>(
+      base::Bind(
+          [](Model* m) {
+            return !m->incognito && m->experimental_features_enabled;
+          },
+          base::Unretained(model)),
+      base::Bind([](UiElement* e, const bool& v) { e->SetVisible(v); },
+                 element.get())));
   scene_->AddUiElement(kUrlBar, std::move(element));
 
   auto speech_recognition_prompt = base::MakeUnique<UiElement>();
@@ -623,6 +629,54 @@ void UiSceneManager::CreateVoiceSearchUiGroup(Model* model) {
   scene_->AddUiElement(kSpeechRecognitionPrompt, std::move(element));
 }
 
+void UiSceneManager::CreateController(Model* model) {
+  auto group = base::MakeUnique<UiElement>();
+  group->set_name(kControllerGroup);
+  group->SetVisible(true);
+  group->set_hit_testable(false);
+  group->AddBinding(base::MakeUnique<Binding<bool>>(
+      base::Bind(
+          [](Model* m, UiSceneManager* mgr) {
+            bool browsing_mode =
+                !mgr->web_vr_mode() && !mgr->showing_web_vr_splash_screen();
+            return browsing_mode || m->web_vr_timeout_state == kWebVrTimedOut;
+          },
+          base::Unretained(model), base::Unretained(this)),
+      base::Bind([](UiElement* v, const bool& b) { v->SetVisible(b); },
+                 base::Unretained(group.get()))));
+  scene_->AddUiElement(kRoot, std::move(group));
+
+  auto controller = base::MakeUnique<Controller>();
+  controller->set_draw_phase(kPhaseForeground);
+  controller->AddBinding(VR_BIND_FUNC(gfx::Transform, Model, model,
+                                      controller.transform, Controller,
+                                      controller.get(), set_local_transform));
+  controller->AddBinding(
+      VR_BIND_FUNC(bool, Model, model,
+                   controller.touchpad_button_state == UiInputManager::DOWN,
+                   Controller, controller.get(), set_touchpad_button_pressed));
+  controller->AddBinding(VR_BIND_FUNC(
+      bool, Model, model, controller.app_button_state == UiInputManager::DOWN,
+      Controller, controller.get(), set_app_button_pressed));
+  controller->AddBinding(VR_BIND_FUNC(
+      bool, Model, model, controller.home_button_state == UiInputManager::DOWN,
+      Controller, controller.get(), set_home_button_pressed));
+  controller->AddBinding(VR_BIND_FUNC(float, Model, model, controller.opacity,
+                                      Controller, controller.get(),
+                                      SetOpacity));
+  scene_->AddUiElement(kControllerGroup, std::move(controller));
+
+  auto laser = base::MakeUnique<Laser>(model);
+  laser->set_draw_phase(kPhaseForeground);
+  laser->AddBinding(VR_BIND_FUNC(float, Model, model, controller.opacity, Laser,
+                                 laser.get(), SetOpacity));
+  scene_->AddUiElement(kControllerGroup, std::move(laser));
+
+  auto reticle = base::MakeUnique<Reticle>(scene_, model);
+  reticle->set_draw_phase(kPhaseForeground);
+  scene_->AddUiElement(kControllerGroup, std::move(reticle));
+}
+
 void UiSceneManager::CreateUrlBar(Model* model) {
   auto url_bar = base::MakeUnique<UrlBar>(
       512,
@@ -645,7 +699,7 @@ void UiSceneManager::CreateUrlBar(Model* model) {
   indicator_bg->SetTranslate(0, kLoadingIndicatorVerticalOffset,
                              kLoadingIndicatorDepthOffset);
   indicator_bg->SetSize(kLoadingIndicatorWidth, kLoadingIndicatorHeight);
-  indicator_bg->set_y_anchoring(YAnchoring::YTOP);
+  indicator_bg->set_y_anchoring(TOP);
   indicator_bg->SetTransitionedProperties({OPACITY});
   indicator_bg->set_corner_radius(kLoadingIndicatorHeight * 0.5f);
   indicator_bg->AddBinding(VR_BIND_FUNC(bool, Model, model, loading, Rect,
@@ -658,7 +712,7 @@ void UiSceneManager::CreateUrlBar(Model* model) {
   auto indicator_fg = base::MakeUnique<Rect>();
   indicator_fg->set_draw_phase(kPhaseForeground);
   indicator_fg->set_name(kLoadingIndicatorForeground);
-  indicator_fg->set_x_anchoring(XLEFT);
+  indicator_fg->set_x_anchoring(LEFT);
   indicator_fg->set_corner_radius(kLoadingIndicatorHeight * 0.5f);
   indicator_fg->set_hit_testable(false);
   BindColor(this, indicator_fg.get(),
@@ -681,8 +735,9 @@ void UiSceneManager::CreateSuggestionList(Model* model) {
 
   layout->set_name(kSuggestionLayout);
   layout->set_hit_testable(false);
-  layout->set_y_anchoring(YAnchoring::YTOP);
-  layout->SetTranslate(0, 0.5, 0.2);
+  layout->set_y_anchoring(BOTTOM);
+  layout->set_y_centering(TOP);
+  layout->SetTranslate(0, -0.05f, 0);
   layout->set_margin(kSuggestionGap);
   layout->SetVisible(true);
 
@@ -949,10 +1004,6 @@ void UiSceneManager::ConfigureScene() {
   bool controls_visible = browsing_mode && !fullscreen_ && !prompting_to_exit_;
   for (UiElement* element : control_elements_) {
     element->SetVisible(controls_visible);
-  }
-
-  if (!base::FeatureList::IsEnabled(features::kExperimentalVRFeatures)) {
-    voice_search_button_->SetVisible(false);
   }
 
   // Close button is a special control element that needs to be hidden when in

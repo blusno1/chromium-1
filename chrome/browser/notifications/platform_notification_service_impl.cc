@@ -29,6 +29,11 @@
 #include "chrome/browser/safe_browsing/ping_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
@@ -47,7 +52,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 #include "url/url_constants.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
@@ -85,6 +90,42 @@ void ReportNotificationImageOnIOThread(
     return;
   safe_browsing_service->ping_manager()->ReportNotificationImage(
       profile, safe_browsing_service->database_manager(), origin, image);
+}
+
+// Whether a web notification should be displayed when chrome is in full
+// screen mode.
+static bool ShouldDisplayWebNotificationOnFullScreen(Profile* profile,
+                                                     const GURL& origin) {
+#if defined(OS_ANDROID)
+  NOTIMPLEMENTED();
+  return false;
+#endif  // defined(OS_ANDROID)
+
+  // Check to see if this notification comes from a webpage that is displaying
+  // fullscreen content.
+  for (auto* browser : *BrowserList::GetInstance()) {
+    // Only consider the browsers for the profile that created the notification
+    if (browser->profile() != profile)
+      continue;
+
+    const content::WebContents* active_contents =
+        browser->tab_strip_model()->GetActiveWebContents();
+    if (!active_contents)
+      continue;
+
+    // Check to see if
+    //  (a) the active tab in the browser shares its origin with the
+    //      notification.
+    //  (b) the browser is fullscreen
+    //  (c) the browser has focus.
+    if (active_contents->GetURL().GetOrigin() == origin &&
+        browser->exclusive_access_manager()->context()->IsFullscreen() &&
+        browser->window()->IsActive()) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace
@@ -423,6 +464,15 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
   DCHECK_EQ(notification_data.actions.size(),
             notification_resources.action_icons.size());
 
+  message_center::RichNotificationData optional_fields;
+#if defined(OS_CHROMEOS)
+  optional_fields.settings_button_handler =
+      message_center::SettingsButtonHandler::TRAY;
+#else
+  optional_fields.settings_button_handler =
+      message_center::SettingsButtonHandler::DELEGATE;
+#endif
+
   // TODO(peter): Handle different screen densities instead of always using the
   // 1x bitmap - crbug.com/585815.
   // TODO(estade): The RichNotificationData should set |clickable| if there's a
@@ -432,7 +482,7 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
       notification_data.title, notification_data.body,
       gfx::Image::CreateFrom1xBitmap(notification_resources.notification_icon),
       base::UTF8ToUTF16(origin.host()), origin, NotifierId(origin),
-      message_center::RichNotificationData(), delegate);
+      optional_fields, delegate);
 
   notification.set_context_message(
       DisplayNameForContextMessage(profile, origin));
@@ -440,6 +490,10 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
   notification.set_timestamp(notification_data.timestamp);
   notification.set_renotify(notification_data.renotify);
   notification.set_silent(notification_data.silent);
+  if (ShouldDisplayWebNotificationOnFullScreen(profile, origin)) {
+    notification.set_fullscreen_visibility(
+        message_center::FullscreenVisibility::OVER_USER);
+  }
 
   if (!notification_resources.image.drawsNothing()) {
     notification.set_type(message_center::NOTIFICATION_TYPE_IMAGE);

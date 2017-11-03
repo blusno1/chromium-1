@@ -584,8 +584,10 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   settings.disallow_non_exact_resource_reuse =
       cmd.HasSwitch(switches::kDisallowNonExactResourceReuse);
 
-  settings.wait_for_all_pipeline_stages_before_draw =
-      cmd.HasSwitch(cc::switches::kRunAllCompositorStagesBeforeDraw);
+  if (cmd.HasSwitch(cc::switches::kRunAllCompositorStagesBeforeDraw)) {
+    settings.wait_for_all_pipeline_stages_before_draw = true;
+    settings.enable_latency_recovery = false;
+  }
 
   settings.enable_image_animations =
       cmd.HasSwitch(switches::kEnableCompositorImageAnimations);
@@ -1222,27 +1224,15 @@ void RenderWidgetCompositor::RequestNewLayerTreeFrameSink() {
   // the CreateLayerTreeFrameSink task.
   if (delegate_->IsClosing())
     return;
-
-#ifdef OS_ANDROID
-  LOG_IF(FATAL, attempt_software_fallback_)
-      << "Android does not support fallback frame sinks.";
-#endif
-
   delegate_->RequestNewLayerTreeFrameSink(
-      attempt_software_fallback_,
       base::Bind(&RenderWidgetCompositor::SetLayerTreeFrameSink,
                  weak_factory_.GetWeakPtr()));
 }
 
 void RenderWidgetCompositor::DidInitializeLayerTreeFrameSink() {
-  attempt_software_fallback_ = false;
 }
 
 void RenderWidgetCompositor::DidFailToInitializeLayerTreeFrameSink() {
-  LOG_IF(FATAL, attempt_software_fallback_)
-      << "Failed to create a fallback LayerTreeFrameSink.";
-
-  attempt_software_fallback_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&RenderWidgetCompositor::RequestNewLayerTreeFrameSink,

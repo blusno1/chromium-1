@@ -335,9 +335,11 @@ ResourceDispatcherHost* ResourceDispatcherHost::Get() {
 
 ResourceDispatcherHostImpl::ResourceDispatcherHostImpl(
     CreateDownloadHandlerIntercept download_handler_intercept,
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_thread_runner)
+    const scoped_refptr<base::SingleThreadTaskRunner>& io_thread_runner,
+    bool enable_resource_scheduler)
     : request_id_(-1),
       is_shutdown_(false),
+      enable_resource_scheduler_(enable_resource_scheduler),
       num_in_flight_requests_(0),
       max_num_in_flight_requests_(base::SharedMemory::GetHandleLimit()),
       max_num_in_flight_requests_per_process_(static_cast<int>(
@@ -380,14 +382,15 @@ ResourceDispatcherHostImpl::ResourceDispatcherHostImpl(
 // the main thread and the IO thread are the same for unittests.
 ResourceDispatcherHostImpl::ResourceDispatcherHostImpl()
     : ResourceDispatcherHostImpl(CreateDownloadHandlerIntercept(),
-                                 base::ThreadTaskRunnerHandle::Get()) {}
+                                 base::ThreadTaskRunnerHandle::Get(),
+                                 /* enable_resource_scheduler */ true) {}
 
 ResourceDispatcherHostImpl::~ResourceDispatcherHostImpl() {
   DCHECK(outstanding_requests_stats_map_.empty());
   DCHECK(outstanding_requests_per_tab_map_.empty());
   DCHECK(g_resource_dispatcher_host);
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
-  g_resource_dispatcher_host = NULL;
+  g_resource_dispatcher_host = nullptr;
 }
 
 // static
@@ -579,7 +582,7 @@ ResourceDispatcherHostImpl::CreateLoginDelegate(
     ResourceLoader* loader,
     net::AuthChallengeInfo* auth_info) {
   if (!delegate_)
-    return NULL;
+    return nullptr;
 
   return delegate_->CreateLoginDelegate(auth_info, loader->request());
 }
@@ -738,11 +741,7 @@ std::unique_ptr<net::ClientCertStore>
 }
 
 void ResourceDispatcherHostImpl::OnInit() {
-  // In some tests |delegate_| does not get set, when that happens assume the
-  // scheduler is enabled.
-  bool enable_resource_scheduler =
-      delegate_ ? delegate_->ShouldUseResourceScheduler() : true;
-  scheduler_.reset(new ResourceScheduler(enable_resource_scheduler));
+  scheduler_.reset(new ResourceScheduler(enable_resource_scheduler_));
 }
 
 void ResourceDispatcherHostImpl::OnShutdown() {
@@ -1091,8 +1090,8 @@ void ResourceDispatcherHostImpl::BeginRequest(
     return;
   }
 
-  ResourceContext* resource_context = NULL;
-  net::URLRequestContext* request_context = NULL;
+  ResourceContext* resource_context = nullptr;
+  net::URLRequestContext* request_context = nullptr;
   requester_info->GetContexts(request_data.resource_type, &resource_context,
                               &request_context);
 
@@ -1208,8 +1207,8 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
       IsBrowserSideNavigationEnabled() &&
       IsResourceTypeFrame(request_data.resource_type);
 
-  ResourceContext* resource_context = NULL;
-  net::URLRequestContext* request_context = NULL;
+  ResourceContext* resource_context = nullptr;
+  net::URLRequestContext* request_context = nullptr;
   requester_info->GetContexts(request_data.resource_type, &resource_context,
                               &request_context);
 
@@ -2412,7 +2411,7 @@ net::URLRequest* ResourceDispatcherHostImpl::GetURLRequest(
     const GlobalRequestID& id) {
   ResourceLoader* loader = GetLoader(id);
   if (!loader)
-    return NULL;
+    return nullptr;
 
   return loader->request();
 }
@@ -2618,7 +2617,7 @@ ResourceLoader* ResourceDispatcherHostImpl::GetLoader(
 
   LoaderMap::const_iterator i = pending_loaders_.find(id);
   if (i == pending_loaders_.end())
-    return NULL;
+    return nullptr;
 
   return i->second.get();
 }

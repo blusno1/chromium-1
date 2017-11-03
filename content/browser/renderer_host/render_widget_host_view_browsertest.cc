@@ -17,7 +17,6 @@
 #include "build/build_config.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "content/browser/gpu/compositor_util.h"
-#include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
@@ -158,7 +157,7 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
 
   // Copy one frame using the CopyFromSurface API.
   void RunBasicCopyFromSurfaceTest() {
-    SET_UP_SURFACE_OR_PASS_TEST(NULL);
+    SET_UP_SURFACE_OR_PASS_TEST(nullptr);
 
     // Repeatedly call CopyFromBackingStore() since, on some platforms (e.g.,
     // Windows), the operation will fail until the first "present" has been
@@ -303,7 +302,7 @@ class CompositingRenderWidgetHostViewBrowserTest
   bool SetUpSourceSurface(const char* wait_message) override {
     content::DOMMessageQueue message_queue;
     NavigateToURL(shell(), TestUrl());
-    if (wait_message != NULL) {
+    if (wait_message != nullptr) {
       std::string result(wait_message);
       if (!message_queue.WaitForMessage(&result)) {
         EXPECT_TRUE(false) << "WaitForMessage " << result << " failed.";
@@ -369,7 +368,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
 // when the RenderWidgetHostView is deleting in the middle of an async copy.
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
                        CopyFromSurface_CallbackDespiteDelete) {
-  SET_UP_SURFACE_OR_PASS_TEST(NULL);
+  SET_UP_SURFACE_OR_PASS_TEST(nullptr);
 
   base::RunLoop run_loop;
   GetRenderWidgetHostView()->CopyFromSurface(
@@ -387,7 +386,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
 // async copy.
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
                        CopyFromSurfaceToVideoFrame_CallbackDespiteDelete) {
-  SET_UP_SURFACE_OR_PASS_TEST(NULL);
+  SET_UP_SURFACE_OR_PASS_TEST(nullptr);
 
   base::RunLoop run_loop;
   scoped_refptr<media::VideoFrame> dest =
@@ -406,7 +405,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
 // until at least one DeliverFrameCallback has been invoked.
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
                        FrameSubscriberTest) {
-  SET_UP_SURFACE_OR_PASS_TEST(NULL);
+  SET_UP_SURFACE_OR_PASS_TEST(nullptr);
   RenderWidgetHostViewBase* const view = GetRenderWidgetHostView();
 
   base::RunLoop run_loop;
@@ -424,7 +423,7 @@ IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_P(CompositingRenderWidgetHostViewBrowserTest, CopyTwice) {
-  SET_UP_SURFACE_OR_PASS_TEST(NULL);
+  SET_UP_SURFACE_OR_PASS_TEST(nullptr);
   RenderWidgetHostViewBase* const view = GetRenderWidgetHostView();
 
   base::RunLoop run_loop;
@@ -677,14 +676,11 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
                        run_loop.QuitClosure());
         rwhv->CopyFromSurfaceToVideoFrame(copy_rect, video_frame, callback);
       } else {
-        if (!content::GpuDataManager::GetInstance()
-                 ->CanUseGpuBrowserCompositor()) {
-          // Skia rendering can cause color differences, particularly in the
-          // middle two columns.
-          SetAllowableError(2);
-          SetExcludeRect(gfx::Rect(output_size.width() / 2 - 1, 0, 2,
-                                   output_size.height()));
-        }
+        // Skia rendering can cause color differences, particularly in the
+        // middle two columns.
+        SetAllowableError(2);
+        SetExcludeRect(
+            gfx::Rect(output_size.width() / 2 - 1, 0, 2, output_size.height()));
 
         const ReadbackRequestCallback callback =
             base::Bind(&CompositingRenderWidgetHostViewBrowserTestTabCapture::

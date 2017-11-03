@@ -867,6 +867,12 @@ are declared in build/common.gypi.
           <message name="IDS_ZOOM_MINUS2" desc="The text label of the Make Text Smaller menu item in the merged menu">
             &#8722;
           </message>
+          <message name="IDS_COPY_URL" desc="The text label of the Copy URL menu item for the Hosted App app menu">
+            Copy &amp;URL
+          </message>
+          <message name="IDS_SITE_SETTINGS" desc="The text label of the Site Settings menu item for the Hosted App app menu">
+            &amp;Site settings
+          </message>
         </if>
         <if expr="use_titlecase">
           <message name="IDS_NEW_TAB" desc="In Title Case: The text label of a menu item for opening a new tab">
@@ -931,6 +937,12 @@ are declared in build/common.gypi.
           </message>
           <message name="IDS_ZOOM_MINUS2" desc="The text label of the Make Text Smaller menu item in the merged menu">
             &#8722;
+          </message>
+          <message name="IDS_COPY_URL" desc="In Title Case: The text label of the Copy URL menu item for the Hosted App app menu">
+            Copy &amp;URL
+          </message>
+          <message name="IDS_SITE_SETTINGS" desc="In Title Case: The text label of the Site Settings menu item for the Hosted App app menu">
+            &amp;Site Settings
           </message>
         </if>
       </if>
@@ -3242,8 +3254,8 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
         V8 Proxy Resolver
       </message>
       <if expr="chromeos">
-        <message name="IDS_UTILITY_PROCESS_ZIP_FILE_CREATOR_NAME" desc="The name of the utility process used for creating zip files.">
-          Zip File Creator
+        <message name="IDS_UTILITY_PROCESS_FILE_UTILITY_NAME" desc="The name of the utility process used for various Chrome specific file operations.">
+          Chrome File Utilities
         </message>
       </if>
       <if expr="not is_android">
@@ -4326,11 +4338,20 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_EXTENSION_PROMPT_UNINSTALL_BUTTON" desc="Text for the uninstall button on the extension uninstall prompt">
         Remove
       </message>
-      <message name="IDS_EXTENSION_PROMPT_UNINSTALL_REPORT_ABUSE" desc="Message to indicate the user can report abuse for the extension about to be uninstalled.">
+      <message name="IDS_EXTENSION_PROMPT_UNINSTALL_REPORT_ABUSE" desc="Label for a checkbox the user can tick to report abuse for the extension being uninstalled.">
         Report abuse
+      </message>
+      <message name="IDS_EXTENSION_PROMPT_UNINSTALL_REPORT_ABUSE_FROM_EXTENSION" desc="Label for a checkbox the user can tick to report abuse for the extension being uninstalled.">
+        Report abuse from "<ph name="EXTENSION_NAME">$1<ex>Gmail Checker</ex></ph>"
+      </message>
+      <message name="IDS_EXTENSION_PROMPT_UNINSTALL_TITLE" desc="Title text for removing an extension.">
+        Remove "<ph name="EXTENSION_NAME">$1<ex>Gmail Checker</ex></ph>"?
       </message>
       <message name="IDS_EXTENSION_PROMPT_UNINSTALL_APP_BUTTON" desc="Text for the uninstall button on the non-platform app and ARC(App Runtime for Chrome) app uninstall prompt">
         Uninstall
+      </message>
+      <message name="IDS_EXTENSION_PROMPT_UNINSTALL_TRIGGERED_BY_EXTENSION" desc="Text in uninstall-extension dialog that indicates the uninstall was triggered by another extension (the name of the extension being uninstalled is already present in the dialog title).">
+        "<ph name="TRIGGERING_EXTENSION_NAME">$1<ex>Extension Manager</ex></ph>" would like to remove this extension.
       </message>
       <message name="IDS_EXTENSION_PROMPT_RE_ENABLE_BUTTON" desc="Text for the enable button on the extension re-enable prompt">
         Re-enable
@@ -5500,15 +5521,15 @@ the Bookmarks menu.">
       </if>
 
       <!-- Importer Lock Dialog -->
+      <message name="IDS_IMPORTER_LOCK_TEXT" desc="The message to be displayed in the importer-lock dialog">
+        To finish importing, close all Firefox windows.
+      </message>
       <if expr="use_titlecase">
         <message name="IDS_IMPORTER_LOCK_TITLE" desc="Dialog title for importer lock dialog">
           Close Firefox
         </message>
         <message name="IDS_IMPORTER_LOCK_OK" desc="Text for OK button (to try importing again) on importer lock dialog">
           Try Again
-        </message>
-        <message name="IDS_IMPORTER_LOCK_CANCEL" desc="Text for Cancel button on importer lock dialog">
-          Cancel
         </message>
       </if>
       <if expr="not use_titlecase">
@@ -5517,9 +5538,6 @@ the Bookmarks menu.">
         </message>
         <message name="IDS_IMPORTER_LOCK_OK" desc="Text for OK button (to try importing again) on importer lock dialog">
           Try again
-        </message>
-        <message name="IDS_IMPORTER_LOCK_CANCEL" desc="Text for Cancel button on importer lock dialog">
-          Cancel
         </message>
       </if>
 

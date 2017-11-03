@@ -66,7 +66,7 @@ class PromiseErrorCallback final : public NavigatorUserMediaErrorCallback {
 
 MediaDevices* MediaDevices::Create(ExecutionContext* context) {
   MediaDevices* media_devices = new MediaDevices(context);
-  media_devices->SuspendIfNeeded();
+  media_devices->PauseIfNeeded();
   return media_devices;
 }
 
@@ -194,11 +194,11 @@ void MediaDevices::ContextDestroyed(ExecutionContext*) {
 }
 
 void MediaDevices::Suspend() {
-  dispatch_scheduled_event_runner_->Suspend();
+  dispatch_scheduled_event_runner_->Pause();
 }
 
 void MediaDevices::Resume() {
-  dispatch_scheduled_event_runner_->Resume();
+  dispatch_scheduled_event_runner_->Unpause();
 }
 
 void MediaDevices::ScheduleDispatchEvent(Event* event) {

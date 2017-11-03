@@ -97,8 +97,6 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
   void SetWaiting(const scoped_refptr<WebServiceWorkerImpl>& service_worker);
   void SetActive(const scoped_refptr<WebServiceWorkerImpl>& service_worker);
 
-  void OnUpdateFound();
-
   // blink::WebServiceWorkerRegistration overrides.
   void SetProxy(blink::WebServiceWorkerRegistrationProxy* proxy) override;
   blink::WebServiceWorkerRegistrationProxy* Proxy() override;
@@ -111,7 +109,6 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
       bool enable,
       std::unique_ptr<WebEnableNavigationPreloadCallbacks> callbacks) override;
   void GetNavigationPreloadState(
-      blink::WebServiceWorkerProvider* provider,
       std::unique_ptr<WebGetNavigationPreloadStateCallbacks> callbacks)
       override;
   void SetNavigationPreloadHeader(
@@ -139,6 +136,7 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
       blink::mojom::ServiceWorkerObjectInfoPtr installing,
       blink::mojom::ServiceWorkerObjectInfoPtr waiting,
       blink::mojom::ServiceWorkerObjectInfoPtr active) override;
+  void UpdateFound() override;
 
   // RefCounted traits implementation, rather than delete |impl| directly, calls
   // |impl->DetachAndMaybeDestroy()| to notify that the last reference to it has
@@ -214,6 +212,11 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
       std::unique_ptr<WebEnableNavigationPreloadCallbacks> callbacks,
       blink::mojom::ServiceWorkerErrorType error,
       const base::Optional<std::string>& error_msg);
+  void OnDidGetNavigationPreloadState(
+      std::unique_ptr<WebGetNavigationPreloadStateCallbacks> callbacks,
+      blink::mojom::ServiceWorkerErrorType error,
+      const base::Optional<std::string>& error_msg,
+      blink::mojom::NavigationPreloadStatePtr state);
 
   // |handle_id_| is the key to map with remote
   // content::ServiceWorkerRegistrationHandle.

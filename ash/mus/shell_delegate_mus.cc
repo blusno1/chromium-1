@@ -10,6 +10,7 @@
 #include "ash/accessibility/default_accessibility_delegate.h"
 #include "ash/gpu_support_stub.h"
 #include "ash/mus/wallpaper_delegate_mus.h"
+#include "ash/screenshot_delegate.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "components/user_manager/user_info_impl.h"
@@ -18,6 +19,30 @@
 #include "ui/keyboard/keyboard_ui.h"
 
 namespace ash {
+namespace {
+
+// TODO(jamescook): Replace with a mojo-compatible ScreenshotClient.
+class ScreenshotDelegateMash : public ScreenshotDelegate {
+ public:
+  ScreenshotDelegateMash() = default;
+  ~ScreenshotDelegateMash() override = default;
+
+  // ScreenshotDelegate:
+  void HandleTakeScreenshotForAllRootWindows() override { NOTIMPLEMENTED(); }
+  void HandleTakePartialScreenshot(aura::Window* window,
+                                   const gfx::Rect& rect) override {
+    NOTIMPLEMENTED();
+  }
+  void HandleTakeWindowScreenshot(aura::Window* window) override {
+    NOTIMPLEMENTED();
+  }
+  bool CanTakeScreenshot() override { return true; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ScreenshotDelegateMash);
+};
+
+}  // namespace
 
 ShellDelegateMus::ShellDelegateMus(service_manager::Connector* connector)
     : connector_(connector) {}
@@ -29,42 +54,47 @@ service_manager::Connector* ShellDelegateMus::GetShellConnector() const {
 }
 
 bool ShellDelegateMus::IsRunningInForcedAppMode() const {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
   return false;
 }
 
 bool ShellDelegateMus::CanShowWindowForUser(aura::Window* window) const {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
   return true;
 }
 
 bool ShellDelegateMus::IsForceMaximizeOnFirstRun() const {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
   return false;
 }
 
 void ShellDelegateMus::PreInit() {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 void ShellDelegateMus::PreShutdown() {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 std::unique_ptr<keyboard::KeyboardUI> ShellDelegateMus::CreateKeyboardUI() {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
   return nullptr;
 }
 
 void ShellDelegateMus::OpenUrlFromArc(const GURL& url) {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 NetworkingConfigDelegate* ShellDelegateMus::GetNetworkingConfigDelegate() {
   // TODO(mash): Provide a real implementation, perhaps by folding its behavior
   // into an ash-side network information cache. http://crbug.com/651157
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
   return nullptr;
+}
+
+std::unique_ptr<ScreenshotDelegate>
+ShellDelegateMus::CreateScreenshotDelegate() {
+  return std::make_unique<ScreenshotDelegateMash>();
 }
 
 std::unique_ptr<WallpaperDelegate> ShellDelegateMus::CreateWallpaperDelegate() {
@@ -77,17 +107,17 @@ AccessibilityDelegate* ShellDelegateMus::CreateAccessibilityDelegate() {
 
 GPUSupport* ShellDelegateMus::CreateGPUSupport() {
   // TODO: http://crbug.com/647421.
-  NOTIMPLEMENTED() << " Using a stub GPUSupport implementation";
+  NOTIMPLEMENTED_LOG_ONCE() << " Using a stub GPUSupport implementation";
   return new GPUSupportStub();
 }
 
 base::string16 ShellDelegateMus::GetProductName() const {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
   return base::string16();
 }
 
 gfx::Image ShellDelegateMus::GetDeprecatedAcceleratorImage() const {
-  NOTIMPLEMENTED();
+  NOTIMPLEMENTED_LOG_ONCE();
   return gfx::Image();
 }
 

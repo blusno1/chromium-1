@@ -18,7 +18,7 @@
 #include "ui/gfx/text_constants.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_tray.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/border.h"
@@ -35,7 +35,6 @@
 #include "ui/views/painter.h"
 
 using message_center::MessageCenter;
-using message_center::NotifierSettingsProvider;
 
 namespace ash {
 
@@ -72,7 +71,6 @@ views::Separator* CreateVerticalSeparator() {
 MessageCenterButtonBar::MessageCenterButtonBar(
     MessageCenterView* message_center_view,
     MessageCenter* message_center,
-    NotifierSettingsProvider* notifier_settings_provider,
     bool settings_initially_visible,
     const base::string16& title)
     : message_center_view_(message_center_view),

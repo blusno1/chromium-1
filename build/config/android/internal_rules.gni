@@ -228,6 +228,10 @@ template("write_build_config") {
       if (defined(invoker.disable_compression) && invoker.disable_compression) {
         args += [ "--disable-asset-compression" ]
       }
+      if (defined(invoker.treat_as_locale_paks) &&
+          invoker.treat_as_locale_paks) {
+        args += [ "--treat-as-locale-paks" ]
+      }
     }
 
     if (is_android_resources || is_apk) {
@@ -2541,10 +2545,14 @@ if (enable_java_templates) {
         args += [ "--chromium-code=1" ]
       }
       if (_enable_errorprone) {
-        deps += [ "//third_party/errorprone:chromium_errorprone($default_toolchain)" ]
+        deps +=
+            [ "//third_party/errorprone:errorprone_java($default_toolchain)" ]
+        deps += [ "//tools/android/errorprone_plugin:errorprone_plugin_java($default_toolchain)" ]
         args += [
           "--use-errorprone-path",
-          "bin/chromium_errorprone",
+          "bin/errorprone_java",
+          "--processorpath",
+          "lib.java/tools/android/errorprone_plugin/errorprone_plugin_java.jar",
         ]
       }
       foreach(e, _provider_configurations) {

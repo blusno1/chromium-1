@@ -173,6 +173,10 @@ extern const base::Feature kNtlmV2Enabled;
 
 extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 
+#if defined(OS_ANDROID)
+extern const base::Feature kOomIntervention;
+#endif
+
 #if !defined(OS_ANDROID)
 extern const base::Feature kOneGoogleBarOnLocalNtp;
 #endif
@@ -231,6 +235,10 @@ extern const base::Feature kSiteDetails;
 
 #if defined(OS_ANDROID)
 extern const base::Feature kSiteNotificationChannels;
+#endif
+
+#if defined(OS_CHROMEOS)
+extern const base::Feature kNativeSamba;
 #endif
 
 extern const base::Feature kSoundContentSetting;

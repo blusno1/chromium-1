@@ -219,8 +219,8 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // listening to it.
   void DisassociateRegistration();
 
-  // Returns a handler for a request, the handler may return nullptr if
-  // the request doesn't require special handling.
+  // Returns a handler for a request. May return nullptr if the request doesn't
+  // require special handling.
   std::unique_ptr<ServiceWorkerRequestHandler> CreateRequestHandler(
       network::mojom::FetchRequestMode request_mode,
       network::mojom::FetchCredentialsMode credentials_mode,
@@ -305,8 +305,6 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
 
   // Sends event messages to the renderer. Events for the worker are queued up
   // until the worker thread id is known via SetReadyToSendMessagesToWorker().
-  void SendUpdateFoundMessage(
-      int registration_handle_id);
   void SendServiceWorkerStateChangedMessage(
       int worker_handle_id,
       blink::mojom::ServiceWorkerState state);

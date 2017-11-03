@@ -71,10 +71,14 @@ enum NotAcceptingTransformReason {
 // This enum must remain synchronized with the enum of the same
 // name in metrics/histograms/histograms.xml.
 enum DataReductionProxyNetworkChangeEvent {
-  IP_CHANGED = 0,         // The client IP address changed.
-  DISABLED_ON_VPN = 1,    // [Deprecated] Proxy is disabled because a VPN is
-                          // running.
-  CHANGE_EVENT_COUNT = 2  // This must always be last.
+  // The client IP address changed.
+  IP_CHANGED = 0,
+  // [Deprecated] Proxy is disabled because a VPN is running.
+  DEPRECATED_DISABLED_ON_VPN = 1,
+  // There was a network change.
+  NETWORK_CHANGED = 2,
+  CHANGE_EVENT_COUNT = NETWORK_CHANGED + 1
+
 };
 
 // Key of the UMA DataReductionProxy.ProbeURL histogram.
@@ -95,6 +99,22 @@ void RecordSecureProxyCheckFetchResult(
   UMA_HISTOGRAM_ENUMERATION(
       kUMAProxyProbeURL, result,
       data_reduction_proxy::SECURE_PROXY_CHECK_FETCH_RESULT_COUNT);
+}
+
+enum class WarmupURLFetchAttemptEvent {
+  kFetchInitiated = 0,
+  kConnectionTypeNone = 1,
+  kProxyNotEnabledByUser = 2,
+  kWarmupURLFetchingDisabled = 3,
+  kCount
+};
+
+void RecordWarmupURLFetchAttemptEvent(
+    WarmupURLFetchAttemptEvent warmup_url_fetch_event) {
+  DCHECK_GT(WarmupURLFetchAttemptEvent::kCount, warmup_url_fetch_event);
+  UMA_HISTOGRAM_ENUMERATION("DataReductionProxy.WarmupURL.FetchAttemptEvent",
+                            warmup_url_fetch_event,
+                            WarmupURLFetchAttemptEvent::kCount);
 }
 
 }  // namespace
@@ -330,9 +350,8 @@ void DataReductionProxyConfig::SetProxyConfig(bool enabled, bool at_startup) {
   enabled_by_user_ = enabled;
   ReloadConfig();
 
-  if (enabled) {
+  if (enabled_by_user_) {
     HandleCaptivePortal();
-    FetchWarmupURL();
 
     // Check if the proxy has been restricted explicitly by the carrier.
     // It is safe to use base::Unretained here, since it gets executed
@@ -342,6 +361,7 @@ void DataReductionProxyConfig::SetProxyConfig(bool enabled, bool at_startup) {
         base::Bind(&DataReductionProxyConfig::HandleSecureProxyCheckResponse,
                    base::Unretained(this)));
   }
+  FetchWarmupURL();
 }
 
 void DataReductionProxyConfig::HandleCaptivePortal() {
@@ -423,9 +443,7 @@ void DataReductionProxyConfig::OnNetworkChanged(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   connection_type_ = type;
-
-  if (connection_type_ == net::NetworkChangeNotifier::CONNECTION_NONE)
-    return;
+  RecordNetworkChangeEvent(NETWORK_CHANGED);
 
   FetchWarmupURL();
 }
@@ -447,29 +465,32 @@ void DataReductionProxyConfig::OnIPAddressChanged() {
 }
 
 void DataReductionProxyConfig::AddDefaultProxyBypassRules() {
-  // localhost
   DCHECK(configurator_);
-  configurator_->AddHostPatternToBypass("<local>");
-  // RFC6890 loopback addresses.
-  // TODO(tbansal): Remove this once crbug/446705 is fixed.
-  configurator_->AddHostPatternToBypass("127.0.0.0/8");
+  configurator_->SetBypassRules(
+      // localhost
+      "<local>,"
 
-  // RFC6890 current network (only valid as source address).
-  configurator_->AddHostPatternToBypass("0.0.0.0/8");
+      // RFC6890 loopback addresses.
+      // TODO(tbansal): Remove this once crbug/446705 is fixed.
+      "127.0.0.0/8,"
 
-  // RFC1918 private addresses.
-  configurator_->AddHostPatternToBypass("10.0.0.0/8");
-  configurator_->AddHostPatternToBypass("172.16.0.0/12");
-  configurator_->AddHostPatternToBypass("192.168.0.0/16");
+      // RFC6890 current network (only valid as source address).
+      "0.0.0.0/8,"
 
-  // RFC3513 unspecified address.
-  configurator_->AddHostPatternToBypass("::/128");
+      // RFC1918 private addresses.
+      "10.0.0.0/8,"
+      "172.16.0.0/12,"
+      "192.168.0.0/16,"
 
-  // RFC4193 private addresses.
-  configurator_->AddHostPatternToBypass("fc00::/7");
-  // IPV6 probe addresses.
-  configurator_->AddHostPatternToBypass("*-ds.metric.gstatic.com");
-  configurator_->AddHostPatternToBypass("*-v4.metric.gstatic.com");
+      // RFC3513 unspecified address.
+      "::/128,"
+
+      // RFC4193 private addresses.
+      "fc00::/7,"
+
+      // IPV6 probe addresses.
+      "*-ds.metric.gstatic.com,"
+      "*-v4.metric.gstatic.com");
 }
 
 void DataReductionProxyConfig::SecureProxyCheck(
@@ -487,11 +508,25 @@ void DataReductionProxyConfig::SecureProxyCheck(
 void DataReductionProxyConfig::FetchWarmupURL() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (!enabled_by_user_ || !params::FetchWarmupURLEnabled())
+  if (!enabled_by_user_) {
+    RecordWarmupURLFetchAttemptEvent(
+        WarmupURLFetchAttemptEvent::kProxyNotEnabledByUser);
     return;
+  }
 
-  if (connection_type_ == net::NetworkChangeNotifier::CONNECTION_NONE)
+  if (!params::FetchWarmupURLEnabled()) {
+    RecordWarmupURLFetchAttemptEvent(
+        WarmupURLFetchAttemptEvent::kWarmupURLFetchingDisabled);
     return;
+  }
+
+  if (connection_type_ == net::NetworkChangeNotifier::CONNECTION_NONE) {
+    RecordWarmupURLFetchAttemptEvent(
+        WarmupURLFetchAttemptEvent::kConnectionTypeNone);
+    return;
+  }
+
+  RecordWarmupURLFetchAttemptEvent(WarmupURLFetchAttemptEvent::kFetchInitiated);
 
   warmup_url_fetcher_->FetchWarmupURL();
 }

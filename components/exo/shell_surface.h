@@ -206,6 +206,18 @@ class ShellSurface : public SurfaceTreeHost,
   // Set container for surface.
   void SetContainer(int container);
 
+  // Set the maximum size for the surface.
+  void SetMaximumSize(const gfx::Size& size);
+
+  // Set the miniumum size for the surface.
+  void SetMinimumSize(const gfx::Size& size);
+
+  // Set bounds mode for surface.
+  void SetBoundsMode(BoundsMode mode);
+
+  // Set "can minimize" state for surface.
+  void SetCanMinimize(bool can_minimize);
+
   // Sets the main surface for the window.
   static void SetMainSurface(aura::Window* window, Surface* surface);
 
@@ -246,6 +258,7 @@ class ShellSurface : public SurfaceTreeHost,
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
   gfx::Size GetMinimumSize() const override;
+  gfx::Size GetMaximumSize() const override;
 
   // Overridden from ash::wm::WindowStateObserver:
   void OnPreWindowStateTypeChange(
@@ -346,11 +359,11 @@ class ShellSurface : public SurfaceTreeHost,
 
   views::Widget* widget_ = nullptr;
   aura::Window* parent_;
-  const BoundsMode bounds_mode_;
+  BoundsMode bounds_mode_ = BoundsMode::SHELL;
   int64_t primary_display_id_;
   gfx::Point origin_;
   bool activatable_ = true;
-  const bool can_minimize_;
+  bool can_minimize_ = true;
   // Container Window Id (see ash/public/cpp/shell_window_ids.h)
   int container_;
   bool frame_enabled_ = false;
@@ -388,6 +401,10 @@ class ShellSurface : public SurfaceTreeHost,
   bool system_modal_ = false;
   bool non_system_modal_window_was_active_ = false;
   gfx::ImageSkia icon_;
+  gfx::Size minimum_size_;
+  gfx::Size pending_minimum_size_;
+  gfx::Size maximum_size_;
+  gfx::Size pending_maximum_size_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellSurface);
 };

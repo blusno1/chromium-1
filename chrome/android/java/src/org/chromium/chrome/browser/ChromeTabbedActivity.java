@@ -64,7 +64,6 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChromeTablet;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.OverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayout;
 import org.chromium.chrome.browser.cookies.CookiesFetcher;
-import org.chromium.chrome.browser.crash.PureJavaExceptionHandler;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.document.DocumentUtils;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
@@ -397,9 +396,6 @@ public class ChromeTabbedActivity
     protected @LaunchIntentDispatcher.Action int maybeDispatchLaunchIntent(Intent intent) {
         if (getClass().equals(ChromeTabbedActivity.class)
                 && Intent.ACTION_MAIN.equals(intent.getAction())) {
-            // Since Chrome can be launched by ChromeTabbedActivity in addition to
-            // ChromeLauncherActivity, we need to install the handler here too.
-            PureJavaExceptionHandler.installHandler();
 
             // Call dispatchToTabbedActivity() for MAIN intents to activate proper multi-window
             // TabbedActivity (i.e. if CTA2 is currently running and Chrome is started, CTA2
@@ -473,7 +469,7 @@ public class ChromeTabbedActivity
                 private void closeIfNoTabsAndHomepageEnabled(boolean isPendingClosure) {
                     if (getTabModelSelector().getTotalTabCount() == 0) {
                         // If the last tab is closed, and homepage is enabled, then exit Chrome.
-                        if (HomepageManager.isHomepageEnabled(getApplicationContext())) {
+                        if (HomepageManager.isHomepageEnabled()) {
                             finish();
                         } else if (isPendingClosure) {
                             NewTabPageUma.recordNTPImpression(
@@ -1179,7 +1175,7 @@ public class ChromeTabbedActivity
      * Create an initial tab for cold start without restored tabs.
      */
     private void createInitialTab() {
-        String url = HomepageManager.getHomepageUri(getApplicationContext());
+        String url = HomepageManager.getHomepageUri();
         if (TextUtils.isEmpty(url) || NewTabPage.isNTPUrl(url)) {
             url = UrlConstants.NTP_URL;
         }
@@ -1625,17 +1621,16 @@ public class ChromeTabbedActivity
 
             @Override
             public View getHeaderView() {
-                // Return early if Chrome Home is not enabled or the menu being shown isn't
-                // for a web page.
-                if (getBottomSheet() == null
-                        || !getAppMenuPropertiesDelegate().shouldShowPageMenu()) {
-                    return null;
-                }
+                // Return early if Chrome Home is not enabled.
+                if (getBottomSheet() == null) return null;
 
+                boolean isPageMenu = getAppMenuPropertiesDelegate().shouldShowPageMenu();
                 LayoutInflater inflater = LayoutInflater.from(ChromeTabbedActivity.this);
 
                 // Show the Chrome Home promo header if available.
                 if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_PROMO)) {
+                    if (!isPageMenu) return null;
+
                     ChromeHomePromoMenuHeader menuHeader =
                             (ChromeHomePromoMenuHeader) inflater.inflate(
                                     R.layout.chrome_home_promo_header, null);
@@ -1643,15 +1638,22 @@ public class ChromeTabbedActivity
                     return menuHeader;
                 }
 
+                Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
+                if (!tracker.wouldTriggerHelpUI(FeatureConstants.CHROME_HOME_MENU_HEADER_FEATURE)) {
+                    return DataReductionProxySettings.getInstance()
+                                    .shouldUseDataReductionMainMenuItem()
+                            ? inflater.inflate(R.layout.data_reduction_main_menu_item, null)
+                            : null;
+                }
+
                 // Return early if the conditions aren't right to show the Chrome Home IPH menu
                 // header.
                 if (mControlContainer.getVisibility() != View.VISIBLE
-                        || getBottomSheet().isSheetOpen()) {
+                        || getBottomSheet().isSheetOpen() || !isPageMenu) {
                     return null;
                 }
 
                 // Show the Chrome Home menu header if the Tracker allows it.
-                Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
                 if (tracker.shouldTriggerHelpUI(FeatureConstants.CHROME_HOME_MENU_HEADER_FEATURE)) {
                     mChromeHomeIphMenuHeader = (ChromeHomeIphMenuHeader) inflater.inflate(
                             R.layout.chrome_home_iph_header, null);
@@ -1659,25 +1661,40 @@ public class ChromeTabbedActivity
                     return mChromeHomeIphMenuHeader;
                 }
 
-                // TODO(twellington): A new API method is being added to the feature engagement
-                //                    system that will allow us to determine if the configuration
-                //                    criteria for showing the IPH menu header is met without
-                //                    calling #shouldTriggerHelpUI (which requires showing the IPH
-                //                    if the method returns true). Once the new API is ready, hook
-                //                    into that to determine if the data reduction header should be
-                //                    be shown. See crbug.com/776007.
-                return DataReductionProxySettings.getInstance().shouldUseDataReductionMainMenuItem()
-                        ? inflater.inflate(R.layout.data_reduction_main_menu_item, null)
-                        : null;
+                // Default is no header.
+                return null;
             }
 
             @Override
             public boolean shouldShowFooter(int maxMenuHeight) {
                 if (showDataSaverFooter()) {
-                    return maxMenuHeight >= getResources().getDimension(
-                                                    R.dimen.data_saver_menu_footer_min_show_height);
+                    return canShowDataReductionItem(maxMenuHeight);
                 }
                 return super.shouldShowFooter(maxMenuHeight);
+            }
+
+            @Override
+            public boolean shouldShowHeader(int maxMenuHeight) {
+                if (getBottomSheet() == null) return super.shouldShowHeader(maxMenuHeight);
+
+                Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
+                if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_PROMO)
+                        || tracker.wouldTriggerHelpUI(
+                                   FeatureConstants.CHROME_HOME_MENU_HEADER_FEATURE)) {
+                    return true;
+                }
+
+                if (DataReductionProxySettings.getInstance().shouldUseDataReductionMainMenuItem()) {
+                    return canShowDataReductionItem(maxMenuHeight);
+                }
+
+                return super.shouldShowHeader(maxMenuHeight);
+            }
+
+            private boolean canShowDataReductionItem(int maxMenuHeight) {
+                // TODO(twellington): Account for whether a different footer or header is showing.
+                return maxMenuHeight >= getResources().getDimension(
+                                                R.dimen.data_saver_menu_footer_min_show_height);
             }
         };
     }

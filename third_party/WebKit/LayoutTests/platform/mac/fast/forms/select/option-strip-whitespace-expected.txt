@@ -13,7 +13,7 @@ layer at (0,0) size 800x600
         LayoutBR {BR} at (0,58) size 0x19
         LayoutText {#text} at (0,117) size 86x19
           text run at (0,117) width 86: "Five Spaces: "
-        LayoutBR {BR} at (152,131) size 1x1
+        LayoutBR {BR} at (151,131) size 1x1
         LayoutBR {BR} at (0,135) size 0x19
         LayoutText {#text} at (0,153) size 306x19
           text run at (0,153) width 306: "Five Spaces (with leading/trailing whitespace): "
@@ -38,13 +38,13 @@ layer at (0,0) size 800x600
             LayoutText (anonymous) at (8,2) size 50x13
               text run at (8,2) width 50: "Five Tabs"
         LayoutText {#text} at (0,0) size 0x0
-layer at (79,42) size 67x59 clip at (80,43) size 54x57
-  LayoutListBox {SELECT} at (70.88,0) size 66.92x58.75 [bgcolor=#FFFFFF] [border: (1px solid #999999)]
-    LayoutBlockFlow {OPTION} at (1,1) size 53.92x14.19
+layer at (79,42) size 66x59 clip at (80,43) size 53x57
+  LayoutListBox {SELECT} at (70.88,0) size 66.47x58.75 [bgcolor=#FFFFFF] [border: (1px solid #999999)]
+    LayoutBlockFlow {OPTION} at (1,1) size 53.47x14.19
       LayoutText {#text} at (2,0) size 50x13
         text run at (2,0) width 50: "Five Tabs"
 layer at (93,119) size 67x59 clip at (94,120) size 54x57
-  LayoutListBox {SELECT} at (85.31,76.75) size 66.92x58.75 [bgcolor=#FFFFFF] [border: (1px solid #999999)]
-    LayoutBlockFlow {OPTION} at (1,1) size 53.92x14.19
+  LayoutListBox {SELECT} at (85.31,76.75) size 66.47x58.75 [bgcolor=#FFFFFF] [border: (1px solid #999999)]
+    LayoutBlockFlow {OPTION} at (1,1) size 53.47x14.19
       LayoutText {#text} at (2,0) size 50x13
         text run at (2,0) width 50: "Five Tabs"

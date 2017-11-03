@@ -52,6 +52,7 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/IdlenessDetector.h"
+#include "core/loader/InteractiveDetector.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/loader/NetworkHintsInterface.h"
 #include "core/loader/PingLoader.h"
@@ -78,9 +79,11 @@
 #include "platform/loader/fetch/UniqueIdentifier.h"
 #include "platform/loader/fetch/fetch_initiator_type_names.h"
 #include "platform/mhtml/MHTMLArchive.h"
+#include "platform/network/NetworkStateNotifier.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/scheduler/renderer/web_view_scheduler.h"
 #include "platform/weborigin/SchemeRegistry.h"
+#include "platform/wtf/Optional.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebApplicationCacheHost.h"
@@ -245,7 +248,9 @@ ResourceFetcher* FrameFetchContext::CreateFetcher(DocumentLoader* loader,
 }
 
 FrameFetchContext::FrameFetchContext(DocumentLoader* loader, Document* document)
-    : document_loader_(loader), document_(document) {
+    : document_loader_(loader),
+      document_(document),
+      save_data_enabled_(GetNetworkStateNotifier().SaveDataEnabled()) {
   DCHECK(GetFrame());
 }
 
@@ -339,7 +344,7 @@ void FrameFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request,
   if (IsReloadLoadType(MasterDocumentLoader()->LoadType()))
     request.ClearHTTPHeaderField(HTTPNames::Save_Data);
 
-  if (GetSettings() && GetSettings()->GetDataSaverEnabled())
+  if (save_data_enabled_)
     request.SetHTTPHeaderField(HTTPNames::Save_Data, "on");
 
   if (GetLocalFrameClient()->IsClientLoFiActiveForFrame()) {
@@ -466,6 +471,13 @@ void FrameFetchContext::DispatchWillSendRequest(
                          initiator_info, resource_type);
   if (IdlenessDetector* idleness_detector = GetFrame()->GetIdlenessDetector())
     idleness_detector->OnWillSendRequest(MasterDocumentLoader()->Fetcher());
+  if (document_) {
+    InteractiveDetector* interactive_detector(
+        InteractiveDetector::From(*document_));
+    if (interactive_detector) {
+      interactive_detector->OnResourceLoadBegin(WTF::nullopt);
+    }
+  }
 }
 
 void FrameFetchContext::DispatchDidReceiveResponse(
@@ -573,6 +585,13 @@ void FrameFetchContext::DispatchDidFinishLoading(unsigned long identifier,
   probe::didFinishLoading(GetFrame()->GetDocument(), identifier,
                           MasterDocumentLoader(), finish_time,
                           encoded_data_length, decoded_body_length);
+  if (document_) {
+    InteractiveDetector* interactive_detector(
+        InteractiveDetector::From(*document_));
+    if (interactive_detector) {
+      interactive_detector->OnResourceLoadEnd(finish_time);
+    }
+  }
 }
 
 void FrameFetchContext::DispatchDidFail(unsigned long identifier,
@@ -585,6 +604,15 @@ void FrameFetchContext::DispatchDidFail(unsigned long identifier,
   GetFrame()->Loader().Progress().CompleteProgress(identifier);
   probe::didFailLoading(GetFrame()->GetDocument(), identifier,
                         MasterDocumentLoader(), error);
+  if (document_) {
+    InteractiveDetector* interactive_detector(
+        InteractiveDetector::From(*document_));
+    if (interactive_detector) {
+      // We have not yet recorded load_finish_time. Pass nullopt here; we will
+      // call MonotonicallyIncreasingTime lazily when we need it.
+      interactive_detector->OnResourceLoadEnd(WTF::nullopt);
+    }
+  }
   // Notification to FrameConsole should come AFTER InspectorInstrumentation
   // call, DevTools front-end relies on this.
   if (!is_internal_request)
@@ -1191,6 +1219,10 @@ void FrameFetchContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(frozen_state_);
   BaseFetchContext::Trace(visitor);
+}
+
+void FrameFetchContext::RecordDataUriWithOctothorpe() {
+  UseCounter::Count(GetFrame(), WebFeature::kDataUriHasOctothorpe);
 }
 
 }  // namespace blink

@@ -6572,6 +6572,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Blink.CookieJar.SyncCookiesSetTime" units="microseconds">
+  <owner>kinuko@chromium.org</owner>
+  <owner>dcheng@chromium.org</owner>
+  <summary>Microseconds per sync IPC call to set cookies.</summary>
+</histogram>
+
 <histogram name="Blink.CookieJar.SyncCookiesTime" units="microseconds">
   <owner>kinuko@chromium.org</owner>
   <owner>dcheng@chromium.org</owner>
@@ -13104,6 +13110,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="DataReductionProxy.WarmupURL.FetchAttemptEvent"
+    enum="DataReductionProxyWarmupURLFetchAttemptEvent">
+  <owner>tbansal@chromium.org</owner>
+  <summary>Records the result of an attempt to fetch the warmup URL.</summary>
+</histogram>
+
 <histogram name="DataReductionProxy.WarmupURL.FetchInitiated" units="count">
   <owner>tbansal@chromium.org</owner>
   <summary>
@@ -13496,6 +13508,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="DataUse.Sync.Download.Bytes" enum="SyncModelTypes">
+  <obsolete>
+    Deprecated 10/2017.
+  </obsolete>
   <owner>amohammadkhan@chromium.org</owner>
   <owner>bengr@chromium.org</owner>
   <summary>
@@ -13506,6 +13521,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="DataUse.Sync.Download.Count" enum="SyncModelTypes">
+  <obsolete>
+    Deprecated 10/2017.
+  </obsolete>
   <owner>amohammadkhan@chromium.org</owner>
   <owner>bengr@chromium.org</owner>
   <summary>
@@ -13516,6 +13534,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="DataUse.Sync.ProgressMarker.Bytes" enum="SyncModelTypes">
+  <obsolete>
+    Deprecated 10/2017.
+  </obsolete>
   <owner>amohammadkhan@chromium.org</owner>
   <owner>bengr@chromium.org</owner>
   <summary>
@@ -13526,6 +13547,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="DataUse.Sync.Upload.Bytes" enum="SyncModelTypes">
+  <obsolete>
+    Deprecated 10/2017.
+  </obsolete>
   <owner>amohammadkhan@chromium.org</owner>
   <owner>bengr@chromium.org</owner>
   <summary>
@@ -13535,6 +13559,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="DataUse.Sync.Upload.Count" enum="SyncModelTypes">
+  <obsolete>
+    Deprecated 10/2017.
+  </obsolete>
   <owner>amohammadkhan@chromium.org</owner>
   <owner>bengr@chromium.org</owner>
   <summary>
@@ -27214,6 +27241,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Histogram.PermanentNameChanged" enum="HistogramNameHash">
+  <owner>asvitkine@chromium.org</owner>
+  <owner>bcwhite@chromium.org</owner>
+  <summary>
+    The hash codes of histograms of which the external name storage was altered
+    after the histogram was created.
+  </summary>
+</histogram>
+
 <histogram name="History.AttemptedToFixProfileError">
   <owner>brettw@chromium.org</owner>
   <summary>
@@ -33078,6 +33114,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Media.Engagement.URLsDeletedScoreReduction" units="%">
+  <owner>beccahughes@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Recorded when the history is cleared and the media engagement data are
+    similarly cleared. It records the reduction in score for each affected
+    origin. The algorithm is made to reduce the score by 0.0 as much as possible
+    and if it fails, the score will actually become 0.0 so every reduction also
+    represent the value of the previous score.
+  </summary>
+</histogram>
+
 <histogram name="Media.FallbackHardwareAudioBitsPerChannel">
   <owner>dalecurtis@chromium.org</owner>
   <summary>
@@ -35387,7 +35435,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each chrome:// renderer process.  Each
-    process provides one sample.  Recorded once per UMA ping.
+    process provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -35652,6 +35700,46 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram
+    name="Memory.Experimental.OomIntervention.NavigationAfterDetectionTime"
+    units="ms">
+  <owner>bashi@chromium.org</owner>
+  <summary>
+    Records the time elapsed between a near-OOM detection and when a navigation
+    is started.
+  </summary>
+</histogram>
+
+<histogram name="Memory.Experimental.OomIntervention.NearOomDetectionEndReason"
+    enum="NearOomDetectionEndReason">
+  <owner>bashi@chromium.org</owner>
+  <summary>
+    Records the reason for stopping near-OOM detection. This isn't recorded when
+    a near-OOM situation was detected.
+  </summary>
+</histogram>
+
+<histogram
+    name="Memory.Experimental.OomIntervention.OomProtectedCrashAfterDetectionTime"
+    units="ms">
+  <owner>bashi@chromium.org</owner>
+  <summary>
+    Records the time elapsed between a near-OOM detection and when an OOM
+    protected renderer was crashed.
+  </summary>
+</histogram>
+
+<histogram
+    name="Memory.Experimental.OomIntervention.RendererGoneAfterDetectionTime"
+    units="ms">
+  <owner>bashi@chromium.org</owner>
+  <summary>
+    Records the time elapsed between a near-OOM detection and when a foreground
+    renderer process was gone. This histogram does not contain OOM protected
+    crashes.
+  </summary>
+</histogram>
+
 <histogram base="true" name="Memory.Experimental.Renderer" units="MB">
 <!-- Name completed by histogram_suffixes name="RendererMemoryAllocator" -->
 
@@ -35752,7 +35840,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each extension process.  Each process
-    provides one sample.  Recorded once per UMA ping.
+    provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -35760,7 +35848,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>erikchen@chromium.org</owner>
   <summary>
     A rough estimate of the private memory footprint of the extension process.
-    Recorded once per UMA ping.
+    Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -35838,7 +35926,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each Native Client loader process.  Each
-    process provides one sample.  Recorded once per UMA ping.
+    process provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -35848,7 +35936,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each Native Client broker process.  Each
-    process provides one sample.  Recorded once per UMA ping.
+    process provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -35962,7 +36050,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>thestig@chromium.org</owner>
   <summary>
     The private working set used by each Pepper Flash plugin process. Each
-    plugin process provides one sample.  Recorded once per UMA ping.
+    plugin process provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -35972,7 +36060,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each Pepper plugin process.  Each plugin
-    process provides one sample.  Recorded once per UMA ping.
+    process provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -35982,7 +36070,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each Pepper plugin broker process.  Each
-    process provides one sample.  Recorded once per UMA ping.
+    process provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36014,7 +36102,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each plugin process.  Each plugin process
-    provides one sample.  Recorded once per UMA ping.
+    provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36082,7 +36170,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The total committed memory used by each renderer process.  Each renderer
-    process provides one sample.  Recorded once per UMA ping.
+    process provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36101,7 +36189,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each renderer process.  Each renderer
-    process provides one sample.  Recorded once per UMA ping.
+    process provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36109,7 +36197,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>erikchen@chromium.org</owner>
   <summary>
     A rough estimate of the private memory footprint of the renderer process.
-    Recorded once per UMA ping.
+    Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36121,7 +36209,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     The private working set used by each renderer process, including all
     renderer types, i.e. this includes Chrome renderer, extensions renderer, as
     well as regular renderer processes.  Each renderer process provides one
-    sample.  Recorded once per UMA ping.
+    sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36133,7 +36221,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     The total committed memory used by each renderer process, including all
     renderer types, i.e. this includes Chrome renderer, extensions renderer, as
     well as regular renderer processes.  Each renderer process provides one
-    sample.  Recorded once per UMA ping.
+    sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36186,7 +36274,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each sandbox helper process.  Each sandbox
-    helper process provides one sample.  Recorded once per UMA ping.
+    helper process provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36353,7 +36441,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each chrome:// renderer process.  Each process provides one
-    sample.  Recorded once per UMA ping if the system has swapped.
+    sample.  Recorded once per process per UMA ping if the system has swapped.
   </summary>
 </histogram>
 
@@ -36383,7 +36471,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each extension process.  Each process provides one sample.
-    Recorded once per UMA ping if the system has swapped.
+    Recorded once per process per UMA ping if the system has swapped.
   </summary>
 </histogram>
 
@@ -36423,7 +36511,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each Native Client loader process.  Each process provides
-    one sample.  Recorded once per UMA ping if the system has swapped.
+    one sample.  Recorded once per process per UMA ping if the system has
+    swapped.
   </summary>
 </histogram>
 
@@ -36433,7 +36522,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each Native Client broker process.  Each process provides
-    one sample.  Recorded once per UMA ping if the system has swapped.
+    one sample.  Recorded once per process per UMA ping if the system has
+    swapped.
   </summary>
 </histogram>
 
@@ -36442,8 +36532,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
   <summary>
-    The number of reads from swap.  Recorded once per UMA ping  if the system
-    has swapped.
+    The number of reads from swap.  Recorded once per UMA ping if the system has
+    swapped.
   </summary>
 </histogram>
 
@@ -36473,7 +36563,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each Pepper plugin process.  Each plugin process provides
-    one sample.  Recorded once per UMA ping if the system has swapped.
+    one sample.  Recorded once per process per UMA ping if the system has
+    swapped.
   </summary>
 </histogram>
 
@@ -36483,7 +36574,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each Pepper plugin broker process.  Each process provides
-    one sample.  Recorded once per UMA ping if the system has swapped.
+    one sample.  Recorded once per process per UMA ping if the system has
+    swapped.
   </summary>
 </histogram>
 
@@ -36496,7 +36588,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each plugin process.  Each plugin process provides one
-    sample.  Recorded once per UMA ping if the system has swapped.
+    sample.  Recorded once per process per UMA ping if the system has swapped.
   </summary>
 </histogram>
 
@@ -36506,7 +36598,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each renderer process.  Each renderer process provides one
-    sample.  Recorded once per UMA ping if the system has swapped.
+    sample.  Recorded once per process per UMA ping if the system has swapped.
   </summary>
 </histogram>
 
@@ -36516,7 +36608,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each sandbox helper process.  Each sandbox helper process
-    provides one sample.  Recorded once per UMA ping if the system has swapped.
+    provides one sample.  Recorded once per process per UMA ping if the system
+    has swapped.
   </summary>
 </histogram>
 
@@ -36548,7 +36641,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each utility process.  Each utility process provides one
-    sample.  Recorded once per UMA ping if the system has swapped.
+    sample.  Recorded once per process per UMA ping if the system has swapped.
   </summary>
 </histogram>
 
@@ -36558,7 +36651,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The swap used by each worker process.  Each worker process provides one
-    sample.  Recorded once per UMA ping if the system has swapped.
+    sample.  Recorded once per process per UMA ping if the system has swapped.
   </summary>
 </histogram>
 
@@ -36611,7 +36704,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each utility process.  Each utility process
-    provides one sample.  Recorded once per UMA ping.
+    provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36621,7 +36714,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by each worker process.  Each worker process
-    provides one sample.  Recorded once per UMA ping.
+    provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -36640,7 +36733,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kouhei@chromium.org</owner>
   <summary>
     The private working set used by the zygote process.  Each zygote process
-    provides one sample.  Recorded once per UMA ping.
+    provides one sample.  Recorded once per process per UMA ping.
   </summary>
 </histogram>
 
@@ -65003,6 +65096,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Previews.OptOut.SQLiteLoadError" enum="SqliteErrorCode">
+  <owner>ryansturm@chromium.org</owner>
+  <summary>
+    The SQLite error code that the previews opt out store saw when trying to
+    open the SQLite database. This is logged when an unexpected error occurs
+    when trying to open the database file.
+  </summary>
+</histogram>
+
 <histogram name="Previews.OptOut.UserOptedOut" enum="PreviewsUserOptedOut">
   <owner>ryansturm@chromium.org</owner>
   <summary>
@@ -68151,6 +68253,23 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="RendererScheduler.TaskDurationPerFrameType"
     enum="RendererSchedulerFrameType" units="ms">
+  <obsolete>
+    Replaced with RendererScheduler.TaskDurationPerFrameType2 due to the
+    introduction of new types of frames as of 11/2017.
+  </obsolete>
+  <owner>altimin@chromium.org</owner>
+  <summary>
+    Total duration of renderer per-frame tasks split per frame type. Used to
+    monitor workload coming from different frames. Reported each time when task
+    is completed and current accumulated duration is longer than 1ms.
+
+    This metric is susceptible to problematic outliers and should be analyzed
+    with custom scripts accounting for that rather than from a dashboard.
+  </summary>
+</histogram>
+
+<histogram name="RendererScheduler.TaskDurationPerFrameType2"
+    enum="RendererSchedulerFrameType2" units="ms">
   <owner>altimin@chromium.org</owner>
   <summary>
     Total duration of renderer per-frame tasks split per frame type. Used to
@@ -68312,6 +68431,126 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>ppi@chromium.org</owner>
   <summary>
     Roundtrip times for synchronous IPC calls from the renderer to browser.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.DidChangeScrollOffset" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.DidChangeScrollOffset.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.DidClearWindowObject" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.DidClearWindowObject.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.DidCommitProvisionalLoad" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.DidCommitProvisionalLoad.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.DidCreateScriptContext" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.DidCreateScriptContext.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.DidFailProvisionalLoad" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.DidFailProvisionalLoad.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.DidFinishDocumentLoad" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.DidFinishDocumentLoad.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.DidFinishLoad" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.DidFinishLoad.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.DidMeaningfulLayout" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.DidMeaningfulLayout.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.DidStartProvisionalLoad" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.DidStartProvisionalLoad.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.FocusedNodeChanged" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.FocusedNodeChanged.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.OnMessageReceived" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.OnMessageReceived.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.ScriptedPrint" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.ScriptedPrint.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.WillCommitProvisionalLoad" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.WillCommitProvisionalLoad.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.WillSendSubmitEvent" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.WillSendSubmitEvent.
+  </summary>
+</histogram>
+
+<histogram name="RenderFrameObservers.WillSubmitForm" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    Cumulative time spent by all RenderFrameObservers in
+    RenderFrameImpl.WillSubmitForm.
   </summary>
 </histogram>
 
@@ -80254,6 +80493,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="SoftwareReporter.PromptUsage" enum="SRTPromptUsage">
+  <obsolete>
+    Deprecated as of 2017-11-01. Replaced with
+    SoftwareReporter.PromptDialogResponse.
+  </obsolete>
   <owner>mad@chromium.org</owner>
   <summary>Usage of the Software Removal Tool (SRT) Prompt.</summary>
 </histogram>
@@ -82619,11 +82862,30 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="SubresourceFilter.SafeBrowsing.CheckDispatchTime"
+    units="microseconds">
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    The microseconds it took to dispatch the Safe Browsing check. This includes
+    IPC descheduling delays to communicate with SafetyNet on Android, and
+    synchronous db checks on desktop.
+  </summary>
+</histogram>
+
 <histogram name="SubresourceFilter.SafeBrowsing.CheckTime" units="ms">
   <owner>csharrison@chromium.org</owner>
   <summary>
     The time an individual Safe Browsing URL check took before finishing. Logged
     when a check is complete or cancelled due to a timeout.
+  </summary>
+</histogram>
+
+<histogram name="SubresourceFilter.SafeBrowsing.TotalCheckTime" units="ms">
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    The time an individual Safe Browsing URL check took before finishing,
+    including posting tasks to and from the IO thread. Measured on the UI
+    thread.
   </summary>
 </histogram>
 
@@ -87556,6 +87818,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Translate.PageCaptured" units="ms">
+  <owner>joelhockey@chromium.org</owner>
+  <summary>
+    The time spent capturing plain text from the DOM. This is reported by
+    ChromeRenderViewObserver when a page is loaded completely.
+  </summary>
+</histogram>
+
 <histogram name="Translate.PageScheme" enum="TranslateScheme">
   <owner>kenjibaheux@google.com</owner>
   <summary>Counts translation target page schemes.</summary>
@@ -89670,6 +89940,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="V8.CompileHeuristicsDecision" enum="CompileHeuristicsDecision">
+  <obsolete>
+    This histogram has been replaced by V8.CompileTime.CacheBehaviour.
+  </obsolete>
   <owner>kouhei@chromium.org</owner>
   <summary>
     V8 script compile function variant which was picked. This contains
@@ -89679,6 +89952,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="V8.CompileInlineScriptMicroSeconds" units="microseconds">
+  <obsolete>
+    This histogram has been replaced by
+    V8.CompileTimeMicroSeconds.NoCache.InlineScript.
+  </obsolete>
   <owner>yangguo@chromium.org</owner>
   <summary>Time spent compiling an inline script.</summary>
 </histogram>
@@ -89705,6 +89982,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="V8.CompileNoncacheableMicroSeconds" units="microseconds">
+  <obsolete>
+    This histogram has been replaced by the subcategories of
+    V8.CompileTimeMicroSeconds.NoCache
+  </obsolete>
   <owner>yangguo@chromium.org</owner>
   <summary>
     Time spent compiling a script that cannot be subject to caching.
@@ -89721,10 +90002,91 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="V8.CompileScript.CacheBehaviour" enum="V8CacheBehaviour">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    The cache behaviour of compiling a V8 script, including whether we produced
+    or consumed a code cache, whether we hit V8's isolate's cache, and if we
+    didn't use the code cache, the reason why not.
+  </summary>
+</histogram>
+
 <histogram name="V8.CompileScriptMicroSeconds" units="microseconds">
   <owner>yangguo@chromium.org</owner>
   <summary>
     Total time spent in compiling a script (incl. parsing/caching).
+  </summary>
+</histogram>
+
+<histogram name="V8.CompileScriptMicroSeconds.CompilationCacheHit"
+    units="microseconds">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    Total time spent in compiling a script (incl. parsing/caching) in the case
+    where the V8 in-memory compilation cache is hit.
+  </summary>
+</histogram>
+
+<histogram name="V8.CompileScriptMicroSeconds.ConsumeCache"
+    units="microseconds">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    Total time spent in compiling a script when the 'compilation' is
+    deserializing it from the code cache.
+  </summary>
+</histogram>
+
+<histogram name="V8.CompileScriptMicroSeconds.ConsumeCache.Failed"
+    units="microseconds">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    Total time spent in compiling a script  (incl. parsing/caching) when the
+    compilation tried to deserialize it from the code cache, but failed.
+  </summary>
+</histogram>
+
+<histogram name="V8.CompileScriptMicroSeconds.NoCache.CacheTooCold"
+    units="microseconds">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    Total time spent in compiling a script (incl. parsing) when the cache is too
+    cold to use.
+  </summary>
+</histogram>
+
+<histogram name="V8.CompileScriptMicroSeconds.NoCache.InlineScript"
+    units="microseconds">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    Total time spent in compiling a script (incl. parsing) when the script is an
+    inline script.
+  </summary>
+</histogram>
+
+<histogram name="V8.CompileScriptMicroSeconds.NoCache.Other"
+    units="microseconds">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    Total time spent in compiling a script (incl. parsing) when we do not want
+    to cache it.
+  </summary>
+</histogram>
+
+<histogram name="V8.CompileScriptMicroSeconds.NoCache.ScriptTooSmall"
+    units="microseconds">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    Total time spent in compiling a script (incl. parsing) when the script is
+    too small to be cached.
+  </summary>
+</histogram>
+
+<histogram name="V8.CompileScriptMicroSeconds.ProduceCache"
+    units="microseconds">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    Total time spent in compiling a script (incl. parsing) and serializing it
+    for the code cache.
   </summary>
 </histogram>
 
@@ -91555,6 +91917,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="WebApk.Update.NumStaleUpdateRequestFiles" units="files">
+  <owner>hanxi@chromium.org</owner>
+  <owner>pkotwicz@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    Records the number of zombie &quot;WebAPK update request&quot; files that
+    the update process failed to cleanup. Recorded for all WebAPKs whenever a
+    WebAPK or webapp is launched.
+  </summary>
+</histogram>
+
 <histogram name="WebApk.Update.RequestQueued" enum="WebApkUpdateRequestQueued">
   <owner>hanxi@chromium.org</owner>
   <owner>pkotwicz@chromium.org</owner>
@@ -91572,6 +91945,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Records the time point when a request to update a WebAPK is sent to the
     WebAPK Server.
+  </summary>
+</histogram>
+
+<histogram name="Webapp.AddToHomescreenDialog.Timeout" units="ms">
+  <owner>dominickn@chromium.org</owner>
+  <summary>
+    Records the number of milliseconds that the add to homescreen dialog
+    required to check installability eligibility.
   </summary>
 </histogram>
 
@@ -92045,11 +92426,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="WebCore.FeatureObserver" enum="FeatureObserver">
+  <obsolete>
+    As of M57 this has been superseded by Blink.UseCounter.Features which fixes
+    a number of issues.  See https://crbug.com/676837.
+  </obsolete>
   <owner>rbyers@chromium.org</owner>
   <summary>
-    NOTE: As of M57 this has been superseded by Blink.UseCounter.Features which
-    fixes a number of issues.  See https://crbug.com/676837.
-
     Count of how many page loads use various features. The PageVisits bucket is
     incremented for each page load, and the other buckets incremented at most
     once per PageVisit via the WebCore::UseCounter class.
@@ -92058,37 +92440,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="WebCore.FeatureObserver.CSSProperties"
     enum="MappedCSSProperties">
+  <obsolete>
+    As of M57 this has been superseded by Blink.UseCounter.CSSProperties which
+    fixes a number of issues.  See https://crbug.com/676837.
+  </obsolete>
   <owner>mikelawther@chromium.org</owner>
   <summary>
-    NOTE: As of M57 this has been superseded by Blink.UseCounter.Features which
-    fixes a number of issues.  See https://crbug.com/676837.
-
     Records usage of CSS properties used on a page, either statically or
     dynamically, from the time the page is initialised to when it is closed or
     navigated away from. Each property is counted at most once per page per
     view.
   </summary>
-  <details>
-    Every time a CSS property is parsed on a page, that property is recorded as
-    having been used. The histogram is updated with this data whenever a page is
-    closed, or a page navigation happens. Each histogram bucket corresponds to a
-    CSS property (eg width, border-radius). The exception is the bucket numbered
-    '1' - this counts the number of pages that CSS properties were counted on.
-
-    These numbers give the percentage of pages that use a CSS property. For
-    example, if the 'border-radius' histogram bucket has a count of 250, and the
-    page count bucket (i.e. bucket number 1) has a count of 1000 - this means
-    that 1000 pages were recorded, and border-radius was used on 25% of those
-    pages.
-
-    Internally, each WebCore::Page has a WebCore::UseCounter instance, with
-    booleans recording use of each CSS property - one boolean per property. Upon
-    destruction of the WebCore::Page (e.g. by the user closing the tab), or a
-    page navigation happening, the histogram is updated. For each boolean that
-    is set to True, the corresponding histogram bucket for that CSS property is
-    incremented by 1. The page count bucket (i.e. bucket number 1) is always
-    incremented by 1 on each histogram update.
-  </details>
 </histogram>
 
 <histogram name="WebCore.Framebust" enum="FramebustPermissions">
@@ -93166,6 +93528,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="WebFont.InterventionResult.MissedCache"
     enum="WebFontInterventionResult">
+  <obsolete>
+    Deprecated 10/2017. Related field trial has finished rolling out.
+  </obsolete>
   <owner>toyoshim@chromium.org</owner>
   <owner>kenjibaheux@chromium.org</owner>
   <summary>

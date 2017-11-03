@@ -334,6 +334,10 @@ const char kEnableFastUnload[] = "enable-fast-unload";
 // (internally adds lEnableGpuPlugin to the command line).
 const char kEnableNaCl[]                    = "enable-nacl";
 
+// Enables styling the profile chooser button using the systme theme.
+// Only available on desktop Linux.
+const char kEnableNativeAvatarButton[] = "enable-native-avatar-button";
+
 // Enables tracing for each navigation. It will attempt to trace each navigation
 // for 10s, until the buffer is full, or until the next navigation.
 // It only works if a URL was provided by --trace-upload-url.
@@ -898,6 +902,10 @@ const char kEnableMacViewsNativeAppWindows[] =
 
 // Enables Translate experimental new UX which replaces the infobar.
 const char kEnableTranslateNewUX[] = "enable-translate-new-ux";
+
+// Forces the first-run flow even on unofficial builds. Note that this still
+// requires a fresh user-data-dir.
+const char kForceUnofficialFirstRun[] = "force-unofficial-first-run";
 
 // Shows a notification when quitting Chrome with hosted apps running. Default
 // behavior is to also quit all hosted apps.

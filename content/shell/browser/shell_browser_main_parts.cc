@@ -147,9 +147,7 @@ void ShellBrowserMainParts::InitializeBrowserContexts() {
 
 void ShellBrowserMainParts::InitializeMessageLoopContext() {
   ui::MaterialDesignController::Initialize();
-  Shell::CreateNewWindow(browser_context_.get(),
-                         GetStartupURL(),
-                         NULL,
+  Shell::CreateNewWindow(browser_context_.get(), GetStartupURL(), nullptr,
                          gfx::Size());
 }
 
@@ -163,8 +161,7 @@ int ShellBrowserMainParts::PreCreateThreads() {
             switches::kCrashDumpsDir);
     breakpad::CrashDumpObserver::GetInstance()->RegisterClient(
         std::make_unique<breakpad::ChildProcessCrashObserver>(
-            crash_dumps_dir, kAndroidMinidumpDescriptor,
-            base::Bind(&base::DoNothing)));
+            crash_dumps_dir, kAndroidMinidumpDescriptor));
   }
 
   return 0;

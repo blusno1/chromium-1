@@ -37,7 +37,7 @@ class CORE_EXPORT ScriptPromiseResolver
  public:
   static ScriptPromiseResolver* Create(ScriptState* script_state) {
     ScriptPromiseResolver* resolver = new ScriptPromiseResolver(script_state);
-    resolver->SuspendIfNeeded();
+    resolver->PauseIfNeeded();
     return resolver;
   }
 
@@ -140,7 +140,7 @@ class CORE_EXPORT ScriptPromiseResolver
                       script_state_->GetIsolate()));
     }
 
-    if (GetExecutionContext()->IsContextSuspended()) {
+    if (GetExecutionContext()->IsContextPaused()) {
       // Retain this object until it is actually resolved or rejected.
       KeepAliveWhilePending();
       return;

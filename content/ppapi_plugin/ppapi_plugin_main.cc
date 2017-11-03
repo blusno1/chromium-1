@@ -57,7 +57,7 @@
 #if defined(OS_WIN)
 sandbox::TargetServices* g_target_services = NULL;
 #else
-void* g_target_services = 0;
+void* g_target_services = nullptr;
 #endif
 
 namespace content {
@@ -111,7 +111,7 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
 
   base::MessageLoop main_message_loop;
   base::PlatformThread::SetName("CrPPAPIMain");
-  base::trace_event::TraceLog::GetInstance()->SetProcessName("PPAPI Process");
+  base::trace_event::TraceLog::GetInstance()->set_process_name("PPAPI Process");
   base::trace_event::TraceLog::GetInstance()->SetProcessSortIndex(
       kTraceEventPpapiProcessSortIndex);
 

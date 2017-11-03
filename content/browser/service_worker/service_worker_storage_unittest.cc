@@ -757,13 +757,13 @@ TEST_F(ServiceWorkerStorageTest, StoreFindUpdateDeleteRegistration) {
             found_registration->resources_total_size_bytes());
   EXPECT_EQ(used_features,
             found_registration->waiting_version()->used_features());
-  found_registration = NULL;
+  found_registration = nullptr;
 
   // But FindRegistrationForPattern is always async.
   EXPECT_EQ(SERVICE_WORKER_OK,
             FindRegistrationForPattern(kScope, &found_registration));
   EXPECT_EQ(live_registration, found_registration);
-  found_registration = NULL;
+  found_registration = nullptr;
 
   // Can be found by id too.
   EXPECT_EQ(SERVICE_WORKER_OK,
@@ -772,7 +772,7 @@ TEST_F(ServiceWorkerStorageTest, StoreFindUpdateDeleteRegistration) {
   ASSERT_TRUE(found_registration.get());
   EXPECT_EQ(kRegistrationId, found_registration->id());
   EXPECT_EQ(live_registration, found_registration);
-  found_registration = NULL;
+  found_registration = nullptr;
 
   // Can be found by just the id too.
   EXPECT_EQ(SERVICE_WORKER_OK,
@@ -780,10 +780,10 @@ TEST_F(ServiceWorkerStorageTest, StoreFindUpdateDeleteRegistration) {
   ASSERT_TRUE(found_registration.get());
   EXPECT_EQ(kRegistrationId, found_registration->id());
   EXPECT_EQ(live_registration, found_registration);
-  found_registration = NULL;
+  found_registration = nullptr;
 
   // Drop the live registration, but keep the version live.
-  live_registration = NULL;
+  live_registration = nullptr;
 
   // Now FindRegistrationForDocument should be async.
   EXPECT_EQ(SERVICE_WORKER_OK,
@@ -817,10 +817,10 @@ TEST_F(ServiceWorkerStorageTest, StoreFindUpdateDeleteRegistration) {
                                       &registrations_for_origin));
   EXPECT_TRUE(registrations_for_origin.empty());
 
-  found_registration = NULL;
+  found_registration = nullptr;
 
   // Drop the live version too.
-  live_version = NULL;
+  live_version = nullptr;
 
   // And FindRegistrationForPattern is always async.
   EXPECT_EQ(SERVICE_WORKER_OK,
@@ -848,12 +848,12 @@ TEST_F(ServiceWorkerStorageTest, StoreFindUpdateDeleteRegistration) {
       found_registration->waiting_version();
   temp_version->SetStatus(ServiceWorkerVersion::ACTIVATED);
   found_registration->SetActiveVersion(temp_version);
-  temp_version = NULL;
+  temp_version = nullptr;
   EXPECT_EQ(SERVICE_WORKER_OK, UpdateToActiveState(found_registration));
   found_registration->set_last_update_check(kToday);
   UpdateLastUpdateCheckTime(found_registration.get());
 
-  found_registration = NULL;
+  found_registration = nullptr;
 
   // Trying to update a unstored registration to active should fail.
   scoped_refptr<ServiceWorkerRegistration> unstored_registration =
@@ -862,7 +862,7 @@ TEST_F(ServiceWorkerStorageTest, StoreFindUpdateDeleteRegistration) {
           kRegistrationId + 1, context()->AsWeakPtr());
   EXPECT_EQ(SERVICE_WORKER_ERROR_NOT_FOUND,
             UpdateToActiveState(unstored_registration));
-  unstored_registration = NULL;
+  unstored_registration = nullptr;
 
   // The Find methods should return a registration with an active version
   // and the expected update time.
@@ -958,22 +958,22 @@ TEST_F(ServiceWorkerStorageTest, InstallingRegistrationsAreFindable) {
             FindRegistrationForId(
                 kRegistrationId, kScope.GetOrigin(), &found_registration));
   EXPECT_EQ(live_registration, found_registration);
-  found_registration = NULL;
+  found_registration = nullptr;
 
   EXPECT_EQ(SERVICE_WORKER_OK,
             FindRegistrationForIdOnly(kRegistrationId, &found_registration));
   EXPECT_EQ(live_registration, found_registration);
-  found_registration = NULL;
+  found_registration = nullptr;
 
   EXPECT_EQ(SERVICE_WORKER_OK,
             FindRegistrationForDocument(kDocumentUrl, &found_registration));
   EXPECT_EQ(live_registration, found_registration);
-  found_registration = NULL;
+  found_registration = nullptr;
 
   EXPECT_EQ(SERVICE_WORKER_OK,
             FindRegistrationForPattern(kScope, &found_registration));
   EXPECT_EQ(live_registration, found_registration);
-  found_registration = NULL;
+  found_registration = nullptr;
 
   EXPECT_EQ(SERVICE_WORKER_OK, GetAllRegistrationsInfos(&all_registrations));
   EXPECT_EQ(1u, all_registrations.size());
@@ -992,8 +992,8 @@ TEST_F(ServiceWorkerStorageTest, InstallingRegistrationsAreFindable) {
   EXPECT_TRUE(registrations_for_origin.empty());
 
   // Notify storage of installation no longer happening.
-  storage()->NotifyDoneInstallingRegistration(
-      live_registration.get(), NULL, SERVICE_WORKER_OK);
+  storage()->NotifyDoneInstallingRegistration(live_registration.get(), nullptr,
+                                              SERVICE_WORKER_OK);
 
   // Once again, should not be findable.
   EXPECT_EQ(SERVICE_WORKER_ERROR_NOT_FOUND,
@@ -1367,8 +1367,8 @@ TEST_F(ServiceWorkerResourceStorageTest, DeleteRegistration_NoLiveVersion) {
   ServiceWorkerStatusCode result = SERVICE_WORKER_ERROR_FAILED;
   std::set<int64_t> verify_ids;
 
-  registration_->SetWaitingVersion(NULL);
-  registration_ = NULL;
+  registration_->SetWaitingVersion(nullptr);
+  registration_ = nullptr;
 
   // Deleting the registration should result in the resources being added to the
   // purgeable list and then doomed in the disk cache and removed from that
@@ -1478,7 +1478,7 @@ TEST_F(ServiceWorkerResourceStorageTest, DeleteRegistration_ActiveVersion) {
 TEST_F(ServiceWorkerResourceStorageDiskTest, CleanupOnRestart) {
   // Promote the worker to active and add a controllee.
   registration_->SetActiveVersion(registration_->waiting_version());
-  registration_->SetWaitingVersion(NULL);
+  registration_->SetWaitingVersion(nullptr);
   storage()->UpdateToActiveState(
       registration_.get(), base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
   ServiceWorkerRemoteProviderEndpoint remote_endpoint;
@@ -1725,7 +1725,7 @@ TEST_F(ServiceWorkerStorageTest, FindRegistration_LongestScopeMatch) {
   EXPECT_EQ(SERVICE_WORKER_OK,
             FindRegistrationForDocument(kDocumentUrl, &found_registration));
   EXPECT_EQ(live_registration2, found_registration);
-  found_registration = NULL;
+  found_registration = nullptr;
 
   // Store registrations.
   EXPECT_EQ(SERVICE_WORKER_OK,
@@ -1739,12 +1739,12 @@ TEST_F(ServiceWorkerStorageTest, FindRegistration_LongestScopeMatch) {
                               live_registration3->waiting_version()));
 
   // Notify storage of installations no longer happening.
-  storage()->NotifyDoneInstallingRegistration(
-      live_registration1.get(), NULL, SERVICE_WORKER_OK);
-  storage()->NotifyDoneInstallingRegistration(
-      live_registration2.get(), NULL, SERVICE_WORKER_OK);
-  storage()->NotifyDoneInstallingRegistration(
-      live_registration3.get(), NULL, SERVICE_WORKER_OK);
+  storage()->NotifyDoneInstallingRegistration(live_registration1.get(), nullptr,
+                                              SERVICE_WORKER_OK);
+  storage()->NotifyDoneInstallingRegistration(live_registration2.get(), nullptr,
+                                              SERVICE_WORKER_OK);
+  storage()->NotifyDoneInstallingRegistration(live_registration3.get(), nullptr,
+                                              SERVICE_WORKER_OK);
 
   // Find a registration among installed ones.
   EXPECT_EQ(SERVICE_WORKER_OK,
@@ -2036,12 +2036,12 @@ TEST_F(ServiceWorkerStorageTest, AbsentNavigationPreloadState) {
   scoped_refptr<ServiceWorkerRegistration> found_registration;
   EXPECT_EQ(SERVICE_WORKER_OK,
             FindRegistrationForDocument(scope1, &found_registration));
-  const NavigationPreloadState& registration_state =
+  const blink::mojom::NavigationPreloadState& registration_state =
       found_registration->navigation_preload_state();
   EXPECT_FALSE(registration_state.enabled);
   EXPECT_EQ("true", registration_state.header);
   ASSERT_TRUE(found_registration->active_version());
-  const NavigationPreloadState& state =
+  const blink::mojom::NavigationPreloadState& state =
       found_registration->active_version()->navigation_preload_state();
   EXPECT_FALSE(state.enabled);
   EXPECT_EQ("true", state.header);
@@ -2122,12 +2122,12 @@ TEST_F(ServiceWorkerStorageDiskTest, DisabledNavigationPreloadState) {
   scoped_refptr<ServiceWorkerRegistration> found_registration;
   EXPECT_EQ(SERVICE_WORKER_OK,
             FindRegistrationForDocument(kScope, &found_registration));
-  const NavigationPreloadState& registration_state =
+  const blink::mojom::NavigationPreloadState& registration_state =
       found_registration->navigation_preload_state();
   EXPECT_FALSE(registration_state.enabled);
   EXPECT_EQ("true", registration_state.header);
   ASSERT_TRUE(found_registration->active_version());
-  const NavigationPreloadState& state =
+  const blink::mojom::NavigationPreloadState& state =
       found_registration->active_version()->navigation_preload_state();
   EXPECT_FALSE(state.enabled);
   EXPECT_EQ("true", state.header);
@@ -2159,12 +2159,12 @@ TEST_F(ServiceWorkerStorageDiskTest, EnabledNavigationPreloadState) {
   scoped_refptr<ServiceWorkerRegistration> found_registration;
   EXPECT_EQ(SERVICE_WORKER_OK,
             FindRegistrationForDocument(kScope, &found_registration));
-  const NavigationPreloadState& registration_state =
+  const blink::mojom::NavigationPreloadState& registration_state =
       found_registration->navigation_preload_state();
   EXPECT_TRUE(registration_state.enabled);
   EXPECT_EQ(kHeaderValue, registration_state.header);
   ASSERT_TRUE(found_registration->active_version());
-  const NavigationPreloadState& state =
+  const blink::mojom::NavigationPreloadState& state =
       found_registration->active_version()->navigation_preload_state();
   EXPECT_TRUE(state.enabled);
   EXPECT_EQ(kHeaderValue, state.header);

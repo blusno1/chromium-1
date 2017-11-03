@@ -24,6 +24,7 @@ import("//services/service_manager/public/service_manifest.gni")
 import("//services/catalog/public/tools/catalog.gni")
 import("//testing/test.gni")
 import("//ui/base/ui_features.gni")
+import("//ui/views/features.gni")
 import("//v8/gni/v8.gni")
 
 if (is_android) {
@@ -493,6 +494,10 @@ if (!is_android) {
       "base/interactive_test_utils_mac.mm",
       "base/interactive_test_utils_win.cc",
       "base/interactive_ui_tests_main.cc",
+      "base/process_inspector_win.cc",
+      "base/process_inspector_win.h",
+      "base/save_desktop_snapshot_win.cc",
+      "base/save_desktop_snapshot_win.h",
       "base/view_event_test_platform_part.h",
       "base/view_event_test_platform_part_chromeos.cc",
       "base/view_event_test_platform_part_default.cc",
@@ -1225,6 +1230,7 @@ test("browser_tests") {
       "../browser/custom_handlers/protocol_handler_registry_browsertest.cc",
       "../browser/data_saver/data_saver_browsertest.cc",
       "../browser/data_saver/data_saver_holdback_browsertest.cc",
+      "../browser/data_saver/data_saver_webapis_browsertest.cc",
       "../browser/devtools/device/adb/adb_client_socket_browsertest.cc",
       "../browser/devtools/device/adb/mock_adb_server.cc",
       "../browser/devtools/device/adb/mock_adb_server.h",
@@ -1536,7 +1542,7 @@ test("browser_tests") {
       "../browser/ui/views/chrome_cleaner_reboot_dialog_browsertest_win.cc",
       "../browser/ui/views/device_chooser_browsertest.cc",
       "../browser/ui/views/hung_renderer_view_browsertest.cc",
-      "../browser/ui/views/try_chrome_dialog_browsertest.cc",
+      "../browser/ui/views/try_chrome_dialog_win/try_chrome_dialog_browsertest.cc",
       "../browser/ui/webui/bookmarks_ui_browsertest.cc",
       "../browser/ui/webui/chrome_url_data_manager_browsertest.cc",
       "../browser/ui/webui/chromeos/bluetooth_pairing_ui_browsertest-inl.h",
@@ -2085,6 +2091,7 @@ test("browser_tests") {
         "../browser/ui/views/payments/payment_request_data_url_browsertest.cc",
         "../browser/ui/views/payments/payment_request_debit_browsertest.cc",
         "../browser/ui/views/payments/payment_request_journey_logger_browsertest.cc",
+        "../browser/ui/views/payments/payment_request_no_update_with_browsertest.cc",
         "../browser/ui/views/payments/payment_request_payment_app_browsertest.cc",
         "../browser/ui/views/payments/payment_request_payment_response_browsertest.cc",
         "../browser/ui/views/payments/payment_request_shipping_address_instance_browsertest.cc",
@@ -2203,7 +2210,6 @@ test("browser_tests") {
         "../browser/chromeos/file_manager/mount_test_util.cc",
         "../browser/chromeos/file_manager/mount_test_util.h",
         "../browser/chromeos/file_manager/video_player_browsertest.cc",
-        "../browser/chromeos/file_manager/zip_file_creator_browsertest.cc",
         "../browser/chromeos/first_run/chromeos_first_run_browsertest.cc",
         "../browser/chromeos/first_run/drive_first_run_browsertest.cc",
         "../browser/chromeos/first_run/goodies_displayer_browsertest.cc",
@@ -2361,6 +2367,7 @@ test("browser_tests") {
         "//ash:test_support_with_content",
         "//ash/public/interfaces:test_interfaces",
         "//chrome/browser/chromeos:arc_test_support",
+        "//chrome/services/file_util/public/cpp:browser_tests",
         "//components/arc:arc_test_support",
         "//components/prefs",
         "//components/user_manager:test_support",
@@ -2395,12 +2402,15 @@ test("browser_tests") {
         sources -= [ "../browser/ui/views/select_file_dialog_extension_browsertest.cc" ]
       }
       if (is_win || is_linux) {
-        sources += [
-          "../browser/feature_engagement/incognito_window/incognito_window_tracker_browsertest.cc",
-          "../browser/feature_engagement/new_tab/new_tab_tracker_browsertest.cc",
-          "../browser/ui/views/ime/input_ime_apitest_nonchromeos.cc",
-        ]
+        sources +=
+            [ "../browser/ui/views/ime/input_ime_apitest_nonchromeos.cc" ]
       }
+    }
+    if (enable_desktop_in_product_help) {
+      sources += [
+        "../browser/feature_engagement/incognito_window/incognito_window_tracker_browsertest.cc",
+        "../browser/feature_engagement/new_tab/new_tab_tracker_browsertest.cc",
+      ]
     }
     if (safe_browsing_mode == 1) {
       sources += [
@@ -3127,6 +3137,7 @@ test("unit_tests") {
     "../browser/command_updater_unittest.cc",
     "../browser/component_updater/chrome_component_updater_configurator_unittest.cc",
     "../browser/component_updater/component_installer_errors_unittest.cc",
+    "../browser/component_updater/optimization_hints_component_installer_unittest.cc",
     "../browser/component_updater/origin_trials_component_installer_unittest.cc",
     "../browser/component_updater/sth_set_component_installer_unittest.cc",
     "../browser/component_updater/subresource_filter_component_installer_unittest.cc",
@@ -3394,6 +3405,7 @@ test("unit_tests") {
     "../browser/status_icons/status_icon_unittest.cc",
     "../browser/status_icons/status_tray_unittest.cc",
     "../browser/storage/durable_storage_permission_context_unittest.cc",
+    "../browser/subresource_filter/subresource_filter_abusive_unittest.cc",
     "../browser/subresource_filter/subresource_filter_configuration_unittest.cc",
     "../browser/subresource_filter/subresource_filter_content_settings_manager_unittest.cc",
     "../browser/subresource_filter/subresource_filter_test_harness.cc",
@@ -3489,7 +3501,6 @@ test("unit_tests") {
     "../renderer/plugins/plugin_uma_unittest.cc",
     "../renderer/prerender/prerender_dispatcher_unittest.cc",
     "../renderer/searchbox/search_bouncer_unittest.cc",
-    "../renderer/searchbox/searchbox_unittest.cc",
     "../renderer/web_apps_unittest.cc",
     "../test/base/chrome_render_view_test.cc",
     "../test/base/chrome_render_view_test.h",
@@ -3569,6 +3580,7 @@ test("unit_tests") {
     "//components/data_use_measurement/core",
     "//components/nacl/common:features",
     "//components/ntp_snippets:test_support",
+    "//components/optimization_guide",
     "//components/os_crypt:test_support",
     "//components/resources",
     "//components/safe_browsing:features",
@@ -3849,6 +3861,7 @@ test("unit_tests") {
       "../common/importer/mock_importer_bridge.cc",
       "../common/importer/mock_importer_bridge.h",
       "../common/multi_process_lock_unittest.cc",
+      "../renderer/searchbox/searchbox_unittest.cc",
       "../test/base/browser_with_test_window_test.cc",
       "../test/base/browser_with_test_window_test.h",
       "../utility/importer/bookmark_html_reader_unittest.cc",
@@ -3960,7 +3973,7 @@ test("unit_tests") {
     sources += [
       "../browser/component_updater/cros_component_installer_unittest.cc",
       "../browser/media/webrtc/desktop_media_list_ash_unittest.cc",
-      "../browser/notifications/message_center_settings_controller_chromeos_unittest.cc",
+      "../browser/notifications/chrome_ash_message_center_client_unittest.cc",
       "../browser/renderer_context_menu/mock_render_view_context_menu.cc",
       "../browser/renderer_context_menu/mock_render_view_context_menu.h",
       "../browser/signin/signin_error_notifier_ash_unittest.cc",
@@ -4823,6 +4836,7 @@ test("unit_tests") {
         "../browser/ui/cocoa/test/styled_text_field_test_helper.h",
         "../browser/ui/cocoa/test/styled_text_field_test_helper.mm",
         "../browser/ui/cocoa/toolbar/app_toolbar_button_cell_unittest.mm",
+        "../browser/ui/cocoa/toolbar/app_toolbar_button_unittest.mm",
         "../browser/ui/cocoa/toolbar/reload_button_unittest.mm",
         "../browser/ui/cocoa/toolbar/toolbar_button_unittest.mm",
         "../browser/ui/cocoa/toolbar/toolbar_controller_unittest.mm",
@@ -4952,6 +4966,9 @@ test("unit_tests") {
         "../browser/ui/views/frame/opaque_browser_frame_view_layout_unittest.cc",
         "../browser/ui/views/sync/one_click_signin_dialog_view_unittest.cc",
       ]
+    }
+    if (enable_native_window_nav_buttons) {
+      sources += [ "../browser/ui/views/frame/desktop_linux_browser_frame_view_layout_unittest.cc" ]
     }
     if (!is_mac || mac_views_browser) {
       sources += [

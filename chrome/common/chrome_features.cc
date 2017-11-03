@@ -336,6 +336,12 @@ const base::Feature kNtlmV2Enabled{"NtlmV2Enabled",
 const base::Feature kOfflinePageDownloadSuggestionsFeature{
     "NTPOfflinePageDownloadSuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
 
+#if defined(OS_ANDROID)
+// Enables or disabled the OOM intervention.
+const base::Feature kOomIntervention{"OomIntervention",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if !defined(OS_ANDROID)
 // Enables or disabled the OneGoogleBar on the local NTP.
 const base::Feature kOneGoogleBarOnLocalNtp{"OneGoogleBarOnLocalNtp",
@@ -433,7 +439,7 @@ const base::Feature kShowAllDialogsWithViewsToolkit{
 // different origins, instead of sending them all to a single 'Sites' channel.
 const base::Feature kSiteNotificationChannels{"SiteNotificationChannels",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
-#endif  // defined (OS_ANDROID)
+#endif  // defined(OS_ANDROID)
 
 // A new user experience for transitioning into fullscreen and mouse pointer
 // lock states.
@@ -444,6 +450,12 @@ const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
 // origin.
 const base::Feature kSiteDetails{"SiteDetails",
                                  base::FEATURE_ENABLED_BY_DEFAULT};
+
+#if defined(OS_CHROMEOS)
+// Enables or disables the ability to add a Samba Share to the Files app
+const base::Feature kNativeSamba{"NativeSamba",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_CHROMEOS)
 
 // Enables or disables the ability to use the sound content setting to mute a
 // website.

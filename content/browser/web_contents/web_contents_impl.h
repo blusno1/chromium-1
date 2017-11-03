@@ -448,6 +448,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
             const blink::WebFindOptions& options) override;
   void StopFinding(StopFindAction action) override;
   bool WasRecentlyAudible() override;
+  bool WasEverAudible() override;
   void GetManifest(const GetManifestCallback& callback) override;
   bool IsFullscreenForCurrentTab() const override;
   void ExitFullscreen(bool will_cause_resize) override;
@@ -501,6 +502,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
                               IPC::Message* reply_msg) override;
   void RunFileChooser(RenderFrameHost* render_frame_host,
                       const FileChooserParams& params) override;
+  void DidCancelLoading() override;
   void DidAccessInitialDocument() override;
   void DidChangeName(RenderFrameHost* render_frame_host,
                      const std::string& name) override;
@@ -585,7 +587,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
                        const GURL& url) override;
   void Close(RenderViewHost* render_view_host) override;
   void RequestMove(const gfx::Rect& new_bounds) override;
-  void DidCancelLoading() override;
   void DocumentAvailableInMainFrame(RenderViewHost* render_view_host) override;
   void RouteCloseEvent(RenderViewHost* rvh) override;
   bool DidAddMessageToConsole(int32_t level,
@@ -937,6 +938,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
                            IframeBeforeUnloadParentHang);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
                            BeforeUnloadDialogRequiresGesture);
+  FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
+                           CancelBeforeUnloadResetsURL);
   FRIEND_TEST_ALL_PREFIXES(DevToolsProtocolTest, JavaScriptDialogNotifications);
   FRIEND_TEST_ALL_PREFIXES(DevToolsProtocolTest, JavaScriptDialogInterop);
   FRIEND_TEST_ALL_PREFIXES(DevToolsProtocolTest, BeforeUnloadDialog);
@@ -1668,6 +1671,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   VideoSizeMap cached_video_sizes_;
 
   bool has_persistent_video_ = false;
+
+  bool was_ever_audible_ = false;
 
   base::WeakPtrFactory<WebContentsImpl> loading_weak_factory_;
   base::WeakPtrFactory<WebContentsImpl> weak_factory_;

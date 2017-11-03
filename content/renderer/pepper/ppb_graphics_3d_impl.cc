@@ -24,6 +24,7 @@
 #include "content/renderer/render_view_impl.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
+#include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ppapi/c/ppp_graphics_3d.h"
@@ -49,10 +50,11 @@ PPB_Graphics3D_Impl::PPB_Graphics3D_Impl(PP_Instance instance)
       bound_to_instance_(false),
       commit_pending_(false),
       has_alpha_(false),
-      use_image_chromium_(
+      image_chromium_enabled_(
           !base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kDisablePepper3DImageChromium) &&
           base::FeatureList::IsEnabled(features::kPepper3DImageChromium)),
+      use_image_chromium_(false),
       weak_ptr_factory_(this) {}
 
 PPB_Graphics3D_Impl::~PPB_Graphics3D_Impl() {
@@ -70,7 +72,7 @@ PP_Resource PPB_Graphics3D_Impl::CreateRaw(
     gpu::Capabilities* capabilities,
     base::SharedMemoryHandle* shared_state_handle,
     gpu::CommandBufferId* command_buffer_id) {
-  PPB_Graphics3D_API* share_api = NULL;
+  PPB_Graphics3D_API* share_api = nullptr;
   if (share_context) {
     EnterResourceNoLock<PPB_Graphics3D_API> enter(share_context, true);
     if (enter.failed())
@@ -238,6 +240,8 @@ bool PPB_Graphics3D_Impl::InitRaw(
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   if (!render_thread)
     return false;
+  if (render_thread->IsGpuCompositingDisabled())
+    return false;
 
   scoped_refptr<gpu::GpuChannelHost> channel =
       render_thread->EstablishGpuChannelSync();
@@ -253,10 +257,15 @@ bool PPB_Graphics3D_Impl::InitRaw(
   has_alpha_ = requested_attribs.alpha_size > 0;
 
   gpu::gles2::ContextCreationAttribHelper attrib_helper = requested_attribs;
+  // At this point we have a GPU channel so we can see whether
+  // features have been blacklisted.
+  use_image_chromium_ = image_chromium_enabled_ &&
+                        !channel->gpu_feature_info().IsWorkaroundEnabled(
+                            gpu::DISABLE_GPU_MEMORY_BUFFERS_AS_RENDER_TARGETS);
   attrib_helper.should_use_native_gmb_for_backbuffer = use_image_chromium_;
   attrib_helper.context_type = gpu::gles2::CONTEXT_TYPE_OPENGLES2;
 
-  gpu::CommandBufferProxyImpl* share_buffer = NULL;
+  gpu::CommandBufferProxyImpl* share_buffer = nullptr;
   if (!plugin_instance->is_flash_plugin())
     UMA_HISTOGRAM_BOOLEAN("Pepper.Graphics3DHasShareGroup", !!share_context);
   if (share_context) {

@@ -48,6 +48,7 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/font_family_cache.h"
 #include "chrome/browser/language/chrome_language_detection_client.h"
+#include "chrome/browser/media/platform_verification_impl.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/presentation_service_delegate_impl.h"
 #include "chrome/browser/media/router/receiver_presentation_service_delegate_impl.h"
@@ -252,7 +253,6 @@
 #include "chrome/browser/chromeos/arc/fileapi/arc_content_file_system_backend_delegate.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_backend_delegate.h"
 #include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
-#include "chrome/browser/chromeos/attestation/platform_verification_impl.h"
 #include "chrome/browser/chromeos/chrome_browser_main_chromeos.h"
 #include "chrome/browser/chromeos/chrome_service_name.h"
 #include "chrome/browser/chromeos/drive/fileapi/file_system_backend_delegate.h"
@@ -269,6 +269,7 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h"
+#include "chrome/services/file_util/public/interfaces/constants.mojom.h"
 #include "chromeos/chromeos_constants.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/user_manager/user_manager.h"
@@ -1878,12 +1879,7 @@ void ChromeContentBrowserClient::AdjustUtilityServiceProcessCommandLine(
   // TODO(sky): move to a whitelist, but currently the set of flags is rather
   // sprawling.
   if (copy_switches) {
-    base::CommandLine::SwitchMap switches =
-        base::CommandLine::ForCurrentProcess()->GetSwitches();
-    switches.erase("single_process");
-    switches.erase(switches::kSingleProcess);
-    switches.erase("gtest_filter");
-    for (const auto& sw : switches)
+    for (const auto& sw : base::CommandLine::ForCurrentProcess()->GetSwitches())
       command_line->AppendSwitchNative(sw.first, sw.second);
   }
 #endif
@@ -2998,11 +2994,8 @@ void ChromeContentBrowserClient::ExposeInterfacesToMediaService(
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   registry->AddInterface(
       base::Bind(&OutputProtectionImpl::Create, render_frame_host));
-#if defined(OS_CHROMEOS)
   registry->AddInterface(
-      base::Bind(&chromeos::attestation::PlatformVerificationImpl::Create,
-                 render_frame_host));
-#endif  // defined(OS_CHROMEOS)
+      base::Bind(&PlatformVerificationImpl::Create, render_frame_host));
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #if BUILDFLAG(ENABLE_MOJO_CDM) && defined(OS_ANDROID)
@@ -3125,6 +3118,11 @@ void ChromeContentBrowserClient::RegisterOutOfProcessServices(
 #if defined(OS_WIN)
   (*services)[chrome::mojom::kUtilWinServiceName] =
       l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_UTILITY_WIN_NAME);
+#endif
+
+#if defined(OS_CHROMEOS)
+  (*services)[chrome::mojom::kFileUtilServiceName] =
+      l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_FILE_UTILITY_NAME);
 #endif
 
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)

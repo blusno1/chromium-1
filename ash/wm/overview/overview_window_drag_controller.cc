@@ -113,9 +113,9 @@ void OverviewWindowDragController::CompleteDrag(
                      ? SplitViewController::RIGHT
                      : SplitViewController::LEFT);
     } else {
-      window_selector_->set_restore_focus_window(item_->GetWindow());
       split_view_controller_->EndSplitView();
-      window_selector_->CancelSelection();
+      window_selector_->SelectWindow(item_);
+      split_view_controller_->ShowAppCannotSnapToast();
     }
   } else {
     did_move_ = false;

@@ -7771,6 +7771,7 @@ uploading your change for review.  These are checked by presubmit scripts.
 <enum name="DataReductionProxyNetworkChangeEvent">
   <int value="0" label="IP Address Change"/>
   <int value="1" label="Proxy disabled on VPN (deprecated)"/>
+  <int value="2" label="Network change event"/>
 </enum>
 
 <enum name="DataReductionProxyProbeURLFetchResult">
@@ -7849,6 +7850,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1"
       label="Resolved HTTPS data reduction proxy does not support QUIC"/>
   <int value="2" label="QUIC proxies have been marked as broken"/>
+  <int value="3" label="QUIC proxies have been disabled via field trial"/>
 </enum>
 
 <enum name="DataReductionProxyResourceContentType">
@@ -7932,6 +7934,13 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="24" label="Site breakdown sorted by data saved"/>
   <int value="25" label="Site breakdown sorted by data used"/>
   <int value="26" label="Site breakdown expanded to see more sites"/>
+</enum>
+
+<enum name="DataReductionProxyWarmupURLFetchAttemptEvent">
+  <int value="0" label="Warmup URL fetch was initiated"/>
+  <int value="1" label="Fetch not initiated due to network unavailability"/>
+  <int value="2" label="Fetch not initiated because proxy was disabled"/>
+  <int value="3" label="Fetch not initiated because warm up URL was disabled"/>
 </enum>
 
 <enum name="DataUrlMimeType">
@@ -11825,11 +11834,12 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="387" label="DeviceNativePrintersAccessMode"/>
   <int value="388" label="DeviceNativePrintersBlacklist"/>
   <int value="389" label="DeviceNativePrintersWhitelist"/>
-  <int value="390" label="DeviceTPMFirmwareUpdateSettings"/>
+  <int value="390" label="TPMFirmwareUpdateSettings"/>
   <int value="391" label="RunAllFlashInAllowMode"/>
-  <int value="392" label="AutoFillCreditCardEnabled"/>
+  <int value="392" label="AutofillCreditCardEnabled"/>
   <int value="393" label="NtlmV2Enabled"/>
   <int value="394" label="MinimumRequiredChromeVersion"/>
+  <int value="395" label="PromptForDownloadLocation"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations">
@@ -16858,6 +16868,10 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2211" label="DocumentGetPreferredStylesheetSet"/>
   <int value="2212" label="DocumentGetSelectedStylesheetSet"/>
   <int value="2213" label="DocumentSetSelectedStylesheetSet"/>
+  <int value="2214" label="GeolocationGetCurrentPosition"/>
+  <int value="2215" label="GeolocationWatchPosition"/>
+  <int value="2216" label="DataUriHasOctothorpe"/>
+  <int value="2217" label="NetInfoSaveData"/>
 </enum>
 
 <enum name="FeedbackSource">
@@ -23391,6 +23405,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="9" label="External intent (WebAPK)"/>
   <int value="10" label="App banner (WebAPK)"/>
   <int value="11" label="Unknown (WebAPK)"/>
+  <int value="12" label="Trusted Web Activity"/>
 </enum>
 
 <enum name="LaunchIntentFlags">
@@ -23993,6 +24008,7 @@ from previous Chrome versions.
   <int value="-2062373123" label="WebPaymentsModifiers:enabled"/>
   <int value="-2059771509" label="NTPTilesLowerResolutionFavicons:disabled"/>
   <int value="-2058656447" label="ContextualSearchUrlActions:enabled"/>
+  <int value="-2054501930" label="NativeSamba:enabled"/>
   <int value="-2053860791" label="XGEOVisibleNetworks:enabled"/>
   <int value="-2048732429" label="enable-alternative-services"/>
   <int value="-2048679945" label="NTPOfflinePageDownloadSuggestions:disabled"/>
@@ -24038,6 +24054,7 @@ from previous Chrome versions.
   <int value="-1960567385" label="KeepPrefetchedContentSuggestions:enabled"/>
   <int value="-1957328398" label="MacSystemShareMenu:disabled"/>
   <int value="-1956349722" label="disable-smooth-scrolling"/>
+  <int value="-1949100957" label="NativeSamba:disabled"/>
   <int value="-1948540128" label="disable-webrtc-hw-encoding (deprecated)"/>
   <int value="-1946595906" label="enable-push-api-background-mode"/>
   <int value="-1946522787" label="VrCustomTabBrowsing:disabled"/>
@@ -24489,6 +24506,7 @@ from previous Chrome versions.
   <int value="-723224470" label="enable-password-force-saving:enabled"/>
   <int value="-722474177" label="browser-side-navigation:disabled"/>
   <int value="-718626298" label="SysInternals:enabled"/>
+  <int value="-717281513" label="ash-enable-keyboard-shortcut-viewer"/>
   <int value="-716953514" label="disable-password-separated-signin-flow"/>
   <int value="-715733307" label="force-effective-connection-type"/>
   <int value="-714712077" label="ClickToOpenPDFPlaceholder:disabled"/>
@@ -24547,6 +24565,7 @@ from previous Chrome versions.
   <int value="-536289234" label="ssl-interstitial-v2-colorful"/>
   <int value="-535208779" label="enable-native-cups"/>
   <int value="-531810064" label="saveas-menu-label"/>
+  <int value="-531792555" label="UseModernMediaControls:disabled"/>
   <int value="-531651776" label="NewRemotePlaybackPipeline:enabled"/>
   <int value="-528927088" label="AutofillCreditCardPopupLayout:disabled"/>
   <int value="-528149352" label="WebRtcUseEchoCanceller3:enabled"/>
@@ -24682,6 +24701,7 @@ from previous Chrome versions.
   <int value="-146552997" label="enable-affiliation-based-matching"/>
   <int value="-144134779" label="AndroidPayIntegrationV2:disabled"/>
   <int value="-143382681" label="InstantTethering:enabled"/>
+  <int value="-141516902" label="UseModernMediaControls:enabled"/>
   <int value="-138983372" label="DesktopPWAWindowing:disabled"/>
   <int value="-138773929" label="PassiveDocumentEventListeners:enabled"/>
   <int value="-122492389" label="enable-browser-task-scheduler"/>
@@ -25781,7 +25801,8 @@ from previous Chrome versions.
 </enum>
 
 <enum name="MappedCSSProperties">
-<!-- Generated from third_party/WebKit/Source/core/frame/UseCounter.cpp -->
+<!-- Generated from third_party/WebKit/Source/core/frame/UseCounter.cpp.
+Called by update_use_counter_css.py.-->
 
   <int value="1" label="Total Pages Measured"/>
   <int value="2" label="color"/>
@@ -26338,7 +26359,7 @@ from previous Chrome versions.
   <int value="553" label="min-block-size"/>
   <int value="554" label="max-inline-size"/>
   <int value="555" label="max-block-size"/>
-  <int value="556" label="alias-line-break"/>
+  <int value="556" label="line-break"/>
   <int value="557" label="place-content"/>
   <int value="558" label="place-items"/>
   <int value="559" label="transform-box"/>
@@ -26367,9 +26388,10 @@ from previous Chrome versions.
   <int value="582" label="scroll-snap-margin-inline-start"/>
   <int value="583" label="scroll-snap-margin-inline-end"/>
   <int value="584" label="scroll-snap-stop"/>
-  <int value="585" label="scroll-boundary-behavior"/>
-  <int value="586" label="scroll-boundary-behavior-x"/>
-  <int value="587" label="scroll-boundary-behavior-y"/>
+  <int value="585" label="overscroll-behavior"/>
+  <int value="586" label="overscroll-behavior-x"/>
+  <int value="587" label="overscroll-behavior-y"/>
+  <int value="588" label="font-variant-east-asian"/>
 </enum>
 
 <enum name="MappedEditingCommands">
@@ -27783,33 +27805,30 @@ from previous Chrome versions.
   <int value="5" label="Active network was unblocked"/>
 </enum>
 
-<enum name="NegativeSampleReason">
-  <int value="0"
-      label="Persistent sparse histogram had logged value but no active
-             sample."/>
+<enum name="NearOomDetectionEndReason">
+  <int value="0" label="OOM protected renderer is crashed"/>
   <int value="1"
-      label="Persistent sparse histogram active sample less than logged
-             value."/>
-  <int value="2"
-      label="Persistent sparse histogram added a negative count during
-             iteration."/>
+      label="Foreground renderer is gone for some reason other than OOM crash"/>
+  <int value="2" label="Foreground renderer navigates to other URL"/>
+</enum>
+
+<enum name="NegativeSampleReason">
+  <int value="0" label="Histogram had logged value but no active sample."/>
+  <int value="1" label="Histogram active sample less than logged value."/>
+  <int value="2" label="Histogram added a negative count during iteration."/>
   <int value="3"
-      label="Persistent sparse histogram added negative count that caused
-             negative value."/>
+      label="Histogram added negative count that caused negative value."/>
   <int value="4"
-      label="Persistent sparse histogram active sample overflowed and became
-             negative."/>
-  <int value="5"
-      label="Persistent sparse histogram accumulated a negative count."/>
+      label="Histogram active sample overflowed and became negative."/>
+  <int value="5" label="Histogram accumulated a negative count."/>
   <int value="6"
-      label="Persistent sparse histogram accumulated a negative count that
-             caused a negative value."/>
+      label="Histogram accumulated a negative count that caused a negative
+             value."/>
   <int value="7"
-      label="Persistent sparse histogram active sample was negative after
-             accumulation (deprecated)."/>
+      label="Histogram active sample was negative after accumulation
+             (deprecated)."/>
   <int value="8"
-      label="Persistent sparse histogram active sample wrapped 2^31 during
-             accumulation."/>
+      label="Histogram active sample wrapped 2^31 during accumulation."/>
 </enum>
 
 <enum name="NetCacheState">
@@ -28848,7 +28867,7 @@ from previous Chrome versions.
 </enum>
 
 <enum name="NotStreamingReason">
-  <int value="0" label="Already loaded"/>
+  <int value="0" label="DEPRECATED: Already loaded"/>
   <int value="1" label="Not HTTP"/>
   <int value="2" label="Reload"/>
   <int value="3" label="Context not valid"/>
@@ -31917,6 +31936,8 @@ from previous Chrome versions.
   <int value="18" label="CHUNK_DEMUXER_ERROR_EOS_STATUS_NETWORK_ERROR"/>
   <int value="19" label="AUDIO_RENDERER_ERROR"/>
   <int value="20" label="AUDIO_RENDERER_ERROR_SPLICE_FAILED"/>
+  <int value="21" label="PIPELINE_ERROR_EXTERNAL_RENDERER_FAILED"/>
+  <int value="22" label="DEMUXER_ERROR_DETECTED_HLS"/>
 </enum>
 
 <enum name="Platform.BootMode.FirmwareWriteProtect">
@@ -34225,6 +34246,9 @@ from previous Chrome versions.
 </enum>
 
 <enum name="RendererSchedulerFrameType">
+  <obsolete>
+    Superseded by RendererSchedulerFrameType2 as of 11/2017.
+  </obsolete>
   <int value="0" label="MainFrame_OnScreen"/>
   <int value="1" label="MainFrame_OffScreen"/>
   <int value="2" label="MainFrame_Background"/>
@@ -34237,6 +34261,32 @@ from previous Chrome versions.
   <int value="9" label="CrossOrigin_OffScreen"/>
   <int value="10" label="CrossOrigin_Background"/>
   <int value="11" label="CrossOrigin_Background_ThrottlingExempt"/>
+</enum>
+
+<enum name="RendererSchedulerFrameType2">
+  <int value="0" label="Non-frame"/>
+  <int value="1" label="Detached"/>
+  <int value="2" label="MainFrame_OnScreen"/>
+  <int value="3" label="MainFrame_OnScreen_ForcedForeground"/>
+  <int value="4" label="MainFrame_OffScreen"/>
+  <int value="5" label="MainFrame_OffScreen_ForcedForeground"/>
+  <int value="6" label="MainFrame_Background"/>
+  <int value="7" label="MainFrame_Background_ThrottlingExempt_Self"/>
+  <int value="8" label="MainFrame_Background_ThrottlingExempt_Other"/>
+  <int value="9" label="SameOrigin_OnScreen"/>
+  <int value="10" label="SameOrigin_OnScreen_ForcedForeground"/>
+  <int value="11" label="SameOrigin_OffScreen"/>
+  <int value="12" label="SameOrigin_OffScreen_ForcedForeground"/>
+  <int value="13" label="SameOrigin_Background"/>
+  <int value="14" label="SameOrigin_Background_ThrottlingExempt_Self"/>
+  <int value="15" label="SameOrigin_Background_ThrottlingExempt_Other"/>
+  <int value="16" label="CrossOrigin_OnScreen"/>
+  <int value="17" label="CrossOrigin_OnScreen_ForcedForeground"/>
+  <int value="18" label="CrossOrigin_OffScreen"/>
+  <int value="19" label="CrossOrigin_OffScreen_ForcedForeground"/>
+  <int value="20" label="CrossOrigin_Background"/>
+  <int value="21" label="CrossOrigin_Background_ThrottlingExempt_Self"/>
+  <int value="22" label="CrossOrigin_Background_ThrottlingExempt_Other"/>
 </enum>
 
 <enum name="RendererSchedulerTaskQueueType">
@@ -37692,6 +37742,10 @@ from previous Chrome versions.
 </enum>
 
 <enum name="SRTPromptUsage">
+  <obsolete>
+    Deprecated as of 2017-11-01. Replaced with
+    SoftwareReporterPromptDialogResponse.
+  </obsolete>
   <int value="0" label="Shown"/>
   <int value="1" label="Accepted"/>
   <int value="2" label="Denied"/>
@@ -38650,21 +38704,21 @@ would be helpful to identify which type is being sent.
 </enum>
 
 <enum name="SwReporterStep">
-  <int value="0" label="Explicit request"/>
-  <int value="1" label="Startup retry"/>
-  <int value="2" label="Retried too many times"/>
+  <int value="0" label="Explicit request (deprecated)"/>
+  <int value="1" label="Startup retry (deprecated)"/>
+  <int value="2" label="Retried too many times (deprecated)"/>
   <int value="3" label="Start execution"/>
   <int value="4" label="Failed to start"/>
-  <int value="5" label="Registry exit code"/>
-  <int value="6" label="Reset retries"/>
+  <int value="5" label="Registry exit code (deprecated)"/>
+  <int value="6" label="Reset retries (deprecated)"/>
   <int value="7" label="Begin SRT download"/>
   <int value="8" label="No browser to show prompt"/>
-  <int value="9" label="No local state"/>
+  <int value="9" label="No local state (deprecated)"/>
   <int value="10" label="No prompt needed"/>
   <int value="11" label="No prompt field trial"/>
   <int value="12" label="Already prompted"/>
-  <int value="13" label="Daily run"/>
-  <int value="14" label="Added to menu"/>
+  <int value="13" label="Daily run (deprecated)"/>
+  <int value="14" label="Added to menu (deprecated)"/>
 </enum>
 
 <enum name="SyncAttachmentStoreResult">
@@ -40691,6 +40745,50 @@ Called by update_traffic_annotation_histograms.py.-->
   <int value="4" label="Locally Managed"/>
   <int value="5" label="Kiosk App"/>
   <int value="6" label="Regular Supervised"/>
+</enum>
+
+<enum name="V8CacheBehaviour">
+  <int value="0" label="kProduceCodeCache">
+    The compilation produced a code cache
+  </int>
+  <int value="1" label="kHitIsolateCache">
+    The compilation hit V8's isolate's compilation cache
+  </int>
+  <int value="2" label="kConsumeCodeCache">
+    The compilation consumed a code cache
+  </int>
+  <int value="3" label="kConsumeCodeCacheFailed">
+    The compilation tried to consume a code cache, but failed (see
+    V8.CodeCacheRejectReason)
+  </int>
+  <int value="4" label="kNoCacheBecauseInlineScript">
+    Blink did not request a code cache because this is an inline script
+  </int>
+  <int value="5" label="kNoCacheBecauseScriptTooSmall">
+    Blink did not request a code cache because this script is too small
+  </int>
+  <int value="6" label="kNoCacheBecauseCacheTooCold">
+    Blink did not request a code cache because the cached resource is too cold
+  </int>
+  <int value="7" label="kNoCacheNoReason">
+    Blink did not request a code cache but gave no reason
+  </int>
+  <int value="8" label="kNoCacheBecauseNoResource">
+    Blink did not request a code cache because there is no resource
+  </int>
+  <int value="9" label="kNoCacheBecauseInspector">
+    Blink did not request a code cache because the script came from the
+    inspector
+  </int>
+  <int value="10" label="kNoCacheBecauseCachingDisabled">
+    Blink did not request a code cache because caching is disabled
+  </int>
+  <int value="11" label="kNoCacheBecauseModule">
+    Blink did not request a code cache because the script is a module
+  </int>
+  <int value="12" label="kNoCacheBecauseStreamingSource">
+    Blink did not request a code cache because this is a streaming source
+  </int>
 </enum>
 
 <enum name="V8CodeCacheRejectReason">

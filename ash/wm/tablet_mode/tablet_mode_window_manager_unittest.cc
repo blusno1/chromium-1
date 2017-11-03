@@ -7,7 +7,6 @@
 #include <string>
 
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_prefs.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -561,8 +560,6 @@ std::string GetPlacementOverride(aura::Window* window) {
 // session restoration purposes.
 TEST_F(TabletModeWindowManagerTest, TestRestoreIntegrety) {
   gfx::Rect bounds(10, 10, 200, 50);
-  gfx::Size empty_size;
-  gfx::Rect empty_bounds;
   std::unique_ptr<aura::Window> normal_window(CreateWindowWithWidget(bounds));
   std::unique_ptr<aura::Window> maximized_window(
       CreateWindowWithWidget(bounds));
@@ -609,7 +606,6 @@ TEST_F(TabletModeWindowManagerTest, PreCreateWindowsDeleteWhileActive) {
     gfx::Rect rect2(10, 60, 200, 50);
     gfx::Rect rect3(20, 140, 100, 100);
     // Bounds for anything else.
-    gfx::Rect rect(80, 90, 100, 110);
     std::unique_ptr<aura::Window> w1(
         CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect1));
     std::unique_ptr<aura::Window> w2(
@@ -638,12 +634,12 @@ TEST_F(TabletModeWindowManagerTest, CreateWindowsAndDeleteWhileActive) {
     gfx::Rect rect1(10, 10, 200, 50);
     gfx::Rect rect2(10, 60, 200, 50);
     gfx::Rect rect3(20, 140, 100, 100);
-    std::unique_ptr<aura::Window> w1(CreateWindow(
-        aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(10, 10, 200, 50)));
-    std::unique_ptr<aura::Window> w2(CreateWindow(
-        aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(10, 60, 200, 50)));
+    std::unique_ptr<aura::Window> w1(
+        CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect1));
+    std::unique_ptr<aura::Window> w2(
+        CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect2));
     std::unique_ptr<aura::Window> w3(CreateFixedSizeNonMaximizableWindow(
-        aura::client::WINDOW_TYPE_NORMAL, gfx::Rect(20, 140, 100, 100)));
+        aura::client::WINDOW_TYPE_NORMAL, rect3));
     // Check that the windows got automatically maximized as well.
     EXPECT_EQ(3, manager->GetNumberOfManagedWindows());
     EXPECT_TRUE(wm::GetWindowState(w1.get())->IsMaximized());
@@ -1323,10 +1319,6 @@ TEST_F(TabletModeWindowManagerTest, ExitsOverview) {
 
 // Test that an edge swipe from the top will end full screen mode.
 TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeSwipeFromTop) {
-  // TODO: investigate failure. http://crbug.com/698093.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> background_window(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
@@ -1367,10 +1359,6 @@ TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeSwipeFromTop) {
 
 // Test that an edge swipe from the bottom will end full screen mode.
 TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeSwipeFromBottom) {
-  // TODO: investigate failure. http://crbug.com/698093.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> background_window(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
@@ -1405,10 +1393,6 @@ TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeSwipeFromBottom) {
 
 // Test that an edge touch press at the top will end full screen mode.
 TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeTouchAtTop) {
-  // TODO: investigate failure. http://crbug.com/698093.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> background_window(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
@@ -1445,10 +1429,6 @@ TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeTouchAtTop) {
 
 // Test that an edge touch press at the bottom will end full screen mode.
 TEST_F(TabletModeWindowManagerTest, ExitFullScreenWithEdgeTouchAtBottom) {
-  // TODO: investigate failure. http://crbug.com/698093.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> background_window(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));

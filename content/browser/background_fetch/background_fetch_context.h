@@ -20,13 +20,16 @@
 #include "content/public/browser/browser_thread.h"
 #include "third_party/WebKit/public/platform/modules/background_fetch/background_fetch.mojom.h"
 
+namespace storage {
+class BlobDataHandle;
+}
+
 namespace content {
 
 class BackgroundFetchJobController;
 struct BackgroundFetchOptions;
 class BackgroundFetchRegistrationId;
 class BackgroundFetchRegistrationNotifier;
-class BlobHandle;
 class BrowserContext;
 class ServiceWorkerContextWrapper;
 struct ServiceWorkerFetchRequest;
@@ -47,7 +50,7 @@ class CONTENT_EXPORT BackgroundFetchContext
 
   // Starts a Background Fetch for the |registration_id|. The |requests| will be
   // asynchronously fetched. The |callback| will be invoked when the fetch has
-  // been registered, or an error occurred that avoids it from doing so.
+  // been registered, or an error occurred that prevents it from doing so.
   void StartFetch(const BackgroundFetchRegistrationId& registration_id,
                   const std::vector<ServiceWorkerFetchRequest>& requests,
                   const BackgroundFetchOptions& options,
@@ -65,6 +68,14 @@ class CONTENT_EXPORT BackgroundFetchContext
   void AddRegistrationObserver(
       const std::string& unique_id,
       blink::mojom::BackgroundFetchRegistrationObserverPtr observer);
+
+  // Updates the title of the Background Fetch identified by |unique_id|. The
+  // |callback| will be invoked when the title has been updated, or an error
+  // occurred that prevents it from doing so.
+  void UpdateRegistrationUI(
+      const std::string& unique_id,
+      const std::string& title,
+      blink::mojom::BackgroundFetchService::UpdateUICallback callback);
 
   BackgroundFetchDataManager& data_manager() { return data_manager_; }
 
@@ -90,6 +101,13 @@ class CONTENT_EXPORT BackgroundFetchContext
       blink::mojom::BackgroundFetchError error,
       const base::Optional<BackgroundFetchRegistration>& registration);
 
+  // Called when the new title has been updated in the data manager.
+  void DidUpdateStoredRegistrationUI(
+      const std::string& unique_id,
+      const std::string& title,
+      blink::mojom::BackgroundFetchService::UpdateUICallback callback,
+      blink::mojom::BackgroundFetchError error);
+
   // Called by a JobController when it finishes processing. Also used to
   // implement |Abort|.
   void DidFinishJob(
@@ -111,14 +129,15 @@ class CONTENT_EXPORT BackgroundFetchContext
       blink::mojom::BackgroundFetchError error,
       bool background_fetch_succeeded,
       std::vector<BackgroundFetchSettledFetch> settled_fetches,
-      std::vector<std::unique_ptr<BlobHandle>> blob_handles);
+      std::vector<std::unique_ptr<storage::BlobDataHandle>> blob_data_handles);
 
   // Called when all processing for the |registration_id| has been finished and
   // the job is ready to be deleted. |blob_handles| are unused, but some callers
   // use it to keep blobs alive for the right duration.
   void CleanupRegistration(
       const BackgroundFetchRegistrationId& registration_id,
-      const std::vector<std::unique_ptr<BlobHandle>>& blob_handles);
+      const std::vector<std::unique_ptr<storage::BlobDataHandle>>&
+          blob_data_handles);
 
   // Called when the last JavaScript BackgroundFetchRegistration object has been
   // garbage collected for a registration marked for deletion, and so it is now

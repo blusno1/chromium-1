@@ -21,6 +21,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/sequence_checker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -120,13 +121,6 @@ void PrintUsage() {
           "    Sets the shard index to run to N (from 0 to TOTAL - 1).\n");
 }
 
-void CallChildProcessLaunched(TestState* test_state,
-                              base::ProcessHandle handle,
-                              base::ProcessId pid) {
-  if (test_state)
-    test_state->ChildProcessLaunched(handle, pid);
-}
-
 // Implementation of base::TestLauncherDelegate. This is also a test launcher,
 // wrapping a lower-level test launcher with content-specific code.
 class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
@@ -147,6 +141,58 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
                     const std::vector<std::string>& test_names) override;
 
  private:
+  class ChildProcessLifetimeObserver : public base::ProcessLifetimeObserver {
+   public:
+    ChildProcessLifetimeObserver(
+        WrapperTestLauncherDelegate* test_launcher_delegate,
+        base::TestLauncher* test_launcher,
+        std::vector<std::string>&& next_test_names,
+        const std::string& test_name,
+        const base::FilePath& output_file,
+        std::unique_ptr<TestState> test_state)
+        : base::ProcessLifetimeObserver(),
+          test_launcher_delegate_(test_launcher_delegate),
+          test_launcher_(test_launcher),
+          next_test_names_(std::move(next_test_names)),
+          test_name_(test_name),
+          output_file_(output_file),
+          test_state_(std::move(test_state)) {}
+    ~ChildProcessLifetimeObserver() override {
+      DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    }
+
+   private:
+    // base::ProcessLifetimeObserver:
+    void OnLaunched(base::ProcessHandle handle, base::ProcessId id) override {
+      if (test_state_)
+        test_state_->ChildProcessLaunched(handle, id);
+    }
+
+    void OnTimedOut(const base::CommandLine& command_line) override {
+      test_launcher_delegate_->OnTestTimedOut(command_line);
+    }
+
+    void OnCompleted(int exit_code,
+                     base::TimeDelta elapsed_time,
+                     bool was_timeout,
+                     const std::string& output) override {
+      DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+      test_launcher_delegate_->GTestCallback(
+          test_launcher_, next_test_names_, test_name_, output_file_,
+          std::move(test_state_), exit_code, elapsed_time, was_timeout, output);
+    }
+
+    SEQUENCE_CHECKER(sequence_checker_);
+    WrapperTestLauncherDelegate* test_launcher_delegate_;
+    base::TestLauncher* test_launcher_;
+    std::vector<std::string> next_test_names_;
+    std::string test_name_;
+    base::FilePath output_file_;
+    std::unique_ptr<TestState> test_state_;
+
+    DISALLOW_COPY_AND_ASSIGN(ChildProcessLifetimeObserver);
+  };
+
   void DoRunTests(base::TestLauncher* test_launcher,
                   const std::vector<std::string>& test_names);
 
@@ -155,6 +201,10 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
   void RunDependentTest(base::TestLauncher* test_launcher,
                         const std::string test_name,
                         const base::TestResult& pre_test_result);
+
+  // Relays timeout notification from the TestLauncher (by way of a
+  // ProcessLifetimeObserver) to the caller's content::TestLauncherDelegate.
+  void OnTestTimedOut(const base::CommandLine& command_line);
 
   // Callback to receive result of a test.
   // |output_file| is a path to xml file written by test-launcher
@@ -398,14 +448,13 @@ void WrapperTestLauncherDelegate::DoRunTests(
 
   char* browser_wrapper = getenv("BROWSER_WRAPPER");
 
-  TestState* test_state = test_state_ptr.get();
+  auto observer = std::make_unique<ChildProcessLifetimeObserver>(
+      this, test_launcher, std::move(test_names_copy), test_name, output_file,
+      std::move(test_state_ptr));
   test_launcher->LaunchChildGTestProcess(
       new_cmd_line, browser_wrapper ? browser_wrapper : std::string(),
       TestTimeouts::action_max_timeout(), test_launch_options,
-      base::Bind(&WrapperTestLauncherDelegate::GTestCallback,
-                 base::Unretained(this), test_launcher, test_names_copy,
-                 test_name, output_file, base::Passed(&test_state_ptr)),
-      base::Bind(&CallChildProcessLaunched, base::Unretained(test_state)));
+      std::move(observer));
 }
 
 void WrapperTestLauncherDelegate::RunDependentTest(
@@ -430,6 +479,11 @@ void WrapperTestLauncherDelegate::RunDependentTest(
                        test_result);
     }
   }
+}
+
+void WrapperTestLauncherDelegate::OnTestTimedOut(
+    const base::CommandLine& command_line) {
+  launcher_delegate_->OnTestTimedOut(command_line);
 }
 
 void WrapperTestLauncherDelegate::GTestCallback(
@@ -526,11 +580,6 @@ std::unique_ptr<TestState> TestLauncherDelegate::PreRunTest(
   return nullptr;
 }
 
-void TestLauncherDelegate::OnDoneRunningTests() {}
-
-TestLauncherDelegate::~TestLauncherDelegate() {
-}
-
 int LaunchTests(TestLauncherDelegate* launcher_delegate,
                 size_t parallel_jobs,
                 int argc,
@@ -562,6 +611,15 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
   params.argv = const_cast<const char**>(argv);
 #endif  // defined(OS_WIN)
 
+#if !defined(OS_ANDROID)
+  // This needs to be before trying to run tests as otherwise utility processes
+  // end up being launched as a test, which leads to rerunning the test.
+  if (command_line->HasSwitch(switches::kProcessType) ||
+      command_line->HasSwitch(kLaunchAsBrowser)) {
+    return ContentMain(params);
+  }
+#endif
+
   if (command_line->HasSwitch(kSingleProcessTestsFlag) ||
       (command_line->HasSwitch(switches::kSingleProcess) &&
        command_line->HasSwitch(base::kGTestFilterFlag)) ||
@@ -570,13 +628,6 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
     g_params = &params;
     return launcher_delegate->RunTestSuite(argc, argv);
   }
-
-#if !defined(OS_ANDROID)
-  if (command_line->HasSwitch(switches::kProcessType) ||
-      command_line->HasSwitch(kLaunchAsBrowser)) {
-    return ContentMain(params);
-  }
-#endif
 
   base::AtExitManager at_exit;
   testing::InitGoogleTest(&argc, argv);

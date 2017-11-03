@@ -29,11 +29,12 @@ void TestWebState::RemoveObserver(WebStateObserver* observer) {
 
 TestWebState::TestWebState()
     : browser_state_(nullptr),
-      web_usage_enabled_(false),
+      web_usage_enabled_(true),
       is_loading_(false),
       is_visible_(false),
       is_crashed_(false),
       is_evicted_(false),
+      has_opener_(false),
       trust_level_(kAbsolute),
       content_is_html_(true) {}
 
@@ -281,7 +282,11 @@ WebStateInterfaceProvider* TestWebState::GetWebStateInterfaceProvider() {
 }
 
 bool TestWebState::HasOpener() const {
-  return false;
+  return has_opener_;
+}
+
+void TestWebState::SetHasOpener(bool has_opener) {
+  has_opener_ = has_opener;
 }
 
 void TestWebState::TakeSnapshot(const SnapshotCallback& callback,

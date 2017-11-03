@@ -24,7 +24,7 @@
 #include "ui/message_center/message_center_export.h"
 #include "ui/message_center/notification_delegate.h"
 #include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_settings.h"
+#include "ui/message_center/notifier_id.h"
 #include "url/gurl.h"
 
 namespace gfx {
@@ -54,6 +54,12 @@ enum class ButtonType {
   TEXT
 };
 
+enum class SettingsButtonHandler {
+  NONE,     // No button. This is the default.
+  TRAY,     // Button shown, the tray handles clicks. Only used on Chrome OS.
+  DELEGATE  // Button shown, notification's delegate handles action.
+};
+
 enum class SystemNotificationWarningLevel { NORMAL, WARNING, CRITICAL_WARNING };
 
 // Represents a button to be shown as part of a notification.
@@ -77,6 +83,15 @@ struct MESSAGE_CENTER_EXPORT ButtonInfo {
   // The placeholder string that should be displayed in the input field for TEXT
   // type buttons until the user has entered a response themselves.
   base::string16 placeholder;
+};
+
+// TODO(estade): add an ALWAYS value to mark notifications as additionally
+// visible over system fullscreen windows such as Chrome OS login so we don't
+// need to centrally track Ash system notification IDs.
+enum class FullscreenVisibility {
+  NONE,       // Don't show the notification over fullscreen (default).
+  OVER_USER,  // Show over the current fullscreened client window.
+              // windows (like Chrome OS login).
 };
 
 // Represents rich features available for notifications.
@@ -179,6 +194,13 @@ class MESSAGE_CENTER_EXPORT RichNotificationData {
   // and hides the icon when the notification is expanded.
   // This is only effective when new style notification is enabled.
   bool use_image_as_icon = false;
+
+  // Controls whether a settings button should appear on the notification. See
+  // enum definition. TODO(estade): turn this into a boolean. See
+  // crbug.com/780342
+  SettingsButtonHandler settings_button_handler = SettingsButtonHandler::NONE;
+
+  FullscreenVisibility fullscreen_visibility = FullscreenVisibility::NONE;
 };
 
 class MESSAGE_CENTER_EXPORT Notification {
@@ -408,6 +430,18 @@ class MESSAGE_CENTER_EXPORT Notification {
   bool use_image_as_icon() const { return optional_fields_.use_image_as_icon; }
   void set_use_image_as_icon(bool use_image_as_icon) {
     optional_fields_.use_image_as_icon = use_image_as_icon;
+  }
+
+  bool should_show_settings_button() const {
+    return optional_fields_.settings_button_handler !=
+           SettingsButtonHandler::NONE;
+  }
+
+  FullscreenVisibility fullscreen_visibility() const {
+    return optional_fields_.fullscreen_visibility;
+  }
+  void set_fullscreen_visibility(FullscreenVisibility visibility) {
+    optional_fields_.fullscreen_visibility = visibility;
   }
 
   NotificationDelegate* delegate() const { return delegate_.get(); }

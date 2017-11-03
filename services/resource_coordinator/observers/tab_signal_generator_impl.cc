@@ -6,16 +6,17 @@
 
 #include <utility>
 
-#include "base/values.h"
 #include "services/resource_coordinator/coordination_unit/frame_coordination_unit_impl.h"
 #include "services/resource_coordinator/coordination_unit/page_coordination_unit_impl.h"
+#include "services/resource_coordinator/coordination_unit/process_coordination_unit_impl.h"
+#include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
 #include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace resource_coordinator {
 
-#define DISPATCH_TAB_SIGNAL(observers, METHOD, cu, ...)          \
+#define DISPATCH_TAB_SIGNAL(observers, METHOD, ...)              \
   observers.ForAllPtrs([&](mojom::TabSignalObserver* observer) { \
-    observer->METHOD(cu->id(), __VA_ARGS__);                     \
+    observer->METHOD(__VA_ARGS__);                               \
   });
 
 TabSignalGeneratorImpl::TabSignalGeneratorImpl() = default;
@@ -28,9 +29,9 @@ void TabSignalGeneratorImpl::AddObserver(mojom::TabSignalObserverPtr observer) {
 
 bool TabSignalGeneratorImpl::ShouldObserve(
     const CoordinationUnitBase* coordination_unit) {
-  auto coordination_unit_type = coordination_unit->id().type;
-  return coordination_unit_type == CoordinationUnitType::kPage ||
-         coordination_unit_type == CoordinationUnitType::kFrame;
+  auto cu_type = coordination_unit->id().type;
+  return cu_type == CoordinationUnitType::kFrame ||
+         cu_type == CoordinationUnitType::kProcess;
 }
 
 void TabSignalGeneratorImpl::OnFramePropertyChanged(
@@ -38,24 +39,32 @@ void TabSignalGeneratorImpl::OnFramePropertyChanged(
     const mojom::PropertyType property_type,
     int64_t value) {
   if (property_type == mojom::PropertyType::kNetworkAlmostIdle) {
-    // Ignore when the signal doesn't come from main frame.
-    if (!frame_cu->IsMainFrame())
+    // Ignore if network is not idle.
+    if (!value)
       return;
-    // TODO(lpy) Combine CPU usage or long task idleness signal.
-    if (auto* page_cu = frame_cu->GetPageCoordinationUnit()) {
-      DISPATCH_TAB_SIGNAL(observers_, OnEventReceived, page_cu,
-                          mojom::TabEvent::kDoneLoading);
-    }
+    NotifyPageAlmostIdleIfPossible(frame_cu);
   }
 }
 
-void TabSignalGeneratorImpl::OnPagePropertyChanged(
-    const PageCoordinationUnitImpl* page_cu,
+void TabSignalGeneratorImpl::OnProcessPropertyChanged(
+    const ProcessCoordinationUnitImpl* process_cu,
     const mojom::PropertyType property_type,
     int64_t value) {
   if (property_type == mojom::PropertyType::kExpectedTaskQueueingDuration) {
-    DISPATCH_TAB_SIGNAL(observers_, OnPropertyChanged, page_cu, property_type,
-                        value);
+    for (auto* frame_cu : process_cu->GetFrameCoordinationUnits()) {
+      if (!frame_cu->IsMainFrame())
+        continue;
+      auto* page_cu = frame_cu->GetPageCoordinationUnit();
+      int64_t duration;
+      if (!page_cu || !page_cu->GetExpectedTaskQueueingDuration(&duration))
+        continue;
+      DISPATCH_TAB_SIGNAL(observers_, SetExpectedTaskQueueingDuration,
+                          page_cu->id(),
+                          base::TimeDelta::FromMilliseconds(duration));
+    }
+  } else if (property_type == mojom::PropertyType::kMainThreadTaskLoadIsLow) {
+    for (auto* frame_cu : process_cu->GetFrameCoordinationUnits())
+      NotifyPageAlmostIdleIfPossible(frame_cu);
   }
 }
 
@@ -63,6 +72,18 @@ void TabSignalGeneratorImpl::BindToInterface(
     resource_coordinator::mojom::TabSignalGeneratorRequest request,
     const service_manager::BindSourceInfo& source_info) {
   bindings_.AddBinding(this, std::move(request));
+}
+
+void TabSignalGeneratorImpl::NotifyPageAlmostIdleIfPossible(
+    const FrameCoordinationUnitImpl* frame_cu) {
+  if (!frame_cu->IsMainFrame())
+    return;
+  if (!frame_cu->IsAlmostIdle())
+    return;
+  auto* page_cu = frame_cu->GetPageCoordinationUnit();
+  if (!page_cu)
+    return;
+  DISPATCH_TAB_SIGNAL(observers_, NotifyPageAlmostIdle, page_cu->id());
 }
 
 }  // namespace resource_coordinator
