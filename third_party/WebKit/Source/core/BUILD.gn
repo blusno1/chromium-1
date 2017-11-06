@@ -536,8 +536,9 @@ css_properties("make_core_generated_css_longhand_property_apis") {
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBackdropFilter.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBackgroundAttachment.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBackgroundBlendMode.h",
-    "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBackgroundBox.h",
+    "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBackgroundClip.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBackgroundColor.h",
+    "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBackgroundOrigin.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBackgroundOrMaskImage.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBackgroundOrMaskSize.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIBaselineShift.h",
@@ -672,7 +673,6 @@ css_properties("make_core_generated_css_longhand_property_apis") {
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPITabSize.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPITextDecorationColor.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPITextDecorationLine.h",
-    "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPITextDecorationSkip.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPITextDecorationStyle.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPITextIndent.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPITextJustify.h",
@@ -707,7 +707,6 @@ css_properties("make_core_generated_css_longhand_property_apis") {
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitBoxFlexGroup.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitBoxOrdinalGroup.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitBoxReflect.h",
-    "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitClip.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitColorNoQuirks.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitFontSizeDelta.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitHighlight.h",
@@ -716,6 +715,7 @@ css_properties("make_core_generated_css_longhand_property_apis") {
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitMarginBefore.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitMarginEnd.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitMarginStart.h",
+    "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitMaskClip.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitMaskComposite.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitOrigin.h",
     "$blink_core_output_dir/css/properties/longhands/CSSPropertyAPIWebkitOriginX.h",
@@ -811,7 +811,10 @@ css_properties("make_core_generated_css_shorthand_property_apis") {
 
 css_properties("make_core_generated_css_property_names") {
   script = "../build/scripts/make_css_property_names.py"
-  other_inputs = [ "../build/scripts/templates/CSSPropertyNames.h.tmpl" ]
+  other_inputs = [
+    "../build/scripts/templates/CSSPropertyNames.cpp.tmpl",
+    "../build/scripts/templates/CSSPropertyNames.h.tmpl",
+  ]
   outputs = [
     "$blink_core_output_dir/CSSPropertyNames.cpp",
     "$blink_core_output_dir/CSSPropertyNames.h",

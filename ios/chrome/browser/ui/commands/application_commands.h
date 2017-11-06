@@ -21,11 +21,16 @@
 - (void)showAccountsSettingsFromViewController:
     (UIViewController*)baseViewController;
 
-// Shows the sync settings UI.
-- (void)showSyncSettings;
+// TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
+// Shows the sync settings UI, presenting from |baseViewController|.
+- (void)showSyncSettingsFromViewController:
+    (UIViewController*)baseViewController;
 
-// Shows the sync encryption passphrase UI.
-- (void)showSyncPassphraseSettings;
+// TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
+// Shows the sync encryption passphrase UI, presenting from
+// |baseViewController|.
+- (void)showSyncPassphraseSettingsFromViewController:
+    (UIViewController*)baseViewController;
 
 @end
 
@@ -72,8 +77,10 @@
 - (void)showClearBrowsingDataSettingsFromViewController:
     (UIViewController*)baseViewController;
 
-// Shows the Autofill Settings UI.
-- (void)showAutofillSettings;
+// TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
+// Shows the Autofill Settings UI, presenting from |baseViewController|.
+- (void)showAutofillSettingsFromViewController:
+    (UIViewController*)baseViewController;
 
 // Shows the Save Passwords settings UI.
 - (void)showSavePasswordsSettings;
@@ -88,8 +95,9 @@
 // Shows the signin UI.
 - (void)showSignin:(ShowSigninCommand*)command;
 
-// Shows the Add Account UI
-- (void)showAddAccount;
+// TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
+// Shows the Add Account UI, presenting from |baseViewController|.
+- (void)showAddAccountFromViewController:(UIViewController*)baseViewController;
 
 @end
 

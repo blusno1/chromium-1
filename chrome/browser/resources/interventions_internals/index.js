@@ -31,11 +31,13 @@ function getTimeFormat(time) {
  * Switch the selected tab to 'selected-tab' class.
  */
 function setSelectedTab() {
-  let selected =
-      document.querySelector('input[type=radio][name=tabs]:checked').value;
-  let selectedTab = document.querySelector('#' + selected);
+  let selected = document.querySelector('input[type=radio][name=tabs]:checked');
+  let selectedTab = document.querySelector('#' + selected.value);
+
   selectedTab.className =
       selectedTab.className.replace('hidden-tab', 'selected-tab');
+  selected.parentElement.className =
+      selected.parentElement.className.replace('inactive-tab', 'active-tab');
 }
 
 /**
@@ -44,8 +46,10 @@ function setSelectedTab() {
  */
 function changeTab() {
   let lastSelected = document.querySelector('.selected-tab');
+  let lastTab = document.querySelector('.active-tab');
   lastSelected.className =
       lastSelected.className.replace('selected-tab', 'hidden-tab');
+  lastTab.className = lastTab.className.replace('active-tab', 'inactive-tab');
 
   setSelectedTab();
 }
@@ -139,6 +143,8 @@ InterventionsInternalPageImpl.prototype = {
     descriptionTd.textContent = log.description;
     tableRow.appendChild(descriptionTd);
 
+    // TODO(thanhdle): Truncate url and show full url when user clicks on it.
+    // crbug.com/773019
     let urlTd = document.createElement('td');
     urlTd.setAttribute('class', 'log-url');
     urlTd.textContent = log.url.url;
@@ -256,22 +262,15 @@ cr.define('interventions_internals', () => {
         .then((response) => {
           let statuses = $('previews-statuses');
 
-          // Sorting the keys by the status's description.
-          let sortedKeys = Array.from(response.statuses.keys());
-          sortedKeys.sort((a, b) => {
-            return response.statuses.get(a).description >
-                response.statuses.get(b).description;
-          });
-
-          sortedKeys.forEach((key) => {
-            let value = response.statuses.get(key);
+          // TODO(thanhdle): The statuses are not printed in alphabetic order of
+          // the key. crbug.com/772458
+          response.statuses.forEach((value, key) => {
             let message = value.description + ': ';
             message += value.enabled ? 'Enabled' : 'Disabled';
 
             assert(!$(key), 'Component ' + key + ' already existed!');
 
             let node = document.createElement('p');
-            node.setAttribute('class', 'previews-status-value');
             node.setAttribute('id', key);
             node.textContent = message;
             statuses.appendChild(node);

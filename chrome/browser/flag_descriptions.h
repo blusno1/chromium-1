@@ -280,6 +280,9 @@ extern const char kEnableMidiManagerDynamicInstantiationDescription[];
 extern const char kEnableNavigationTracingName[];
 extern const char kEnableNavigationTracingDescription[];
 
+extern const char kEnableNetworkLoggingToFileName[];
+extern const char kEnableNetworkLoggingToFileDescription[];
+
 extern const char kEnableNetworkServiceName[];
 extern const char kEnableNetworkServiceDescription[];
 
@@ -1046,17 +1049,11 @@ extern const char kContentSuggestionsCategoryRankerDescription[];
 extern const char kContentSuggestionsDebugLogName[];
 extern const char kContentSuggestionsDebugLogDescription[];
 
-extern const char kContextualSearchContextualCardsBarIntegration[];
-extern const char kContextualSearchContextualCardsBarIntegrationDescription[];
-
-extern const char kContextualSearchSingleActionsName[];
-extern const char kContextualSearchSingleActionsDescription[];
-
-extern const char kContextualSearchUrlActionsName[];
-extern const char kContextualSearchUrlActionsDescription[];
-
 extern const char kContextualSearchName[];
 extern const char kContextualSearchDescription[];
+
+extern const char kContextualSearchMlTapSuppressionName[];
+extern const char kContextualSearchMlTapSuppressionDescription[];
 
 extern const char kDontPrefetchLibrariesName[];
 extern const char kDontPrefetchLibrariesDescription[];
@@ -1307,6 +1304,9 @@ extern const char kEnableNewAppMenuIconDescription[];
 
 extern const char kOmniboxEntitySuggestionsName[];
 extern const char kOmniboxEntitySuggestionsDescription[];
+
+extern const char kOmniboxTabSwitchSuggestionsName[];
+extern const char kOmniboxTabSwitchSuggestionsDescription[];
 
 extern const char kOmniboxTailSuggestionsName[];
 extern const char kOmniboxTailSuggestionsDescription[];

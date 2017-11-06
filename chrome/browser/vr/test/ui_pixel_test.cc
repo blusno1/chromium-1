@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/vr/browser_ui_interface.h"
 #include "chrome/browser/vr/model/model.h"
+#include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
 #include "chrome/browser/vr/ui_input_manager.h"
@@ -40,7 +41,6 @@ void UiPixelTest::SetUp() {
   ASSERT_EQ(glGetError(), (GLenum)GL_NO_ERROR);
 
   browser_ = base::MakeUnique<MockBrowserInterface>();
-  content_input_delegate_ = base::MakeUnique<MockContentInputDelegate>();
 #endif
 }
 
@@ -56,8 +56,7 @@ void UiPixelTest::TearDown() {
 
 void UiPixelTest::MakeUi(const UiInitialState& ui_initial_state,
                          const ToolbarState& toolbar_state) {
-  ui_ = base::MakeUnique<Ui>(browser_.get(), content_input_delegate_.get(),
-                             ui_initial_state);
+  ui_ = base::MakeUnique<Ui>(browser_.get(), nullptr, ui_initial_state);
   ui_->OnGlInitialized(content_texture_,
                        vr::UiElementRenderer::kTextureLocationLocal);
   ui_->GetBrowserUiWeakPtr()->SetToolbarState(toolbar_state);
@@ -96,8 +95,8 @@ void UiPixelTest::DrawUi(const gfx::Vector3dF& laser_direction,
       gfx::Vector3dF(-render_info.head_pose.matrix().get(2, 0),
                      -render_info.head_pose.matrix().get(2, 1),
                      -render_info.head_pose.matrix().get(2, 2))));
-  ui_->input_manager()->HandleInput(controller_model, &reticle_model,
-                                    &gesture_list);
+  ui_->input_manager()->HandleInput(MsToTicks(1), controller_model,
+                                    &reticle_model, &gesture_list);
   ui_->OnControllerUpdated(controller_model, reticle_model);
   ui_->ui_renderer()->Draw(render_info);
 

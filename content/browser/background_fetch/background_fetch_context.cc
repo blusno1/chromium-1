@@ -56,6 +56,39 @@ BackgroundFetchContext::~BackgroundFetchContext() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 }
 
+void BackgroundFetchContext::GetRegistration(
+    int64_t service_worker_registration_id,
+    const url::Origin& origin,
+    const std::string& developer_id,
+    blink::mojom::BackgroundFetchService::GetRegistrationCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  data_manager_.GetRegistration(
+      service_worker_registration_id, origin, developer_id,
+      base::BindOnce(&BackgroundFetchContext::DidGetRegistration,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void BackgroundFetchContext::DidGetRegistration(
+    blink::mojom::BackgroundFetchService::GetRegistrationCallback callback,
+    blink::mojom::BackgroundFetchError error,
+    std::unique_ptr<BackgroundFetchRegistration> registration) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  if (error != blink::mojom::BackgroundFetchError::NONE) {
+    std::move(callback).Run(error, base::nullopt);
+    return;
+  }
+
+  DCHECK(registration);
+  // The data manager only has the number of bytes from completed downloads, so
+  // augment this with the number of downloaded bytes from in-progress jobs.
+  DCHECK(job_controllers_.count(registration->unique_id));
+  registration->downloaded +=
+      job_controllers_[registration->unique_id]->GetInProgressDownloadedBytes();
+  std::move(callback).Run(error, *registration.get());
+}
+
 void BackgroundFetchContext::StartFetch(
     const BackgroundFetchRegistrationId& registration_id,
     const std::vector<ServiceWorkerFetchRequest>& requests,
@@ -75,17 +108,19 @@ void BackgroundFetchContext::DidCreateRegistration(
     const BackgroundFetchOptions& options,
     blink::mojom::BackgroundFetchService::FetchCallback callback,
     blink::mojom::BackgroundFetchError error,
-    const base::Optional<BackgroundFetchRegistration>& registration) {
+    std::unique_ptr<BackgroundFetchRegistration> registration) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   RecordRegistrationCreatedError(error);
-  if (error == blink::mojom::BackgroundFetchError::NONE) {
-    DCHECK(registration);
-    // Create the BackgroundFetchJobController to do the actual fetching.
-    CreateController(registration_id, options, registration.value());
+  if (error != blink::mojom::BackgroundFetchError::NONE) {
+    std::move(callback).Run(error, base::nullopt);
+    return;
   }
 
-  std::move(callback).Run(error, registration);
+  DCHECK(registration);
+  // Create the BackgroundFetchJobController to do the actual fetching.
+  CreateController(registration_id, options, *registration.get());
+  std::move(callback).Run(error, *registration.get());
 }
 
 void BackgroundFetchContext::AddRegistrationObserver(
@@ -94,7 +129,7 @@ void BackgroundFetchContext::AddRegistrationObserver(
   registration_notifier_->AddObserver(unique_id, std::move(observer));
 }
 
-void BackgroundFetchContext::UpdateRegistrationUI(
+void BackgroundFetchContext::UpdateUI(
     const std::string& unique_id,
     const std::string& title,
     blink::mojom::BackgroundFetchService::UpdateUICallback callback) {
@@ -102,12 +137,12 @@ void BackgroundFetchContext::UpdateRegistrationUI(
 
   data_manager_.UpdateRegistrationUI(
       unique_id, title,
-      base::BindOnce(&BackgroundFetchContext::DidUpdateStoredRegistrationUI,
+      base::BindOnce(&BackgroundFetchContext::DidUpdateStoredUI,
                      weak_factory_.GetWeakPtr(), unique_id, title,
                      std::move(callback)));
 }
 
-void BackgroundFetchContext::DidUpdateStoredRegistrationUI(
+void BackgroundFetchContext::DidUpdateStoredUI(
     const std::string& unique_id,
     const std::string& title,
     blink::mojom::BackgroundFetchService::UpdateUICallback callback,
@@ -116,7 +151,7 @@ void BackgroundFetchContext::DidUpdateStoredRegistrationUI(
 
   if (error == blink::mojom::BackgroundFetchError::NONE &&
       job_controllers_.count(unique_id)) {
-    job_controllers_[unique_id]->UpdateJobTitle(title);
+    job_controllers_[unique_id]->UpdateUI(title);
   }
 
   std::move(callback).Run(error);

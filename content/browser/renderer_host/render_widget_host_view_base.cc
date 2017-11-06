@@ -273,6 +273,13 @@ void RenderWidgetHostViewBase::DidUnregisterFromTextInputManager(
   text_input_manager_ = nullptr;
 }
 
+void RenderWidgetHostViewBase::ResizeDueToAutoResize(const gfx::Size& new_size,
+                                                     uint64_t sequence_number) {
+  RenderWidgetHostImpl* host =
+      RenderWidgetHostImpl::From(GetRenderWidgetHost());
+  host->DidAllocateLocalSurfaceIdForAutoResize(sequence_number);
+}
+
 base::WeakPtr<RenderWidgetHostViewBase> RenderWidgetHostViewBase::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
@@ -302,7 +309,13 @@ void RenderWidgetHostViewBase::FocusedNodeTouched(
 }
 
 void RenderWidgetHostViewBase::GetScreenInfo(ScreenInfo* screen_info) {
-  *screen_info = ScreenInfo();
+  RenderWidgetHostImpl* host =
+      RenderWidgetHostImpl::From(GetRenderWidgetHost());
+  if (!host || !host->delegate()) {
+    *screen_info = ScreenInfo();
+    return;
+  }
+  host->delegate()->GetScreenInfo(screen_info);
 }
 
 uint32_t RenderWidgetHostViewBase::RendererFrameNumber() {

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/process/process.h"
+#include "base/unguessable_token.h"
 #include "cc/ipc/cc_param_traits.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "content/common/content_export.h"
@@ -154,10 +155,11 @@ IPC_MESSAGE_CONTROL1(BrowserPluginHostMsg_UnlockMouse_ACK,
                      int /* browser_plugin_instance_id */)
 
 // Sent when plugin's position has changed.
-IPC_MESSAGE_CONTROL4(BrowserPluginHostMsg_UpdateResizeParams,
+IPC_MESSAGE_CONTROL5(BrowserPluginHostMsg_UpdateResizeParams,
                      int /* browser_plugin_instance_id */,
                      gfx::Rect /* frame_rect */,
                      content::ScreenInfo /* screen_info */,
+                     uint64_t /* sequence_number */,
                      viz::LocalSurfaceId /* local_surface_id */)
 
 IPC_MESSAGE_ROUTED2(BrowserPluginHostMsg_SatisfySequence,
@@ -187,6 +189,12 @@ IPC_MESSAGE_CONTROL2(BrowserPluginMsg_AdvanceFocus,
                      int /* browser_plugin_instance_id */,
                      bool /* reverse */)
 
+// When a guest resizes due to auto-resize, this message informs the
+// BrowserPlugin to request a new viz::LocalSurfaceId.
+IPC_MESSAGE_CONTROL2(BrowserPluginMsg_ResizeDueToAutoResize,
+                     int /* browser_plugin_instance_id */,
+                     uint64_t /* sequence_number */)
+
 // When the guest starts/stops listening to touch events, it needs to notify the
 // plugin in the embedder about it.
 IPC_MESSAGE_CONTROL2(BrowserPluginMsg_ShouldAcceptTouchEvents,
@@ -212,5 +220,14 @@ IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetMouseLock,
 IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetTooltipText,
                      int /* browser_plugin_instance_id */,
                      base::string16 /* tooltip_text */)
+
+#if defined(USE_AURA)
+// Sets the token that is used to embed the guest. |embed_token| is a token
+// that was generated from the window server and is expected to be supplied to
+// EmbedUsingToken().
+IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetMusEmbedToken,
+                     int /* browser_plugin_instance_id */,
+                     base::UnguessableToken /* embed_token */)
+#endif
 
 #endif  // CONTENT_COMMON_BROWSER_PLUGIN_BROWSER_PLUGIN_MESSAGES_H_

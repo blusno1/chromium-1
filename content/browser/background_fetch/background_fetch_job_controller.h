@@ -62,11 +62,13 @@ class CONTENT_EXPORT BackgroundFetchJobController final
       int completed_downloads,
       int total_downloads,
       const std::vector<std::string>& outstanding_guids) override;
-  uint64_t GetInProgressDownloadedBytes() override;
 
-  // Updates the job title that's shown to the user as part of a notification
-  // for instance.
-  void UpdateJobTitle(const std::string& title);
+  // Gets the number of bytes downloaded for jobs that are currently running.
+  uint64_t GetInProgressDownloadedBytes();
+
+  // Updates the UI (currently only job title) that's shown to the user as part
+  // of a notification for instance.
+  void UpdateUI(const std::string& title);
 
   // Aborts the job including cancelling any ongoing downloads.
   void Abort();

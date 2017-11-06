@@ -48,8 +48,7 @@ constexpr CGFloat kImageXInset = 16;
 constexpr CGSize kImageSize{16, 16};
 constexpr CGFloat kDividerWidth = 1;
 constexpr CGFloat kDividerYInset = 8;
-constexpr CGFloat kButtonLeadingInset = 8;
-constexpr CGFloat kButtonTrailingInset = 5;
+constexpr CGFloat kButtonXInset = 8;
 constexpr CGFloat kButtonYInset = 6;
 
 constexpr CGFloat kTextX = 46;
@@ -58,7 +57,7 @@ constexpr CGFloat kFilenameWithStatusY = 22;
 constexpr CGFloat kStatusTextY = 8;
 constexpr CGFloat kMenuButtonSpacing = 8;
 
-constexpr CGFloat kMenuButtonTrailingMargin = 9;
+constexpr CGFloat kMenuButtonTrailingMargin = 12;
 constexpr CGFloat kMenuButtonSize = 24;
 constexpr const gfx::VectorIcon* kMenuButtonIcon = &kHorizontalMenuIcon;
 
@@ -245,10 +244,9 @@ NSTextField* MakeLabel(
   if ((self = [super initWithFrame:NSMakeRect(0, 0, kNormalSize.width,
                                               kNormalSize.height)])) {
     const NSRect bounds = self.bounds;
-    const NSRect buttonRect =
-        NSMakeRect(kButtonLeadingInset, kButtonYInset,
-                   NSWidth(bounds) - kButtonLeadingInset - kButtonTrailingInset,
-                   NSHeight(bounds) - kButtonYInset * 2);
+    const NSRect buttonRect = NSMakeRect(kButtonXInset, kButtonYInset,
+                                         NSWidth(bounds) - kButtonXInset * 2,
+                                         NSHeight(bounds) - kButtonYInset * 2);
     base::scoped_nsobject<MDHoverButton> button([[MDHoverButton alloc]
         initWithFrame:[self cr_localizedRect:buttonRect]]);
     button_ = button;
@@ -397,6 +395,40 @@ NSTextField* MakeLabel(
                  });
 }
 
+- (void)setCanceled:(BOOL)canceled {
+  if (progressIndicator_.hidden == canceled)
+    return;
+  [NSAnimationContext runAnimationGroup:^(NSAnimationContext* context) {
+    context.duration = 0.15;
+    context.timingFunction =
+        CAMediaTimingFunction.cr_materialEaseInTimingFunction;
+    progressIndicator_.animator.hidden = canceled;
+
+  }
+                      completionHandler:nil];
+
+  CAAnimationGroup* textAnim = [CAAnimationGroup animation];
+  if (canceled)
+    textAnim.beginTime = CACurrentMediaTime() + 0.05;
+  textAnim.duration = 0.4;
+  textAnim.timingFunction =
+      CAMediaTimingFunction.cr_materialEaseInOutTimingFunction;
+  textAnim.fillMode = kCAFillModeBackwards;
+  textAnim.animations = @[
+    [CABasicAnimation animationWithKeyPath:@"position"],
+    [CABasicAnimation animationWithKeyPath:@"bounds"],
+  ];
+
+  for (NSView* view : {filenameView_, statusTextView_}) {
+    NSRect frame = [self cr_localizedRect:view.frame];
+    CGFloat newX = canceled ? NSMinX(kProgressIndicatorFrame) : kTextX;
+    frame.size.width += frame.origin.x - newX;
+    frame.origin.x = newX;
+    [view.layer addAnimation:textAnim forKey:nil];
+    view.frame = [self cr_localizedRect:frame];
+  }
+}
+
 - (void)setStateFromDownload:(DownloadItemModel*)downloadModel {
   const content::DownloadItem& download = *downloadModel->download();
   const content::DownloadItem::DownloadState state = download.GetState();
@@ -455,6 +487,7 @@ NSTextField* MakeLabel(
 
   switch (state) {
     case content::DownloadItem::COMPLETE:
+      [self setCanceled:NO];
       [progressIndicator_
           setState:MDDownloadItemProgressIndicatorState::kComplete
           progress:1
@@ -475,6 +508,7 @@ NSTextField* MakeLabel(
           }];
       break;
     case content::DownloadItem::IN_PROGRESS:
+      [self setCanceled:NO];
       [progressIndicator_
             setState:MDDownloadItemProgressIndicatorState::kInProgress
             progress:downloadModel->PercentComplete() / 100.0
@@ -483,13 +517,12 @@ NSTextField* MakeLabel(
       break;
     case content::DownloadItem::CANCELLED:
     case content::DownloadItem::INTERRUPTED:
+      [self setCanceled:YES];
       [progressIndicator_
-            setState:MDDownloadItemProgressIndicatorState::kCanceled
+            setState:MDDownloadItemProgressIndicatorState::kInProgress
             progress:0
           animations:nil
-          completion:^{
-            [self finish];
-          }];
+          completion:nil];
       break;
     case content::DownloadItem::MAX_DOWNLOAD_STATE:
       NOTREACHED();

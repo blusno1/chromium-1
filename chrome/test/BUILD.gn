@@ -1429,6 +1429,7 @@ test("browser_tests") {
 
       # If this list is used on Android in the future, these browser/speech/*
       # files will probably not be applicable.
+      "../browser/net/network_connection_tracker_browsertest.cc",
       "../browser/speech/extension_api/tts_extension_apitest.cc",
       "../browser/speech/speech_recognition_browsertest.cc",
       "../browser/spellchecker/spellcheck_service_browsertest.cc",
@@ -1541,7 +1542,6 @@ test("browser_tests") {
       "../browser/ui/views/chrome_cleaner_dialog_browsertest_win.cc",
       "../browser/ui/views/chrome_cleaner_reboot_dialog_browsertest_win.cc",
       "../browser/ui/views/device_chooser_browsertest.cc",
-      "../browser/ui/views/hung_renderer_view_browsertest.cc",
       "../browser/ui/views/try_chrome_dialog_win/try_chrome_dialog_browsertest.cc",
       "../browser/ui/webui/bookmarks_ui_browsertest.cc",
       "../browser/ui/webui/chrome_url_data_manager_browsertest.cc",
@@ -1741,7 +1741,9 @@ test("browser_tests") {
         "$root_out_dir/resources.pak",
       ]
     }
-
+    if (!is_mac || mac_views_browser) {
+      sources += [ "../browser/ui/views/hung_renderer_view_browsertest.cc" ]
+    }
     if (enable_captive_portal_detection) {
       sources +=
           [ "../browser/ssl/captive_portal_blocking_page_browsertest.cc" ]
@@ -4999,8 +5001,8 @@ test("unit_tests") {
         "../browser/ui/views/tabs/fake_base_tab_strip_controller.cc",
         "../browser/ui/views/tabs/fake_base_tab_strip_controller.h",
         "../browser/ui/views/tabs/stacked_tab_strip_layout_unittest.cc",
+        "../browser/ui/views/tabs/tab_strip_impl_unittest.cc",
         "../browser/ui/views/tabs/tab_strip_layout_unittest.cc",
-        "../browser/ui/views/tabs/tab_strip_unittest.cc",
         "../browser/ui/views/tabs/tab_unittest.cc",
         "../browser/ui/views/toolbar/reload_button_unittest.cc",
         "../browser/ui/views/toolbar/toolbar_action_view_unittest.cc",

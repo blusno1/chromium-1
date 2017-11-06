@@ -27,7 +27,7 @@ import linker_map_parser
 import models
 import ninja_parser
 import nm
-import paths
+import path_util
 
 
 # Effect of _MAX_SAME_NAME_ALIAS_COUNT (as of Oct 2017, with min_pss = max):
@@ -77,8 +77,8 @@ def _UnmangleRemainingSymbols(raw_symbols, tool_prefix):
     return
 
   logging.info('Unmangling %d names', len(to_process))
-  proc = subprocess.Popen([tool_prefix + 'c++filt'], stdin=subprocess.PIPE,
-                          stdout=subprocess.PIPE)
+  proc = subprocess.Popen([path_util.GetCppFiltPath(tool_prefix)],
+                          stdin=subprocess.PIPE, stdout=subprocess.PIPE)
   stdout = proc.communicate('\n'.join(s.full_name for s in to_process))[0]
   assert proc.returncode == 0
 
@@ -554,7 +554,7 @@ def CreateMetadata(map_path, elf_path, apk_path, tool_prefix, output_directory):
     timestamp_obj = datetime.datetime.utcfromtimestamp(os.path.getmtime(
         elf_path))
     timestamp = calendar.timegm(timestamp_obj.timetuple())
-    relative_tool_prefix = paths.ToSrcRootRelative(tool_prefix)
+    relative_tool_prefix = path_util.ToSrcRootRelative(tool_prefix)
 
     metadata = {
         models.METADATA_GIT_REVISION: git_rev,
@@ -733,7 +733,7 @@ def _DetectGitRevision(directory):
 
 
 def BuildIdFromElf(elf_path, tool_prefix):
-  args = [tool_prefix + 'readelf', '-n', elf_path]
+  args = [path_util.GetReadElfPath(tool_prefix), '-n', elf_path]
   stdout = subprocess.check_output(args)
   match = re.search(r'Build ID: (\w+)', stdout)
   assert match, 'Build ID not found from running: ' + ' '.join(args)
@@ -741,7 +741,7 @@ def BuildIdFromElf(elf_path, tool_prefix):
 
 
 def _SectionSizesFromElf(elf_path, tool_prefix):
-  args = [tool_prefix + 'readelf', '-S', '--wide', elf_path]
+  args = [path_util.GetReadElfPath(tool_prefix), '-S', '--wide', elf_path]
   stdout = subprocess.check_output(args)
   section_sizes = {}
   # Matches  [ 2] .hash HASH 00000000006681f0 0001f0 003154 04   A  3   0  8
@@ -752,7 +752,7 @@ def _SectionSizesFromElf(elf_path, tool_prefix):
 
 
 def _ArchFromElf(elf_path, tool_prefix):
-  args = [tool_prefix + 'readelf', '-h', elf_path]
+  args = [path_util.GetReadElfPath(tool_prefix), '-h', elf_path]
   stdout = subprocess.check_output(args)
   machine = re.search('Machine:\s*(.+)', stdout).group(1)
   if machine == 'Intel 80386':
@@ -826,9 +826,9 @@ def Run(args, parser):
   any_input = apk_path or elf_path or map_path
   if not any_input:
     parser.error('Most pass at least one of --apk-file, --elf-file, --map-file')
-  lazy_paths = paths.LazyPaths(tool_prefix=args.tool_prefix,
-                               output_directory=args.output_directory,
-                               any_path_within_output_directory=any_input)
+  lazy_paths = path_util.LazyPaths(tool_prefix=args.tool_prefix,
+                                   output_directory=args.output_directory,
+                                   any_path_within_output_directory=any_input)
   if apk_path:
     with zipfile.ZipFile(apk_path) as z:
       lib_infos = [f for f in z.infolist()

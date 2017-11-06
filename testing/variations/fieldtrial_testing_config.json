@@ -867,6 +867,21 @@
             ]
         }
     ],
+    "ContextualSearch": [
+        {
+            "platforms": [
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "Expected",
+                    "params": {
+                        "enable_ranker_integration": "true"
+                    }
+                }
+            ]
+        }
+    ],
     "CopylessPaste": [
         {
             "platforms": [
@@ -2246,6 +2261,22 @@
                     "enable_features": [
                         "OfflinePagesAsyncDownload",
                         "OfflinePagesSvelte"
+                    ]
+                }
+            ]
+        }
+    ],
+    "OfflinePagesPrefetchingSuggestions": [
+        {
+            "platforms": [
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "KeepPrefetchedContentSuggestions",
+                        "OfflinePagesPrefetching"
                     ]
                 }
             ]

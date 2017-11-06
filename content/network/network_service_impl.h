@@ -42,6 +42,7 @@ class CONTENT_EXPORT NetworkServiceImpl : public service_manager::Service,
   // TODO(https://crbug.com/767450): Once the NetworkService can always create
   // its own NetLog in production, remove the |net_log| argument.
   NetworkServiceImpl(std::unique_ptr<service_manager::BinderRegistry> registry,
+                     mojom::NetworkServiceRequest request = nullptr,
                      net::NetLog* net_log = nullptr);
 
   ~NetworkServiceImpl() override;
@@ -60,6 +61,7 @@ class CONTENT_EXPORT NetworkServiceImpl : public service_manager::Service,
   void DeregisterNetworkContext(NetworkContext* network_context);
 
   // mojom::NetworkService implementation:
+  void SetClient(mojom::NetworkServiceClientPtr client) override;
   void CreateNetworkContext(mojom::NetworkContextRequest request,
                             mojom::NetworkContextParamsPtr params) override;
   void DisableQuic() override;
@@ -70,6 +72,7 @@ class CONTENT_EXPORT NetworkServiceImpl : public service_manager::Service,
   bool quic_disabled() const { return quic_disabled_; }
   bool HasRawHeadersAccess(uint32_t process_id) const;
 
+  mojom::NetworkServiceClient* client() { return client_.get(); }
   net::NetLog* net_log() const;
 
  private:
@@ -88,6 +91,8 @@ class CONTENT_EXPORT NetworkServiceImpl : public service_manager::Service,
   // TODO(https://crbug.com/767450): Remove this, once Chrome no longer creates
   // its own NetLog.
   net::NetLog* net_log_;
+
+  mojom::NetworkServiceClientPtr client_;
 
   // Observer that logs network changes to the NetLog. Must be below the NetLog
   // and the NetworkChangeNotifier (Once this class creates it), so it's

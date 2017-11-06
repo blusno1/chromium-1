@@ -1333,9 +1333,6 @@ crbug.com/769357 [ Win7 Debug ] virtual/mojo-loading/http/tests/misc/webtiming-s
 # These are the failing tests because Chrome hasn't implemented according to the spec.
 crbug.com/645988 external/wpt/uievents/order-of-events/focus-events/focus-manual.html [ Failure ]
 
-# Needs test_driver.click() implementation.
-crbug.com/781231 external/wpt/uievents/order-of-events/mouse-events/click-cancel.html [ Timeout ]
-
 crbug.com/662010 [ Win7 ] http/tests/csspaint/invalidation-background-image.html [ Skip ]
 
 # These tests are skipped as there is no touch support on Mac.
@@ -1784,6 +1781,12 @@ crbug.com/711529 virtual/mojo-loading/http/tests/security/cross-origin-createIma
 crbug.com/711529 virtual/mojo-loading/http/tests/workers/shared-worker-performance-timeline.html [ Timeout ]
 
 crbug.com/713587 external/wpt/css/css-ui/caret-color-006.html [ Skip ]
+
+# Tests that will start failing after this WebRTC CL is rolled in: https://webrtc-review.googlesource.com/c/src/+/9020
+crbug.com/780581 external/wpt/webrtc/RTCPeerConnection-setLocalDescription-pranswer.html [ Pass Failure ]
+crbug.com/780581 external/wpt/webrtc/RTCPeerConnection-setRemoteDescription-answer.html [ Pass Failure ]
+crbug.com/780581 external/wpt/webrtc/RTCPeerConnection-setRemoteDescription-offer.html [ Pass Failure ]
+crbug.com/780581 external/wpt/webrtc/RTCPeerConnection-setRemoteDescription-pranswer.html [ Pass Failure ]
 
 # Automatically-added expectations for CSS tests which are temporarily
 # commented-out while the test directory is disabled (see top of file).
@@ -2297,6 +2300,8 @@ crbug.com/666703 external/wpt/html/browsers/sandboxing/sandbox-disallow-same-ori
 crbug.com/626703 external/wpt/html/dom/documents/dom-tree-accessors/Document.currentScript.html [ Timeout ]
 crbug.com/626703 external/wpt/html/browsers/history/the-location-interface/location-protocol-setter-non-broken.html [ Failure Pass ]
 
+crbug.com/781595 external/wpt/html/dom/documents/resource-metadata-management/document-lastModified-01.html [ Failure ]
+
 crbug.com/655458 external/wpt/workers/constructors/SharedWorker/undefined-arguments.html [ Failure ]
 crbug.com/655458 external/wpt/workers/baseurl/alpha/worker.html [ Failure ]
 crbug.com/655458 external/wpt/workers/interfaces/SharedWorkerGlobalScope/onconnect.html [ Failure ]
@@ -2529,9 +2534,6 @@ crbug.com/765738 [ Linux Win Mac ] virtual/enable_wasm/http/tests/wasm/wasm_remo
 
 crbug.com/663585 editing/pasteboard/data-transfer-items-image-png.html [ Pass Failure ]
 
-# Possible duplicate of crbug.com/509025
-# crbug.com/663847 fast/events/context-no-deselect.html [ Pass Failure ]
-
 crbug.com/652536 fast/events/mouse-cursor.html [ Pass Failure ]
 crbug.com/652536 virtual/mouseevent_fractional/fast/events/mouse-cursor.html [ Pass Failure ]
 crbug.com/671478 fast/table/percent-height-replaced-content-in-cell.html [ Pass Failure ]
@@ -2556,13 +2558,7 @@ crbug.com/702837 fast/text/aat-morx.html [ Skip ]
 
 crbug.com/688670 media/track/track-cue-rendering-after-controls-removed.html [ Pass Failure ]
 
-# Possible duplicate of crbug.com/665577
-# crbug.com/664858 virtual/threaded/fast/scroll-behavior/overflow-scroll-animates.html [ Pass Failure ]
-# crbug.com/664858 virtual/threaded/fast/scroll-behavior/smooth-scroll/horizontal-smooth-scroll-in-rtl.html [ Pass Failure ]
 crbug.com/664858 virtual/threaded/fast/scroll-behavior/smooth-scroll/main-thread-scrolling-reason-added.html [ Skip ]
-# crbug.com/664858 virtual/threaded/fast/scroll-behavior/smooth-scroll/ongoing-smooth-scroll-anchors.html [ Pass Failure ]
-# crbug.com/664858 virtual/threaded/fast/scroll-behavior/smooth-scroll/ongoing-smooth-scroll-vertical-rl-anchors.html [ Pass Failure ]
-# crbug.com/664858 virtual/threaded/fast/scroll-behavior/smooth-scroll/scroll-during-selection.html [ Pass Failure ]
 
 crbug.com/684874 virtual/threaded/fast/scroll-behavior/smooth-scroll/scroll-during-selection.html [ Pass Failure ]
 crbug.com/766357 virtual/threaded/fast/scroll-behavior/wheel-and-touch-scroll-use-count.html [ Pass Failure ]
@@ -3393,7 +3389,7 @@ crbug.com/755405 [ Android ] fast/css/line-thickness-underline-strikethrough-ove
 crbug.com/755405 [ Android ] fast/css/text-overflow-ellipsis-strict.html [ Failure ]
 crbug.com/755405 [ Android ] fast/css/text-overflow-ellipsis.html [ Failure ]
 crbug.com/755405 [ Android ] fast/css/getComputedStyle/getComputedStyle-margin-percentage.html [ Failure ]
-crbug.com/755405 [ Android ] fast/css3-text/css3-text-decoration/text-decoration-skip.html [ Failure ]
+crbug.com/755405 [ Android ] fast/css3-text/css3-text-decoration/text-decoration-skip-ink.html [ Failure ]
 crbug.com/755405 [ Android ] fast/css3-text/css3-text-decoration/text-decoration-style-inherit-links.html [ Failure ]
 crbug.com/755405 [ Android ] fast/css3-text/css3-text-decoration/text-decoration-style-inherit-not-propagated-by-out-of-flow.html [ Failure ]
 crbug.com/755405 [ Android ] fast/css3-text/css3-text-decoration/text-decoration-style-inherit-simple-underlines.html [ Failure ]
@@ -3818,3 +3814,9 @@ crbug.com/773122 crbug.com/777813 [ Win ] fast/text/font-ascent-mac.html [ Failu
 crbug.com/778575 [ Mac Linux ] http/tests/devtools/tracing/timeline-js/timeline-script-id.html [ Pass Failure ]
 crbug.com/778575 [ Mac ] http/tests/devtools/tracing/timeline-js/timeline-injected-script-eval.html [ Pass Failure ]
 crbug.com/778575 [ Mac ] virtual/threaded/http/tests/devtools/tracing/hit-test.html [ Pass Failure ]
+
+# Sheriff failures 2017-11-03
+crbug.com/781171 [ Android ] external/wpt/css/css-timing/cubic-bezier-timing-functions-output.html [ Failure Crash Pass ]
+crbug.com/781171 [ Android ] external/wpt/css/css-timing/frames-timing-functions-output.html [ Skip ]
+crbug.com/781171 [ Android ] external/wpt/css/css-timing/frames-timing-functions-syntax.html [ Skip ]
+crbug.com/781171 [ Android ] external/wpt/css/css-timing/step-timing-functions-output.html [ Skip ]

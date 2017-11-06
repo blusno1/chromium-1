@@ -505,18 +505,21 @@ public class ChromeTabbedActivity
 
     @Override
     public void onNewIntent(Intent intent) {
+        // The intent to use in maybeDispatchExplicitMainViewIntent(). We're explicitly
+        // adding NEW_TASK flag to make sure backing from CCT brings up the caller activity,
+        // and not Chrome
+        Intent intentForDispatching = new Intent(intent);
+        intentForDispatching.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         @LaunchIntentDispatcher.Action
         int action = maybeDispatchExplicitMainViewIntent(
-                intent, sExplicitMainViewIntentDispatchedOnNewIntent);
+                intentForDispatching, sExplicitMainViewIntentDispatchedOnNewIntent);
         if (action != LaunchIntentDispatcher.Action.CONTINUE) {
-            // Change our position in the activity stack to make sure back button sends user
-            // to the activity that started the custom tab.
-            if ((intent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
-                moveTaskToBack(true);
-            }
+            // Pressing back button in CCT should bring user to the caller activity.
+            moveTaskToBack(true);
             // Intent was dispatched to CustomTabActivity, consume it.
             return;
         }
+
         mIntentHandlingTimeMs = SystemClock.uptimeMillis();
         super.onNewIntent(intent);
     }
@@ -552,9 +555,11 @@ public class ChromeTabbedActivity
             //                might not have completed at this point and we could show multiple
             //                promos.
             boolean isShowingPromo = mLocaleManager.hasShownSearchEnginePromoThisSession();
+            // Promo dialogs in multiwindow mode are broken on some devices: http://crbug.com/354696
+            boolean isLegacyMultiWindow = MultiWindowUtils.getInstance().isLegacyMultiWindow(this);
             if (!isShowingPromo && !mIntentWithEffect && FirstRunStatus.getFirstRunFlowComplete()
-                    && preferenceManager.getPromosSkippedOnFirstStart()
-                    && !VrShellDelegate.isInVr()) {
+                    && preferenceManager.getPromosSkippedOnFirstStart() && !VrShellDelegate.isInVr()
+                    && !isLegacyMultiWindow) {
                 // Data reduction promo should be temporarily suppressed if the sign in promo is
                 // shown to avoid nagging users too much.
                 isShowingPromo = SigninPromoUtil.launchSigninPromoIfNeeded(this)

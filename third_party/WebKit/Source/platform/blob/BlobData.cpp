@@ -38,6 +38,7 @@
 #include "platform/WebTaskRunner.h"
 #include "platform/blob/BlobBytesProvider.h"
 #include "platform/blob/BlobRegistry.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/runtime_enabled_features.h"
 #include "platform/text/LineEnding.h"
 #include "platform/wtf/PtrUtil.h"
@@ -84,6 +85,19 @@ bool IsValidBlobType(const String& type) {
 void BindBytesProvider(std::unique_ptr<BlobBytesProvider> provider,
                        BytesProviderRequest request) {
   mojo::MakeStrongBinding(std::move(provider), std::move(request));
+}
+
+BlobRegistryPtr& GetThreadSpecificRegistry() {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<BlobRegistryPtr>, registry,
+                                  ());
+  if (!registry.IsSet()) {
+    // TODO(mek): Going through InterfaceProvider to get a BlobRegistryPtr
+    // ends up going through the main thread. Ideally workers wouldn't need
+    // to do that.
+    Platform::Current()->GetInterfaceProvider()->GetInterface(
+        MakeRequest(&*registry));
+  }
+  return *registry;
 }
 
 }  // namespace
@@ -267,13 +281,8 @@ BlobDataHandle::BlobDataHandle()
       size_(0),
       is_single_unknown_size_file_(false) {
   if (RuntimeEnabledFeatures::MojoBlobsEnabled()) {
-    // TODO(mek): Going through InterfaceProvider to get a BlobRegistryPtr
-    // ends up going through the main thread. Ideally workers wouldn't need
-    // to do that.
-    BlobRegistryPtr registry;
-    Platform::Current()->GetInterfaceProvider()->GetInterface(
-        MakeRequest(&registry));
-    registry->Register(MakeRequest(&blob_info_), uuid_, "", "", {});
+    GetThreadSpecificRegistry()->Register(MakeRequest(&blob_info_), uuid_, "",
+                                          "", {});
   } else {
     BlobRegistry::RegisterBlobData(uuid_, BlobData::Create());
   }
@@ -285,12 +294,7 @@ BlobDataHandle::BlobDataHandle(std::unique_ptr<BlobData> data, long long size)
       size_(size),
       is_single_unknown_size_file_(data->IsSingleUnknownSizeFile()) {
   if (RuntimeEnabledFeatures::MojoBlobsEnabled()) {
-    // TODO(mek): Going through InterfaceProvider to get a BlobRegistryPtr
-    // ends up going through the main thread. Ideally workers wouldn't need
-    // to do that.
-    BlobRegistryPtr registry;
-    Platform::Current()->GetInterfaceProvider()->GetInterface(
-        MakeRequest(&registry));
+    TRACE_EVENT0("Blob", "Registry::RegisterBlob");
 
     size_t current_memory_population = 0;
     Vector<DataElementPtr> elements;
@@ -385,8 +389,9 @@ BlobDataHandle::BlobDataHandle(std::unique_ptr<BlobData> data, long long size)
       }
     }
 
-    registry->Register(MakeRequest(&blob_info_), uuid_,
-                       type_.IsNull() ? "" : type_, "", std::move(elements));
+    GetThreadSpecificRegistry()->Register(MakeRequest(&blob_info_), uuid_,
+                                          type_.IsNull() ? "" : type_, "",
+                                          std::move(elements));
   } else {
     BlobRegistry::RegisterBlobData(uuid_, std::move(data));
   }
@@ -402,13 +407,8 @@ BlobDataHandle::BlobDataHandle(const String& uuid,
   if (RuntimeEnabledFeatures::MojoBlobsEnabled()) {
     SCOPED_BLINK_UMA_HISTOGRAM_TIMER_THREAD_SAFE(
         "Storage.Blob.GetBlobFromUUIDTime");
-    // TODO(mek): Going through InterfaceProvider to get a BlobRegistryPtr
-    // ends up going through the main thread. Ideally workers wouldn't need
-    // to do that.
-    BlobRegistryPtr registry;
-    Platform::Current()->GetInterfaceProvider()->GetInterface(
-        MakeRequest(&registry));
-    registry->GetBlobFromUUID(MakeRequest(&blob_info_), uuid_);
+    GetThreadSpecificRegistry()->GetBlobFromUUID(MakeRequest(&blob_info_),
+                                                 uuid_);
   } else {
     BlobRegistry::AddBlobDataRef(uuid_);
   }

@@ -93,8 +93,7 @@ void BackgroundFetchServiceImpl::UpdateUI(const std::string& unique_id,
     return;
   }
 
-  background_fetch_context_->UpdateRegistrationUI(unique_id, title,
-                                                  std::move(callback));
+  background_fetch_context_->UpdateUI(unique_id, title, std::move(callback));
 }
 
 void BackgroundFetchServiceImpl::Abort(int64_t service_worker_registration_id,
@@ -128,9 +127,9 @@ void BackgroundFetchServiceImpl::GetRegistration(
     return;
   }
 
-  background_fetch_context_->data_manager().GetRegistration(
-      service_worker_registration_id, origin, developer_id,
-      std::move(callback));
+  background_fetch_context_->GetRegistration(service_worker_registration_id,
+                                             origin, developer_id,
+                                             std::move(callback));
 }
 
 void BackgroundFetchServiceImpl::GetDeveloperIds(

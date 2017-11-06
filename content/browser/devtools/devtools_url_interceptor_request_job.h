@@ -25,8 +25,7 @@ namespace content {
 
 // A URLRequestJob that allows programmatic request blocking / modification or
 // response mocking.  This class should only be accessed on the IO thread.
-class DevToolsURLInterceptorRequestJob : public net::URLRequestJob,
-                                         public net::URLRequest::Delegate {
+class DevToolsURLInterceptorRequestJob : public net::URLRequestJob {
  public:
   DevToolsURLInterceptorRequestJob(
       scoped_refptr<DevToolsURLRequestInterceptor::State>
@@ -59,21 +58,6 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob,
   void SetAuth(const net::AuthCredentials& credentials) override;
   void CancelAuth() override;
 
-  // net::URLRequest::Delegate methods:
-  void OnAuthRequired(net::URLRequest* request,
-                      net::AuthChallengeInfo* auth_info) override;
-  void OnCertificateRequested(
-      net::URLRequest* request,
-      net::SSLCertRequestInfo* cert_request_info) override;
-  void OnSSLCertificateError(net::URLRequest* request,
-                             const net::SSLInfo& ssl_info,
-                             bool fatal) override;
-  void OnResponseStarted(net::URLRequest* request, int net_error) override;
-  void OnReadCompleted(net::URLRequest* request, int bytes_read) override;
-  void OnReceivedRedirect(net::URLRequest* request,
-                          const net::RedirectInfo& redirect_info,
-                          bool* defer_redirect) override;
-
   // Must be called on IO thread.
   void StopIntercepting();
 
@@ -90,6 +74,7 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob,
 
  private:
   class SubRequest;
+  class MockResponseDetails;
 
   // We keep a copy of the original request details to facilitate the
   // Network.modifyRequest command which could potentially change any of these
@@ -111,62 +96,12 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob,
     const net::URLRequestContext* url_request_context;
   };
 
-  // If the request was either allowed or modified, a SubRequest will be used to
-  // perform the fetch and the results proxied to the original request. This
-  // gives us the flexibility to pretend redirects didn't happen if the user
-  // chooses to mock the response.  Note this SubRequest is ignored by the
-  // interceptor.
-  class SubRequest {
-   public:
-    SubRequest(
-        DevToolsURLInterceptorRequestJob::RequestDetails& request_details,
-        DevToolsURLInterceptorRequestJob* devtools_interceptor_request_job,
-        scoped_refptr<DevToolsURLRequestInterceptor::State>
-            devtools_url_request_interceptor_state);
-    ~SubRequest();
-
-    void Cancel();
-
-    net::URLRequest* request() const { return request_.get(); }
-
-   private:
-    std::unique_ptr<net::URLRequest> request_;
-
-    DevToolsURLInterceptorRequestJob*
-        devtools_interceptor_request_job_;  // NOT OWNED.
-
-    scoped_refptr<DevToolsURLRequestInterceptor::State>
-        devtools_url_request_interceptor_state_;
-    bool fetch_in_progress_;
-  };
-
-  class MockResponseDetails {
-   public:
-    MockResponseDetails(std::string response_bytes,
-                        base::TimeTicks response_time);
-
-    MockResponseDetails(
-        const scoped_refptr<net::HttpResponseHeaders>& response_headers,
-        std::string response_bytes,
-        size_t read_offset,
-        base::TimeTicks response_time);
-
-    ~MockResponseDetails();
-
-    scoped_refptr<net::HttpResponseHeaders>& response_headers() {
-      return response_headers_;
-    }
-
-    base::TimeTicks response_time() const { return response_time_; }
-
-    int ReadRawData(net::IOBuffer* buf, int buf_size);
-
-   private:
-    scoped_refptr<net::HttpResponseHeaders> response_headers_;
-    std::string response_bytes_;
-    size_t read_offset_;
-    base::TimeTicks response_time_;
-  };
+  // Callbacks from SubRequest.
+  void OnSubRequestAuthRequired(net::AuthChallengeInfo* auth_info);
+  void OnSubRequestRedirectReceived(const net::URLRequest& request,
+                                    const net::RedirectInfo& redirectinfo,
+                                    bool* defer_redirect);
+  void OnSubRequestResponseStarted(const net::Error& net_error);
 
   // Retrieves the response headers from either the |sub_request_| or the
   // |mock_response_|.  In some cases (e.g. file access) this may be null.
@@ -182,8 +117,8 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob,
 
   enum class WaitingForUserResponse {
     NOT_WAITING,
-    WAITING_FOR_INTERCEPTION_RESPONSE,
-    WAITING_FOR_AUTH_RESPONSE,
+    WAITING_FOR_REQUEST_ACK,
+    WAITING_FOR_AUTH_ACK,
   };
 
   scoped_refptr<DevToolsURLRequestInterceptor::State>
@@ -194,7 +129,6 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob,
   std::unique_ptr<net::RedirectInfo> redirect_;
   WaitingForUserResponse waiting_for_user_response_;
   bool intercepting_requests_;
-  bool killed_;
   scoped_refptr<net::AuthChallengeInfo> auth_info_;
 
   const std::string interception_id_;

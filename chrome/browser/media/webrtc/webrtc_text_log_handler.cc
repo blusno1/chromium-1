@@ -301,11 +301,16 @@ void WebRtcTextLogHandler::ReleaseLog(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(logging_state_ == STOPPED || logging_state_ == CHANNEL_CLOSING);
 
-  log_buffer_->SetComplete();
-  *log_buffer = std::move(log_buffer_);
-  *meta_data = std::move(meta_data_);
-  log_buffer_.reset();
-  meta_data_.reset();
+  // Checking log_buffer_ here due to seeing some crashes out in the wild.
+  // See crbug/699960 for more details.
+  if (log_buffer_) {
+    log_buffer_->SetComplete();
+    *log_buffer = std::move(log_buffer_);
+  }
+
+  if (meta_data_)
+    *meta_data = std::move(meta_data_);
+
   if (logging_state_ != CHANNEL_CLOSING)
     logging_state_ = LoggingState::CLOSED;
 }
@@ -440,13 +445,7 @@ void WebRtcTextLogHandler::LogInitialInfoOnIOThread(
       "." + IntToString(cpu.stepping()) + ", x" +
       IntToString(base::SysInfo::NumberOfProcessors()) + ", " +
       IntToString(base::SysInfo::AmountOfPhysicalMemoryMB()) + "MB");
-  std::string cpu_brand = cpu.cpu_brand();
-  // Workaround for crbug.com/249713.
-  // TODO(grunell): Remove workaround when bug is fixed.
-  size_t null_pos = cpu_brand.find('\0');
-  if (null_pos != std::string::npos)
-    cpu_brand.erase(null_pos);
-  LogToCircularBuffer("Cpu brand: " + cpu_brand);
+  LogToCircularBuffer("Cpu brand: " + cpu.cpu_brand());
 
   // Computer model
   std::string computer_model = "Not available";

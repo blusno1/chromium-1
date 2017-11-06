@@ -793,6 +793,10 @@ enum {
   [self.headerController reparentToolbarController];
 }
 
+- (id<ToolbarSnapshotProviding>)toolbarSnapshotProvider {
+  return self.headerController.toolbarSnapshotProvider;
+}
+
 - (CGFloat)toolbarHeight {
   // If the google landing controller is nil, there is no toolbar visible in the
   // native content view, finally there is no toolbar on iPad.

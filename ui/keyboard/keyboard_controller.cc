@@ -393,10 +393,10 @@ void KeyboardController::SetContainerBehaviorInternal(
     const ContainerType type) {
   switch (type) {
     case ContainerType::FULL_WIDTH:
-      container_behavior_ = std::make_unique<ContainerFullWidthBehavior>();
+      container_behavior_ = std::make_unique<ContainerFullWidthBehavior>(this);
       break;
     case ContainerType::FLOATING:
-      container_behavior_ = std::make_unique<ContainerFloatingBehavior>();
+      container_behavior_ = std::make_unique<ContainerFloatingBehavior>(this);
       break;
     default:
       NOTREACHED();
@@ -469,7 +469,7 @@ void KeyboardController::OnTextInputStateChanged(
 
   bool focused =
       client && (client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE);
-  bool should_hide = !focused && !keyboard_locked_;
+  bool should_hide = !focused && container_behavior_->TextBlurHidesKeyboard();
 
   if (should_hide) {
     switch (state_) {

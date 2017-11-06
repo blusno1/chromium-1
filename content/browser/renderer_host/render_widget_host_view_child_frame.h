@@ -175,6 +175,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       BrowserAccessibilityDelegate* delegate,
       bool for_root_frame) override;
   void GetScreenInfo(ScreenInfo* screen_info) override;
+  void ResizeDueToAutoResize(const gfx::Size& new_size,
+                             uint64_t sequence_number) override;
 
   // viz::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
@@ -300,8 +302,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // associated with this view or a cross process ancestor frame has been hidden
   // using CSS.
   bool CanBecomeVisible();
-
-  static bool IsUsingMus();
 
   using FrameSwappedCallbackList =
       base::circular_deque<std::unique_ptr<base::Closure>>;

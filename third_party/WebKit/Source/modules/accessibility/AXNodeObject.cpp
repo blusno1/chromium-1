@@ -1416,7 +1416,10 @@ int AXNodeObject::SetSize() const {
 
 int AXNodeObject::AutoPosInSet() const {
   AXObject* parent = ParentObject();
-  if (!parent)
+
+  // Do not continue if the children will need updating soon, because
+  // the calculation requires all the siblings to remain stable.
+  if (!parent || parent->NeedsToUpdateChildren())
     return 0;
 
   int pos_in_set = 1;
@@ -1449,7 +1452,10 @@ int AXNodeObject::AutoPosInSet() const {
 
 int AXNodeObject::AutoSetSize() const {
   AXObject* parent = ParentObject();
-  if (!parent)
+
+  // Do not continue if the children will need updating soon, because
+  // the calculation requires all the siblings to remain stable.
+  if (!parent || parent->NeedsToUpdateChildren())
     return 0;
 
   int set_size = AutoPosInSet();
@@ -1564,6 +1570,19 @@ bool AXNodeObject::MinValueForRange(float* out_value) const {
   if (auto* meter = ToHTMLMeterElementOrNull(GetNode())) {
     *out_value = meter->min();
     return true;
+  }
+
+  // In ARIA 1.1, default value of scrollbar, separator and slider
+  // for aria-valuemin were changed to 0.
+  switch (AriaRoleAttribute()) {
+    case kScrollBarRole:
+    case kSplitterRole:
+    case kSliderRole: {
+      *out_value = 0.0f;
+      return true;
+    }
+    default:
+      break;
   }
 
   return false;

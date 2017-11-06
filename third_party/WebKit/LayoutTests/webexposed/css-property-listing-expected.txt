@@ -4,7 +4,6 @@ All changes to this list should go through Blink's feature review process: http:
 [LONGHANDS]
     -webkit-app-region
     -webkit-appearance
-    -webkit-background-clip
     -webkit-background-origin
     -webkit-border-after-color
     -webkit-border-after-style
@@ -335,7 +334,7 @@ All changes to this list should go through Blink's feature review process: http:
     text-combine-upright
     text-decoration-color
     text-decoration-line
-    text-decoration-skip
+    text-decoration-skip-ink
     text-decoration-style
     text-indent
     text-justify
@@ -698,6 +697,8 @@ All changes to this list should go through Blink's feature review process: http:
         animation-timing-function
     -webkit-backface-visibility
         backface-visibility
+    -webkit-background-clip
+        background-clip
     -webkit-background-size
         background-size
     -webkit-border-bottom-left-radius

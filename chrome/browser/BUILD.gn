@@ -915,6 +915,8 @@ split_static_library("browser") {
     "page_load_metrics/observers/tab_restore_page_load_metrics_observer.h",
     "page_load_metrics/observers/ukm_page_load_metrics_observer.cc",
     "page_load_metrics/observers/ukm_page_load_metrics_observer.h",
+    "page_load_metrics/observers/use_counter/ukm_features.cc",
+    "page_load_metrics/observers/use_counter/ukm_features.h",
     "page_load_metrics/observers/use_counter_page_load_metrics_observer.cc",
     "page_load_metrics/observers/use_counter_page_load_metrics_observer.h",
     "page_load_metrics/page_load_metrics_embedder_interface.h",
@@ -2524,12 +2526,12 @@ split_static_library("browser") {
       "repost_form_warning_controller.h",
       "resource_coordinator/background_tab_navigation_throttle.cc",
       "resource_coordinator/background_tab_navigation_throttle.h",
+      "resource_coordinator/page_signal_receiver.cc",
+      "resource_coordinator/page_signal_receiver.h",
       "resource_coordinator/tab_manager.cc",
       "resource_coordinator/tab_manager.h",
       "resource_coordinator/tab_manager_delegate_chromeos.cc",
       "resource_coordinator/tab_manager_delegate_chromeos.h",
-      "resource_coordinator/tab_manager_grc_tab_signal_observer.cc",
-      "resource_coordinator/tab_manager_grc_tab_signal_observer.h",
       "resource_coordinator/tab_manager_observer.cc",
       "resource_coordinator/tab_manager_observer.h",
       "resource_coordinator/tab_manager_stats_collector.cc",
@@ -3250,8 +3252,6 @@ split_static_library("browser") {
       "feature_engagement/new_tab/new_tab_tracker_factory.h",
       "feature_engagement/session_duration_updater.cc",
       "feature_engagement/session_duration_updater.h",
-      "feature_engagement/session_duration_updater_factory.cc",
-      "feature_engagement/session_duration_updater_factory.h",
     ]
   }
 

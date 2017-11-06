@@ -580,6 +580,7 @@ interface CSS
     static method percent
     static method pt
     static method px
+    static method q
     static method rad
     static method registerProperty
     static method rem
@@ -7239,6 +7240,9 @@ interface VRFrameOfReference : VRCoordinateSystem
     getter bounds
     getter emulatedHeight
     method constructor
+interface VRLayer
+    attribute @@toStringTag
+    method constructor
 interface VRPose
     attribute @@toStringTag
     getter angularAcceleration
@@ -7256,6 +7260,7 @@ interface VRPresentationFrame
     method getDevicePose
 interface VRSession : EventTarget
     attribute @@toStringTag
+    getter baseLayer
     getter depthFar
     getter depthNear
     getter device
@@ -7269,6 +7274,7 @@ interface VRSession : EventTarget
     method end
     method requestFrame
     method requestFrameOfReference
+    setter baseLayer
     setter depthFar
     setter depthNear
     setter onblur
@@ -7299,6 +7305,26 @@ interface VRView
     getter eye
     getter projectionMatrix
     method constructor
+    method getViewport
+interface VRViewport
+    attribute @@toStringTag
+    getter height
+    getter width
+    getter x
+    getter y
+    method constructor
+interface VRWebGLLayer : VRLayer
+    attribute @@toStringTag
+    getter alpha
+    getter antialias
+    getter context
+    getter depth
+    getter framebufferHeight
+    getter framebufferWidth
+    getter multiview
+    getter stencil
+    method constructor
+    method requestViewportScaling
 interface VTTCue : TextTrackCue
     attribute @@toStringTag
     getter align
@@ -9013,7 +9039,6 @@ interface webkitSpeechGrammarList
     method item
 interface webkitSpeechRecognition : EventTarget
     attribute @@toStringTag
-    getter audioTrack
     getter continuous
     getter grammars
     getter interimResults
@@ -9034,7 +9059,6 @@ interface webkitSpeechRecognition : EventTarget
     method constructor
     method start
     method stop
-    setter audioTrack
     setter continuous
     setter grammars
     setter interimResults

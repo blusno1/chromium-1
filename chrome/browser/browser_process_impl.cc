@@ -116,13 +116,16 @@
 #include "components/web_resource/web_resource_pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/network_connection_tracker.h"
 #include "extensions/common/constants.h"
 #include "extensions/features/features.h"
 #include "media/media_features.h"
@@ -209,8 +212,7 @@ rappor::RapporService* GetBrowserRapporService() {
 }
 
 BrowserProcessImpl::BrowserProcessImpl(
-    base::SequencedTaskRunner* local_state_task_runner,
-    const base::CommandLine& command_line)
+    base::SequencedTaskRunner* local_state_task_runner)
     : created_watchdog_thread_(false),
       created_browser_policy_connector_(false),
       created_profile_manager_(false),
@@ -236,13 +238,6 @@ BrowserProcessImpl::BrowserProcessImpl(
 #endif
 
   net_log_ = base::MakeUnique<net_log::ChromeNetLog>();
-
-  if (command_line.HasSwitch(switches::kLogNetLog)) {
-    net_log_->StartWritingToFile(
-        command_line.GetSwitchValuePath(switches::kLogNetLog),
-        GetNetCaptureModeFromCommandLine(command_line),
-        command_line.GetCommandLineString(), chrome::GetChannelString());
-  }
 
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
       chrome::kChromeSearchScheme);
@@ -573,6 +568,18 @@ BrowserProcessImpl::system_network_context_manager() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(system_network_context_manager_.get());
   return system_network_context_manager_.get();
+}
+
+content::NetworkConnectionTracker*
+BrowserProcessImpl::network_connection_tracker() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(io_thread_);
+  if (!network_connection_tracker_) {
+    network_connection_tracker_ =
+        std::make_unique<content::NetworkConnectionTracker>(
+            io_thread_->GetNetworkServiceOnUIThread());
+  }
+  return network_connection_tracker_.get();
 }
 
 WatchDogThread* BrowserProcessImpl::watchdog_thread() {
@@ -1071,13 +1078,29 @@ void BrowserProcessImpl::CreateLocalState() {
                    net::HttpNetworkSession::NORMAL_SOCKET_POOL)));
 }
 
-void BrowserProcessImpl::PreCreateThreads() {
+void BrowserProcessImpl::PreCreateThreads(
+    const base::CommandLine& command_line) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // chrome-extension:// URLs are safe to request anywhere, but may only
   // commit (including in iframes) in extension processes.
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
       extensions::kExtensionScheme, true);
 #endif
+
+  if (command_line.HasSwitch(switches::kLogNetLog)) {
+    base::FilePath log_file =
+        command_line.GetSwitchValuePath(switches::kLogNetLog);
+    if (log_file.empty()) {
+      base::FilePath user_data_dir;
+      bool success =
+          base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+      DCHECK(success);
+      log_file = user_data_dir.AppendASCII("netlog.json");
+    }
+    net_log_->StartWritingToFile(
+        log_file, GetNetCaptureModeFromCommandLine(command_line),
+        command_line.GetCommandLineString(), chrome::GetChannelString());
+  }
 
   // Must be created before the IOThread.
   // TODO(mmenke): Once IOThread class is no longer needed (not the thread

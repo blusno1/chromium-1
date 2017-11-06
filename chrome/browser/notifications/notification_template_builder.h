@@ -15,10 +15,6 @@
 class GURL;
 class XmlWriter;
 
-namespace base {
-class Time;
-}
-
 namespace message_center {
 struct ButtonInfo;
 class Notification;
@@ -33,10 +29,8 @@ class Notification;
 // is used frequently in Chrome, is nicer to use and has already been vetted.
 class NotificationTemplateBuilder {
  public:
-  // Builds the notification template for the given |notification|. The given
-  // |notification_id| will be available when the user interacts with the toast.
+  // Builds the notification template for the given |notification|.
   static std::unique_ptr<NotificationTemplateBuilder> Build(
-      const std::string& notification_id,
       const message_center::Notification& notification);
 
   ~NotificationTemplateBuilder();
@@ -56,7 +50,7 @@ class NotificationTemplateBuilder {
   // Writes the <toast> element with the |notification_id| as the launch string.
   // Also closes the |xml_writer_| for writing as the toast is now complete.
   void StartToastElement(const std::string& notification_id,
-                         const base::Time& timastamp);
+                         const message_center::Notification& notification);
   void EndToastElement();
 
   // Writes the <visual> element.

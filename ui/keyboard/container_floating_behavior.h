@@ -11,6 +11,7 @@
 #include "ui/keyboard/container_behavior.h"
 #include "ui/keyboard/container_type.h"
 #include "ui/keyboard/drag_descriptor.h"
+#include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_export.h"
 #include "ui/wm/core/window_animations.h"
 
@@ -23,7 +24,7 @@ constexpr int kDefaultDistanceFromScreenRight = 20;
 
 class KEYBOARD_EXPORT ContainerFloatingBehavior : public ContainerBehavior {
  public:
-  ContainerFloatingBehavior();
+  ContainerFloatingBehavior(KeyboardController* controller);
   ~ContainerFloatingBehavior() override;
 
   // ContainerBehavior overrides
@@ -46,6 +47,7 @@ class KEYBOARD_EXPORT ContainerFloatingBehavior : public ContainerBehavior {
   void SetCanonicalBounds(aura::Window* container,
                           const gfx::Rect& display_bounds) override;
   ContainerType GetType() const override;
+  bool TextBlurHidesKeyboard() const override;
 
  private:
   // Ensures that the keyboard is neither off the screen nor overlapping an
@@ -65,6 +67,8 @@ class KEYBOARD_EXPORT ContainerFloatingBehavior : public ContainerBehavior {
   gfx::Point GetPositionForShowingKeyboard(
       const gfx::Size& keyboard_size,
       const gfx::Rect& display_bounds) const;
+
+  KeyboardController* controller_;
 
   // TODO(blakeo): cache the default_position_ on a per-display basis.
   gfx::Point default_position_ = gfx::Point(-1, -1);

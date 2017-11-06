@@ -2521,6 +2521,14 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="3" label="Slow forward navigation"/>
 </enum>
 
+<enum name="BackgroundedRendererTransition">
+  <int value="0" label="Backgrounded"/>
+  <int value="1" label="Stopped after a delay"/>
+  <int value="2" label="Stopped due to critical resources"/>
+  <int value="3" label="Resumed"/>
+  <int value="4" label="Foregrounded"/>
+</enum>
+
 <enum name="BackgroundFetchEventDispatchResult">
   <int value="0" label="Success"/>
   <int value="1" label="Cannot find worker"/>
@@ -20384,21 +20392,26 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="DataUse.MessageSize.AllServices.Downstream.Unknown.NotCellular"/>
   <int value="-1607339868"
       label="DataUse.MessageSize.AllServices.Upstream.Unknown.NotCellular"/>
+  <summary>
+    These numbers are the lower 32 bits of the hash of the metric name.
+  </summary>
+  <int value="-1459119846"
+      label="ServiceWorkerCache.Cache.Scheduler.QueueLength"/>
   <int value="-1390672863"
       label="DataUse.MessageSize.AllServices.Upstream.Background.NotCellular"/>
   <int value="-1286300074"
       label="Network.Shill.Wifi.ExpiredLeaseLengthSeconds"/>
+  <int value="-968816650"
+      label="PasswordManager.Android.PasswordExceptionEntry.Website"/>
   <int value="-847447887"
       label="DataUse.MessageSize.AllServices.Upstream.Foreground.NotCellular"/>
-  <summary>
-    These numbers are the lower 32 bits of the hash of the metric name.
-  </summary>
   <int value="-742109866" label="Stability.BrowserExitCodes"/>
   <int value="-657514887" label="DataUse.MessageSize.AllServices"/>
   <int value="-535820174"
       label="DataUse.MessageSize.AllServices.Downstream.Background.NotCellular"/>
   <int value="-355731177" label="UMA.SamplingRatePerMille"/>
   <int value="-141990989" label="DataUse.AllServices.Background"/>
+  <int value="-48200749" label="DiskCache.0.TotalIOTime"/>
   <int value="0" label="Missing hash value"/>
   <int value="149985012"
       label="DataUse.MessageSize.AllServices.Upstream.Unknown.Cellular"/>
@@ -20411,11 +20424,15 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="Network.Shill.Ethernet.LinkMonitorResponseTimeSample"/>
   <int value="662206917"
       label="Network.Shill.Ethernet.ExpiredLeaseLengthSeconds"/>
+  <int value="705114606"
+      label="PasswordManager.Android.PasswordCredentialEntry.Website"/>
   <int value="757405826"
       label="DataUse.MessageSize.AllServices.Upstream.Foreground.Cellular"/>
   <int value="1370064090"
       label="DataUse.MessageSize.AllServices.Upstream.Background.Cellular"/>
   <int value="1514844119" label="DataUse.Sync.Upload.Bytes"/>
+  <int value="1525608243"
+      label="PasswordManager.Android.PasswordCredentialEntry.Username"/>
   <int value="1753226325"
       label="DataUse.MessageSize.AllServices.Downstream.Foreground.Cellular"/>
   <int value="1977321258"
@@ -23406,6 +23423,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="10" label="App banner (WebAPK)"/>
   <int value="11" label="Unknown (WebAPK)"/>
   <int value="12" label="Trusted Web Activity"/>
+  <int value="13" label="WebShareTarget (WebAPK)"/>
 </enum>
 
 <enum name="LaunchIntentFlags">
@@ -24135,6 +24153,7 @@ from previous Chrome versions.
   <int value="-1784788154" label="NewRemotePlaybackPipeline:disabled"/>
   <int value="-1780306716"
       label="OmniboxSpeculativeServiceWorkerStartOnQueryInput:enabled"/>
+  <int value="-1778993296" label="ContextualSearchMlTapSuppression:disabled"/>
   <int value="-1772172557" label="enable-osk-overscroll"/>
   <int value="-1767470652" label="out-of-process-pdf"/>
   <int value="-1751928267" label="disable-icon-ntp"/>
@@ -24614,6 +24633,7 @@ from previous Chrome versions.
   <int value="-378180863" label="disable-panels"/>
   <int value="-378033324" label="disable-win32k-renderer-lockdown"/>
   <int value="-374657496" label="OmniboxEnableClipboardProvider:enabled"/>
+  <int value="-374423260" label="OmniboxTabSwitchSuggestions:disabled"/>
   <int value="-367474066" label="DialogTouchBar:enabled"/>
   <int value="-365920680" label="ImageCaptureAPI:disabled"/>
   <int value="-364587218" label="ResourceLoadScheduler:enabled"/>
@@ -24665,6 +24685,7 @@ from previous Chrome versions.
   <int value="-275619817"
       label="disable-proximity-auth-bluetooth-low-energy-discovery"/>
   <int value="-275164173" label="QuickUnlockPinSignin:enabled"/>
+  <int value="-270626757" label="log-net-log"/>
   <int value="-268357961" label="enable-feature-policy"/>
   <int value="-254887599" label="google-profile-info"/>
   <int value="-250822813" label="PwaImprovedSplashScreen:enabled"/>
@@ -24778,6 +24799,7 @@ from previous Chrome versions.
   <int value="75747474" label="disable-webview-signin-flow"/>
   <int value="78998551" label="disable-hosted-app-shim-creation"/>
   <int value="79503461" label="disable-account-consistency"/>
+  <int value="79595680" label="OmniboxTabSwitchSuggestions:enabled"/>
   <int value="83422372"
       label="ChromeHomePersonalizedOmniboxSuggestions:enabled"/>
   <int value="84911198" label="ScanCardsInWebPayments:disabled"/>
@@ -24951,6 +24973,7 @@ from previous Chrome versions.
   <int value="625273056" label="disable-boot-animation"/>
   <int value="628302973" label="NTPSnippets:enabled"/>
   <int value="628570445" label="AndroidAutofillAccessibility:enabled"/>
+  <int value="629549626" label="ContextualSearchMlTapSuppression:enabled"/>
   <int value="630244477" label="ServiceWorkerPaymentApps:enabled"/>
   <int value="630947363" label="touch-events"/>
   <int value="632340413" label="network-settings-config"/>
@@ -26392,6 +26415,7 @@ Called by update_use_counter_css.py.-->
   <int value="586" label="overscroll-behavior-x"/>
   <int value="587" label="overscroll-behavior-y"/>
   <int value="588" label="font-variant-east-asian"/>
+  <int value="589" label="text-decoration-skip-ink"/>
 </enum>
 
 <enum name="MappedEditingCommands">
@@ -29387,6 +29411,9 @@ Called by update_use_counter_css.py.-->
   <int value="10" label="Interstitial page detected">
     Save operation failed because an interstitial page (i.e. page warning of
     expired certificates or improper dev signatures) was detected.
+  </int>
+  <int value="11" label="Digest calculation failure">
+    Failed to compute the digest of an archive file.
   </int>
 </enum>
 
@@ -40403,6 +40430,8 @@ Full version information for the fingerprint enum values:
   <int value="48" label="kErrorCodeUserCanceled"/>
   <int value="49" label="kErrorCodeNonCriticalUpdateInOOBE"/>
   <int value="50" label="kErrorCodeOmahaUpdateIgnoredOverCellular"/>
+  <int value="51" label="kErrorCodePayloadTimestampError"/>
+  <int value="52" label="kErrorCodeUpdatedButNotActive"/>
 </enum>
 
 <enum name="UpdateEngineInstallDateProvisioningSource">
@@ -40788,6 +40817,9 @@ Called by update_traffic_annotation_histograms.py.-->
   </int>
   <int value="12" label="kNoCacheBecauseStreamingSource">
     Blink did not request a code cache because this is a streaming source
+  </int>
+  <int value="13" label="kNoCacheBecauseExtension">
+    Blink did not request a code cache because it is compiling an extension
   </int>
 </enum>
 

@@ -13,6 +13,14 @@
 // Snapshot used by the TabSwitcher.
 - (UIView*)snapshotForTabSwitcher;
 
+// Returns a snapshot used by the StackView after resizing the toolbar to
+// |frame|.
+- (UIView*)snapshotForStackViewWithWidth:(CGFloat)width;
+
+// Asks the provider for the color of the background of the toolbar. A nil value
+// indicates the default color will be used.
+- (UIColor*)toolbarBackgroundColor;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_SNAPSHOT_PROVIDER_H_

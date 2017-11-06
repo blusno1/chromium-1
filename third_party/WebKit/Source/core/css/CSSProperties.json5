@@ -760,7 +760,7 @@
     },
     {
       name: "background-clip",
-      api_class: "CSSPropertyAPIBackgroundBox",
+      api_class: true,
       api_methods: ["ParseSingleValue"],
       api_custom_apply_functions_all: true,
     },
@@ -788,7 +788,7 @@
     },
     {
       name: "background-origin",
-      api_class: "CSSPropertyAPIBackgroundBox",
+      api_class: true,
       api_methods: ["ParseSingleValue"],
       api_custom_apply_functions_all: true,
     },
@@ -2756,16 +2756,13 @@
       converter: "ConvertFlags<TextDecoration>",
     },
     {
-      name: "text-decoration-skip",
+      name: "text-decoration-skip-ink",
       api_class: true,
-      api_methods: ["ParseSingleValue"],
       inherited: true,
       field_group: "*",
-      field_size: 3,
-      field_template: "primitive",
-      default_value: "TextDecorationSkip::kObjects",
-      type_name: "TextDecorationSkip",
-      converter: "ConvertFlags<TextDecorationSkip>",
+      field_template: "keyword",
+      keywords: ["none", "auto"],
+      default_value: "auto",
     },
     {
       name: "text-decoration-style",
@@ -3030,12 +3027,6 @@
       default_value: "none",
       name_for_methods: "DraggableRegionMode",
       api_custom_apply_functions_all: true,
-    },
-    {
-      name: "-webkit-background-clip",
-      api_class: "CSSPropertyAPIWebkitClip",
-      api_methods: ["ParseSingleValue"],
-      use_handlers_for: "CSSPropertyBackgroundClip",
     },
     {
       name: "-webkit-background-origin",
@@ -3361,7 +3352,7 @@
     },
     {
       name: "-webkit-mask-clip",
-      api_class: "CSSPropertyAPIWebkitClip",
+      api_class: true,
       api_methods: ["ParseSingleValue"],
       api_custom_apply_functions_all: true,
     },
@@ -4624,6 +4615,12 @@
     {
       name: "-webkit-backface-visibility",
       alias_for: "backface-visibility",
+    },
+    // -webkit-background-clip accepts "content", "padding", and "border" values
+    // See crbug.com/604023
+    {
+      name: "-webkit-background-clip",
+      alias_for: "background-clip",
     },
     // "-webkit-background-size: 10px" behaves as "background-size: 10px 10px"
     {

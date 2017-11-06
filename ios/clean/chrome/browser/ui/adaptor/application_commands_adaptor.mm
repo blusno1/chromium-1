@@ -55,8 +55,9 @@
   [self showAlert:@"showClearBrowsingDataSettingsFromViewController:"];
 }
 
-- (void)showAutofillSettings {
-  [self showAlert:@"showAutofillSettings"];
+- (void)showAutofillSettingsFromViewController:
+    (UIViewController*)baseViewController {
+  [self showAlert:@"showAutofillSettingsFromViewController:"];
 }
 
 - (void)showSavePasswordsSettings {
@@ -76,8 +77,8 @@
   [self showAlert:@"showSignin"];
 }
 
-- (void)showAddAccount {
-  [self showAlert:@"showAddAccount"];
+- (void)showAddAccountFromViewController:(UIViewController*)baseViewController {
+  [self showAlert:@"showAddAccountFromViewController:"];
 }
 
 #pragma mark - ApplicationSettingsCommands
@@ -87,12 +88,16 @@
   [self showAlert:@"showAccountsSettingsFromViewController:"];
 }
 
-- (void)showSyncSettings {
-  [self showAlert:@"showSyncSettings"];
+// TODO(crbug.com/779791) : Do not pass |baseViewController| through dispatcher.
+- (void)showSyncSettingsFromViewController:
+    (UIViewController*)baseViewController {
+  [self showAlert:@"showSyncSettingsFromViewController:"];
 }
 
-- (void)showSyncPassphraseSettings {
-  [self showAlert:@"showSyncPassphraseSettings"];
+// TODO(crbug.com/779791) : Do not pass |baseViewController| through dispatcher.
+- (void)showSyncPassphraseSettingsFromViewController:
+    (UIViewController*)baseViewController {
+  [self showAlert:@"showSyncPassphraseSettingsFromViewController:"];
 }
 
 #pragma mark - Private

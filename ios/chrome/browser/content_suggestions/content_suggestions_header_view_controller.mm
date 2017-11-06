@@ -381,6 +381,10 @@ const CGFloat kHintLabelSidePadding = 12;
   [self.headerView reparentToolbarController];
 }
 
+- (id<ToolbarSnapshotProviding>)toolbarSnapshotProvider {
+  return self.headerView.toolbarSnapshotProvider;
+}
+
 #pragma mark - LogoAnimationControllerOwnerOwner
 
 - (id<LogoAnimationControllerOwner>)logoAnimationControllerOwner {

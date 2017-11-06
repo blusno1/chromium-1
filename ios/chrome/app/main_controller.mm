@@ -117,7 +117,7 @@
 #import "ios/chrome/browser/ui/external_file_remover_impl.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
+#import "ios/chrome/browser/ui/fullscreen/legacy_fullscreen_controller.h"
 #import "ios/chrome/browser/ui/history/history_panel_view_controller.h"
 #import "ios/chrome/browser/ui/main/browser_view_wrangler.h"
 #import "ios/chrome/browser/ui/main/main_coordinator.h"
@@ -1414,16 +1414,17 @@ const int kExternalFilesCleanupDelaySeconds = 60;
                                  completion:nil];
 }
 
-- (void)showAutofillSettings {
+// TODO(crbug.com/779791) : Remove showing settings from MainController.
+- (void)showAutofillSettingsFromViewController:
+    (UIViewController*)baseViewController {
   if (_settingsNavigationController)
     return;
   _settingsNavigationController =
       [SettingsNavigationController newAutofillController:_mainBrowserState
                                                  delegate:self];
-  [[self topPresentedViewController]
-      presentViewController:_settingsNavigationController
-                   animated:YES
-                 completion:nil];
+  [baseViewController presentViewController:_settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
 }
 
 - (void)showSavePasswordsSettings {
@@ -1489,7 +1490,8 @@ const int kExternalFilesCleanupDelaySeconds = 60;
   }
 }
 
-- (void)showAddAccount {
+// TODO(crbug.com/779791) : Remove settings commands from MainController.
+- (void)showAddAccountFromViewController:(UIViewController*)baseViewController {
   if (!self.signinInteractionCoordinator) {
     self.signinInteractionCoordinator = [[SigninInteractionCoordinator alloc]
         initWithBrowserState:_mainBrowserState
@@ -1501,7 +1503,7 @@ const int kExternalFilesCleanupDelaySeconds = 60;
                                     ACCESS_POINT_UNKNOWN
                     promoAction:signin_metrics::PromoAction::
                                     PROMO_ACTION_NO_SIGNIN_PROMO
-       presentingViewController:[self topPresentedViewController]
+       presentingViewController:baseViewController
                      completion:nil];
 }
 
@@ -1520,7 +1522,8 @@ const int kExternalFilesCleanupDelaySeconds = 60;
     return;
   }
   if (_settingsNavigationController) {
-    [_settingsNavigationController showAccountsSettingsFromViewController:nil];
+    [_settingsNavigationController
+        showAccountsSettingsFromViewController:baseViewController];
     return;
   }
   _settingsNavigationController = [SettingsNavigationController
@@ -1531,33 +1534,37 @@ const int kExternalFilesCleanupDelaySeconds = 60;
                                  completion:nil];
 }
 
-- (void)showSyncSettings {
+// TODO(crbug.com/779791) : Remove show settings commands from MainController.
+- (void)showSyncSettingsFromViewController:
+    (UIViewController*)baseViewController {
   if (_settingsNavigationController) {
-    [_settingsNavigationController showSyncSettings];
+    [_settingsNavigationController
+        showSyncSettingsFromViewController:baseViewController];
     return;
   }
   _settingsNavigationController =
       [SettingsNavigationController newSyncController:_mainBrowserState
                                allowSwitchSyncAccount:YES
                                              delegate:self];
-  [[self topPresentedViewController]
-      presentViewController:_settingsNavigationController
-                   animated:YES
-                 completion:nil];
+  [baseViewController presentViewController:_settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
 }
 
-- (void)showSyncPassphraseSettings {
+// TODO(crbug.com/779791) : Remove show settings commands from MainController.
+- (void)showSyncPassphraseSettingsFromViewController:
+    (UIViewController*)baseViewController {
   if (_settingsNavigationController) {
-    [_settingsNavigationController showSyncPassphraseSettings];
+    [_settingsNavigationController
+        showSyncPassphraseSettingsFromViewController:baseViewController];
     return;
   }
   _settingsNavigationController = [SettingsNavigationController
       newSyncEncryptionPassphraseController:_mainBrowserState
                                    delegate:self];
-  [[self topPresentedViewController]
-      presentViewController:_settingsNavigationController
-                   animated:YES
-                 completion:nil];
+  [baseViewController presentViewController:_settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
 }
 
 #pragma mark - chromeExecuteCommand

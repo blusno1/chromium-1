@@ -38,7 +38,6 @@ const char* kBlacklistExtensions[] = {
     "GL_EXT_direct_state_access",
     "GL_EXT_multi_draw_indirect",
     "GL_EXT_raster_multisample",
-    "GL_EXT_window_rectangles",
     "GL_NV_bindless_texture",
     "GL_NV_texture_barrier",
     "GL_OES_sample_shading",
@@ -153,6 +152,7 @@ sk_sp<const GrGLInterface> CreateGrGLInterface(
   functions->fGetQueryObjectui64v = gl->glGetQueryObjectui64vFn;
   functions->fQueryCounter = gl->glQueryCounterFn;
   functions->fGetQueryiv = gl->glGetQueryivFn;
+  functions->fGetProgramBinary = gl->glGetProgramBinaryFn;
   functions->fGetProgramInfoLog = gl->glGetProgramInfoLogFn;
   functions->fGetProgramiv = gl->glGetProgramivFn;
   functions->fGetShaderInfoLog = gl->glGetShaderInfoLogFn;
@@ -175,6 +175,8 @@ sk_sp<const GrGLInterface> CreateGrGLInterface(
 
   functions->fPixelStorei = gl->glPixelStoreiFn;
   functions->fPolygonMode = gl->glPolygonModeFn;
+  functions->fProgramBinary = gl->glProgramBinaryFn;
+  functions->fProgramParameteri = gl->glProgramParameteriFn;
 
   // GL_EXT_raster_multisample
   // functions->fRasterSamples = gl->glRasterSamplesEXTFn;
@@ -469,7 +471,7 @@ sk_sp<const GrGLInterface> CreateGrGLInterface(
   functions->fObjectLabel = gl->glObjectLabelFn;
 
   // GL_EXT_window_rectangles
-  // functions->fWindowRectangles = gl->glWindowRectanglesEXTFn;
+  functions->fWindowRectangles = gl->glWindowRectanglesEXTFn;
 
   // EGL_KHR_image / EGL_KHR_image_base
   // functions->fCreateImage = nullptr;

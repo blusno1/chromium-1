@@ -96,9 +96,9 @@ const char kSessionExitedCleanly[] = "profile.exited_cleanly";
 // shutdown. Used to determine the exit type the last time the profile was open.
 const char kSessionExitType[] = "profile.exit_type";
 
-// Stores the total amount of observed active session time for the user.
-// Observed time is active session time.
-const char kObservedSessionTime[] = "profile.observed_time";
+// Stores the total amount of observed active session time for the user while
+// in-product help is active. Observed time is active session time in seconds.
+const char kObservedSessionTime[] = "profile.observed_session_time";
 
 // The last time that the site engagement service recorded an engagement event
 // for this profile for any URL. Recorded only during shutdown. Used to prevent
@@ -591,6 +591,8 @@ const char kChromeOSReleaseNotesVersion[] = "settings.release_notes.version";
 const char kDisplayPowerState[] = "settings.display.power_state";
 // A dictionary pref that stores per display preferences.
 const char kDisplayProperties[] = "settings.display.properties";
+// A dictionary pref that stores the touch associations for the device.
+const char kDisplayTouchAssociations[] = "settings.display.touch_associations";
 
 // A dictionary pref that specifies per-display layout/offset information.
 // Its key is the ID of the display and its value is a dictionary for the

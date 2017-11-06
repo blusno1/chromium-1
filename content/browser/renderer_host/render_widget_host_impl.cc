@@ -735,14 +735,7 @@ void RenderWidgetHostImpl::SetImportance(ChildProcessImportance importance) {
 bool RenderWidgetHostImpl::GetResizeParams(ResizeParams* resize_params) {
   *resize_params = ResizeParams();
 
-  // TODO(fsamuel): We should have a single code path for propagation of
-  // ScreenInfo. Ideally we should always grab the ScreenInfo from the
-  // view, and in the case of top level pages, we grab ScreenInfo from
-  // the WebContentsView through the RenderWidgetHostView.
-  if (view_ && view_->IsRenderWidgetHostViewChildFrame())
-    view_->GetScreenInfo(&resize_params->screen_info);
-  else
-    GetScreenInfo(&resize_params->screen_info);
+  GetScreenInfo(&resize_params->screen_info);
 
   if (delegate_) {
     resize_params->is_fullscreen_granted =
@@ -1474,10 +1467,12 @@ void RenderWidgetHostImpl::RemoveInputEventObserver(
 
 void RenderWidgetHostImpl::GetScreenInfo(ScreenInfo* result) {
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetScreenInfo");
-  if (delegate_)
+  if (view_) {
+    view_->GetScreenInfo(result);
+  } else {
+    DCHECK(delegate_);
     delegate_->GetScreenInfo(result);
-  else
-    NOTREACHED();
+  }
 
   // TODO(sievers): find a way to make this done another way so the method
   // can be const.
@@ -2462,19 +2457,27 @@ void RenderWidgetHostImpl::DelayedAutoResized(uint64_t sequence_number) {
   if (!auto_resize_enabled_)
     return;
 
+  last_auto_resize_request_number_ = sequence_number;
+
   if (delegate_)
-    delegate_->ResizeDueToAutoResize(this, new_size);
+    delegate_->ResizeDueToAutoResize(this, new_size, sequence_number);
+}
+
+void RenderWidgetHostImpl::DetachDelegate() {
+  delegate_ = nullptr;
+  latency_tracker_.SetDelegate(nullptr);
+}
+
+void RenderWidgetHostImpl::DidAllocateLocalSurfaceIdForAutoResize(
+    uint64_t sequence_number) {
+  if (last_auto_resize_request_number_ != sequence_number)
+    return;
 
   viz::LocalSurfaceId local_surface_id(view_->GetLocalSurfaceId());
   if (local_surface_id.is_valid()) {
     Send(new ViewMsg_SetLocalSurfaceIdForAutoResize(
         routing_id_, sequence_number, local_surface_id));
   }
-}
-
-void RenderWidgetHostImpl::DetachDelegate() {
-  delegate_ = nullptr;
-  latency_tracker_.SetDelegate(nullptr);
 }
 
 void RenderWidgetHostImpl::DidReceiveRendererFrame() {

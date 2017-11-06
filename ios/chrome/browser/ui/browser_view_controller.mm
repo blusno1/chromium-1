@@ -124,6 +124,7 @@
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
 #import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
+#import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
@@ -135,8 +136,8 @@
 #import "ios/chrome/browser/ui/external_search/external_search_coordinator.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_controller_ios.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
+#import "ios/chrome/browser/ui/fullscreen/legacy_fullscreen_controller.h"
 #import "ios/chrome/browser/ui/history_popup/requirements/tab_history_presentation.h"
 #import "ios/chrome/browser/ui/history_popup/tab_history_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/key_commands_provider.h"
@@ -158,6 +159,7 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/sad_tab/sad_tab_legacy_coordinator.h"
+#import "ios/chrome/browser/ui/settings/sync_utils/sync_presenter.h"
 #import "ios/chrome/browser/ui/settings/sync_utils/sync_util.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_controller.h"
 #import "ios/chrome/browser/ui/snackbar/snackbar_coordinator.h"
@@ -280,7 +282,7 @@ UIColor* StatusBarBackgroundColor() {
 }
 
 // Duration of the toolbar animation.
-const NSTimeInterval kFullScreenControllerToolbarAnimationDuration = 0.3;
+const NSTimeInterval kLegacyFullscreenControllerToolbarAnimationDuration = 0.3;
 
 const CGFloat kVoiceSearchBarHeight = 59.0;
 
@@ -376,7 +378,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                                     CRWNativeContentProvider,
                                     CRWWebStateDelegate,
                                     DialogPresenterDelegate,
-                                    FullScreenControllerDelegate,
+                                    LegacyFullscreenControllerDelegate,
                                     KeyCommandsPlumbing,
                                     NetExportTabHelperDelegate,
                                     ManageAccountsDelegate,
@@ -393,6 +395,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                                     SKStoreProductViewControllerDelegate,
                                     SnapshotOverlayProvider,
                                     StoreKitLauncher,
+                                    SyncPresenter,
                                     TabDialogDelegate,
                                     TabHeadersDelegate,
                                     TabHistoryPresentation,
@@ -849,7 +852,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
 // |completed| should indicate if the animation finished completely or was
 // interrupted. |offset| should indicate the header offset after the animation.
 // |dragged| should indicate if the header moved due to the user dragging.
-- (void)fullScreenController:(FullScreenController*)controller
+- (void)fullScreenController:(LegacyFullscreenController*)controller
     headerAnimationCompleted:(BOOL)completed
                       offset:(CGFloat)offset;
 // Performs a search with the image at the given url. The referrer is used to
@@ -1088,10 +1091,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   return static_cast<id<ApplicationCommands, BrowserCommands, OmniboxFocuser,
                         SnackbarCommands, UrlLoader, WebToolbarDelegate>>(
       _dispatcher);
-}
-
-- (id<ToolbarSnapshotProviding>)toolbarSnapshotProvider {
-  return _toolbarCoordinator;
 }
 
 - (void)setActive:(BOOL)active {
@@ -1670,7 +1669,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
   [[UpgradeCenter sharedInstance] addInfoBarToManager:infoBarManager
                                              forTabId:[tab tabId]];
   if (!ReSignInInfoBarDelegate::Create(_browserState, tab, self.dispatcher)) {
-    DisplaySyncErrors(_browserState, tab, self.dispatcher);
+    DisplaySyncErrors(_browserState, tab, self /* id<SyncPresenter> */);
   }
 
   // The rest of this function initiates the new tab animation, which is
@@ -1918,7 +1917,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
     self.tabStripCoordinator.tabModel = _model;
     self.tabStripCoordinator.presentationProvider = self;
     self.tabStripCoordinator.animationWaitDuration =
-        kFullScreenControllerToolbarAnimationDuration;
+        kLegacyFullscreenControllerToolbarAnimationDuration;
     [self.tabStripCoordinator start];
   }
 
@@ -2480,7 +2479,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   tab.snapshotOverlayProvider = self;
   tab.passKitDialogProvider = self;
   if (!base::FeatureList::IsEnabled(features::kNewFullscreen)) {
-    tab.fullScreenControllerDelegate = self;
+    tab.legacyFullscreenControllerDelegate = self;
   }
   if (!IsIPadIdiom()) {
     tab.overscrollActionsControllerDelegate = self;
@@ -2524,7 +2523,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   tab.snapshotOverlayProvider = nil;
   tab.passKitDialogProvider = nil;
   if (!base::FeatureList::IsEnabled(features::kNewFullscreen)) {
-    tab.fullScreenControllerDelegate = nil;
+    tab.legacyFullscreenControllerDelegate = nil;
   }
   if (!IsIPadIdiom()) {
     tab.overscrollActionsControllerDelegate = nil;
@@ -3074,7 +3073,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
                                       completionHandler:handler];
 }
 
-#pragma mark - FullScreenControllerDelegate methods
+#pragma mark - LegacyFullscreenControllerDelegate methods
 
 - (CGFloat)headerOffset {
   if (IsIPadIdiom())
@@ -3180,7 +3179,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   return std::ceil(CGRectGetHeight(self.view.bounds) - footerHeight + offset);
 }
 
-- (void)fullScreenController:(FullScreenController*)controller
+- (void)fullScreenController:(LegacyFullscreenController*)controller
     headerAnimationCompleted:(BOOL)completed
                       offset:(CGFloat)offset {
   if (completed)
@@ -3199,7 +3198,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   }
 }
 
-- (void)fullScreenController:(FullScreenController*)fullScreenController
+- (void)fullScreenController:(LegacyFullscreenController*)fullScreenController
     drawHeaderViewFromOffset:(CGFloat)headerOffset
                      animate:(BOOL)animate {
   if ([_sideSwipeController inSwipe])
@@ -3225,18 +3224,19 @@ bubblePresenterForFeature:(const base::Feature&)feature
                           offset:headerOffset];
   };
   if (animate) {
-    [UIView animateWithDuration:kFullScreenControllerToolbarAnimationDuration
-                          delay:0.0
-                        options:UIViewAnimationOptionBeginFromCurrentState
-                     animations:block
-                     completion:completion];
+    [UIView
+        animateWithDuration:kLegacyFullscreenControllerToolbarAnimationDuration
+                      delay:0.0
+                    options:UIViewAnimationOptionBeginFromCurrentState
+                 animations:block
+                 completion:completion];
   } else {
     block();
     completion(YES);
   }
 }
 
-- (void)fullScreenController:(FullScreenController*)fullScreenController
+- (void)fullScreenController:(LegacyFullscreenController*)fullScreenController
     drawHeaderViewFromOffset:(CGFloat)headerOffset
               onWebViewProxy:(id<CRWWebViewProxy>)webViewProxy
      changeTopContentPadding:(BOOL)changeTopContentPadding
@@ -3269,11 +3269,12 @@ bubblePresenterForFeature:(const base::Feature&)feature
                           offset:headerOffset];
   };
 
-  [UIView animateWithDuration:kFullScreenControllerToolbarAnimationDuration
-                        delay:0.0
-                      options:UIViewAnimationOptionBeginFromCurrentState
-                   animations:block
-                   completion:completion];
+  [UIView
+      animateWithDuration:kLegacyFullscreenControllerToolbarAnimationDuration
+                    delay:0.0
+                  options:UIViewAnimationOptionBeginFromCurrentState
+               animations:block
+               completion:completion];
 }
 
 #pragma mark - VoiceSearchBarOwner
@@ -4801,6 +4802,24 @@ bubblePresenterForFeature:(const base::Feature&)feature
   }
 }
 
+- (id<ToolbarSnapshotProviding>)toolbarSnapshotProvider {
+  id<ToolbarSnapshotProviding> toolbarSnapshotProvider = nil;
+  if ([_toolbarCoordinator view].hidden) {
+    Tab* currentTab = [_model currentTab];
+    if (currentTab.webState &&
+        UrlHasChromeScheme(currentTab.webState->GetLastCommittedURL())) {
+      // Use the native content controller's toolbar when the BVC's is hidden.
+      id nativeController = [self nativeControllerForTab:currentTab];
+      if ([nativeController conformsToProtocol:@protocol(ToolbarOwner)]) {
+        toolbarSnapshotProvider = [nativeController toolbarSnapshotProvider];
+      }
+    }
+  } else {
+    toolbarSnapshotProvider = _toolbarCoordinator;
+  }
+  return toolbarSnapshotProvider;
+}
+
 #pragma mark - TabModelObserver methods
 
 // Observer method, tab inserted.
@@ -5320,7 +5339,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
       ios::AccountReconcilorFactory::GetForBrowserState(self.browserState)
           ->GetState());
-  [self.dispatcher showAddAccount];
+  [self.dispatcher showAddAccountFromViewController:self];
 }
 
 - (void)onGoIncognito:(const GURL&)url {
@@ -5343,6 +5362,24 @@ bubblePresenterForFeature:(const base::Feature&)feature
   } else {
     [self.dispatcher openNewTab:[OpenNewTabCommand command]];
   }
+}
+
+#pragma mark - SyncPresenter
+
+- (void)showReauthenticateSignin {
+  [self.dispatcher
+      showSignin:[[ShowSigninCommand alloc]
+                     initWithOperation:AUTHENTICATION_OPERATION_REAUTHENTICATE
+                           accessPoint:signin_metrics::AccessPoint::
+                                           ACCESS_POINT_UNKNOWN]];
+}
+
+- (void)showSyncSettings {
+  [self.dispatcher showSyncSettingsFromViewController:self];
+}
+
+- (void)showSyncPassphraseSettings {
+  [self.dispatcher showSyncPassphraseSettingsFromViewController:self];
 }
 
 @end

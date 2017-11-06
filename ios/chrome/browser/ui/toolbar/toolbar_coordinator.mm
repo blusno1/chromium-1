@@ -172,9 +172,30 @@
   } else {
     toolbarSnapshotView = [[UIView alloc] initWithFrame:self.view.frame];
     [toolbarSnapshotView layer].contents = static_cast<id>(
-        CaptureViewWithOption(self.view, 1, kClientSideRendering).CGImage);
+        CaptureViewWithOption(self.view, 0, kClientSideRendering).CGImage);
   }
   return toolbarSnapshotView;
+}
+
+- (UIView*)snapshotForStackViewWithWidth:(CGFloat)width {
+  CGRect oldFrame = self.view.frame;
+  CGRect newFrame = oldFrame;
+  newFrame.size.width = width;
+  self.view.frame = newFrame;
+  UIView* toolbarSnapshotView = [self snapshotForTabSwitcher];
+  self.view.frame = oldFrame;
+  return toolbarSnapshotView;
+}
+
+- (UIColor*)toolbarBackgroundColor {
+  UIColor* toolbarBackgroundColor = nil;
+  if (self.webToolbarController.backgroundView.hidden ||
+      self.webToolbarController.backgroundView.alpha == 0) {
+    // If the background view isn't visible, use the base toolbar view's
+    // background color.
+    toolbarBackgroundColor = self.webToolbarController.view.backgroundColor;
+  }
+  return toolbarBackgroundColor;
 }
 
 #pragma mark - IncognitoViewControllerDelegate
