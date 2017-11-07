@@ -189,6 +189,8 @@ static_library("test_support") {
     "dwrite_font_fake_sender_win.h",
     "fake_compositor_dependencies.cc",
     "fake_compositor_dependencies.h",
+    "fake_leveldb_database.cc",
+    "fake_leveldb_database.h",
     "fake_plugin_service.cc",
     "fake_plugin_service.h",
     "fake_renderer_compositor_frame_sink.cc",
@@ -201,8 +203,6 @@ static_library("test_support") {
     "mock_keyboard.h",
     "mock_keyboard_driver_win.cc",
     "mock_keyboard_driver_win.h",
-    "mock_leveldb_database.cc",
-    "mock_leveldb_database.h",
     "mock_overscroll_observer.h",
     "mock_permission_manager.cc",
     "mock_permission_manager.h",
@@ -733,7 +733,6 @@ test("content_browsertests") {
     "../browser/media/session/mock_media_session_player_observer.cc",
     "../browser/media/session/mock_media_session_player_observer.h",
     "../browser/memory/memory_coordinator_impl_browsertest.cc",
-    "../browser/memory/near_oom_intervention_browsertest.cc",
     "../browser/message_port_provider_browsertest.cc",
     "../browser/mojo_sandbox_browsertest.cc",
     "../browser/net_info_browsertest.cc",
@@ -1456,7 +1455,6 @@ test("content_unittests") {
     "../common/cross_site_document_classifier_unittest.cc",
     "../common/cursors/webcursor_unittest.cc",
     "../common/dom_storage/dom_storage_map_unittest.cc",
-    "../common/feature_policy/feature_policy_unittest.cc",
     "../common/indexed_db/indexed_db_key_unittest.cc",
     "../common/input/event_with_latency_info_unittest.cc",
     "../common/input/gesture_event_stream_validator_unittest.cc",
@@ -2028,6 +2026,10 @@ test("content_perftests") {
     "//ui/events/blink",
     "//ui/gfx",
     "//ui/gfx/geometry",
+
+    # For TestMojoProxyResolverFactory. Remove once it moves to the network
+    # service.
+    "//services/service_manager/public/cpp",
   ]
 
   if (is_android) {

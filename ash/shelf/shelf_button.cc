@@ -355,18 +355,30 @@ const char* ShelfButton::GetClassName() const {
 
 bool ShelfButton::OnMousePressed(const ui::MouseEvent& event) {
   Button::OnMousePressed(event);
+
+  // No need to scale up the app for mouse right click since the app can't be
+  // dragged through right button.
+  if (!(event.flags() & ui::EF_LEFT_MOUSE_BUTTON))
+    return true;
+
   shelf_view_->PointerPressedOnButton(this, ShelfView::MOUSE, event);
-  drag_timer_.Start(
-      FROM_HERE, base::TimeDelta::FromMilliseconds(kDragTimeThresholdMs),
-      base::Bind(&ShelfButton::OnTouchDragTimer, base::Unretained(this)));
+
+  if (shelf_view_->IsDraggedView(this)) {
+    drag_timer_.Start(
+        FROM_HERE, base::TimeDelta::FromMilliseconds(kDragTimeThresholdMs),
+        base::Bind(&ShelfButton::OnTouchDragTimer, base::Unretained(this)));
+  }
   return true;
 }
 
 void ShelfButton::OnMouseReleased(const ui::MouseEvent& event) {
   Button::OnMouseReleased(event);
-  shelf_view_->PointerReleasedOnButton(this, ShelfView::MOUSE, false);
   drag_timer_.Stop();
   ClearState(STATE_DRAGGING);
+  // PointerReleasedOnButton deletes the ShelfButton when user drags a pinned
+  // running app from shelf.
+  shelf_view_->PointerReleasedOnButton(this, ShelfView::MOUSE, false);
+  // WARNING: we may have been deleted.
 }
 
 void ShelfButton::OnMouseCaptureLost() {
@@ -456,16 +468,6 @@ void ShelfButton::ChildPreferredSizeChanged(views::View* child) {
   Layout();
 }
 
-void ShelfButton::OnFocus() {
-  AddState(STATE_FOCUSED);
-  Button::OnFocus();
-}
-
-void ShelfButton::OnBlur() {
-  ClearState(STATE_FOCUSED);
-  Button::OnBlur();
-}
-
 void ShelfButton::OnGestureEvent(ui::GestureEvent* event) {
   switch (event->type()) {
     case ui::ET_GESTURE_TAP_DOWN:
@@ -545,8 +547,7 @@ void ShelfButton::NotifyClick(const ui::Event& event) {
 
 void ShelfButton::UpdateState() {
   indicator_->SetVisible(!(state_ & STATE_HIDDEN) &&
-                         (state_ & STATE_ACTIVE || state_ & STATE_ATTENTION ||
-                          state_ & STATE_RUNNING));
+                         (state_ & STATE_ATTENTION || state_ & STATE_RUNNING));
 
   const bool is_horizontal_shelf =
       shelf_view_->shelf()->IsHorizontalAlignment();

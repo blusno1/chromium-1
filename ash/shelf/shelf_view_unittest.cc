@@ -321,6 +321,10 @@ class ShelfViewTest : public AshTestBase {
 
   ShelfItem GetItemByID(const ShelfID& id) { return *model_->ItemByID(id); }
 
+  void PinAppWithID(const ShelfID& id) { model_->PinAppWithID(id.app_id); }
+
+  bool IsAppPinned(const ShelfID& id) { return model_->IsAppPinned(id.app_id); }
+
   void CheckModelIDs(
       const std::vector<std::pair<ShelfID, views::View*>>& id_map) {
     size_t map_index = 0;
@@ -1208,9 +1212,6 @@ TEST_F(ShelfViewTest, ShelfItemStatus) {
   int index = model_->ItemIndexByID(last_added);
   ShelfButton* button = GetButtonByID(last_added);
   ASSERT_EQ(ShelfButton::STATE_RUNNING, button->state());
-  item.status = STATUS_ACTIVE;
-  model_->Set(index, item);
-  ASSERT_EQ(ShelfButton::STATE_ACTIVE, button->state());
   item.status = STATUS_ATTENTION;
   model_->Set(index, item);
   ASSERT_EQ(ShelfButton::STATE_ATTENTION, button->state());
@@ -1283,6 +1284,37 @@ TEST_F(ShelfViewTest, ShelfRipOff) {
   EXPECT_FALSE(test_api_for_overflow.IsRippedOffFromShelf());
 }
 
+// Tests that drag and drop a pinned running app will unpin it.
+TEST_F(ShelfViewTest, DragAndDropPinnedRunningApp) {
+  ui::test::EventGenerator& generator = GetEventGenerator();
+
+  // The test makes some assumptions that the shelf is bottom aligned.
+  ASSERT_EQ(test_api_->shelf_view()->shelf()->alignment(),
+            SHELF_ALIGNMENT_BOTTOM);
+
+  // The rip off threshold. Taken from |kRipOffDistance| in shelf_view.cc.
+  constexpr int kRipOffDistance = 48;
+
+  const ShelfID id = AddApp();
+  // Added only one app here, the index of the app will not change after drag
+  // and drop.
+  int index = model_->ItemIndexByID(id);
+  ShelfItem item = GetItemByID(id);
+  EXPECT_EQ(STATUS_RUNNING, item.status);
+  PinAppWithID(id);
+  EXPECT_TRUE(IsAppPinned(GetItemId(index)));
+
+  gfx::Point app_location = GetButtonCenter(GetButtonByID(id));
+  generator.set_current_location(app_location);
+  generator.PressLeftButton();
+  generator.MoveMouseBy(0, -kShelfSize / 2 - 1);
+  EXPECT_FALSE(test_api_->IsRippedOffFromShelf());
+  generator.MoveMouseBy(0, -kRipOffDistance);
+  EXPECT_TRUE(test_api_->IsRippedOffFromShelf());
+  generator.ReleaseLeftButton();
+  EXPECT_FALSE(IsAppPinned(GetItemId(index)));
+}
+
 // Confirm that item status changes are reflected in the buttons
 // for platform apps.
 TEST_F(ShelfViewTest, ShelfItemStatusPlatformApp) {
@@ -1295,9 +1327,6 @@ TEST_F(ShelfViewTest, ShelfItemStatusPlatformApp) {
   int index = model_->ItemIndexByID(last_added);
   ShelfButton* button = GetButtonByID(last_added);
   ASSERT_EQ(ShelfButton::STATE_RUNNING, button->state());
-  item.status = STATUS_ACTIVE;
-  model_->Set(index, item);
-  ASSERT_EQ(ShelfButton::STATE_ACTIVE, button->state());
   item.status = STATUS_ATTENTION;
   model_->Set(index, item);
   ASSERT_EQ(ShelfButton::STATE_ATTENTION, button->state());

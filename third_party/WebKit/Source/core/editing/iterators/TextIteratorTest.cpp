@@ -37,8 +37,7 @@
 #include "core/html/forms/TextControlElement.h"
 
 namespace blink {
-
-namespace {
+namespace text_iterator_test {
 
 TextIteratorBehavior CollapseTrailingSpaceBehavior() {
   return TextIteratorBehavior::Builder().SetCollapseTrailingSpace(true).Build();
@@ -62,7 +61,11 @@ TextIteratorBehavior EmitsObjectReplacementCharacterBehavior() {
       .Build();
 }
 
-}  // namespace
+TextIteratorBehavior EmitsSmallXForTextSecurityBehavior() {
+  return TextIteratorBehavior::Builder()
+      .SetEmitsSmallXForTextSecurity(true)
+      .Build();
+}
 
 struct DOMTree : NodeTraversal {
   using PositionType = Position;
@@ -148,6 +151,20 @@ TEST_F(TextIteratorTest, BasicIteration) {
   SetBodyContent(input);
   EXPECT_EQ("[Hello, ][text][\n][\n][iterator.]", Iterate<DOMTree>());
   EXPECT_EQ("[Hello, ][text][\n][\n][iterator.]", Iterate<FlatTree>());
+}
+
+TEST_F(TextIteratorTest, EmitsSmallXForTextSecurity) {
+  InsertStyleElement("s {-webkit-text-security:disc;}");
+  SetBodyContent("abc<s>foo</s>baz");
+  // E2 80 A2 is U+2022 BULLET
+  EXPECT_EQ("[abc][xxx][baz]",
+            Iterate<DOMTree>(EmitsSmallXForTextSecurityBehavior()));
+  EXPECT_EQ("[abc][\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2][baz]",
+            Iterate<DOMTree>(TextIteratorBehavior()));
+  EXPECT_EQ("[abc][xxx][baz]",
+            Iterate<FlatTree>(EmitsSmallXForTextSecurityBehavior()));
+  EXPECT_EQ("[abc][\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2][baz]",
+            Iterate<FlatTree>(TextIteratorBehavior()));
 }
 
 TEST_F(TextIteratorTest, IgnoreAltTextInTextControls) {
@@ -996,4 +1013,5 @@ TEST_F(TextIteratorTest, BasicIterationInputiWithBr) {
   EXPECT_EQ("[b]", IteratePartial<DOMTree>(start, end));
 }
 
+}  // namespace text_iterator_test
 }  // namespace blink

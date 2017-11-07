@@ -10,6 +10,7 @@ import android.view.textclassifier.TextClassifier;
 
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.SelectionClient;
+import org.chromium.content_public.browser.SelectionMetricsLogger;
 import org.chromium.content_public.browser.WebContents;
 
 /**
@@ -76,6 +77,7 @@ public class SelectionClientManager {
      * notified of method calls.
      * @param contextualSearchSelectionClient An additional {@link SelectionClient} that should be
      *        notified of requests going forward, used by Contextual Search.
+     * @return The resulting {@link SelectionClient} that should be active after the addition.
      */
     SelectionClient addContextualSearchSelectionClient(
             SelectionClient contextualSearchSelectionClient) {
@@ -94,6 +96,7 @@ public class SelectionClientManager {
     /**
      * Removes the current {@link SelectionClient} from the current instances that will be notified
      * of method calls.
+     * @return A remaining {@link SelectionClient} used for Smart Selection or {@code null}.
      */
     @Nullable
     SelectionClient removeContextualSearchSelectionClient() {
@@ -193,6 +196,11 @@ public class SelectionClientManager {
         @Override
         public TextClassifier getCustomTextClassifier() {
             return mSmartSelectionClient.getCustomTextClassifier();
+        }
+
+        @Override
+        public SelectionMetricsLogger getSelectionMetricsLogger() {
+            return mSmartSelectionClient.getSelectionMetricsLogger();
         }
     }
 }

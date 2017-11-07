@@ -103,6 +103,7 @@ class IntentPickerBubbleView : public LocationBarBubbleDelegateView,
   FRIEND_TEST_ALL_PREFIXES(IntentPickerBubbleViewTest, PressButtonTwice);
   FRIEND_TEST_ALL_PREFIXES(IntentPickerBubbleViewTest, ChromeNotInCandidates);
   FRIEND_TEST_ALL_PREFIXES(IntentPickerBubbleViewTest, StayInChromeTest);
+  FRIEND_TEST_ALL_PREFIXES(IntentPickerBubbleViewTest, WebContentsTiedToBubble);
   IntentPickerBubbleView(const std::vector<AppInfo>& app_info,
                          IntentPickerResponse intent_picker_cb,
                          content::WebContents* web_contents,
@@ -146,9 +147,6 @@ class IntentPickerBubbleView : public LocationBarBubbleDelegateView,
   gfx::ImageSkia GetAppImageForTesting(size_t index);
   views::InkDropState GetInkDropStateForTesting(size_t);
   void PressButtonForTesting(size_t index, const ui::Event& event);
-  size_t GetScrollViewSizeForTesting() const;
-  std::string GetPackageNameForTesting(size_t index) const;
-  bool GetStayInChromeEnabledForTesting();
 
   static IntentPickerBubbleView* intent_picker_bubble_;
 

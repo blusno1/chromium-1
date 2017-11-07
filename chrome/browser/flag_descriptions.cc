@@ -473,6 +473,13 @@ const char kEnableOutOfProcessHeapProfilingDescription[] =
 const char kEnableOutOfProcessHeapProfilingModeMinimal[] =
     "Profile only the browser and GPU processes.";
 const char kEnableOutOfProcessHeapProfilingModeAll[] = "Profile all processes.";
+const char kEnableOutOfProcessHeapProfilingModeBrowser[] =
+    "Profile only the browser processes.";
+const char kEnableOutOfProcessHeapProfilingModeGpu[] =
+    "Profile only the GPU processes.";
+const char kEnableOutOfProcessHeapProfilingModeRendererSampling[] =
+    "Profile a random sampling of renderer processes, ensuring only one is "
+    "ever profiled at a time.";
 
 const char kEnablePictureInPictureName[] = "Enable picture in picture.";
 const char kEnablePictureInPictureDescription[] =
@@ -822,10 +829,6 @@ const char kMojoVideoEncodeAcceleratorName[] =
 const char kMojoVideoEncodeAcceleratorDescription[] =
     "Use new Mojo IPC to access hardware-accelerated video encoder, where "
     "available.";
-
-const char kModuleScriptsName[] = "Enable ECMAScript 6 modules";
-const char kModuleScriptsDescription[] =
-    "Enables ECMAScript 6 modules support in Blink.";
 
 const char kModuleScriptsDynamicImportName[] =
     "Enable ECMAScript 6 modules dynamic import";
@@ -2425,8 +2428,7 @@ const char kDisableSystemTimezoneAutomaticDetectionDescription[] =
 
 const char kEnableBackgroundBlurName[] = "Enable background blur.";
 const char kEnableBackgroundBlurDescription[] =
-    "Enables background blur for the Peeking Launcher, Lock Screen, and Tab "
-    "Switcher.";
+    "Enables background blur for the Peeking Launcher and Tab Switcher.";
 
 const char kEnableAndroidWallpapersAppName[] = "Android Wallpapers App";
 const char kEnableAndroidWallpapersAppDescription[] =
@@ -2594,35 +2596,6 @@ const char kOfficeEditingComponentAppName[] =
 const char kOfficeEditingComponentAppDescription[] =
     "Office Editing for Docs, Sheets & Slides for testing purposes.";
 
-const char kSpuriousPowerButtonWindowName[] = "Spurious power button window";
-const char kSpuriousPowerButtonWindowDescription[] =
-    "Number of recent accelerometer samples to examine to determine if a power "
-    "button event was spurious.";
-
-const char kSpuriousPowerButtonAccelCountName[] =
-    "Spurious power button acceleration count";
-const char kSpuriousPowerButtonAccelCountDescription[] =
-    "Number of recent acceleration samples that must meet or exceed exceed the "
-    "threshold in order for a power button event to be considered spurious.";
-
-const char kSpuriousPowerButtonScreenAccelName[] =
-    "Spurious power button screen acceleration threshold";
-const char kSpuriousPowerButtonScreenAccelDescription[] =
-    "Threshold (in m/s^2, disregarding gravity) that screen acceleration must "
-    "meet or exceed for a power button event to be considered spurious.";
-
-const char kSpuriousPowerButtonKeyboardAccelName[] =
-    "Spurious power button keyboard acceleration threshold";
-const char kSpuriousPowerButtonKeyboardAccelDescription[] =
-    "Threshold (in m/s^2, disregarding gravity) that keyboard acceleration "
-    "must meet or exceed for a power button event to be considered spurious.";
-
-const char kSpuriousPowerButtonLidAngleChangeName[] =
-    "Spurious power button lid angle change threshold";
-const char kSpuriousPowerButtonLidAngleChangeDescription[] =
-    "Change in lid angle (i.e. hinge between keyboard and screen) that must be "
-    "met or exceeded for a power button event to be considered spurious.";
-
 const char kSysInternalsName[] = "Enable Sys-Internals";
 const char kSysInternalsDescription[] =
     "If enabled, user can monitor system information at "
@@ -2667,6 +2640,12 @@ const char kEnableMashDescription[] =
     "Mash (UI, Chrome and ash in separate services)";
 const char kEnableMusDescription[] =
     "Mus (UI in separate service, Chrome and ash in same service)";
+
+// TODO(mcasas): remove after https://crbug.com/771345.
+const char kUseMonitorColorSpaceName[] = "Use monitor color space";
+const char kUseMonitorColorSpaceDescription[] =
+    "Enables Chrome to use the  color space information provided by the monitor"
+    " instead of the default sRGB color space.";
 
 const char kVideoPlayerChromecastSupportName[] =
     "Experimental Chromecast support for Video Player";
@@ -2799,6 +2778,11 @@ const char kWebrtcH264WithOpenh264FfmpegDescription[] =
 #endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 #if defined(OS_CHROMEOS)
+
+const char kAshDisableLoginDimAndBlurName[] =
+    "Disable dimming and blur on login screen.";
+const char kAshDisableLoginDimAndBlurDescription[] =
+    "Disable dimming and blur on login screen.";
 
 const char kAshDisableSmoothScreenRotationName[] =
     "Disable smooth rotation animations.";

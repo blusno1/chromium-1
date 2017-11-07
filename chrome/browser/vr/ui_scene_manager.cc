@@ -1043,7 +1043,6 @@ void UiSceneManager::ConfigureScene() {
   ceiling_->SetVisible(browsing_mode());
 
   // Update content quad parameters depending on fullscreen.
-  // TODO(http://crbug.com/642937): Animate fullscreen transitions.
   if (fullscreen_) {
     scene_->GetUiElementByName(k2dBrowsingContentGroup)
         ->SetTranslate(0, kFullscreenVerticalOffset, -kFullscreenDistance);
@@ -1144,9 +1143,10 @@ bool UiSceneManager::ShouldRenderWebVr() {
 
 void UiSceneManager::OnGlInitialized(
     unsigned int content_texture_id,
-    UiElementRenderer::TextureLocation content_location) {
+    UiElementRenderer::TextureLocation content_location,
+    SkiaSurfaceProvider* provider) {
   main_content_->SetTexture(content_texture_id, content_location);
-  scene_->OnGlInitialized();
+  scene_->OnGlInitialized(provider);
 
   ConfigureScene();
 }

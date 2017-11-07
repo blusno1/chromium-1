@@ -86,8 +86,8 @@
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/CString.h"
 #include "public/platform/WebCORS.h"
-#include "public/platform/WebFeaturePolicyFeature.h"
 #include "public/platform/WebURLRequest.h"
+#include "third_party/WebKit/common/feature_policy/feature_policy_feature.h"
 
 namespace blink {
 
@@ -293,7 +293,7 @@ XMLHttpRequest::XMLHttpRequest(
     v8::Isolate* isolate,
     bool is_isolated_world,
     scoped_refptr<SecurityOrigin> isolated_world_security_origin)
-    : SuspendableObject(context),
+    : PausableObject(context),
       timeout_milliseconds_(0),
       state_(kUnsent),
       length_downloaded_to_file_(0),
@@ -695,9 +695,9 @@ void XMLHttpRequest::open(const AtomicString& method,
   upload_complete_ = false;
 
   if (!async && GetExecutionContext()->IsDocument()) {
-    if (IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kSyncXHR) &&
+    if (IsSupportedInFeaturePolicy(FeaturePolicyFeature::kSyncXHR) &&
         !GetDocument()->GetFrame()->IsFeatureEnabled(
-            WebFeaturePolicyFeature::kSyncXHR)) {
+            FeaturePolicyFeature::kSyncXHR)) {
       exception_state.ThrowDOMException(
           kInvalidAccessError,
           "Synchronous requests are disabled by Feature Policy.");
@@ -1925,12 +1925,12 @@ void XMLHttpRequest::HandleDidTimeout() {
                      expected_length);
 }
 
-void XMLHttpRequest::Suspend() {
-  progress_event_throttle_->Suspend();
+void XMLHttpRequest::Pause() {
+  progress_event_throttle_->Pause();
 }
 
-void XMLHttpRequest::Resume() {
-  progress_event_throttle_->Resume();
+void XMLHttpRequest::Unpause() {
+  progress_event_throttle_->Unpause();
 }
 
 void XMLHttpRequest::ContextDestroyed(ExecutionContext*) {
@@ -1958,7 +1958,7 @@ const AtomicString& XMLHttpRequest::InterfaceName() const {
 }
 
 ExecutionContext* XMLHttpRequest::GetExecutionContext() const {
-  return SuspendableObject::GetExecutionContext();
+  return PausableObject::GetExecutionContext();
 }
 
 void XMLHttpRequest::ReportMemoryUsageToV8() {
@@ -1989,7 +1989,7 @@ void XMLHttpRequest::Trace(blink::Visitor* visitor) {
   visitor->Trace(blob_loader_);
   XMLHttpRequestEventTarget::Trace(visitor);
   DocumentParserClient::Trace(visitor);
-  SuspendableObject::Trace(visitor);
+  PausableObject::Trace(visitor);
 }
 
 void XMLHttpRequest::TraceWrappers(

@@ -302,6 +302,9 @@ extern const char kEnableOutOfProcessHeapProfilingName[];
 extern const char kEnableOutOfProcessHeapProfilingDescription[];
 extern const char kEnableOutOfProcessHeapProfilingModeMinimal[];
 extern const char kEnableOutOfProcessHeapProfilingModeAll[];
+extern const char kEnableOutOfProcessHeapProfilingModeBrowser[];
+extern const char kEnableOutOfProcessHeapProfilingModeGpu[];
+extern const char kEnableOutOfProcessHeapProfilingModeRendererSampling[];
 
 extern const char kEnablePictureInPictureName[];
 extern const char kEnablePictureInPictureDescription[];
@@ -516,9 +519,6 @@ extern const char kMojoLoadingDescription[];
 
 extern const char kMojoVideoEncodeAcceleratorName[];
 extern const char kMojoVideoEncodeAcceleratorDescription[];
-
-extern const char kModuleScriptsName[];
-extern const char kModuleScriptsDescription[];
 
 extern const char kModuleScriptsDynamicImportName[];
 extern const char kModuleScriptsDynamicImportDescription[];
@@ -1605,21 +1605,6 @@ extern const char kQuickUnlockFingerprintDescription[];
 extern const char kOfficeEditingComponentAppName[];
 extern const char kOfficeEditingComponentAppDescription[];
 
-extern const char kSpuriousPowerButtonWindowName[];
-extern const char kSpuriousPowerButtonWindowDescription[];
-
-extern const char kSpuriousPowerButtonAccelCountName[];
-extern const char kSpuriousPowerButtonAccelCountDescription[];
-
-extern const char kSpuriousPowerButtonScreenAccelName[];
-extern const char kSpuriousPowerButtonScreenAccelDescription[];
-
-extern const char kSpuriousPowerButtonKeyboardAccelName[];
-extern const char kSpuriousPowerButtonKeyboardAccelDescription[];
-
-extern const char kSpuriousPowerButtonLidAngleChangeName[];
-extern const char kSpuriousPowerButtonLidAngleChangeDescription[];
-
 extern const char kTeamDrivesName[];
 extern const char kTeamDrivesDescription[];
 
@@ -1636,6 +1621,9 @@ extern const char kUseMusName[];
 extern const char kUseMusDescription[];
 extern const char kEnableMashDescription[];
 extern const char kEnableMusDescription[];
+
+extern const char kUseMonitorColorSpaceName[];
+extern const char kUseMonitorColorSpaceDescription[];
 
 extern const char kVideoPlayerChromecastSupportName[];
 extern const char kVideoPlayerChromecastSupportDescription[];
@@ -1728,6 +1716,9 @@ extern const char kWebrtcH264WithOpenh264FfmpegDescription[];
 #endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 #if defined(OS_CHROMEOS)
+
+extern const char kAshDisableLoginDimAndBlurName[];
+extern const char kAshDisableLoginDimAndBlurDescription[];
 
 extern const char kAshDisableSmoothScreenRotationName[];
 extern const char kAshDisableSmoothScreenRotationDescription[];

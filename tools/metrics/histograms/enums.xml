@@ -2581,6 +2581,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="10" label="WebView variations task"/>
   <int value="11" label="Offline content notification task"/>
   <int value="12" label="WebAPK update task"/>
+  <int value="13" label="Download resumption task"/>
 </enum>
 
 <enum name="BackgroundTracingState">
@@ -2800,6 +2801,7 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="CPFC_RESIZE_PARAMS_CHANGED_LOCAL_SURFACE_ID_UNCHANGED"/>
   <int value="183"
       label="BPG_RESIZE_PARAMS_CHANGED_LOCAL_SURFACE_ID_UNCHANGED"/>
+  <int value="184" label="RFH_NEGATIVE_SELECTION_START_OFFSET"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions">
@@ -4165,8 +4167,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2"
       label="Canvas state stack too large (unbalanced save/restore?)."/>
   <int value="3" label="Direct pixel write."/>
-  <int value="4" label="Flush for initial clear."/>
-  <int value="5" label="Flush after drawing from a WebGL canvas."/>
+  <int value="4" label="Flush for initial clear. (obsolete)"/>
+  <int value="5" label="Flush after drawing from a WebGL canvas. (obsolete)"/>
   <int value="6" label="Acquiring snapshot for getImageData()."/>
   <int value="7"
       label="Acquiring snapshot for WebGL texture upload. (obsolete)"/>
@@ -11996,8 +11998,13 @@ uploading your change for review.  These are checked by presubmit scripts.
   </summary>
   <int value="0" label="Other type of error on retrieve policy request"/>
   <int value="1" label="Success"/>
-  <int value="2" label="Retrieve request issued before session started"/>
+  <int value="2"
+      label="Retrieve request issued before session started (Deprecated)"/>
   <int value="3" label="Failed to retrieve policy data in session manager"/>
+  <int value="4"
+      label="Session manager failed to get policy service, possibly because
+             the retrieve request was issued before the user session started
+             or the account id was invalid"/>
 </enum>
 
 <enum name="EnterpriseUploadJobSuccess">
@@ -13943,6 +13950,7 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="ACCESSIBILITY_PRIVATE_SETNATIVECHROMEVOXARCSUPPORTFORCURRENTAPP"/>
   <int value="1198"
       label="LANGUAGESETTINGSPRIVATE_SETENABLETRANSLATIONFORLANGUAGE"/>
+  <int value="1199" label="LANGUAGESETTINGSPRIVATE_MOVELANGUAGE"/>
 </enum>
 
 <enum name="ExtensionIconState">
@@ -14594,17 +14602,17 @@ uploading your change for review.  These are checked by presubmit scripts.
   <summary>
     Defines the icon type stored as cached in the history backend.
   </summary>
-  <int value="0" label="INVALID">Not an actual icon.</int>
-  <int value="1" label="FAVICON">
+  <int value="0" label="Invalid">Not an actual icon.</int>
+  <int value="1" label="Favicon">
     Regular favicon (e.g. rel=&quot;icon&quot;).
   </int>
-  <int value="2" label="TOUCH_ICON">
+  <int value="2" label="TouchIcon">
     Touch icon (rel=&quot;apple-touch-icon&quot;).
   </int>
-  <int value="3" label="TOUCH_PRECOMPOSED_ICON">
+  <int value="3" label="TouchPrecomposedIcon">
     Precomposed touch icon (rel=&quot;apple-touch-icon-precomposed&quot;).
   </int>
-  <int value="4" label="WEB_MANIFEST_ICON">Icon listed in a Web Manifest.</int>
+  <int value="4" label="WebManifestIcon">Icon listed in a Web Manifest.</int>
 </enum>
 
 <enum name="FeatureObserver">
@@ -16880,6 +16888,13 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2215" label="GeolocationWatchPosition"/>
   <int value="2216" label="DataUriHasOctothorpe"/>
   <int value="2217" label="NetInfoSaveData"/>
+  <int value="2218" label="V8Element_GetClientRects_Method"/>
+  <int value="2219" label="V8Element_GetBoundingClientRect_Method"/>
+  <int value="2220" label="V8Range_GetClientRects_Method"/>
+  <int value="2221" label="V8Range_GetBoundingClientRect_Method"/>
+  <int value="2222" label="V8ErrorCaptureStackTrace"/>
+  <int value="2223" label="V8ErrorPrepareStackTrace"/>
+  <int value="2224" label="V8ErrorStackTraceLimit"/>
 </enum>
 
 <enum name="FeedbackSource">
@@ -20383,6 +20398,9 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="HistogramNameHash">
+  <summary>
+    These numbers are the lower 32 bits of the hash of the metric name.
+  </summary>
   <int value="-2055973512" label="Login.ConsumerNewUsersAllowed"/>
   <int value="-2021219906"
       label="DataUse.MessageSize.AllServices.Downstream.Foreground.NotCellular"/>
@@ -20392,9 +20410,6 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="DataUse.MessageSize.AllServices.Downstream.Unknown.NotCellular"/>
   <int value="-1607339868"
       label="DataUse.MessageSize.AllServices.Upstream.Unknown.NotCellular"/>
-  <summary>
-    These numbers are the lower 32 bits of the hash of the metric name.
-  </summary>
   <int value="-1459119846"
       label="ServiceWorkerCache.Cache.Scheduler.QueueLength"/>
   <int value="-1390672863"
@@ -20411,6 +20426,7 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="DataUse.MessageSize.AllServices.Downstream.Background.NotCellular"/>
   <int value="-355731177" label="UMA.SamplingRatePerMille"/>
   <int value="-141990989" label="DataUse.AllServices.Background"/>
+  <int value="-132932440" label="DataUse.ContentType.Services"/>
   <int value="-48200749" label="DiskCache.0.TotalIOTime"/>
   <int value="0" label="Missing hash value"/>
   <int value="149985012"
@@ -20428,6 +20444,8 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="PasswordManager.Android.PasswordCredentialEntry.Website"/>
   <int value="757405826"
       label="DataUse.MessageSize.AllServices.Upstream.Foreground.Cellular"/>
+  <int value="761823979" label="Crashpad.HandlerLifetimeMilestone"/>
+  <int value="1264664660" label="DataUse.PageTransition.UserTraffic"/>
   <int value="1370064090"
       label="DataUse.MessageSize.AllServices.Upstream.Background.Cellular"/>
   <int value="1514844119" label="DataUse.Sync.Upload.Bytes"/>
@@ -23866,6 +23884,13 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="4" label="LoadLibraryExW Unavailable, LoadLibraryW Fail"/>
 </enum>
 
+<enum name="LoadRulesetResult">
+  <int value="0" label="Load succeeded"/>
+  <int value="1" label="Load failed - Invalid path"/>
+  <int value="2" label="Load failed - Memory Map error"/>
+  <int value="3" label="Load failed - Ruleset verification error"/>
+</enum>
+
 <enum name="LoadType">
   <int value="0" label="UNDEFINED_LOAD">Not yet initialized</int>
   <int value="1" label="RELOAD">User pressed reload</int>
@@ -24252,6 +24277,7 @@ from previous Chrome versions.
   <int value="-1487243228" label="NewUsbBackend:disabled"/>
   <int value="-1482685863" label="enable-request-tablet-site"/>
   <int value="-1480926949" label="MaterialDesignBookmarks:enabled"/>
+  <int value="-1480866718" label="ash-disable-login-dim-and-blur"/>
   <int value="-1478876902" label="disable-permission-action-reporting"/>
   <int value="-1473668019" label="token-binding:disabled"/>
   <int value="-1473136627" label="enable-web-payments"/>
@@ -24928,6 +24954,7 @@ from previous Chrome versions.
   <int value="480544447" label="NonValidatingReloadOnRefreshContentV2:enabled"/>
   <int value="481506759" label="ServiceWorkerScriptStreaming:enabled"/>
   <int value="492113129" label="ExperimentalAppBanners:enabled"/>
+  <int value="492985975" label="use-monitor-color-space"/>
   <int value="493903641" label="disable-appcontainer"/>
   <int value="494733611" label="disable-drop-sync-credential"/>
   <int value="503245473" label="disable-translate-new-ux"/>
@@ -25308,7 +25335,6 @@ from previous Chrome versions.
   <int value="1510659184" label="MacMDDownloadShelf:enabled"/>
   <int value="1511140997" label="OfflinePagesAsyncDownload:disabled"/>
   <int value="1511161758" label="BackgroundLoader:enabled"/>
-  <int value="1512249489" label="ModuleScripts:disabled"/>
   <int value="1514036945"
       label="OmniboxUIExperimentElideSuggestionUrlAfterHost:disabled"/>
   <int value="1514119870" label="enable-file-manager-touch-mode"/>
@@ -25491,7 +25517,6 @@ from previous Chrome versions.
   <int value="2059322877" label="new-avatar-menu"/>
   <int value="2063091429" label="OfflinePagesSharing:enabled"/>
   <int value="2067634730" label="LsdPermissionPrompt:disabled"/>
-  <int value="2067923510" label="ModuleScripts:enabled"/>
   <int value="2071340353" label="progress-bar-completion"/>
   <int value="2071461362" label="disable-credit-card-scan"/>
   <int value="2076787478" label="OmniboxDisplayTitleForCurrentUrl:disabled"/>
@@ -28899,6 +28924,7 @@ Called by update_use_counter_css.py.-->
   <int value="5" label="Thread busy"/>
   <int value="6" label="V8 cannot stream"/>
   <int value="7" label="Script too small"/>
+  <int value="8" label="No resource buffer"/>
 </enum>
 
 <enum name="NPAPIPluginStatus">
@@ -29916,6 +29942,11 @@ Called by update_use_counter_css.py.-->
   <int value="1" label="requests sent"/>
   <int value="2" label="requests invalidated"/>
   <int value="3" label="(non-invalidated) replies received"/>
+</enum>
+
+<enum name="OomInterventionUserDecision">
+  <int value="0" label="Declined"/>
+  <int value="1" label="Accepted"/>
 </enum>
 
 <enum name="OpenFileSystemResult">

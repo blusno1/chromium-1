@@ -11,7 +11,6 @@
 #include "content/browser/devtools/devtools_url_request_interceptor.h"
 #include "content/browser/devtools/protocol/network.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/global_request_id.h"
 #include "content/public/common/resource_type.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_job.h"
@@ -28,8 +27,7 @@ namespace content {
 class DevToolsURLInterceptorRequestJob : public net::URLRequestJob {
  public:
   DevToolsURLInterceptorRequestJob(
-      scoped_refptr<DevToolsURLRequestInterceptor::State>
-          devtools_url_request_interceptor_state,
+      DevToolsURLRequestInterceptor* interceptor,
       const std::string& interception_id,
       net::URLRequest* original_request,
       net::NetworkDelegate* original_network_delegate,
@@ -121,8 +119,7 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob {
     WAITING_FOR_AUTH_ACK,
   };
 
-  scoped_refptr<DevToolsURLRequestInterceptor::State>
-      devtools_url_request_interceptor_state_;
+  DevToolsURLRequestInterceptor* const interceptor_;
   RequestDetails request_details_;
   std::unique_ptr<SubRequest> sub_request_;
   std::unique_ptr<MockResponseDetails> mock_response_details_;
@@ -140,7 +137,6 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob {
   const base::WeakPtr<protocol::NetworkHandler> network_handler_;
   const bool is_redirect_;
   const ResourceType resource_type_;
-  GlobalRequestID global_request_id_;
   base::WeakPtrFactory<DevToolsURLInterceptorRequestJob> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DevToolsURLInterceptorRequestJob);

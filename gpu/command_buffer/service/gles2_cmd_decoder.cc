@@ -2435,6 +2435,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   bool supports_swap_buffers_with_bounds_;
   bool supports_commit_overlay_planes_;
   bool supports_async_swap_;
+  bool supports_oop_raster_;
   uint32_t next_async_swap_id_ = 1;
   uint32_t pending_swaps_ = 0;
   bool supports_dc_layers_ = false;
@@ -3169,6 +3170,7 @@ GLES2DecoderImpl::GLES2DecoderImpl(
       supports_swap_buffers_with_bounds_(false),
       supports_commit_overlay_planes_(false),
       supports_async_swap_(false),
+      supports_oop_raster_(false),
       derivatives_explicitly_enabled_(false),
       frag_depth_explicitly_enabled_(false),
       draw_buffers_explicitly_enabled_(false),
@@ -3763,40 +3765,44 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
                     "chromium_raster_transport not present";
       return gpu::ContextResult::kFatalFailure;
     }
+    // Assume that we can create a GrContext. This will be set to false if
+    // there's a failure.
+    supports_oop_raster_ = true;
     sk_sp<const GrGLInterface> interface(
         CreateGrGLInterface(gl_version_info()));
-    // TODO(enne): if this or gr_context creation below fails in practice for
-    // different reasons than the ones the renderer would fail on for gpu
-    // raster, expose this in gpu::Capabilities so the renderer can handle it.
     if (!interface) {
-      LOG(ERROR) << "ContextResult::kFatalFailure: "
-                    "GrGLInterface creation failed";
-      return gpu::ContextResult::kFatalFailure;
+      DLOG(ERROR) << "OOP raster support disabled: GrGLInterface creation "
+                     "failed.";
+      supports_oop_raster_ = false;
     }
 
-    gr_context_ = sk_sp<GrContext>(
-        GrContext::Create(kOpenGL_GrBackend,
-                          reinterpret_cast<GrBackendContext>(interface.get())));
-    if (!gr_context_) {
-      bool was_lost = CheckResetStatus();
-      LOG(ERROR) << (was_lost ? "ContextResult::kTransientFailure: "
-                              : "ContextResult::kFatalFailure: ")
-                 << "Could not create GrContext";
-      return was_lost ? gpu::ContextResult::kTransientFailure
-                      : gpu::ContextResult::kFatalFailure;
+    if (supports_oop_raster_) {
+      gr_context_ = sk_sp<GrContext>(GrContext::Create(
+          kOpenGL_GrBackend,
+          reinterpret_cast<GrBackendContext>(interface.get())));
+      if (gr_context_) {
+        // TODO(enne): this cache is for this decoder only and each decoder has
+        // its own cache.  This is pretty unfortunate.  This really needs to be
+        // rethought before shipping.  Most likely a different command buffer
+        // context for raster-in-gpu, with a shared gl context / gr context
+        // that different decoders can use.
+        static const int kMaxGaneshResourceCacheCount = 8196;
+        static const size_t kMaxGaneshResourceCacheBytes = 96 * 1024 * 1024;
+        gr_context_->setResourceCacheLimits(kMaxGaneshResourceCacheCount,
+                                            kMaxGaneshResourceCacheBytes);
+      } else {
+        bool was_lost = CheckResetStatus();
+        if (was_lost) {
+          DLOG(ERROR)
+              << "ContextResult::kTransientFailure: Could not create GrContext";
+          return gpu::ContextResult::kTransientFailure;
+        }
+        DLOG(ERROR) << "OOP raster support disabled: GrContext creation "
+                       "failed.";
+        supports_oop_raster_ = false;
+      }
     }
-
-    // TODO(enne): this cache is for this decoder only and each decoder has
-    // its own cache.  This is pretty unfortunate.  This really needs to be
-    // rethought before shipping.  Most likely a different command buffer
-    // context for raster-in-gpu, with a shared gl context / gr context
-    // that different decoders can use.
-    static const int kMaxGaneshResourceCacheCount = 8196;
-    static const size_t kMaxGaneshResourceCacheBytes = 96 * 1024 * 1024;
-    gr_context_->setResourceCacheLimits(kMaxGaneshResourceCacheCount,
-                                        kMaxGaneshResourceCacheBytes);
   }
-
   return gpu::ContextResult::kSuccess;
 }
 
@@ -3994,6 +4000,7 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
   caps.texture_npot = feature_info_->feature_flags().npot_ok;
   caps.texture_storage_image =
       feature_info_->feature_flags().chromium_texture_storage_image;
+  caps.supports_oop_raster = supports_oop_raster_;
 
   return caps;
 }
@@ -13003,6 +13010,22 @@ bool GLES2DecoderImpl::ClearLevel(Texture* texture,
     tile_height = height;
   }
 
+  Buffer* bound_buffer =
+      buffer_manager()->GetBufferInfoForTarget(&state_, GL_PIXEL_UNPACK_BUFFER);
+  if (bound_buffer) {
+    // If an unpack buffer is bound, we need to clear unpack parameters
+    // because they have been applied to the driver.
+    // Note: if it is not bound, we don't need to do anything, since they were
+    // set to 0 in ContextState::UpdateUnpackParameters.
+    api()->glBindBufferFn(GL_PIXEL_UNPACK_BUFFER, 0);
+    if (state_.unpack_row_length > 0)
+      api()->glPixelStoreiFn(GL_UNPACK_ROW_LENGTH, 0);
+    if (state_.unpack_image_height > 0)
+      api()->glPixelStoreiFn(GL_UNPACK_IMAGE_HEIGHT, 0);
+    DCHECK_EQ(0, state_.unpack_skip_pixels);
+    DCHECK_EQ(0, state_.unpack_skip_rows);
+    DCHECK_EQ(0, state_.unpack_skip_images);
+  }
   {
     // Add extra scope to destroy zero and the object it owns right
     // after its usage.
@@ -13021,10 +13044,20 @@ bool GLES2DecoderImpl::ClearLevel(Texture* texture,
       y += tile_height;
     }
   }
+  if (bound_buffer) {
+    if (state_.unpack_row_length > 0)
+      api()->glPixelStoreiFn(GL_UNPACK_ROW_LENGTH, state_.unpack_row_length);
+    if (state_.unpack_image_height > 0)
+      api()->glPixelStoreiFn(GL_UNPACK_IMAGE_HEIGHT,
+                             state_.unpack_image_height);
+    api()->glBindBufferFn(GL_PIXEL_UNPACK_BUFFER, bound_buffer->service_id());
+  }
+
   TextureRef* bound_texture =
       texture_manager()->GetTextureInfoForTarget(&state_, texture->target());
   api()->glBindTextureFn(texture->target(),
                          bound_texture ? bound_texture->service_id() : 0);
+  DCHECK(glGetError() == GL_NO_ERROR);
   return true;
 }
 
@@ -19930,8 +19963,8 @@ void GLES2DecoderImpl::ClearFramebufferForWorkaround(GLbitfield mask) {
   ScopedGLErrorSuppressor suppressor("GLES2DecoderImpl::ClearWorkaround",
                                      GetErrorState());
   clear_framebuffer_blit_->ClearFramebuffer(
-      this, GetBoundReadFramebufferSize(), mask, state_.color_clear_red,
-      state_.color_clear_green, state_.color_clear_blue,
+      this, gfx::Size(viewport_max_width_, viewport_max_height_), mask,
+      state_.color_clear_red, state_.color_clear_green, state_.color_clear_blue,
       state_.color_clear_alpha, state_.depth_clear, state_.stencil_clear);
 }
 

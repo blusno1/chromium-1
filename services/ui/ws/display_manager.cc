@@ -79,13 +79,14 @@ bool DisplayManager::SetDisplayConfiguration(
     int64_t primary_display_id,
     int64_t internal_display_id,
     const std::vector<display::Display>& mirrors) {
+  DCHECK_NE(display::kUnifiedDisplayId, internal_display_id);
   if (window_server_->display_creation_config() !=
       DisplayCreationConfig::MANUAL) {
     LOG(ERROR) << "SetDisplayConfiguration is only valid when roots manually "
                   "created";
     return false;
   }
-  if (displays.size() != viewport_metrics.size()) {
+  if (displays.size() + mirrors.size() != viewport_metrics.size()) {
     LOG(ERROR) << "SetDisplayConfiguration called with mismatch in sizes";
     return false;
   }

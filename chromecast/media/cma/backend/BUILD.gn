@@ -165,6 +165,7 @@ test("cast_audio_backend_unittests") {
     "//base",
     "//base/test:run_all_unittests",
     "//chromecast/media/cma/backend/post_processors:test_support",
+    "//chromecast/public",
     "//chromecast/public/media",
     "//media:shared_memory_support",
     "//testing/gmock",
@@ -189,6 +190,9 @@ cast_shared_library("libcast_governor_1.0") {
     ":governor",
     "//chromecast/public/media",
   ]
+  if (is_fuchsia) {
+    ldflags = [ "-Wl,-Bsymbolic" ]
+  }
 }
 
 cast_source_set("governor") {
@@ -213,6 +217,9 @@ cast_shared_library("libcast_saturated_gain_1.0") {
     ":saturated_gain",
     "//chromecast/public/media",
   ]
+  if (is_fuchsia) {
+    ldflags = [ "-Wl,-Bsymbolic" ]
+  }
 }
 
 cast_source_set("saturated_gain") {

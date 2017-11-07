@@ -12,15 +12,26 @@
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
+namespace simplified_backwards_text_iterator_test {
+
+TextIteratorBehavior EmitsSmallXForTextSecurityBehavior() {
+  return TextIteratorBehavior::Builder()
+      .SetEmitsSmallXForTextSecurity(true)
+      .Build();
+}
 
 class SimplifiedBackwardsTextIteratorTest : public EditingTestBase {
  protected:
-  std::string ExtractStringInRange(const std::string selection_text) {
+  std::string ExtractStringInRange(
+      const std::string selection_text,
+      const TextIteratorBehavior& behavior = TextIteratorBehavior()) {
     const SelectionInDOMTree selection = SetSelectionTextToBody(selection_text);
     StringBuilder builder;
     bool is_first = true;
-    for (SimplifiedBackwardsTextIterator iterator(EphemeralRange(
-             selection.ComputeStartPosition(), selection.ComputeEndPosition()));
+    for (SimplifiedBackwardsTextIterator iterator(
+             EphemeralRange(selection.ComputeStartPosition(),
+                            selection.ComputeEndPosition()),
+             behavior);
          !iterator.AtEnd(); iterator.Advance()) {
       BackwardsTextBuffer buffer;
       iterator.CopyTextTo(&buffer);
@@ -315,4 +326,15 @@ TEST_F(SimplifiedBackwardsTextIteratorTest, CopyWholeCodePoints) {
     EXPECT_EQ(kExpected[i], buffer[i]);
 }
 
+TEST_F(SimplifiedBackwardsTextIteratorTest, TextSecurity) {
+  InsertStyleElement("s {-webkit-text-security:disc;}");
+  EXPECT_EQ("baz, xxx, abc",
+            ExtractStringInRange("^abc<s>foo</s>baz|",
+                                 EmitsSmallXForTextSecurityBehavior()));
+  // E2 80 A2 is U+2022 BULLET
+  EXPECT_EQ("baz, \xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2, abc",
+            ExtractStringInRange("^abc<s>foo</s>baz|", TextIteratorBehavior()));
+}
+
+}  // namespace simplified_backwards_text_iterator_test
 }  // namespace blink

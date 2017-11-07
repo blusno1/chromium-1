@@ -19,6 +19,7 @@ namespace switches {
 ASH_PUBLIC_EXPORT extern const char kAshConstrainPointerToRoot[];
 ASH_PUBLIC_EXPORT extern const char kAshDebugShortcuts[];
 ASH_PUBLIC_EXPORT extern const char kAshDeveloperShortcuts[];
+ASH_PUBLIC_EXPORT extern const char kAshDisableLoginDimAndBlur[];
 ASH_PUBLIC_EXPORT extern const char kAshDisableShelfModelSynchronization[];
 ASH_PUBLIC_EXPORT extern const char kAshDisableSmoothScreenRotation[];
 ASH_PUBLIC_EXPORT extern const char kAshDisableTabletAutohideTitlebars[];
@@ -55,11 +56,6 @@ ASH_PUBLIC_EXPORT extern const char kAuraLegacyPowerButton[];
 ASH_PUBLIC_EXPORT extern const char kForceClamshellPowerButton[];
 ASH_PUBLIC_EXPORT extern const char kHasInternalStylus[];
 ASH_PUBLIC_EXPORT extern const char kShowMdLogin[];
-ASH_PUBLIC_EXPORT extern const char kSpuriousPowerButtonWindow[];
-ASH_PUBLIC_EXPORT extern const char kSpuriousPowerButtonAccelCount[];
-ASH_PUBLIC_EXPORT extern const char kSpuriousPowerButtonScreenAccel[];
-ASH_PUBLIC_EXPORT extern const char kSpuriousPowerButtonKeyboardAccel[];
-ASH_PUBLIC_EXPORT extern const char kSpuriousPowerButtonLidAngleChange[];
 ASH_PUBLIC_EXPORT extern const char kTouchscreenUsableWhileScreenOff[];
 ASH_PUBLIC_EXPORT extern const char kUseIMEService[];
 

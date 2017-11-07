@@ -60,7 +60,7 @@ void UiElement::Render(UiElementRenderer* renderer,
   NOTREACHED();
 }
 
-void UiElement::Initialize() {}
+void UiElement::Initialize(SkiaSurfaceProvider* provider) {}
 
 void UiElement::OnHoverEnter(const gfx::PointF& position) {}
 
@@ -229,6 +229,10 @@ const gfx::Transform& UiElement::world_space_transform() const {
 
 bool UiElement::IsWorldPositioned() const {
   return true;
+}
+
+std::string UiElement::DebugName() const {
+  return UiElementNameToString(name());
 }
 
 void UiElement::OnSetMode() {}

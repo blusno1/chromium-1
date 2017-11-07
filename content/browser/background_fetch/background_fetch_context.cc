@@ -69,6 +69,14 @@ void BackgroundFetchContext::GetRegistration(
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
+void BackgroundFetchContext::GetDeveloperIdsForServiceWorker(
+    int64_t service_worker_registration_id,
+    const url::Origin& origin,
+    blink::mojom::BackgroundFetchService::GetDeveloperIdsCallback callback) {
+  data_manager_.GetDeveloperIdsForServiceWorker(service_worker_registration_id,
+                                                origin, std::move(callback));
+}
+
 void BackgroundFetchContext::DidGetRegistration(
     blink::mojom::BackgroundFetchService::GetRegistrationCallback callback,
     blink::mojom::BackgroundFetchError error,
@@ -135,6 +143,13 @@ void BackgroundFetchContext::UpdateUI(
     blink::mojom::BackgroundFetchService::UpdateUICallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
+  // The registration must a) still be active, or b) have completed/failed (not
+  // aborted) with the waitUntil promise from that event not yet resolved.
+  if (!job_controllers_.count(unique_id)) {
+    std::move(callback).Run(blink::mojom::BackgroundFetchError::INVALID_ID);
+    return;
+  }
+
   data_manager_.UpdateRegistrationUI(
       unique_id, title,
       base::BindOnce(&BackgroundFetchContext::DidUpdateStoredUI,
@@ -149,6 +164,9 @@ void BackgroundFetchContext::DidUpdateStoredUI(
     blink::mojom::BackgroundFetchError error) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
+  // TODO(delphick): The controller might not exist if the developer updates the
+  // UI from the event using event.waitUntil. Consider showing a message in the
+  // console.
   if (error == blink::mojom::BackgroundFetchError::NONE &&
       job_controllers_.count(unique_id)) {
     job_controllers_[unique_id]->UpdateUI(title);
@@ -170,6 +188,14 @@ void BackgroundFetchContext::CreateController(
                           base::Unretained(registration_notifier_.get())),
       base::BindOnce(&BackgroundFetchContext::DidFinishJob,
                      weak_factory_.GetWeakPtr(), base::Bind(&IgnoreError)));
+
+  // TODO(delphick): This assumes that fetches are always started afresh in
+  // each browser session. We need to initialize the number of downloads using
+  // information loaded from the database.
+  controller->InitializeRequestStatus(
+      0, /* completed_downloads*/
+      data_manager_.GetTotalNumberOfRequests(registration_id),
+      std::vector<std::string>() /* outstanding download GUIDs */);
 
   // Start fetching the first few requests immediately. At some point in the
   // future we may want a more elaborate scheduling mechanism here.

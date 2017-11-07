@@ -143,8 +143,6 @@ InterventionsInternalPageImpl.prototype = {
     descriptionTd.textContent = log.description;
     tableRow.appendChild(descriptionTd);
 
-    // TODO(thanhdle): Truncate url and show full url when user clicks on it.
-    // crbug.com/773019
     let urlTd = document.createElement('td');
     urlTd.setAttribute('class', 'log-url');
     urlTd.textContent = log.url.url;
@@ -262,15 +260,22 @@ cr.define('interventions_internals', () => {
         .then((response) => {
           let statuses = $('previews-statuses');
 
-          // TODO(thanhdle): The statuses are not printed in alphabetic order of
-          // the key. crbug.com/772458
-          response.statuses.forEach((value, key) => {
+          // Sorting the keys by the status's description.
+          let sortedKeys = Array.from(response.statuses.keys());
+          sortedKeys.sort((a, b) => {
+            return response.statuses.get(a).description >
+                response.statuses.get(b).description;
+          });
+
+          sortedKeys.forEach((key) => {
+            let value = response.statuses.get(key);
             let message = value.description + ': ';
             message += value.enabled ? 'Enabled' : 'Disabled';
 
             assert(!$(key), 'Component ' + key + ' already existed!');
 
             let node = document.createElement('p');
+            node.setAttribute('class', 'previews-status-value');
             node.setAttribute('id', key);
             node.textContent = message;
             statuses.appendChild(node);

@@ -162,6 +162,7 @@
 #import "ios/chrome/browser/ui/settings/sync_utils/sync_presenter.h"
 #import "ios/chrome/browser/ui/settings/sync_utils/sync_util.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_controller.h"
+#import "ios/chrome/browser/ui/signin_interaction/public/signin_presenter.h"
 #import "ios/chrome/browser/ui/snackbar/snackbar_coordinator.h"
 #import "ios/chrome/browser/ui/stack_view/card_view.h"
 #import "ios/chrome/browser/ui/stack_view/page_animation_util.h"
@@ -395,6 +396,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                                     SKStoreProductViewControllerDelegate,
                                     SnapshotOverlayProvider,
                                     StoreKitLauncher,
+                                    SigninPresenter,
                                     SyncPresenter,
                                     TabDialogDelegate,
                                     TabHeadersDelegate,
@@ -1668,7 +1670,8 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint {
       InfoBarManagerImpl::FromWebState(webState);
   [[UpgradeCenter sharedInstance] addInfoBarToManager:infoBarManager
                                              forTabId:[tab tabId]];
-  if (!ReSignInInfoBarDelegate::Create(_browserState, tab, self.dispatcher)) {
+  if (!ReSignInInfoBarDelegate::Create(_browserState, tab,
+                                       self /* id<SigninPresenter> */)) {
     DisplaySyncErrors(_browserState, tab, self /* id<SyncPresenter> */);
   }
 
@@ -2478,7 +2481,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   tab.dialogDelegate = self;
   tab.snapshotOverlayProvider = self;
   tab.passKitDialogProvider = self;
-  if (!base::FeatureList::IsEnabled(features::kNewFullscreen)) {
+  if (!base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen)) {
     tab.legacyFullscreenControllerDelegate = self;
   }
   if (!IsIPadIdiom()) {
@@ -2522,7 +2525,7 @@ bubblePresenterForFeature:(const base::Feature&)feature
   tab.dialogDelegate = nil;
   tab.snapshotOverlayProvider = nil;
   tab.passKitDialogProvider = nil;
-  if (!base::FeatureList::IsEnabled(features::kNewFullscreen)) {
+  if (!base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen)) {
     tab.legacyFullscreenControllerDelegate = nil;
   }
   if (!IsIPadIdiom()) {
@@ -4335,7 +4338,13 @@ bubblePresenterForFeature:(const base::Feature&)feature
   };
 
   [self setLastTapPoint:command];
-  DCHECK(self.visible || self.dismissingModal);
+  // When the tab switcher presentation experiment is enabled, the new tab can
+  // be opened before BVC has been made visible onscreen.  Test for this case by
+  // checking if the parent container VC is currently in the process of being
+  // presented.
+  DCHECK(self.visible || self.dismissingModal ||
+         (TabSwitcherPresentsBVCEnabled() &&
+          self.parentViewController.isBeingPresented));
   Tab* currentTab = [_model currentTab];
   if (currentTab) {
     [currentTab updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
@@ -4619,15 +4628,20 @@ bubblePresenterForFeature:(const base::Feature&)feature
   if (self.presentedViewController) {
     // Dismisses any other modal controllers that may be present, e.g. Recent
     // Tabs.
+    //
     // Note that currently, some controllers like the bookmark ones were already
     // dismissed (in this example in -dismissBookmarkModalControllerAnimated:),
-    // but are still reported as the presentedViewController. The result is that
-    // this will call -dismissViewControllerAnimated:completion: a second time
-    // on it. It is not per se an issue, as it is a no-op. The problem is that
-    // in such a case, the completion block is not called.
-    // To ensure the completion is called, nil is passed here, and the
-    // completion is called below.
-    [self dismissViewControllerAnimated:NO completion:nil];
+    // but are still reported as the presentedViewController.  Calling
+    // |dismissViewControllerAnimated:completion:| again would dismiss the BVC
+    // itself, so instead check the value of |self.dismissingModal| and only
+    // call dismiss if one of the above calls has not already triggered a
+    // dismissal.
+    //
+    // To ensure the completion is called, nil is passed to the call to dismiss,
+    // and the completion is called explicitly below.
+    if (!TabSwitcherPresentsBVCEnabled() || !self.dismissingModal) {
+      [self dismissViewControllerAnimated:NO completion:nil];
+    }
     // Dismissed controllers will be so after a delay. Queue the completion
     // callback after that.
     if (completion) {
@@ -4800,6 +4814,10 @@ bubblePresenterForFeature:(const base::Feature&)feature
     }
     _isToolbarControllerRelinquished = NO;
   }
+}
+
+- (CGRect)toolbarFrame {
+  return [_toolbarCoordinator view].frame;
 }
 
 - (id<ToolbarSnapshotProviding>)toolbarSnapshotProvider {
@@ -5368,10 +5386,12 @@ bubblePresenterForFeature:(const base::Feature&)feature
 
 - (void)showReauthenticateSignin {
   [self.dispatcher
-      showSignin:[[ShowSigninCommand alloc]
-                     initWithOperation:AUTHENTICATION_OPERATION_REAUTHENTICATE
-                           accessPoint:signin_metrics::AccessPoint::
-                                           ACCESS_POINT_UNKNOWN]];
+              showSignin:
+                  [[ShowSigninCommand alloc]
+                      initWithOperation:AUTHENTICATION_OPERATION_REAUTHENTICATE
+                            accessPoint:signin_metrics::AccessPoint::
+                                            ACCESS_POINT_UNKNOWN]
+      baseViewController:self];
 }
 
 - (void)showSyncSettings {
@@ -5380,6 +5400,12 @@ bubblePresenterForFeature:(const base::Feature&)feature
 
 - (void)showSyncPassphraseSettings {
   [self.dispatcher showSyncPassphraseSettingsFromViewController:self];
+}
+
+#pragma mark - SigninPresenter
+
+- (void)showSignin:(ShowSigninCommand*)command {
+  [self.dispatcher showSignin:command baseViewController:self];
 }
 
 @end

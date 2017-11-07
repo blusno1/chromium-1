@@ -1,10 +1,13 @@
 <!--
+@WIN-ALLOW:row_*
+@WIN-ALLOW:column_*
 @MAC-ALLOW:AXIndex=*
 @MAC-ALLOW:AXColumnHeaderUIElements=*
 @MAC-ALLOW:AXColumnIndexRange=*
 @MAC-ALLOW:AXHeader=*
 @MAC-ALLOW:AXRowHeaderUIElements=*
 @MAC-ALLOW:AXRowIndexRange=*
+@MAC-DENY:AXDescription=*
 -->
 <!DOCTYPE html>
 <html>
@@ -12,12 +15,12 @@
 
 <table border=1>
   <tr>
-    <th>Firstname</th>
-    <th>Lastname</th>
+    <th aria-label="Firstname">Firstname</th>
+    <th aria-label="Lastname">Lastname</th>
   </tr>
   <tr>
     <td>Jill</td>
-    <td>Smith</td>    
+    <td>Smith</td>
   </tr>
 </table>
 

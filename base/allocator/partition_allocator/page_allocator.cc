@@ -24,10 +24,6 @@
 #include <errno.h>
 #include <sys/mman.h>
 
-#ifndef MADV_FREE
-#define MADV_FREE MADV_DONTNEED
-#endif
-
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif
@@ -291,23 +287,18 @@ bool SetSystemPagesAccess(void* address,
 }
 
 void DecommitSystemPages(void* address, size_t length) {
-  DCHECK(!(length & kSystemPageOffsetMask));
+  DCHECK_EQ(0UL, length & kSystemPageOffsetMask);
+
 #if defined(OS_POSIX)
-#if defined(OS_MACOSX)
-  // On macOS, MADV_FREE_REUSABLE has comparable behavior to MADV_FREE, but also
-  // marks the pages with the reusable bit, which allows both Activity Monitor
-  // and memory-infra to correctly track the pages.
-  int ret = madvise(address, length, MADV_FREE_REUSABLE);
-#else
-  int ret = madvise(address, length, MADV_FREE);
-#endif
-  if (ret != 0 && errno == EINVAL) {
-    // MADV_FREE only works on Linux 4.5+ . If request failed,
-    // retry with older MADV_DONTNEED . Note that MADV_FREE
-    // being defined at compile time doesn't imply runtime support.
-    ret = madvise(address, length, MADV_DONTNEED);
-  }
-  CHECK(!ret);
+  // In POSIX, there is no decommit concept. Discarding is an effective way of
+  // implementing the Windows semantics where the OS is allowed to not swap the
+  // pages in the region.
+  //
+  // TODO(ajwong): Also explore setting PageInaccessible to make the protection
+  // semantics consistent between Windows and POSIX. This might have a perf cost
+  // though as both decommit and recommit would incur an extra syscall.
+  // http://crbug.com/766882
+  DiscardSystemPages(address, length);
 #else
   CHECK(SetSystemPagesAccess(address, length, PageInaccessible));
 #endif
@@ -316,7 +307,7 @@ void DecommitSystemPages(void* address, size_t length) {
 bool RecommitSystemPages(void* address,
                          size_t length,
                          PageAccessibilityConfiguration page_accessibility) {
-  DCHECK(!(length & kSystemPageOffsetMask));
+  DCHECK_EQ(0UL, length & kSystemPageOffsetMask);
   DCHECK_NE(PageInaccessible, page_accessibility);
 #if defined(OS_POSIX)
   // On POSIX systems, read the memory to recommit. This has the correct
@@ -329,13 +320,28 @@ bool RecommitSystemPages(void* address,
 }
 
 void DiscardSystemPages(void* address, size_t length) {
-  DCHECK(!(length & kSystemPageOffsetMask));
+  DCHECK_EQ(0UL, length & kSystemPageOffsetMask);
+
 #if defined(OS_POSIX)
-  // On POSIX, the implementation detail is that discard and decommit are the
-  // same, and lead to pages that are returned to the system immediately and
-  // get replaced with zeroed pages when touched. So we just call
-  // DecommitSystemPages() here to avoid code duplication.
-  DecommitSystemPages(address, length);
+  int ret = -1;
+#if defined(OS_MACOSX)
+  // On macOS, MADV_FREE_REUSABLE has comparable behavior to MADV_FREE, but also
+  // marks the pages with the reusable bit, which allows both Activity Monitor
+  // and memory-infra to correctly track the pages.
+  ret = madvise(address, length, MADV_FREE_REUSABLE);
+#else
+#if defined(MADV_FREE)
+  ret = madvise(address, length, MADV_FREE);
+  if (ret != 0 && errno == EINVAL) {
+    // MADV_FREE only works on Linux 4.5+. If the request failed, retry with the
+    // older MADV_DONTNEED. (Note that MADV_FREE being defined at compile time
+    // doesn't imply runtime support.)
+    ret = madvise(address, length, MADV_DONTNEED);
+  }
+#else
+  ret = madvise(address, length, MADV_DONTNEED);
+#endif  // MADV_FREE
+#endif  // OS_MACOSX
 #else
   // On Windows discarded pages are not returned to the system immediately and
   // not guaranteed to be zeroed when returned to the application.
@@ -359,7 +365,7 @@ void DiscardSystemPages(void* address, size_t length) {
     void* ret = VirtualAlloc(address, length, MEM_RESET, PAGE_READWRITE);
     CHECK(ret);
   }
-#endif
+#endif  // OS_POSIX
 }
 
 bool ReserveAddressSpace(size_t size) {

@@ -531,44 +531,6 @@ const FeatureEntry::Choice kUiShowCompositedLayerBordersChoices[] = {
     {flag_descriptions::kUiShowCompositedLayerBordersAll,
      cc::switches::kUIShowCompositedLayerBorders, ""}};
 
-const FeatureEntry::Choice kSpuriousPowerButtonWindowChoices[] = {
-    {"0", "", ""},
-    {"5", ash::switches::kSpuriousPowerButtonWindow, "5"},
-    {"10", ash::switches::kSpuriousPowerButtonWindow, "10"},
-    {"15", ash::switches::kSpuriousPowerButtonWindow, "15"},
-    {"20", ash::switches::kSpuriousPowerButtonWindow, "20"},
-};
-const FeatureEntry::Choice kSpuriousPowerButtonAccelCountChoices[] = {
-    {"0", "", ""},
-    {"1", ash::switches::kSpuriousPowerButtonAccelCount, "1"},
-    {"2", ash::switches::kSpuriousPowerButtonAccelCount, "2"},
-    {"3", ash::switches::kSpuriousPowerButtonAccelCount, "3"},
-    {"4", ash::switches::kSpuriousPowerButtonAccelCount, "4"},
-    {"5", ash::switches::kSpuriousPowerButtonAccelCount, "5"},
-};
-const FeatureEntry::Choice kSpuriousPowerButtonScreenAccelChoices[] = {
-    {"0", "", ""},
-    {"0.2", ash::switches::kSpuriousPowerButtonScreenAccel, "0.2"},
-    {"0.4", ash::switches::kSpuriousPowerButtonScreenAccel, "0.4"},
-    {"0.6", ash::switches::kSpuriousPowerButtonScreenAccel, "0.6"},
-    {"0.8", ash::switches::kSpuriousPowerButtonScreenAccel, "0.8"},
-    {"1.0", ash::switches::kSpuriousPowerButtonScreenAccel, "1.0"},
-};
-const FeatureEntry::Choice kSpuriousPowerButtonKeyboardAccelChoices[] = {
-    {"0", "", ""},
-    {"0.2", ash::switches::kSpuriousPowerButtonKeyboardAccel, "0.2"},
-    {"0.4", ash::switches::kSpuriousPowerButtonKeyboardAccel, "0.4"},
-    {"0.6", ash::switches::kSpuriousPowerButtonKeyboardAccel, "0.6"},
-    {"0.8", ash::switches::kSpuriousPowerButtonKeyboardAccel, "0.8"},
-    {"1.0", ash::switches::kSpuriousPowerButtonKeyboardAccel, "1.0"},
-};
-const FeatureEntry::Choice kSpuriousPowerButtonLidAngleChangeChoices[] = {
-    {"0", "", ""},
-    {"45", ash::switches::kSpuriousPowerButtonLidAngleChange, "45"},
-    {"90", ash::switches::kSpuriousPowerButtonLidAngleChange, "90"},
-    {"135", ash::switches::kSpuriousPowerButtonLidAngleChange, "135"},
-    {"180", ash::switches::kSpuriousPowerButtonLidAngleChange, "180"},
-};
 #endif  // OS_CHROMEOS
 
 const FeatureEntry::Choice kV8CacheOptionsChoices[] = {
@@ -1052,7 +1014,13 @@ const FeatureEntry::Choice kEnableOutOfProcessHeapProfilingChoices[] = {
     {flag_descriptions::kEnableOutOfProcessHeapProfilingModeMinimal,
      switches::kMemlog, switches::kMemlogModeMinimal},
     {flag_descriptions::kEnableOutOfProcessHeapProfilingModeAll,
-     switches::kMemlog, switches::kMemlogModeAll}};
+     switches::kMemlog, switches::kMemlogModeAll},
+    {flag_descriptions::kEnableOutOfProcessHeapProfilingModeBrowser,
+     switches::kMemlog, switches::kMemlogModeBrowser},
+    {flag_descriptions::kEnableOutOfProcessHeapProfilingModeGpu,
+     switches::kMemlog, switches::kMemlogModeGpu},
+    {flag_descriptions::kEnableOutOfProcessHeapProfilingModeRendererSampling,
+     switches::kMemlog, switches::kMemlogModeRendererSampling}};
 
 const FeatureEntry::FeatureParam kOmniboxUIMaxAutocompleteMatches4[] = {
     {OmniboxFieldTrial::kUIMaxAutocompleteMatchesParam, "4"}};
@@ -1533,26 +1501,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"show-touch-hud", flag_descriptions::kShowTouchHudName,
      flag_descriptions::kShowTouchHudDescription, kOsAll,
      SINGLE_VALUE_TYPE(ash::switches::kAshTouchHud)},
-    {"spurious-power-button-window",
-     flag_descriptions::kSpuriousPowerButtonWindowName,
-     flag_descriptions::kSpuriousPowerButtonWindowDescription, kOsCrOS,
-     MULTI_VALUE_TYPE(kSpuriousPowerButtonWindowChoices)},
-    {"spurious-power-button-accel-count",
-     flag_descriptions::kSpuriousPowerButtonAccelCountName,
-     flag_descriptions::kSpuriousPowerButtonAccelCountDescription, kOsCrOS,
-     MULTI_VALUE_TYPE(kSpuriousPowerButtonAccelCountChoices)},
-    {"spurious-power-button-screen-accel",
-     flag_descriptions::kSpuriousPowerButtonScreenAccelName,
-     flag_descriptions::kSpuriousPowerButtonScreenAccelDescription, kOsCrOS,
-     MULTI_VALUE_TYPE(kSpuriousPowerButtonScreenAccelChoices)},
-    {"spurious-power-button-keyboard-accel",
-     flag_descriptions::kSpuriousPowerButtonKeyboardAccelName,
-     flag_descriptions::kSpuriousPowerButtonKeyboardAccelDescription, kOsCrOS,
-     MULTI_VALUE_TYPE(kSpuriousPowerButtonKeyboardAccelChoices)},
-    {"spurious-power-button-lid-angle-change",
-     flag_descriptions::kSpuriousPowerButtonLidAngleChangeName,
-     flag_descriptions::kSpuriousPowerButtonLidAngleChangeDescription, kOsCrOS,
-     MULTI_VALUE_TYPE(kSpuriousPowerButtonLidAngleChangeChoices)},
 #endif  // OS_CHROMEOS
     {
         "disable-accelerated-video-decode",
@@ -3154,6 +3102,10 @@ const FeatureEntry kFeatureEntries[] = {
      MULTI_VALUE_TYPE(kForceColorProfileChoices)},
 
 #if defined(OS_CHROMEOS)
+    {"use-monitor-color-space", flag_descriptions::kUseMonitorColorSpaceName,
+     flag_descriptions::kUseMonitorColorSpaceDescription, kOsCrOS,
+     SINGLE_VALUE_TYPE(switches::kUseMonitorColorSpace)},
+
     {"quick-unlock-pin-signin", flag_descriptions::kQuickUnlockPinSignin,
      flag_descriptions::kQuickUnlockPinSigninDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(features::kQuickUnlockPinSignin)},
@@ -3315,10 +3267,6 @@ const FeatureEntry kFeatureEntries[] = {
      kOsWin | kOsLinux | kOsCrOS,
      SINGLE_VALUE_TYPE(switches::kEnableExperimentalFullscreenExitUI)},
 #endif  // defined(TOOLKIT_VIEWS)
-
-    {"enable-module-scripts", flag_descriptions::kModuleScriptsName,
-     flag_descriptions::kModuleScriptsDescription, kOsAll,
-     FEATURE_VALUE_TYPE(features::kModuleScripts)},
 
     {"network-service", flag_descriptions::kEnableNetworkServiceName,
      flag_descriptions::kEnableNetworkServiceDescription, kOsAll,
@@ -3610,6 +3558,11 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAshEnableKeyboardShortcutViewerName,
      flag_descriptions::kAshEnableKeyboardShortcutViewerDescription, kOsCrOS,
      SINGLE_VALUE_TYPE(ash::switches::kAshEnableKeyboardShortcutViewer)},
+
+    {"ash-disable-login-dim-and-blur",
+     flag_descriptions::kAshDisableLoginDimAndBlurName,
+     flag_descriptions::kAshDisableLoginDimAndBlurDescription, kOsCrOS,
+     SINGLE_DISABLE_VALUE_TYPE(ash::switches::kAshDisableLoginDimAndBlur)},
 #endif  // OS_CHROMEOS
 
 #if defined(OS_CHROMEOS)

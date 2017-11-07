@@ -39,10 +39,14 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
     OTHER_ERROR = 0,
     // The policy was retrieved successfully.
     SUCCESS = 1,
-    // Retrieve policy request issued before session started.
-    SESSION_DOES_NOT_EXIST = 2,
+    // Retrieve policy request issued before session started (deprecated, use
+    // GET_SERVICE_FAIL).
+    SESSION_DOES_NOT_EXIST_DEPRECATED = 2,
     // Session manager failed to encode the policy data.
     POLICY_ENCODE_ERROR = 3,
+    // Session manager failed to get the policy service, possibly because a user
+    // session hasn't started yet or the account id was invalid.
+    GET_SERVICE_FAIL = 4,
     // Has to be the last value of enumeration. Used for UMA.
     COUNT
   };

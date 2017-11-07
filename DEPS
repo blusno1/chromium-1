@@ -73,11 +73,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '7a13d871ca54024474ebba9118766f87fac7b3d5',
+  'skia_revision': '63bc48d09323a62c8c67237fc66ad6ec7105e973',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '42e0a23fb3b83936c8a2fde9a9dc0484189f3bd3',
+  'v8_revision': '163f4bbbf2117a0ff679cb8cb5928935a5b31171',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -85,7 +85,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '5b09d90d9cf70df2f357cc2df4bb8f61f243c131',
+  'angle_revision': 'd80f2944cf130684ab0f3d7179572494180e80f4',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -97,7 +97,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'f1ecbedf506e4bbe46ffb9131a1c592c6e3e1b2f',
+  'pdfium_revision': '979e916fde750e47f262c59dc75f4ca2dc19ed39',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -125,7 +125,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype
   # and whatever else without interference from each other.
-  'freetype_revision': '94f6d57a4c4264e59493ccdf9b8cef92600c0c25',
+  'freetype_revision': '8f5568bfc4fd5fe707f0e41915b57affc1bff0e3',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
@@ -174,7 +174,7 @@ deps = {
     Var('chromium_git') + '/chromium/frame_rate/content.git' + '@' + 'c10272c88463efeef6bb19c9ec07c42bc8fe22b9',
 
   'src/chrome/test/data/vr/webvr_info':
-    Var('chromium_git') + '/external/github.com/toji/webvr.info.git' + '@' + 'd73e6182287e3c6c0daa4d3d2ea578a31a2e5a6b',
+    Var('chromium_git') + '/external/github.com/toji/webvr.info.git' + '@' + 'c58ae99b9ff9e2aa4c524633519570bf33536248',
 
   'src/ios/third_party/earl_grey/src': {
       'url': Var('chromium_git') + '/external/github.com/google/EarlGrey.git' + '@' + '2fd8a7d4b76f820fb95bce495c0ceb324dbe3edb',
@@ -192,7 +192,7 @@ deps = {
   },
 
   'src/ios/third_party/material_components_ios/src': {
-      'url': Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + 'e4ef28e6796430e550023be60ff58d6418b40a49',
+      'url': Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + '857c3016cdf4f765263af84f41f027f51091bbc8',
       'condition': 'checkout_ios',
   },
 
@@ -202,7 +202,7 @@ deps = {
   },
 
   'src/ios/third_party/material_internationalization_ios/src': {
-      'url': Var('chromium_git') + '/external/github.com/material-foundation/material-internationalization-ios.git' + '@' + 'f34691a78fc9a0607b565062f6d5cf9f8ea268a4',
+      'url': Var('chromium_git') + '/external/github.com/material-foundation/material-internationalization-ios.git' + '@' + '5b0f22e4715305ddc3a8810f5939be3f07cb7e3e',
       'condition': 'checkout_ios',
   },
 
@@ -272,7 +272,7 @@ deps = {
     Var('boringssl_git') + '/boringssl.git' + '@' +  Var('boringssl_revision'),
 
   'src/third_party/breakpad/breakpad':
-    Var('chromium_git') + '/breakpad/breakpad.git' + '@' + '5dad29423e62292c6ff468cabfee4422ba55b18b',
+    Var('chromium_git') + '/breakpad/breakpad.git' + '@' + '3bbf3fb0db6d751405b6fc30daba478445089e4d',
 
   'src/third_party/catapult':
     Var('chromium_git') + '/catapult.git' + '@' + Var('catapult_revision'),
@@ -282,7 +282,7 @@ deps = {
 
   # Build tools for Chrome OS. Note: This depends on third_party/pyelftools.
   'src/third_party/chromite': {
-      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '370839fe525e79fe84ceb71147661953e632fabd',
+      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + 'ef632e4a473bfe196707200bc315293b59a121f7',
       'condition': 'checkout_linux',
   },
 
@@ -310,7 +310,7 @@ deps = {
   },
 
   'src/third_party/depot_tools':
-    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'bb915e00ae3cd385b26b6c3e72dd8c284d8dcf28',
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '9a03ae0833f72d40b51d8be1b7b38486050768c3',
 
   # DevTools node modules. Used on Linux buildbots only.
   'src/third_party/devtools-node-modules': {
@@ -626,7 +626,7 @@ deps = {
     Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '34842fa3c36988840c89f5bc6a68503175acf7d9',
 
   'src/third_party/webrtc':
-    Var('webrtc_git') + '/src.git' + '@' + '969d4a93866491c325317a6441f5e693d8685bae', # commit position 20528
+    Var('webrtc_git') + '/src.git' + '@' + 'aeb5d88dee9998a26fbe3f76790007a8f2fc98f7', # commit position 20528
 
   'src/third_party/xdg-utils': {
       'url': Var('chromium_git') + '/chromium/deps/xdg-utils.git' + '@' + 'd80274d5869b17b8c9067a1022e4416ee7ed5e0d',
@@ -1162,6 +1162,15 @@ hooks = [
   },
 
   {
+    'name': 'Android CIPD Ensure',
+    'pattern': '.',
+    'condition': 'checkout_android',
+    'action': ['src/build/cipd/cipd_wrapper.py',
+               '--chromium-root', 'src',
+               '--ensure-file', 'src/build/cipd/android/android.ensure',
+    ],
+  },
+  {
     # This downloads SDK extras and puts them in the
     # third_party/android_tools/sdk/extras directory.
     'name': 'sdkextras',
@@ -1169,20 +1178,9 @@ hooks = [
     'condition': 'checkout_android',
     # When adding a new sdk extras package to download, add the package
     # directory and zip file to .gitignore in third_party/android_tools.
-    'action': ['python',
-               'src/build/android/play_services/update.py',
-               'download'
-    ],
-  },
-  {
-    'name': 'android_system_sdk',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'android_system_stubs',
-               '-l', 'third_party/android_system_sdk'
+    'action': [ 'python',
+                'src/build/android/play_services/update.py',
+                'download'
     ],
   },
   # Download checkstyle for use in PRESUBMIT for Java changes.
@@ -1197,215 +1195,6 @@ hooks = [
                 '--no_auth',
                 '--bucket', 'chromium-android-tools/checkstyle',
                 '-s', 'src/third_party/checkstyle/checkstyle-8.0-all.jar.sha1'
-    ],
-  },
-  {
-    'name': 'intellij',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-intellij',
-               '-l', 'third_party/intellij'
-    ],
-  },
-  {
-    'name': 'javax_inject',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-javax-inject',
-               '-l', 'third_party/javax_inject'
-    ],
-  },
-  {
-    'name': 'hamcrest',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-hamcrest',
-               '-l', 'third_party/hamcrest'
-    ],
-  },
-  {
-    'name': 'guava',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-guava',
-               '-l', 'third_party/guava'
-    ],
-  },
-  {
-    'name': 'android_support_test_runner',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-android-support-test-runner',
-               '-l', 'third_party/android_support_test_runner'
-    ],
-  },
-  {
-    'name': 'byte_buddy',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-byte-buddy',
-               '-l', 'third_party/byte_buddy'
-    ],
-  },
-  {
-    'name': 'espresso',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-espresso',
-               '-l', 'third_party/espresso'
-    ],
-  },
-  {
-    'name': 'robolectric_libs',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-robolectric',
-               '-l', 'third_party/robolectric'
-    ],
-  },
-  {
-    'name': 'apache_velocity',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-apache-velocity',
-               '-l', 'third_party/apache_velocity'
-    ],
-  },
-  {
-    'name': 'ow2_asm',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-ow2-asm',
-               '-l', 'third_party/ow2_asm'
-    ],
-  },
-  {
-    'name': 'desugar',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-android-tools/bazel/desugar',
-               '-l', 'third_party/bazel/desugar'
-    ],
-  },
-  {
-    'name': 'apk-patch-size-estimator',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-android-tools/apk-patch-size-estimator',
-               '-l', 'third_party/apk-patch-size-estimator/lib'
-    ],
-  },
-  {
-    'name': 'icu4j',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-icu4j',
-               '-l', 'third_party/icu4j'
-    ],
-  },
-  {
-    'name': 'accessibility_test_framework',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-accessibility-test-framework',
-               '-l', 'third_party/accessibility_test_framework'
-    ],
-  },
-  {
-    'name': 'bouncycastle',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-bouncycastle',
-               '-l', 'third_party/bouncycastle'
-    ],
-  },
-  {
-    'name': 'sqlite4java',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-sqlite4java',
-               '-l', 'third_party/sqlite4java'
-    ],
-  },
-  {
-    'name': 'gson',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-gson',
-               '-l', 'third_party/gson',
-    ],
-  },
-  {
-    'name': 'objenesis',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-objenesis',
-               '-l', 'third_party/objenesis'
-    ],
-  },
-  {
-    'name': 'xstream',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/update_deps/update_third_party_deps.py',
-               'download',
-               '-b', 'chromium-robolectric',
-               '-l', 'third_party/xstream'
     ],
   },
   {
@@ -1450,7 +1239,7 @@ hooks = [
     'pattern': '.',
     'condition': 'checkout_android',
     'action': [ 'python',
-               'src/third_party/gvr-android-sdk/test-apks/update.py',
+                'src/third_party/gvr-android-sdk/test-apks/update.py',
     ],
   },
   {
@@ -1458,8 +1247,8 @@ hooks = [
     'name': 'doclava',
     'pattern': '.',
     'condition': 'checkout_android',
-    'action': ['python',
-               'src/build/android/download_doclava.py',
+    'action': [ 'python',
+                'src/build/android/download_doclava.py',
     ],
   },
 

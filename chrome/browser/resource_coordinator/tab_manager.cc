@@ -24,7 +24,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
-#include "base/time/tick_clock.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -34,9 +33,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
 #include "chrome/browser/resource_coordinator/resource_coordinator_web_contents_observer.h"
-#include "chrome/browser/resource_coordinator/tab_manager_observer.h"
+#include "chrome/browser/resource_coordinator/tab_lifetime_observer.h"
+#include "chrome/browser/resource_coordinator/tab_manager_resource_coordinator_signal_observer.h"
 #include "chrome/browser/resource_coordinator/tab_manager_stats_collector.h"
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
+#include "chrome/browser/resource_coordinator/time.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -230,10 +231,9 @@ TabManager::TabManager()
       minimum_protection_time_(base::TimeDelta::FromMinutes(10)),
 #endif
       browser_tab_strip_tracker_(this, nullptr, this),
-      test_tick_clock_(nullptr),
       is_session_restore_loading_tabs_(false),
       background_tab_loading_mode_(BackgroundTabLoadingMode::kStaggered),
-      force_load_timer_(base::MakeUnique<base::OneShotTimer>()),
+      force_load_timer_(base::MakeUnique<base::OneShotTimer>(GetTickClock())),
       loading_slots_(kNumOfLoadingSlots),
       weak_ptr_factory_(this) {
 #if defined(OS_CHROMEOS)
@@ -241,10 +241,15 @@ TabManager::TabManager()
 #endif
   browser_tab_strip_tracker_.Init();
   session_restore_observer_.reset(new TabManagerSessionRestoreObserver(this));
+  if (PageSignalReceiver::IsEnabled()) {
+    resource_coordinator_signal_observer_.reset(
+        new ResourceCoordinatorSignalObserver());
+  }
   stats_collector_.reset(new TabManagerStatsCollector());
 }
 
 TabManager::~TabManager() {
+  resource_coordinator_signal_observer_.reset();
   Stop();
 }
 
@@ -477,11 +482,6 @@ void TabManager::LogMemory(const std::string& title,
   memory::OomMemoryDetails::Log(title, callback);
 }
 
-void TabManager::set_test_tick_clock(base::TickClock* test_tick_clock) {
-  test_tick_clock_ = test_tick_clock;
-  force_load_timer_.reset(new base::OneShotTimer(test_tick_clock));
-}
-
 TabStatsList TabManager::GetUnsortedTabStats(
     const std::vector<gfx::NativeWindow>& windows_sorted_by_z_index) const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -503,11 +503,11 @@ TabStatsList TabManager::GetUnsortedTabStats(
   return stats_list;
 }
 
-void TabManager::AddObserver(TabManagerObserver* observer) {
+void TabManager::AddObserver(TabLifetimeObserver* observer) {
   observers_.AddObserver(observer);
 }
 
-void TabManager::RemoveObserver(TabManagerObserver* observer) {
+void TabManager::RemoveObserver(TabLifetimeObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
@@ -637,13 +637,13 @@ int TabManager::GetTabCount() const {
 
 void TabManager::OnDiscardedStateChange(content::WebContents* contents,
                                         bool is_discarded) {
-  for (TabManagerObserver& observer : observers_)
+  for (TabLifetimeObserver& observer : observers_)
     observer.OnDiscardedStateChange(contents, is_discarded);
 }
 
 void TabManager::OnAutoDiscardableStateChange(content::WebContents* contents,
                                               bool is_auto_discardable) {
-  for (TabManagerObserver& observer : observers_)
+  for (TabLifetimeObserver& observer : observers_)
     observer.OnAutoDiscardableStateChange(contents, is_auto_discardable);
 }
 
@@ -796,8 +796,6 @@ void TabManager::UpdateTimerCallback() {
 
   if (BrowserList::GetInstance()->empty())
     return;
-
-  last_adjust_time_ = NowTicks();
 
 #if defined(OS_CHROMEOS)
   TabStatsList stats_list = GetTabStats();
@@ -1068,16 +1066,7 @@ bool TabManager::IsMediaTab(WebContents* contents) const {
 TabManager::WebContentsData* TabManager::GetWebContentsData(
     content::WebContents* contents) const {
   WebContentsData::CreateForWebContents(contents);
-  auto* web_contents_data = WebContentsData::FromWebContents(contents);
-  web_contents_data->set_test_tick_clock(test_tick_clock_);
-  return web_contents_data;
-}
-
-TimeTicks TabManager::NowTicks() const {
-  if (!test_tick_clock_)
-    return TimeTicks::Now();
-
-  return test_tick_clock_->NowTicks();
+  return WebContentsData::FromWebContents(contents);
 }
 
 // TODO(jamescook): This should consider tabs with references to other tabs,
@@ -1374,18 +1363,6 @@ bool TabManager::IsNavigationDelayedForTest(
       return true;
   }
   return false;
-}
-
-bool TabManager::TriggerForceLoadTimerForTest() {
-  if (!force_load_timer_->IsRunning() ||
-      (test_tick_clock_->NowTicks() < force_load_timer_->desired_run_time())) {
-    return false;
-  }
-
-  base::Closure timer_callback(force_load_timer_->user_task());
-  force_load_timer_->Stop();
-  timer_callback.Run();
-  return true;
 }
 
 }  // namespace resource_coordinator

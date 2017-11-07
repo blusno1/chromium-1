@@ -404,6 +404,7 @@ crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/normal-flow/replaced-in
 crbug.com/714962 virtual/layout_ng/fast/block/float/overhanging-float-crashes-when-sibling-becomes-formatting-context.html [ Failure ]
 
 ### virtual/layout_ng/external/wpt/css/CSS2/positioning
+crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/positioning/absolute-replaced-height-001.xht [ Failure ]
 crbug.com/635619 virtual/layout_ng/external/wpt/css/CSS2/positioning/abspos-007.xht [ Failure ]
 crbug.com/635619 [ Linux ] virtual/layout_ng/external/wpt/css/CSS2/positioning/abspos-011.xht [ Failure ]
 crbug.com/635619 [ Linux ] virtual/layout_ng/external/wpt/css/CSS2/positioning/abspos-012.xht [ Failure ]
@@ -489,6 +490,7 @@ crbug.com/635619 virtual/layout_ng/fast/block/float/float-in-float-painting.html
 crbug.com/635619 virtual/layout_ng/fast/block/float/float-inserted-into-clean-line.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/float-list-changed-before-layout-crash.html [ Crash Pass ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/float-not-removed-from-next-sibling4.html [ Crash Pass ]
+crbug.com/635619 virtual/layout_ng/fast/block/float/float-on-line-obeys-container-padding.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/float-overflow-hidden-containing-block-width.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/float-reparent-during-detach-crash.html [ Crash Pass ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/floats-and-text-indent-rl.html [ Failure ]
@@ -496,6 +498,7 @@ crbug.com/635619 virtual/layout_ng/fast/block/float/floats-and-text-indent.html 
 crbug.com/635619 virtual/layout_ng/fast/block/float/floats-do-not-overhang-from-block-formatting-context.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/floats-offset-image-strict-line-height.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/floats-offset-inline-block-strict-line-height.html [ Failure ]
+
 crbug.com/635619 virtual/layout_ng/fast/block/float/floats-with-margin-should-not-wrap.html [ Failure ]
 crbug.com/635619 virtual/layout_ng/fast/block/float/independent-align-positioning.html [ Failure ]
 crbug.com/635619 [ Mac ] virtual/layout_ng/fast/block/float/intruding-painted-twice.html [ Failure ]
@@ -537,6 +540,71 @@ crbug.com/635619 virtual/layout_ng/fast/block/margin-collapse/webkit-margin-coll
 crbug.com/724701 virtual/layout_ng/overflow/overflow-basic-004.html [ Failure ]
 crbug.com/728378 virtual/layout_ng/overflow/overflow-position-003.html [ Failure ]
 
+# ====== LayoutNG,LayoutNGPaintFragments ======
+
+### Crash site: DrawingRecorder.cpp
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/dirtyLinesForInline.html [ Crash ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/drawStyledEmptyInlinesWithWS.html [ Crash Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-box-background-long-image.html [ Crash Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-box-background-repeat-y.html [ Crash Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-box-background.html [ Crash Failure ]
+
+### Crash site: PaintController.cpp
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/fixed-pos-moves-with-abspos-inline-parent.html [ Crash ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/styledEmptyInlinesWithBRs.html [ Crash Failure ]
+
+### Crash site: ShapeResultBloberizer.cpp
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/crash-new-continuation-with-outline.html [ Crash ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-position-top-align.html [ Crash Failure ]
+
+### Crash site: layout_ng_block_flow.cc
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/continuation-positioned-reparenting.html [ Crash ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-offsetLeft-relpos.html [ Crash Failure ]
+
+### Crash site: ng_inline_node.cc
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-box-adjust-position-crash.html [ Crash ]
+
+### Image/text failures only on LayoutNGPaintFragments
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/001.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/002.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/25277-2.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/25277.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/br-text-decoration.html [ Crash Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/continuation-outlines-with-layers-2.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/emptyInlinesWithinLists.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-continuation-borders.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-focus-ring.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-offsetLeft-continuation.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-padding-disables-text-quirk.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-text-quirk-bpm.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-width-containing-collapsed-whitespace-and-image-in-float.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-wrap-with-parent-padding.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/long-wrapped-line.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/nested-top-alignment.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/outline-offset.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/percentage-margins.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/positioned-object-between-replaced-elements.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/positionedLifetime.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/vertical-align-text-bottom.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/vertical-align-with-fallback-fonts.html [ Failure ]
+
+### Image/text failures also on LayoutNG
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/absolute-positioned-inline-in-centred-block.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/br-client-rect.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/break-between-nobr.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/continuation-outlines-with-layers.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/continuation-outlines.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/drawStyledEmptyInlines.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-borders-with-bidi-override.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-box-background-repeat-x.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-destroy-dirty-lines-crash.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-focus-ring-under-absolute-enclosing-relative-div.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/inline-with-empty-inline-children.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/justify-emphasis-inline-box.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/left-right-center-inline-alignment-in-ltr-and-rtl-blocks.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/out-of-flow-objects-and-whitespace-after-empty-inline.html [ Failure ]
+crbug.com/714962 virtual/layout_ng_paint/fast/inline/outline-continuations.html [ Failure ]
+
 # ====== LayoutNG-only failures until here ======
 
 # ====== DevTools test migration failures from here ======
@@ -551,36 +619,6 @@ crbug.com/778515 http/tests/devtools/elements/styles-3/styles-add-new-rule.js [ 
 crbug.com/778515 virtual/mojo-loading/http/tests/devtools/elements/styles-3/styles-add-new-rule-tab.js [ Pass Failure ]
 
 # ====== DevTools test migration failures until here ======
-
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.3arg.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.5arg.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.basic.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.destpos.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.destsize.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.sourcepos.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.sourcesize.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.alpha.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.animated.poster.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.broken.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.canvas.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.clip.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.composite.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.floatsource.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.negativedest.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.negativedir.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.negativesource.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.nonfinite.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.nowrap.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.null.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.path.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.self.1.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.self.2.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.svg.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.transform.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.wrongtype.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.zerocanvas.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.zerosource.image.worker.html [ Pass Timeout ]
-crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.zerosource.worker.html [ Pass Timeout ]
 
 crbug.com/778391 http/tests/devtools/elements/styles-3/styles-add-new-rule-tab.js [ Pass Failure ]
 crbug.com/778391 http/tests/devtools/elements/styles-3/styles-disable-inherited.js [ Pass Failure ]
@@ -924,8 +962,8 @@ crbug.com/552494 scrollbars/overflow-scrollbar-combinations.html [ Pass Failure 
 crbug.com/552494 virtual/prefer_compositing_to_lcd_text/scrollbars/overflow-scrollbar-combinations.html [ Pass Failure ]
 crbug.com/552494 virtual/rootlayerscrolls/scrollbars/overflow-scrollbar-combinations.html [ Pass Failure ]
 
-crbug.com/659456 http/tests/devtools/persistence/automapping-sourcemap.html [ Pass Failure ]
-crbug.com/659456 virtual/mojo-loading/http/tests/devtools/persistence/automapping-sourcemap.html [ Pass Failure ]
+crbug.com/659456 http/tests/devtools/persistence/automapping-sourcemap.js [ Pass Failure ]
+crbug.com/659456 virtual/mojo-loading/http/tests/devtools/persistence/automapping-sourcemap.js [ Pass Failure ]
 
 crbug.com/652964 [ Linux Win ] fast/text/hyphens/hyphen-min-preferred-width-mock.html [ Skip ]
 crbug.com/652964 [ Linux Win ] fast/text/hyphens/hyphens-align.html [ Skip ]
@@ -1850,8 +1888,8 @@ crbug.com/626703 http/tests/devtools/extensions/extensions-sidebar.html [ Pass F
 crbug.com/626703 virtual/mojo-loading/http/tests/devtools/extensions/extensions-sidebar.html [ Pass Failure ]
 crbug.com/626703 http/tests/devtools/network/network-columns-visible.js [ Pass Failure ]
 crbug.com/626703 virtual/mojo-loading/http/tests/devtools/network/network-columns-visible.js [ Pass Failure ]
-crbug.com/626703 http/tests/devtools/persistence/persistence-tabbed-editor-opens-filesystem-uisourcecode.html [ Pass Failure ]
-crbug.com/626703 virtual/mojo-loading/http/tests/devtools/persistence/persistence-tabbed-editor-opens-filesystem-uisourcecode.html [ Pass Failure ]
+crbug.com/626703 http/tests/devtools/persistence/persistence-tabbed-editor-opens-filesystem-uisourcecode.js [ Pass Failure ]
+crbug.com/626703 virtual/mojo-loading/http/tests/devtools/persistence/persistence-tabbed-editor-opens-filesystem-uisourcecode.js [ Pass Failure ]
 crbug.com/751952 external/wpt/editing/run/forwarddelete.html [ Failure Pass Timeout ]
 crbug.com/751952 fast/text/international/complex-text-rectangle.html [ Timeout Pass ]
 crbug.com/751952 editing/selection/modify_extend/extend_by_character.html [ Pass Failure ]
@@ -1865,6 +1903,7 @@ crbug.com/751952 virtual/mojo-loading/http/tests/devtools/unit/datagrid-editable
 crbug.com/751952 virtual/origin-trials-runtimeflags-disabled/http/tests/origin_trials/webexposed/budget-api-origin-trial-interfaces.html [ Pass Failure ]
 
 # ====== New tests from wpt-importer added here ======
+crbug.com/626703 [ Linux Win ] external/wpt/encoding/legacy-mb-japanese/iso-2022-jp/iso2022jp-encode-form-csiso2022jp.html [ Timeout ]
 crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/css/css-fonts/font-synthesis-01.html [ Failure ]
 crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/css/css-fonts/font-synthesis-02.html [ Failure ]
 crbug.com/626703 [ Linux Mac10.10 Mac10.11 Mac10.12 Retina Win ] external/wpt/css/css-fonts/font-synthesis-03.html [ Failure ]
@@ -1995,7 +2034,7 @@ crbug.com/626703 external/wpt/service-workers/service-worker/update-bytecheck.ht
 crbug.com/626703 external/wpt/speech-api/SpeechSynthesis-speak-twice.html [ Timeout ]
 crbug.com/626703 external/wpt/streams/readable-streams/general.html [ Failure Timeout ]
 crbug.com/626703 external/wpt/svg/linking/reftests/href-filter-element.html [ Failure ]
-crbug.com/626703 external/wpt/wasm/wasm_indexeddb_test.html [ Timeout ]
+crbug.com/626703 external/wpt/wasm/wasm_indexeddb_test.https.html [ Failure ]
 crbug.com/626703 external/wpt/wasm/wasm_local_iframe_test.html [ Failure ]
 crbug.com/626703 external/wpt/wasm/wasm_serialization_tests.html [ Failure ]
 crbug.com/626703 external/wpt/wasm/wasm_service_worker_test.https.html [ Failure ]
@@ -2393,8 +2432,8 @@ crbug.com/701047 [ Mac10.12 ] editing/style/block-styles-007.html [ Failure ]
 crbug.com/664873 http/tests/xmlhttprequest/small-chunks-response-text.html [ Failure Pass ]
 crbug.com/664873 virtual/mojo-loading/http/tests/xmlhttprequest/small-chunks-response-text.html [ Failure Pass ]
 
-crbug.com/660295 http/tests/devtools/elements/elements-panel-restore-selection-when-node-comes-later.html [ Pass Failure ]
-crbug.com/667560 virtual/mojo-loading/http/tests/devtools/elements/elements-panel-restore-selection-when-node-comes-later.html [ Pass Failure ]
+crbug.com/660295 http/tests/devtools/elements/elements-panel-restore-selection-when-node-comes-later.js [ Pass Failure ]
+crbug.com/667560 virtual/mojo-loading/http/tests/devtools/elements/elements-panel-restore-selection-when-node-comes-later.js [ Pass Failure ]
 crbug.com/735245 http/tests/devtools/application-panel/storage-view-reports-quota.html [ Pass Timeout Failure ]
 crbug.com/735245 virtual/mojo-loading/http/tests/devtools/application-panel/storage-view-reports-quota.html [ Pass Timeout Failure ]
 
@@ -3110,23 +3149,23 @@ crbug.com/630695 fast/css/transformed-mask.html [ NeedsManualRebaseline ]
 crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/console/console-eval-scoped.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/console/console-functions.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/console/console-log-object-with-getter.js [ NeedsManualRebaseline ]
-crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/elements/event-listener-sidebar-jquery1.html [ NeedsManualRebaseline ]
-crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/elements/event-listener-sidebar-jquery2.html [ NeedsManualRebaseline ]
-crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/elements/event-listener-sidebar.html [ NeedsManualRebaseline ]
+crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/elements/event-listener-sidebar-jquery1.js [ NeedsManualRebaseline ]
+crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/elements/event-listener-sidebar-jquery2.js [ NeedsManualRebaseline ]
+crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/elements/event-listener-sidebar.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/runtime/runtime-getProperties.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/sources/debugger-pause/debugger-pause-in-internal.html [ NeedsManualRebaseline ]
 crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/sources/debugger-ui/function-generator-details.html [ NeedsManualRebaseline ]
 crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/sources/debugger-ui/watch-expressions-preserve-expansion.html [ NeedsManualRebaseline ]
 crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/sources/debugger/properties-special.html [ NeedsManualRebaseline ]
-crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/persistence/automapping-sourcemap-nameclash.html [ NeedsManualRebaseline ]
-crbug.com/v8/4958 http/tests/devtools/persistence/automapping-sourcemap-nameclash.html [ NeedsManualRebaseline ]
+crbug.com/v8/4958 virtual/mojo-loading/http/tests/devtools/persistence/automapping-sourcemap-nameclash.js [ NeedsManualRebaseline ]
+crbug.com/v8/4958 http/tests/devtools/persistence/automapping-sourcemap-nameclash.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 inspector-protocol/debugger/domdebugger-getEventListeners.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 http/tests/devtools/console/console-eval-scoped.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 http/tests/devtools/console/console-functions.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 http/tests/devtools/console/console-log-object-with-getter.js [ NeedsManualRebaseline ]
-crbug.com/v8/4958 http/tests/devtools/elements/event-listener-sidebar-jquery1.html [ NeedsManualRebaseline ]
-crbug.com/v8/4958 http/tests/devtools/elements/event-listener-sidebar-jquery2.html [ NeedsManualRebaseline ]
-crbug.com/v8/4958 http/tests/devtools/elements/event-listener-sidebar.html [ NeedsManualRebaseline ]
+crbug.com/v8/4958 http/tests/devtools/elements/event-listener-sidebar-jquery1.js [ NeedsManualRebaseline ]
+crbug.com/v8/4958 http/tests/devtools/elements/event-listener-sidebar-jquery2.js [ NeedsManualRebaseline ]
+crbug.com/v8/4958 http/tests/devtools/elements/event-listener-sidebar.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 http/tests/devtools/runtime/runtime-getProperties.js [ NeedsManualRebaseline ]
 crbug.com/v8/4958 http/tests/devtools/sources/debugger-pause/debugger-pause-in-internal.html [ NeedsManualRebaseline ]
 crbug.com/v8/4958 http/tests/devtools/sources/debugger-ui/function-generator-details.html [ NeedsManualRebaseline ]
@@ -3645,7 +3684,6 @@ crbug.com/757698 external/wpt/WebCryptoAPI/generateKey/test_successes_RSASSA-PKC
 crbug.com/757955 [ Win7 Debug ] http/tests/devtools/sources/debugger-pause/pause-on-elements-panel.html [ Pass Timeout ]
 crbug.com/667560 [ Win7 Debug ] virtual/mojo-loading/http/tests/devtools/sources/debugger-pause/pause-on-elements-panel.html [ Pass Timeout ]
 crbug.com/757955 [ Win7 ] media/color-profile-video-seek-filter.html [ Pass Timeout ]
-crbug.com/757955 [ Win7 Debug ] virtual/threaded/animations/composited-animations-rotate-zero-degrees.html [ Pass Timeout ]
 crbug.com/757955 [ Win7 Debug ] external/wpt/encoding/legacy-mb-japanese/shift_jis/sjis-encode-form-errors-han.html [ Pass Timeout ]
 crbug.com/778271 [ Win Debug ] http/tests/devtools/tracing/frame-model-instrumentation.html [ Pass Failure ]
 crbug.com/778271 [ Win Debug ] virtual/mojo-loading/http/tests/devtools/tracing/frame-model-instrumentation.html [ Pass Failure ]
@@ -3820,3 +3858,7 @@ crbug.com/781171 [ Android ] external/wpt/css/css-timing/cubic-bezier-timing-fun
 crbug.com/781171 [ Android ] external/wpt/css/css-timing/frames-timing-functions-output.html [ Skip ]
 crbug.com/781171 [ Android ] external/wpt/css/css-timing/frames-timing-functions-syntax.html [ Skip ]
 crbug.com/781171 [ Android ] external/wpt/css/css-timing/step-timing-functions-output.html [ Skip ]
+
+# Sheriff failures 2017-11-07
+crbug.com/782067 [ Mac10.10 Mac10.11 ] fast/css/no-recalc-on-no-op-inline-style-changes.html [ Pass Failure ]
+crbug.com/782095 [ Win ] media/track/track-kind.html [ Pass Timeout ]

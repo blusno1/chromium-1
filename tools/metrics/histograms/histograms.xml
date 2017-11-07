@@ -22202,6 +22202,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Extensions.DeclarativeNetRequest.LoadRulesetResult"
+    enum="LoadRulesetResult">
+  <owner>karandeepb@chromium.org</owner>
+  <summary>
+    Records the result of loading an extension ruleset for the Declarative Net
+    Request API. Emitted whenever an extension with a ruleset is loaded.
+  </summary>
+</histogram>
+
 <histogram name="Extensions.DeclarativeNetRequest.ManifestRulesCount"
     units="rules">
   <owner>karandeepb@chromium.org</owner>
@@ -35767,6 +35776,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     renderer process was gone. This histogram does not contain OOM protected
     crashes.
   </summary>
+</histogram>
+
+<histogram name="Memory.Experimental.OomIntervention.UserDecision"
+    enum="OomInterventionUserDecision">
+  <owner>bashi@chromium.org</owner>
+  <summary>Records user decisions on near-OOM intervention.</summary>
 </histogram>
 
 <histogram base="true" name="Memory.Experimental.Renderer" units="MB">
@@ -54750,6 +54765,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     How many times the keychain reauthorization ran before finally succeeding,
     when run during the main browser launch.
+  </summary>
+</histogram>
+
+<histogram name="OSX.NativeShare" units="BooleanSuccess">
+  <owner>lgrey@chromium.org</owner>
+  <summary>
+    Whether the user successfully shared via a native sharing extensions after
+    selecting it from the share menu. False can indicate failure or
+    user-initiated cancellation.
   </summary>
 </histogram>
 
@@ -82687,6 +82711,19 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="SubresourceFilter.IndexRuleset.Verify.WallDuration"
     units="microseconds">
+  <obsolete>
+    Deprecated in favor of the Verify2 metric
+  </obsolete>
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    The total time it took to verify the indexed ruleset in the browser process.
+    Logged every time verification occurs, which usually occurs when the first
+    page with activation is navigated to.
+  </summary>
+</histogram>
+
+<histogram name="SubresourceFilter.IndexRuleset.Verify2.WallDuration"
+    units="ms">
   <owner>csharrison@chromium.org</owner>
   <summary>
     The total time it took to verify the indexed ruleset in the browser process.
@@ -90055,15 +90092,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="V8.CompileScriptMicroSeconds.CompilationCacheHit"
-    units="microseconds">
-  <owner>leszeks@chromium.org</owner>
-  <summary>
-    Total time spent in compiling a script (incl. parsing/caching) in the case
-    where the V8 in-memory compilation cache is hit.
-  </summary>
-</histogram>
-
 <histogram name="V8.CompileScriptMicroSeconds.ConsumeCache"
     units="microseconds">
   <owner>leszeks@chromium.org</owner>
@@ -90079,6 +90107,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Total time spent in compiling a script  (incl. parsing/caching) when the
     compilation tried to deserialize it from the code cache, but failed.
+  </summary>
+</histogram>
+
+<histogram name="V8.CompileScriptMicroSeconds.IsolateCacheHit"
+    units="microseconds">
+  <owner>leszeks@chromium.org</owner>
+  <summary>
+    Total time spent in compiling a script (incl. parsing/caching) in the case
+    where the V8 isolate's compilation cache is hit.
   </summary>
 </histogram>
 
@@ -91982,6 +92019,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Records the time point when a request to update a WebAPK is sent to the
     WebAPK Server.
+  </summary>
+</histogram>
+
+<histogram name="WebApk.WebApkService.BindSuccess" enum="BooleanSuccess">
+  <owner>hanxi@chromium.org</owner>
+  <owner>pkotwicz@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    Records whether Chrome can bind to a WebAPK's &quot;WebAPK service&quot;.
+    Recorded each time that Chrome attempts to bind to a WebAPK service.
   </summary>
 </histogram>
 
@@ -99428,6 +99475,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <suffix name="DeviceLocalAccount"
       label="DeviceLocalAccount policy fetch response."/>
   <suffix name="User" label="User policy fetch response."/>
+  <suffix name="UserDuringLogin"
+      label="User policy fetch response during login."/>
   <affected-histogram name="Enterprise.RetrievePolicyResponse"/>
 </histogram_suffixes>
 
@@ -100318,11 +100367,27 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
              menu."/>
   <suffix name="IPH_DataSaverPreview"
       label="In product help data saver preview."/>
-  <suffix name="IPH_ContextualSearch"
-      label="In product help for contextual search."/>
-  <suffix name="IPH_ContextualSearchTap"
+  <suffix name="IPH_ContextualSearch">
+    <obsolete>
+      Replaced with IPH_ContextualSearchWebSearch.
+    </obsolete>
+  </suffix>
+  <suffix name="IPH_ContextualSearchWebSearch"
+      label="In product help for contextual search for users who use web
+             search."/>
+  <suffix name="IPH_ContextualSearchTap">
+    <obsolete>
+      Replaced with IPH_ContextualSearchPromoteTap.
+    </obsolete>
+  </suffix>
+  <suffix name="IPH_ContextualSearchPromoteTap"
       label="In product help for tap trigger for contextual search."/>
-  <suffix name="IPH_ContextualSearchPanel"
+  <suffix name="IPH_ContextualSearchPanel">
+    <obsolete>
+      Replaced with IPH_ContextualSearchPromotePanelOpen.
+    </obsolete>
+  </suffix>
+  <suffix name="IPH_ContextualSearchPromotePanelOpen"
       label="In product help for opening the contextual search panel."/>
   <suffix name="IPH_ContextualSearchOptIn"
       label="In product help for opting-in for contextual search."/>

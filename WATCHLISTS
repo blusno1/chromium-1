@@ -1210,6 +1210,10 @@
                   'components/omnibox/|'\
                   'ios/chrome/browser/ui/omnibox/'
     },
+    'optimization_guide': {
+      'filepath': 'optimization_guide|'\
+                  'optimization_hints',
+    },
     'origin_trials': {
       'filepath': 'origin_trials'\
                   '|OriginTrial'\
@@ -2159,6 +2163,9 @@
                       'petewil+watch@chromium.org',
                       'romax+watch@chromium.org'],
     'omnibox': ['jdonnelly+watch@chromium.org'],
+    'optimization_guide': ['dougarnett+watch-optguide@chromium.org',
+                           'sophiechang+watch-optguide@chromium.org',
+			   'maniscalco+watch-optguide@chromium.org'],
     'origin_trials': ['chasej+watch@chromium.org',
                       'iclelland+watch@chromium.org'],
     'ozone': ['kalyan.kondapally@intel.com',
@@ -2205,8 +2212,7 @@
                        'peter@chromium.org'],
     'reading_list': ['stkhapugin@chromium.org'],
     'remoting': ['chromoting-reviews@chromium.org'],
-    'rlz_id': ['alito+watch@chromium.org',
-               'gab+watch@chromium.org',
+    'rlz_id': ['gab+watch@chromium.org',
                'robertshield+watch@chromium.org'],
     'safe_browsing': ['timvolodine@chromium.org',
                       'vakh+watch@chromium.org'],
@@ -2239,8 +2245,7 @@
                    'vmpstr+watch@chromium.org'],
     'subresource_filter': ['subresource-filter-reviews@chromium.org'],
     'supervised_users': ['pam+watch@chromium.org'],
-    'swreporter': ['alito+watch@chromium.org',
-                   'csharp+watch@chromium.org',
+    'swreporter': ['csharp+watch@chromium.org',
                    'ftirelo+watch@chromium.org',
                    'joenotcharles+watch@chromium.org'],
     'sync': ['sync-reviews@chromium.org'],

@@ -100,7 +100,6 @@ class EventClientImpl;
 class EventTransformationHandler;
 class FirstRunHelper;
 class FocusCycler;
-class GPUSupport;
 class HighContrastController;
 class HighlighterController;
 class ImeController;
@@ -320,7 +319,10 @@ class ASH_EXPORT Shell : public SessionObserver,
     return brightness_control_delegate_.get();
   }
   CastConfigController* cast_config() { return cast_config_.get(); }
+
+  // Returns nullptr in mash which has no global cursor manager.
   ::wm::CursorManager* cursor_manager() { return cursor_manager_.get(); }
+
   display::DisplayManager* display_manager() { return display_manager_.get(); }
   DisplayConfigurationController* display_configuration_controller() {
     return display_configuration_controller_.get();
@@ -340,7 +342,6 @@ class ASH_EXPORT Shell : public SessionObserver,
     return event_transformation_handler_.get();
   }
   FocusCycler* focus_cycler() { return focus_cycler_.get(); }
-  GPUSupport* gpu_support() { return gpu_support_.get(); }
   HighlighterController* highlighter_controller() {
     return highlighter_controller_.get();
   }
@@ -788,9 +789,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   // See comment for GetRootWindowForNewWindows().
   aura::Window* root_window_for_new_windows_ = nullptr;
   aura::Window* scoped_root_window_for_new_windows_ = nullptr;
-
-  // Injected content::GPUDataManager support.
-  std::unique_ptr<GPUSupport> gpu_support_;
 
   std::unique_ptr<ImmersiveHandlerFactoryAsh> immersive_handler_factory_;
 

@@ -291,6 +291,7 @@ IntentPickerBubbleView::IntentPickerBubbleView(
     content::WebContents* web_contents,
     bool disable_stay_in_chrome)
     : LocationBarBubbleDelegateView(nullptr /* anchor_view */, web_contents),
+      content::WebContentsObserver(web_contents),
       intent_picker_cb_(intent_picker_cb),
       selected_app_tag_(0),
       scroll_view_(nullptr),
@@ -419,17 +420,4 @@ void IntentPickerBubbleView::PressButtonForTesting(size_t index,
   views::Button* button =
       static_cast<views::Button*>(GetIntentPickerLabelButtonAt(index));
   ButtonPressed(button, event);
-}
-
-size_t IntentPickerBubbleView::GetScrollViewSizeForTesting() const {
-  return GetScrollViewSize();
-}
-
-std::string IntentPickerBubbleView::GetPackageNameForTesting(
-    size_t index) const {
-  return app_info_[index].package_name;
-}
-
-bool IntentPickerBubbleView::GetStayInChromeEnabledForTesting() {
-  return IsDialogButtonEnabled(ui::DIALOG_BUTTON_CANCEL);
 }

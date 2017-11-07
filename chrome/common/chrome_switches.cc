@@ -486,7 +486,10 @@ const char kMediaCacheSize[]                = "media-cache-size";
 // Enables the out-of-process memory logging.
 const char kMemlog[] = "memlog";
 const char kMemlogModeAll[] = "all";
+const char kMemlogModeBrowser[] = "browser";
+const char kMemlogModeGpu[] = "gpu";
 const char kMemlogModeMinimal[] = "minimal";
+const char kMemlogModeRendererSampling[] = "renderer-sampling";
 
 // Allows setting a different destination ID for connection-monitoring GCM
 // messages. Useful when running against a non-prod management server.
@@ -971,7 +974,7 @@ const char kWatcherProcess[]                = "watcher";
 const char kWindows10CustomTitlebar[]       = "windows10-custom-titlebar";
 #endif  // defined(OS_WIN)
 
-#if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
+#if BUILDFLAG(ENABLE_MUS)
 // Enables Mus+ash (out-of-process ash and mus). See //ash/README.md
 const char kMash[]                          = "mash";
 
@@ -979,9 +982,6 @@ const char kMash[]                          = "mash";
 // NOTE: Used by the Chrome OS crash_reporter to identify mash processes. If you
 // change or remove the flag please update platform2/crash_reporter.
 const char kMashServiceName[] = "mash-service-name";
-
-// Used to enable mus as a separate process, but chrome+ash still together.
-const char kMus[] = "mus";
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)

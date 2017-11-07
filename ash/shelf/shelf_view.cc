@@ -164,22 +164,14 @@ class FadeInAnimationDelegate : public gfx::AnimationDelegate {
 void ReflectItemStatus(const ShelfItem& item, ShelfButton* button) {
   switch (item.status) {
     case STATUS_CLOSED:
-      button->ClearState(ShelfButton::STATE_ACTIVE);
       button->ClearState(ShelfButton::STATE_RUNNING);
       button->ClearState(ShelfButton::STATE_ATTENTION);
       break;
     case STATUS_RUNNING:
-      button->ClearState(ShelfButton::STATE_ACTIVE);
       button->AddState(ShelfButton::STATE_RUNNING);
       button->ClearState(ShelfButton::STATE_ATTENTION);
       break;
-    case STATUS_ACTIVE:
-      button->AddState(ShelfButton::STATE_ACTIVE);
-      button->ClearState(ShelfButton::STATE_RUNNING);
-      button->ClearState(ShelfButton::STATE_ATTENTION);
-      break;
     case STATUS_ATTENTION:
-      button->ClearState(ShelfButton::STATE_ACTIVE);
       button->ClearState(ShelfButton::STATE_RUNNING);
       button->AddState(ShelfButton::STATE_ATTENTION);
       break;
@@ -686,10 +678,11 @@ bool ShelfView::ShouldEventActivateButton(View* view, const ui::Event& event) {
 void ShelfView::PointerPressedOnButton(views::View* view,
                                        Pointer pointer,
                                        const ui::LocatedEvent& event) {
-  if (IsShowingMenu())
-    launcher_menu_runner_->Cancel();
   if (drag_view_)
     return;
+
+  if (IsShowingMenu())
+    launcher_menu_runner_->Cancel();
 
   int index = view_model_->GetIndexOfView(view);
   if (index == -1 || view_model_->view_size() <= 1)

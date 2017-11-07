@@ -21,7 +21,7 @@
 #include "base/strings/string16.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "chrome/browser/resource_coordinator/tab_manager_observer.h"
+#include "chrome/browser/resource_coordinator/tab_lifetime_observer.h"
 #include "chrome/browser/resource_coordinator/tab_stats.h"
 #include "chrome/browser/sessions/session_restore_observer.h"
 #include "chrome/browser/ui/browser_list_observer.h"
@@ -33,10 +33,6 @@
 class BrowserList;
 class GURL;
 class TabStripModel;
-
-namespace base {
-class TickClock;
-}
 
 namespace content {
 class NavigationHandle;
@@ -84,8 +80,9 @@ struct BrowserInfo {
 class TabManager : public TabStripModelObserver,
                    public chrome::BrowserListObserver {
  public:
-  // Forward declaration of page signal observer.
-  class PageSignalReceiver;
+  // Forward declaration of resource coordinator signal observer.
+  class ResourceCoordinatorSignalObserver;
+
   // Needs to be public for DEFINE_WEB_CONTENTS_USER_DATA_KEY.
   class WebContentsData;
 
@@ -146,10 +143,6 @@ class TabManager : public TabStripModelObserver,
   // Log memory statistics for the running processes, then call the callback.
   void LogMemory(const std::string& title, const base::Closure& callback);
 
-  // Used to set the test TickClock, which then gets used by NowTicks(). See
-  // |test_tick_clock_| for more details.
-  void set_test_tick_clock(base::TickClock* test_tick_clock);
-
   // Returns TabStats for all tabs in the current Chrome instance. The tabs are
   // sorted first by most recently used to least recently used Browser and
   // second by index in the Browser. |windows_sorted_by_z_index| is a list of
@@ -160,8 +153,8 @@ class TabManager : public TabStripModelObserver,
       const std::vector<gfx::NativeWindow>& windows_sorted_by_z_index =
           std::vector<gfx::NativeWindow>()) const;
 
-  void AddObserver(TabManagerObserver* observer);
-  void RemoveObserver(TabManagerObserver* observer);
+  void AddObserver(TabLifetimeObserver* observer);
+  void RemoveObserver(TabLifetimeObserver* observer);
 
   // Used in tests to change the protection time of the tabs.
   void set_minimum_protection_time_for_tests(
@@ -415,10 +408,6 @@ class TabManager : public TabStripModelObserver,
   // creating one if needed.
   WebContentsData* GetWebContentsData(content::WebContents* contents) const;
 
-  // Returns either the system's clock or the test clock. See |test_tick_clock_|
-  // for more details.
-  base::TimeTicks NowTicks() const;
-
   // Implementation of DiscardTab. Returns null if no tab was discarded.
   // Otherwise returns the new web_contents of the discarded tab.
   content::WebContents* DiscardTabImpl(DiscardTabCondition condition);
@@ -485,9 +474,6 @@ class TabManager : public TabStripModelObserver,
   bool IsNavigationDelayedForTest(
       const content::NavigationHandle* navigation_handle) const;
 
-  // Trigger |force_load_timer_| to fire. Use only in tests.
-  bool TriggerForceLoadTimerForTest();
-
   // Set |loading_slots_|. Use only in tests.
   void SetLoadingSlotsForTest(size_t loading_slots) {
     loading_slots_ = loading_slots;
@@ -518,10 +504,6 @@ class TabManager : public TabStripModelObserver,
   // no discard has happened yet.
   base::TimeTicks last_discard_time_;
 
-  // Wall-clock time of last priority adjustment, used to correct the above
-  // times for discontinuities caused by suspend/resume.
-  base::TimeTicks last_adjust_time_;
-
   // Number of times a tab has been discarded, for statistics.
   int discard_count_;
 
@@ -549,10 +531,6 @@ class TabManager : public TabStripModelObserver,
   // TabStripModels. Automatically tracks browsers as they come and go.
   BrowserTabStripTracker browser_tab_strip_tracker_;
 
-  // Pointer to a test clock. If this is set, NowTicks() returns the value of
-  // this test clock. Otherwise it returns the system clock's value.
-  base::TickClock* test_tick_clock_;
-
   // Injected BrowserInfo list. Allows this to be tested end-to-end without
   // requiring a full browser environment. If specified these BrowserInfo will
   // be crawled as the authoritative source of tabs, otherwise the BrowserList
@@ -563,7 +541,7 @@ class TabManager : public TabStripModelObserver,
   std::vector<BrowserInfo> test_browser_info_list_;
 
   // List of observers that will receive notifications on state changes.
-  base::ObserverList<TabManagerObserver> observers_;
+  base::ObserverList<TabLifetimeObserver> observers_;
 
   bool is_session_restore_loading_tabs_;
 
@@ -587,6 +565,11 @@ class TabManager : public TabStripModelObserver,
   // The number of loading slots that TabManager can use to load background tabs
   // in parallel.
   size_t loading_slots_;
+
+  // |resource_coordinator_signal_observer_| is owned by TabManager and is used
+  // to receive various signals from ResourceCoordinator.
+  std::unique_ptr<ResourceCoordinatorSignalObserver>
+      resource_coordinator_signal_observer_;
 
   // Records UMAs for tab and system-related events and properties during
   // session restore.

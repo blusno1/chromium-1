@@ -4448,14 +4448,13 @@ class ContextLifetimeTestWebFrameClient
   }
 
   // WebFrameClient:
-  WebLocalFrame* CreateChildFrame(
-      WebLocalFrame* parent,
-      WebTreeScopeType scope,
-      const WebString& name,
-      const WebString& fallback_name,
-      WebSandboxFlags sandbox_flags,
-      const WebParsedFeaturePolicy& container_policy,
-      const WebFrameOwnerProperties&) override {
+  WebLocalFrame* CreateChildFrame(WebLocalFrame* parent,
+                                  WebTreeScopeType scope,
+                                  const WebString& name,
+                                  const WebString& fallback_name,
+                                  WebSandboxFlags sandbox_flags,
+                                  const ParsedFeaturePolicy& container_policy,
+                                  const WebFrameOwnerProperties&) override {
     return CreateLocalChild(*parent, scope,
                             WTF::MakeUnique<ContextLifetimeTestWebFrameClient>(
                                 create_notifications_, release_notifications_));
@@ -6511,7 +6510,7 @@ class TestSubstituteDataWebFrameClient
                               WebHistoryCommitType) override {
     Frame()->LoadHTMLString("This should appear",
                             ToKURL("chrome-error://chromewebdata/"),
-                            error.unreachable_url, true);
+                            error.url(), true);
   }
   void DidCommitProvisionalLoad(const WebHistoryItem&,
                                 WebHistoryCommitType) override {
@@ -6539,10 +6538,8 @@ TEST_P(ParameterizedWebFrameTest, ReplaceNavigationAfterHistoryNavigation) {
   // https://bugs.webkit.org/show_bug.cgi?id=91685,
   // FrameLoader::didReceiveData() wasn't getting called in this case, which
   // resulted in the SubstituteData document not getting displayed.
-  WebURLError error;
-  error.reason = 1337;
-  error.domain = WebURLError::Domain::kTest;
   std::string error_url = "http://0.0.0.0";
+  WebURLError error(WebURLError::Domain::kTest, 1337, ToKURL(error_url));
   WebURLResponse response;
   response.SetURL(URLTestHelpers::ToKURL(error_url));
   response.SetMIMEType("text/html");
@@ -7468,7 +7465,7 @@ class TestCachePolicyWebFrameClient
       const WebString&,
       const WebString&,
       WebSandboxFlags,
-      const WebParsedFeaturePolicy&,
+      const ParsedFeaturePolicy&,
       const WebFrameOwnerProperties& frame_owner_properties) override {
     auto child = WTF::MakeUnique<TestCachePolicyWebFrameClient>();
     auto* child_ptr = child.get();
@@ -7751,7 +7748,7 @@ class TestHistoryWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
                                   const WebString& name,
                                   const WebString& fallback_name,
                                   WebSandboxFlags,
-                                  const WebParsedFeaturePolicy&,
+                                  const ParsedFeaturePolicy&,
                                   const WebFrameOwnerProperties&) override {
     return CreateLocalChild(*parent, scope, &child_client_);
   }
@@ -7891,7 +7888,7 @@ class FailCreateChildFrame : public FrameTestHelpers::TestWebFrameClient {
       const WebString& name,
       const WebString& fallback_name,
       WebSandboxFlags sandbox_flags,
-      const WebParsedFeaturePolicy& container_policy,
+      const ParsedFeaturePolicy& container_policy,
       const WebFrameOwnerProperties& frame_owner_properties) override {
     ++call_count_;
     return nullptr;
@@ -11430,14 +11427,13 @@ TEST_P(ParameterizedWebFrameTest, NoLoadingCompletionCallbacksInDetach) {
     ~MainFrameClient() override {}
 
     // FrameTestHelpers::TestWebFrameClient:
-    WebLocalFrame* CreateChildFrame(
-        WebLocalFrame* parent,
-        WebTreeScopeType scope,
-        const WebString& name,
-        const WebString& fallback_name,
-        WebSandboxFlags sandbox_flags,
-        const WebParsedFeaturePolicy& container_policy,
-        const WebFrameOwnerProperties&) override {
+    WebLocalFrame* CreateChildFrame(WebLocalFrame* parent,
+                                    WebTreeScopeType scope,
+                                    const WebString& name,
+                                    const WebString& fallback_name,
+                                    WebSandboxFlags sandbox_flags,
+                                    const ParsedFeaturePolicy& container_policy,
+                                    const WebFrameOwnerProperties&) override {
       return CreateLocalChild(*parent, scope, &child_client_);
     }
 
@@ -11692,7 +11688,7 @@ class TestFallbackWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
       const WebString&,
       const WebString&,
       WebSandboxFlags,
-      const WebParsedFeaturePolicy& container_policy,
+      const ParsedFeaturePolicy& container_policy,
       const WebFrameOwnerProperties& frameOwnerProperties) override {
     DCHECK(child_client_);
     return CreateLocalChild(*parent, scope, child_client_);

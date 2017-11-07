@@ -136,8 +136,8 @@ crbug.com/420008 [ Release ] http/tests/devtools/editor/text-editor-word-jumps.j
 crbug.com/667560 [ Release ] virtual/mojo-loading/http/tests/devtools/editor/text-editor-word-jumps.js [ Slow ]
 crbug.com/420008 [ Release ] http/tests/devtools/console-xhr-logging.js [ Slow ]
 crbug.com/420008 [ Release ] virtual/mojo-loading/http/tests/devtools/console-xhr-logging.js [ Slow ]
-crbug.com/596486 [ Linux ] http/tests/devtools/elements/insert-node.html [ Slow ]
-crbug.com/667560 [ Linux ] virtual/mojo-loading/http/tests/devtools/elements/insert-node.html [ Slow ]
+crbug.com/596486 [ Linux ] http/tests/devtools/elements/insert-node.js [ Slow ]
+crbug.com/667560 [ Linux ] virtual/mojo-loading/http/tests/devtools/elements/insert-node.js [ Slow ]
 webkit.org/b/84735 [ Win ] http/tests/devtools/change-iframe-src.js [ Slow ]
 webkit.org/b/84735 [ Win ] virtual/mojo-loading/http/tests/devtools/change-iframe-src.js [ Slow ]
 crbug.com/504565 [ Mac ] http/tests/devtools/search/sources-search-scope.html [ Slow ]
@@ -174,7 +174,6 @@ crbug.com/73609 virtual/mojo-loading/http/tests/media/video-play-stall.html [ Sl
 crbug.com/330389 [ Debug ] css-parser/color3_hsl.html [ Slow ]
 
 # Many of the virtual animations tests are slow.
-crbug.com/248938 virtual/threaded/animations/direction-and-fill/animation-direction-reverse-fill-mode-hardware.html [ Slow ]
 crbug.com/248938 virtual/threaded/animations/direction-and-fill/animation-direction-reverse-fill-mode.html [ Slow ]
 crbug.com/248938 virtual/threaded/animations/direction-and-fill/animation-direction-reverse-hardware.html [ Slow ]
 crbug.com/248938 virtual/threaded/animations/stability/animation-on-inline-crash.html [ Slow ]
@@ -463,8 +462,8 @@ crbug.com/676572 [ Debug ] external/wpt/webstorage/storage_local_setitem_quotaex
 crbug.com/741259 editing/selection/select-bidi-run.html [ Slow ]
 
 # These tests were previously marked Slow in ASANExpectations.
-crbug.com/451577 [ Linux ] http/tests/devtools/elements/user-properties.html [ Slow ]
-crbug.com/667560 [ Linux ] virtual/mojo-loading/http/tests/devtools/elements/user-properties.html [ Slow ]
+crbug.com/451577 [ Linux ] http/tests/devtools/elements/user-properties.js [ Slow ]
+crbug.com/667560 [ Linux ] virtual/mojo-loading/http/tests/devtools/elements/user-properties.js [ Slow ]
 crbug.com/451577 [ Linux ] http/tests/devtools/layers/layer-canvas-log.html [ Slow ]
 crbug.com/667560 [ Linux ] virtual/mojo-loading/http/tests/devtools/layers/layer-canvas-log.html [ Slow ]
 
@@ -472,6 +471,37 @@ crbug.com/667560 [ Linux ] virtual/mojo-loading/http/tests/devtools/layers/layer
 crbug.com/736056 external/wpt/encoding/legacy-mb-japanese [ Slow ]
 crbug.com/736056 external/wpt/encoding/legacy-mb-korean [ Slow ]
 crbug.com/736056 external/wpt/encoding/legacy-mb-tchinese [ Slow ]
+
+# These imported tests require drawing on workers and therefore are slow on Linux Leak bot.
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.3arg.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.5arg.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.basic.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.destpos.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.destsize.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.sourcepos.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.9arg.sourcesize.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.alpha.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.animated.poster.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.broken.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.canvas.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.clip.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.composite.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.floatsource.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.negativedest.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.negativedir.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.negativesource.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.nonfinite.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.nowrap.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.null.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.path.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.self.1.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.self.2.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.svg.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.transform.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.wrongtype.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.zerocanvas.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.zerosource.image.worker.html [ Slow ]
+crbug.com/779956 [ Linux ] external/wpt/offscreen-canvas/drawing-images-to-the-canvas/2d.drawImage.zerosource.worker.html [ Slow ]
 
 # These tests need to do many iterations and so can't be fast.
 crbug.com/748418 http/tests/streams/chromium/deep-recursion-getwriter.html [ Slow ]

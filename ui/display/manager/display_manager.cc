@@ -260,9 +260,6 @@ DisplayManager::BeginEndNotifier::~BeginEndNotifier() {
   }
 }
 
-// static
-int64_t DisplayManager::kUnifiedDisplayId = -10;
-
 DisplayManager::DisplayManager(std::unique_ptr<Screen> screen)
     : screen_(std::move(screen)),
       layout_store_(new DisplayLayoutStore),
@@ -1445,8 +1442,7 @@ bool DisplayManager::ResetDisplayToDefaultMode(int64_t id) {
 
 void DisplayManager::ResetInternalDisplayZoom() {
   if (IsInUnifiedMode()) {
-    const ManagedDisplayInfo& display_info =
-        GetDisplayInfo(DisplayManager::kUnifiedDisplayId);
+    const ManagedDisplayInfo& display_info = GetDisplayInfo(kUnifiedDisplayId);
     const ManagedDisplayInfo::ManagedDisplayModeList& modes =
         display_info.display_modes();
     auto iter = std::find_if(
@@ -1783,7 +1779,13 @@ Display DisplayManager::CreateDisplayFromDisplayInfoById(int64_t id) {
   new_display.set_rotation(display_info.GetActiveRotation());
   new_display.set_touch_support(display_info.touch_support());
   new_display.set_maximum_cursor_size(display_info.maximum_cursor_size());
+#if defined(OS_CHROMEOS)
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(::switches::kUseMonitorColorSpace))
+    new_display.set_color_space(display_info.color_space());
+#else
   new_display.set_color_space(display_info.color_space());
+#endif
 
   if (internal_display_has_accelerometer_ && Display::IsInternalDisplayId(id)) {
     new_display.set_accelerometer_support(

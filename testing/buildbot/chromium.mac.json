@@ -102,12 +102,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "crashpad_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "crypto_unittests"
       },
       {
@@ -575,12 +569,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "crashpad_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "crypto_unittests"
       },
       {
@@ -1034,12 +1022,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "crashpad_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "crypto_unittests"
       },
       {
@@ -1334,6 +1316,9 @@
         }
       },
       {
+        "args": [
+          "--jobs=1"
+        ],
         "isolate_name": "telemetry_perf_unittests",
         "name": "telemetry_perf_unittests",
         "swarming": {
@@ -1343,6 +1328,9 @@
         }
       },
       {
+        "args": [
+          "--jobs=1"
+        ],
         "isolate_name": "telemetry_unittests",
         "name": "telemetry_unittests",
         "swarming": {
@@ -1484,12 +1472,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "content_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -1909,12 +1891,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "content_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "crashpad_tests"
       },
       {
         "swarming": {

@@ -163,6 +163,7 @@ source_set("browser") {
     "//ui/accessibility",
     "//ui/accessibility:ax_gen",
     "//ui/base",
+    "//ui/base:ui_features",
     "//ui/base/ime",
     "//ui/display",
     "//ui/display/types",
@@ -401,6 +402,7 @@ source_set("browser") {
     "background_fetch/background_fetch_registration_notifier.h",
     "background_fetch/background_fetch_request_info.cc",
     "background_fetch/background_fetch_request_info.h",
+    "background_fetch/background_fetch_request_manager.h",
     "background_fetch/background_fetch_service_impl.cc",
     "background_fetch/background_fetch_service_impl.h",
     "background_fetch/storage/cleanup_task.cc",
@@ -552,6 +554,8 @@ source_set("browser") {
     "devtools/devtools_frame_trace_recorder.h",
     "devtools/devtools_http_handler.cc",
     "devtools/devtools_http_handler.h",
+    "devtools/devtools_interceptor_controller.cc",
+    "devtools/devtools_interceptor_controller.h",
     "devtools/devtools_io_context.cc",
     "devtools/devtools_io_context.h",
     "devtools/devtools_manager.cc",
@@ -2150,6 +2154,7 @@ source_set("browser") {
 
   if (use_aura) {
     deps += [
+      "//services/ui:lib",
       "//services/ui/public/cpp",
       "//services/ui/public/interfaces",
       "//ui/aura",

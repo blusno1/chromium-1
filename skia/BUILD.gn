@@ -4,11 +4,11 @@
 
 import("//build/config/features.gni")
 import("//build/config/freetype/freetype.gni")
-import("//build/config/linux/pangocairo/pangocairo.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//printing/features/features.gni")
 import("//testing/test.gni")
 import("//third_party/skia/gn/shared_sources.gni")
+import("//device/vr/features/features.gni")
 
 if (current_cpu == "arm") {
   import("//build/config/arm.gni")
@@ -419,6 +419,31 @@ component("skia") {
     ]
   }
 
+  if (enable_vr) {
+    sources -= [
+      "//third_party/skia/src/gpu/gl/GrGLCreateNativeInterface_none.cpp",
+      "//third_party/skia/src/gpu/gl/GrGLDefaultInterface_none.cpp",
+    ]
+    sources +=
+        [ "//third_party/skia/src/gpu/gl/GrGLDefaultInterface_native.cpp" ]
+    if (is_android) {
+      sources += [ "//third_party/skia/src/gpu/gl/android/GrGLCreateNativeInterface_android.cpp" ]
+      libs = [
+        "EGL",
+        "GLESv2",
+      ]
+    } else if (is_linux) {
+      sources += [ "//third_party/skia/src/gpu/gl/glx/GrGLCreateNativeInterface_glx.cpp" ]
+      libs = [ "GL" ]
+    } else if (is_win) {
+      sources += [ "//third_party/skia/src/gpu/gl/win/GrGLCreateNativeInterface_win.cpp" ]
+      libs += [ "OpenGL32.lib" ]
+    } else {
+      sources +=
+          [ "//third_party/skia/src/gpu/gl/GrGLCreateNativeInterface_none.cpp" ]
+    }
+  }
+
   if (is_clang && !is_nacl) {
     # Skia won't compile with some of the more strict clang warnings.
     # e.g. it does:
@@ -450,15 +475,6 @@ component("skia") {
   }
 
   if (is_linux) {
-    if (use_pangocairo) {
-      configs += [
-        # libpng_config will be included automatically from deps.  We do this
-        # to ensure that it is included before the pangocairo path (which also
-        # has a png.h).
-        "//third_party/libpng:libpng_config",
-        "//build/config/linux/pangocairo",
-      ]
-    }
     deps += [
       "//third_party/expat",
       "//third_party/fontconfig",
@@ -727,12 +743,6 @@ test("skia_unittests") {
       "//mojo/public/cpp/bindings",
       "//skia/public/interfaces:test_interfaces",
     ]
-  }
-
-  if (is_linux) {
-    if (use_pangocairo) {
-      configs += [ "//build/config/linux/pangocairo" ]
-    }
   }
 }
 

@@ -71,11 +71,6 @@ const char kLastProfileResetTimestamp[] = "profile.last_reset_timestamp";
 const char kChromeCleanerResetPending[] = "chrome_cleaner.reset_pending";
 #endif
 
-// The JSON representation of the user's language profile. Used as an input to
-// the user language model (i.e. for determining which languages a user
-// understands).
-const char kUserLanguageProfile[] = "language_profile";
-
 // The URL to open the new tab page to. Only set by Group Policy.
 const char kNewTabPageLocationOverride[] = "newtab_page_location_override";
 
@@ -2329,12 +2324,6 @@ const char kSearchGeolocationPostDisclosureMetricsRecorded[] =
 // A dictionary which stores whether location access is enabled for the current
 // default search engine.
 const char kDSEGeolocationSetting[] = "dse_geolocation_setting";
-
-// A dictionary which stores whether location access is enabled for the current
-// default search engine, if it is the Google search engine. Deprecated
-// Google-only version of the above.
-const char kGoogleDSEGeolocationSettingDeprecated[] =
-    "google_dse_geolocation_setting";
 
 // A dictionary of manifest URLs of Web Share Targets to a dictionary containing
 // attributes of its share_target field found in its manifest. Each key in the

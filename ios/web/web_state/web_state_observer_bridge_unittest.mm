@@ -165,15 +165,6 @@ TEST_F(WebStateObserverBridgeTest, PageLoaded) {
   EXPECT_FALSE([observer_ loadPageInfo]->success);
 }
 
-// Tests |webState:webStateDidDismissInterstitial:| forwarding.
-TEST_F(WebStateObserverBridgeTest, InterstitialDismissed) {
-  ASSERT_FALSE([observer_ dismissInterstitialInfo]);
-
-  bridge_->InterstitialDismissed(&test_web_state_);
-  ASSERT_TRUE([observer_ dismissInterstitialInfo]);
-  EXPECT_EQ(&test_web_state_, [observer_ dismissInterstitialInfo]->web_state);
-}
-
 // Tests |webState:didChangeLoadingProgress:| forwarding.
 TEST_F(WebStateObserverBridgeTest, LoadProgressChanged) {
   ASSERT_FALSE([observer_ changeLoadingProgressInfo]);
@@ -251,7 +242,7 @@ TEST_F(WebStateObserverBridgeTest, FaviconUrlUpdated) {
   ASSERT_FALSE([observer_ updateFaviconUrlCandidatesInfo]);
 
   web::FaviconURL url(GURL("https://chromium.test/"),
-                      web::FaviconURL::TOUCH_ICON, {gfx::Size(5, 6)});
+                      web::FaviconURL::IconType::kTouchIcon, {gfx::Size(5, 6)});
 
   bridge_->FaviconUrlUpdated(&test_web_state_, {url});
   ASSERT_TRUE([observer_ updateFaviconUrlCandidatesInfo]);

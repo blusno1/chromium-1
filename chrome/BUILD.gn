@@ -281,18 +281,13 @@ if (!is_android && !is_mac) {
                        rebase_path(version_script, root_build_dir) ]
         }
 
-        if (use_pangocairo) {
-          # Needed for chrome_main.cc initialization of libraries.
-          configs += [ "//build/config/linux/pangocairo" ]
-        }
-
         if (use_x11) {
           configs += [
             "//build/config/linux:x11",
             "//build/config/linux:xext",
           ]
         }
-        if (enable_package_mash_services) {
+        if (enable_mus) {
           deps += [ "//mash/common" ]
         }
       }
@@ -332,7 +327,7 @@ if (!is_android && !is_mac) {
 
   # TODO(jonross): remove this once telemetry can differentiate between linux
   # and linux chromiumos.
-  if (enable_package_mash_services) {
+  if (enable_mus) {
     chrome_binary("chrome_test") {
       # Note that the output name needs to end with "chrome", because that's
       # what telemetry test-runner expects.

@@ -35,6 +35,11 @@
 
 namespace blink {
 
+enum DataU8ColorType {
+  kRGBAColorType,
+  kN32ColorType,
+};
+
 enum ImageDataStorageFormat {
   kUint8ClampedArrayStorageFormat,
   kUint16ArrayStorageFormat,
@@ -123,12 +128,6 @@ enum DisableDeferralReason {
   kDisableDeferralDrawImageWithTextureBackedSourceImage = 6,
   kDisableDeferralReasonLowEndDevice = 7,
   kDisableDeferralReasonCount,
-};
-
-enum FlushReason {
-  kFlushReasonUnknown,
-  kFlushReasonInitialClear,
-  kFlushReasonDrawImageOfWebGL,
 };
 
 enum MailboxSyncMode {
