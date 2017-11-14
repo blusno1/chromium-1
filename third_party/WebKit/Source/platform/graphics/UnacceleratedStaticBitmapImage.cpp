@@ -4,6 +4,10 @@
 
 #include "platform/graphics/UnacceleratedStaticBitmapImage.h"
 
+#include "components/viz/common/gpu/context_provider.h"
+#include "platform/graphics/AcceleratedStaticBitmapImage.h"
+#include "platform/graphics/WebGraphicsContext3DProviderWrapper.h"
+#include "public/platform/WebGraphicsContext3DProvider.h"
 #include "third_party/skia/include/core/SkImage.h"
 
 namespace blink {
@@ -11,7 +15,7 @@ namespace blink {
 scoped_refptr<UnacceleratedStaticBitmapImage>
 UnacceleratedStaticBitmapImage::Create(sk_sp<SkImage> image) {
   DCHECK(!image->isTextureBacked());
-  return WTF::AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
+  return base::AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
 }
 
 UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(
@@ -24,7 +28,7 @@ UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(
 
 scoped_refptr<UnacceleratedStaticBitmapImage>
 UnacceleratedStaticBitmapImage::Create(PaintImage image) {
-  return WTF::AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
+  return base::AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
 }
 
 UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(PaintImage image)
@@ -41,6 +45,27 @@ IntSize UnacceleratedStaticBitmapImage::Size() const {
 bool UnacceleratedStaticBitmapImage::IsPremultiplied() const {
   return paint_image_.GetSkImage()->alphaType() ==
          SkAlphaType::kPremul_SkAlphaType;
+}
+
+scoped_refptr<StaticBitmapImage>
+UnacceleratedStaticBitmapImage::MakeAccelerated(
+    WeakPtr<WebGraphicsContext3DProviderWrapper> context_wrapper) {
+  if (!context_wrapper)
+    return nullptr;  // Can happen if the context is lost.
+
+  GrContext* grcontext = context_wrapper->ContextProvider()->GetGrContext();
+  if (!grcontext)
+    return nullptr;  // Can happen if the context is lost.
+
+  // TODO(crbug.com/782383): This can return a SkColorSpace, which should be
+  // passed along.
+  sk_sp<SkImage> gpu_skimage =
+      paint_image_.GetSkImage()->makeTextureImage(grcontext, nullptr);
+  if (!gpu_skimage)
+    return nullptr;
+
+  return AcceleratedStaticBitmapImage::CreateFromSkImage(
+      std::move(gpu_skimage), std::move(context_wrapper));
 }
 
 bool UnacceleratedStaticBitmapImage::CurrentFrameKnownToBeOpaque(MetadataMode) {

@@ -11,7 +11,9 @@ cr.define('extension_item_list_tests', function() {
     NoSearchResultsMsg: 'empty item list filtering results',
   };
 
-  suite('ExtensionItemListTest', function() {
+  var suiteName = 'ExtensionItemListTest';
+
+  suite(suiteName, function() {
     /** @type {extensions.ItemList} */
     var itemList;
     var testVisible;
@@ -78,26 +80,31 @@ cr.define('extension_item_list_tests', function() {
     });
 
     test(assert(TestNames.NoItemsMsg), function() {
+      Polymer.dom.flush();
       testVisible('#no-items', false);
       testVisible('#no-search-results', false);
 
       itemList.extensions = [];
       itemList.apps = [];
+      Polymer.dom.flush();
       testVisible('#no-items', true);
       testVisible('#no-search-results', false);
     });
 
     test(assert(TestNames.NoSearchResultsMsg), function() {
+      Polymer.dom.flush();
       testVisible('#no-items', false);
       testVisible('#no-search-results', false);
 
       itemList.filter = 'non-existent name';
+      Polymer.dom.flush();
       testVisible('#no-items', false);
       testVisible('#no-search-results', true);
     });
   });
 
   return {
+    suiteName: suiteName,
     TestNames: TestNames,
   };
 });

@@ -40,6 +40,7 @@
 #include "chrome/common/features.h"
 #include "chrome/common/pause_tabs_field_trial.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/browser_sync/browser_sync_switches.h"
@@ -71,6 +72,7 @@
 #include "components/previews/core/previews_features.h"
 #include "components/proximity_auth/switches.h"
 #include "components/search_provider_logos/features.h"
+#include "components/search_provider_logos/switches.h"
 #include "components/security_state/core/security_state.h"
 #include "components/security_state/core/switches.h"
 #include "components/signin/core/browser/profile_management_switches.h"
@@ -152,8 +154,11 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "chrome/browser/ui/tabs/tab_features.h"
 #endif  // OS_WIN
+
+#if defined(TOOLKIT_VIEWS)
+#include "chrome/browser/ui/tabs/tab_features.h"
+#endif
 
 using flags_ui::FeatureEntry;
 using flags_ui::kOsMac;
@@ -317,6 +322,10 @@ const FeatureEntry::FeatureParam kAccountConsistencyDice[] = {
     {signin::kAccountConsistencyFeatureMethodParameter,
      signin::kAccountConsistencyFeatureMethodDice}};
 
+const FeatureEntry::FeatureParam kAccountConsistencyDicePrepareMigration[] = {
+    {signin::kAccountConsistencyFeatureMethodParameter,
+     signin::kAccountConsistencyFeatureMethodDicePrepareMigration}};
+
 const FeatureEntry::FeatureParam kAccountConsistencyDiceMigration[] = {
     {signin::kAccountConsistencyFeatureMethodParameter,
      signin::kAccountConsistencyFeatureMethodDiceMigration}};
@@ -335,6 +344,9 @@ const FeatureEntry::FeatureVariation kAccountConsistencyFeatureVariations[] = {
      nullptr /* variation_id */},
     {"Dice (migration)", kAccountConsistencyDiceMigration,
      arraysize(kAccountConsistencyDiceMigration), nullptr /* variation_id */},
+    {"Dice (prepare migration)", kAccountConsistencyDicePrepareMigration,
+     arraysize(kAccountConsistencyDicePrepareMigration),
+     nullptr /* variation_id */},
     {"Dice (fix auth errors)", kAccountConsistencyDiceFixAuthErrors,
      arraysize(kAccountConsistencyDiceFixAuthErrors),
      nullptr /* variation_id */}
@@ -1090,44 +1102,24 @@ const FeatureEntry::Choice kAsyncImageDecodingChoices[] = {
      cc::switches::kDisableCheckerImaging, ""},
 };
 
+const FeatureEntry::Choice kUseDdljsonApiChoices[] = {
+    {flags_ui::kGenericExperimentChoiceDefault, "", ""},
 #if defined(OS_ANDROID)
-const FeatureEntry::FeatureParam kUseDdljsonApiTest0[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android0.json"}};
-const FeatureEntry::FeatureParam kUseDdljsonApiTest1[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android1.json"}};
-const FeatureEntry::FeatureParam kUseDdljsonApiTest2[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android2.json"}};
-const FeatureEntry::FeatureParam kUseDdljsonApiTest3[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android3.json"}};
-const FeatureEntry::FeatureParam kUseDdljsonApiTest4[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android4.json"}};
+    {"(force test doodle 0)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android0.json"},
+    {"(force test doodle 1)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android1.json"},
+    {"(force test doodle 2)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android2.json"},
+    {"(force test doodle 3)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android3.json"},
+    {"(force test doodle 4)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_android4.json"},
 #else
-const FeatureEntry::FeatureParam kUseDdljsonApiTest0[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_desktop0.json"}};
-const FeatureEntry::FeatureParam kUseDdljsonApiTest1[] = {
-    {search_provider_logos::features::kDdljsonOverrideUrlParam,
-     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_desktop1.json"}};
-#endif  // defined(OS_ANDROID)
-
-const FeatureEntry::FeatureVariation kUseDdljsonApiVariations[] = {
-    {"(force test doodle 0)", kUseDdljsonApiTest0,
-     arraysize(kUseDdljsonApiTest0), nullptr},
-    {"(force test doodle 1)", kUseDdljsonApiTest1,
-     arraysize(kUseDdljsonApiTest1), nullptr},
-#if defined(OS_ANDROID)
-    // Interactive doodles: Android-only for now.
-    {"(force test doodle 2)", kUseDdljsonApiTest2,
-     arraysize(kUseDdljsonApiTest2), nullptr},
-    {"(force test doodle 3)", kUseDdljsonApiTest3,
-     arraysize(kUseDdljsonApiTest3), nullptr},
-    {"(force test doodle 4)", kUseDdljsonApiTest4,
-     arraysize(kUseDdljsonApiTest4), nullptr},
+    {"(force test doodle 0)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_desktop0.json"},
+    {"(force test doodle 1)", search_provider_logos::switches::kGoogleDoodleUrl,
+     "https://www.gstatic.com/chrome/ntp/doodle_test/ddljson_desktop1.json"},
 #endif  // defined(OS_ANDROID)
 };
 
@@ -1308,7 +1300,7 @@ const FeatureEntry kFeatureEntries[] = {
     {"show-autofill-type-predictions",
      flag_descriptions::kShowAutofillTypePredictionsName,
      flag_descriptions::kShowAutofillTypePredictionsDescription, kOsAll,
-     SINGLE_VALUE_TYPE(autofill::switches::kShowAutofillTypePredictions)},
+     FEATURE_VALUE_TYPE(autofill::features::kAutofillShowTypePredictions)},
     {"smooth-scrolling", flag_descriptions::kSmoothScrollingName,
      flag_descriptions::kSmoothScrollingDescription,
      // Mac has a separate implementation with its own setting to disable.
@@ -1633,6 +1625,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kServiceWorkerScriptStreamingName,
      flag_descriptions::kServiceWorkerScriptStreamingDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kServiceWorkerScriptStreaming)},
+    {"enable-pwa-full-code-cache",
+     flag_descriptions::kEnablePWAFullCodeCacheName,
+     flag_descriptions::kEnablePWAFullCodeCacheDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kPWAFullCodeCache)},
     {"enable-suggestions-with-substring-match",
      flag_descriptions::kSuggestionsWithSubStringMatchName,
      flag_descriptions::kSuggestionsWithSubStringMatchDescription, kOsAll,
@@ -2148,6 +2144,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kMacViewsNativeAppWindowsDescription, kOsMac,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableMacViewsNativeAppWindows,
                                switches::kDisableMacViewsNativeAppWindows)},
+    {"mac-views-profile-chooser",
+     flag_descriptions::kMacViewsProfileChooserName,
+     flag_descriptions::kMacViewsProfileChooserDescription, kOsMac,
+     FEATURE_VALUE_TYPE(features::kViewsProfileChooser)},
     {"mac-views-task-manager", flag_descriptions::kMacViewsTaskManagerName,
      flag_descriptions::kMacViewsTaskManagerDescription, kOsMac,
      FEATURE_VALUE_TYPE(features::kViewsTaskManager)},
@@ -2222,6 +2222,9 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kExperimentalKeyboardLockUiDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kExperimentalKeyboardLockUI)},
 #if defined(OS_ANDROID)
+    {"progress-bar-throttle", flag_descriptions::kProgressBarThrottleName,
+     flag_descriptions::kProgressBarThrottleDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kProgressBarThrottleFeature)},
     {"progress-bar-completion", flag_descriptions::kProgressBarCompletionName,
      flag_descriptions::kProgressBarCompletionDescription, kOsAndroid,
      MULTI_VALUE_TYPE(kProgressBarCompletionChoices)},
@@ -2286,9 +2289,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kNtpPopularSitesDescription, kOsAndroid,
      ENABLE_DISABLE_VALUE_TYPE(ntp_tiles::switches::kEnableNTPPopularSites,
                                ntp_tiles::switches::kDisableNTPPopularSites)},
-    {"use-android-midi-api", flag_descriptions::kUseAndroidMidiApiName,
-     flag_descriptions::kUseAndroidMidiApiDescription, kOsAndroid,
-     FEATURE_VALUE_TYPE(midi::features::kMidiManagerAndroid)},
 #endif  // OS_ANDROID
 #if defined(OS_WIN)
     {"trace-export-events-to-etw",
@@ -2634,7 +2634,7 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kImportantSitesInCbdDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kImportantSitesInCbd)},
     {"tabs-in-cbd", flag_descriptions::kTabsInCbdName,
-     flag_descriptions::kTabsInCbdDescription, kOsAll,
+     flag_descriptions::kTabsInCbdDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kTabsInCbd)},
     {"passive-listener-default",
      flag_descriptions::kPassiveEventListenerDefaultName,
@@ -2951,11 +2951,13 @@ const FeatureEntry kFeatureEntries[] = {
      SINGLE_VALUE_TYPE(ash::switches::kAshForceEnableStylusTools)},
 #endif  // defined(OS_CHROMEOS)
 
+#if defined(OS_ANDROID)
     {"enable-midi-manager-dynamic-instantiation",
      flag_descriptions::kEnableMidiManagerDynamicInstantiationName,
      flag_descriptions::kEnableMidiManagerDynamicInstantiationDescription,
      kOsAll,
      FEATURE_VALUE_TYPE(midi::features::kMidiManagerDynamicInstantiation)},
+#endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN)
     {"new-usb-backend", flag_descriptions::kNewUsbBackendName,
@@ -3081,9 +3083,11 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableZipArchiverPackerDescription, kOsCrOS,
      SINGLE_VALUE_TYPE(chromeos::switches::kEnableZipArchiverPacker)},
     {"enable-zip-archiver-unpacker",
-     flag_descriptions::kEnableZipArchiverUnpackerName,
-     flag_descriptions::kEnableZipArchiverUnpackerDescription, kOsCrOS,
-     SINGLE_VALUE_TYPE(chromeos::switches::kEnableZipArchiverUnpacker)},
+     flag_descriptions::kZipArchiverUnpackerName,
+     flag_descriptions::kZipArchiverUnpackerDescription, kOsCrOS,
+     ENABLE_DISABLE_VALUE_TYPE(
+         chromeos::switches::kEnableZipArchiverUnpacker,
+         chromeos::switches::kDisableZipArchiverUnpacker)},
 #endif  // OS_CHROMEOS
 
 #if defined(OS_ANDROID)
@@ -3246,6 +3250,9 @@ const FeatureEntry kFeatureEntries[] = {
     {"browser-side-navigation", flag_descriptions::kBrowserSideNavigationName,
      flag_descriptions::kBrowserSideNavigationDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kBrowserSideNavigation)},
+    {"navigation-mojo-response", flag_descriptions::kNavigationMojoResponseName,
+     flag_descriptions::kNavigationMojoResponseDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kNavigationMojoResponse)},
 
 #if defined(OS_MACOSX)
     {"mac-touchbar", flag_descriptions::kMacTouchBarName,
@@ -3284,10 +3291,7 @@ const FeatureEntry kFeatureEntries[] = {
 
     {"use-ddljson-api", flag_descriptions::kUseDdljsonApiName,
      flag_descriptions::kUseDdljsonApiDescription, kOsAll,
-     FEATURE_WITH_PARAMS_VALUE_TYPE(
-         search_provider_logos::features::kUseDdljsonApi,
-         kUseDdljsonApiVariations,
-         "NTPUseDdljsonApi")},
+     MULTI_VALUE_TYPE(kUseDdljsonApiChoices)},
 
 #if defined(OS_ANDROID)
     {"spannable-inline-autocomplete",
@@ -3546,11 +3550,11 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kStopLoadingInBackgroundDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kStopLoadingInBackground)},
 
-#if defined(OS_WIN)
+#if defined(TOOLKIT_VIEWS)
     {"experimental-tab-controller",
      flag_descriptions::kExperimentalTabControllerName,
-     flag_descriptions::kExperimentalTabControllerDescription, kOsWin,
-     FEATURE_VALUE_TYPE(kExperimentalTabControllerFeature)},
+     flag_descriptions::kExperimentalTabControllerDescription,
+     kOsWin | kOsLinux, FEATURE_VALUE_TYPE(kExperimentalTabControllerFeature)},
 #endif  // defined(OS_WIN)
 
 #if defined(OS_CHROMEOS)
@@ -3564,6 +3568,11 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAshDisableLoginDimAndBlurDescription, kOsCrOS,
      SINGLE_DISABLE_VALUE_TYPE(ash::switches::kAshDisableLoginDimAndBlur)},
 #endif  // OS_CHROMEOS
+
+    {"clipboard-content-setting",
+     flag_descriptions::kClipboardContentSettingName,
+     flag_descriptions::kClipboardContentSettingDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kClipboardContentSetting)},
 
 #if defined(OS_CHROMEOS)
     {"native-samba", flag_descriptions::kNativeSambaName,
@@ -3580,6 +3589,12 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableNetworkLoggingToFileName,
      flag_descriptions::kEnableNetworkLoggingToFileDescription, kOsAll,
      SINGLE_VALUE_TYPE(switches::kLogNetLog)},
+
+#if defined(OS_CHROMEOS)
+    {"enable-multi-mirroring", flag_descriptions::kEnableMultiMirroringName,
+     flag_descriptions::kEnableMultiMirroringDescription, kOsCrOS,
+     SINGLE_VALUE_TYPE(switches::kEnableMultiMirroring)},
+#endif  // defined(OS_CHROMEOS)
 
     // NOTE: Adding a new flag requires adding a corresponding entry to enum
     // "LoginCustomFlags" in tools/metrics/histograms/enums.xml. See "Flag

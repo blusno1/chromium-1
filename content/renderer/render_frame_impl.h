@@ -110,6 +110,7 @@ struct WebCursorInfo;
 struct WebFindOptions;
 class WebLayerTreeView;
 class WebRelatedAppsFetcher;
+struct FramePolicy;
 struct WebRemoteScrollProperties;
 }  // namespace blink
 
@@ -163,7 +164,6 @@ struct CustomContextMenuContext;
 struct FileChooserFileInfo;
 struct FileChooserParams;
 struct FrameOwnerProperties;
-struct FramePolicy;
 struct FrameReplicationState;
 struct NavigationParams;
 struct RequestNavigationParams;
@@ -171,10 +171,6 @@ struct ResourceResponseHead;
 struct ScreenInfo;
 struct StartNavigationParams;
 struct StreamOverrideParameters;
-
-namespace {
-class CreateFrameWidgetParams;
-}
 
 class CONTENT_EXPORT RenderFrameImpl
     : public RenderFrame,
@@ -514,6 +510,8 @@ class CONTENT_EXPORT RenderFrameImpl
   // mojom::Frame implementation:
   void GetInterfaceProvider(
       service_manager::mojom::InterfaceProviderRequest request) override;
+  void GetCanonicalUrlForSharing(
+      GetCanonicalUrlForSharingCallback callback) override;
 
   // mojom::FrameBindingsControl implementation:
   void AllowBindings(int32_t enabled_bindings_flags) override;
@@ -1017,7 +1015,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnSnapshotAccessibilityTree(int callback_id);
   void OnExtractSmartClipData(uint32_t callback_id, const gfx::Rect& rect);
   void OnUpdateOpener(int opener_routing_id);
-  void OnDidUpdateFramePolicy(const FramePolicy& frame_policy);
+  void OnDidUpdateFramePolicy(const blink::FramePolicy& frame_policy);
   void OnSetFrameOwnerProperties(
       const FrameOwnerProperties& frame_owner_properties);
   void OnAdvanceFocus(blink::WebFocusType type, int32_t source_routing_id);

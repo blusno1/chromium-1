@@ -7,13 +7,11 @@
 
 #include <vector>
 
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/permissions/permission_request.h"
 #include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/permissions/permission_util.h"
-#include "content/public/browser/permission_type.h"
 
 namespace content {
 class WebContents;
@@ -101,10 +99,6 @@ class PermissionUmaUtil {
   static const char kPermissionsPromptDenied[];
   static const char kPermissionsPromptDeniedGesture[];
   static const char kPermissionsPromptDeniedNoGesture[];
-  static const char kPermissionsPromptRequestsPerPrompt[];
-  static const char kPermissionsPromptMergedBubbleTypes[];
-  static const char kPermissionsPromptMergedBubbleAccepted[];
-  static const char kPermissionsPromptMergedBubbleDenied[];
   static const char kPermissionsPromptAcceptedPriorDismissCountPrefix[];
   static const char kPermissionsPromptAcceptedPriorIgnoreCountPrefix[];
   static const char kPermissionsPromptDeniedPriorDismissCountPrefix[];
@@ -115,9 +109,7 @@ class PermissionUmaUtil {
   static const char kPermissionsPromptIgnoredPriorIgnoreCountPrefix[];
 
   static void PermissionRequested(ContentSettingsType permission,
-                                  const GURL& requesting_origin,
-                                  const GURL& embedding_origin,
-                                  Profile* profile);
+                                  const GURL& requesting_origin);
   static void PermissionGranted(ContentSettingsType permission,
                                 PermissionRequestGestureType gesture_type,
                                 const GURL& requesting_origin,

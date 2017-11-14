@@ -27,6 +27,7 @@
 #include "content/public/common/screen_info.h"
 #include "ipc/ipc_listener.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
+#include "services/viz/public/interfaces/hit_test/hit_test_region_list.mojom.h"
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
@@ -155,7 +156,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   void DidReceiveRendererFrame();
 
   // Notification that a resize or move session ended on the native widget.
-  void UpdateScreenInfo(gfx::NativeView view);
+  virtual void UpdateScreenInfo(gfx::NativeView view);
 
   // Tells if the display property (work area/scale factor) has
   // changed since the last time.
@@ -198,6 +199,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // The height of the bottom bar.
   virtual float GetBottomControlsHeight() const;
+
+  // If mouse wheels can only specify the number of ticks of some static
+  // multiplier constant, this method returns that constant (in DIPs). If mouse
+  // wheels can specify an arbitrary delta this returns 0.
+  virtual int GetMouseWheelMinimumGranularity() const;
 
   // Called prior to forwarding input event messages to the renderer, giving
   // the view a chance to perform in-process event filtering or processing.
@@ -248,9 +254,16 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
       viz::mojom::CompositorFrameSinkClient*
           renderer_compositor_frame_sink) = 0;
 
+  // This is called by the RenderWidgetHostImpl to provide a new compositor
+  // frame that was received from the renderer process. if Viz service hit
+  // testing is enabled then a HitTestRegionList provides hit test data
+  // that is used for routing input events.
+  // TODO(kenrb): When Viz service is enabled on all platforms,
+  // |hit_test_region_list| should stop being an optional argument.
   virtual void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
-      viz::CompositorFrame frame) = 0;
+      viz::CompositorFrame frame,
+      viz::mojom::HitTestRegionListPtr hit_test_region_list) = 0;
 
   virtual void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) {}
 

@@ -56,8 +56,8 @@
 #include "net/base/url_util.h"
 #include "net/http/http_request_headers.h"
 #include "net/url_request/redirect_info.h"
+#include "third_party/WebKit/common/sandbox_flags.h"
 #include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
-#include "third_party/WebKit/public/web/WebSandboxFlags.h"
 
 namespace content {
 
@@ -836,9 +836,9 @@ void NavigationRequest::OnResponseStarted(
   // Check if the navigation should be allowed to proceed.
   navigation_handle_->WillProcessResponse(
       render_frame_host, response->head.headers.get(),
-      response->head.connection_info, ssl_status, request_id,
-      common_params_.should_replace_current_entry, is_download, is_stream,
-      base::Closure(),
+      response->head.connection_info, response->head.socket_address, ssl_status,
+      request_id, common_params_.should_replace_current_entry, is_download,
+      is_stream, base::Closure(),
       base::Bind(&NavigationRequest::OnWillProcessResponseChecksComplete,
                  base::Unretained(this)));
 }

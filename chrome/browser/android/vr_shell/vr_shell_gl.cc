@@ -26,10 +26,11 @@
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/fps_meter.h"
 #include "chrome/browser/vr/model/model.h"
+#include "chrome/browser/vr/pose_util.h"
 #include "chrome/browser/vr/ui.h"
+#include "chrome/browser/vr/ui_element_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/vr_gl_util.h"
-#include "chrome/browser/vr/vr_shell_renderer.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/common/content_features.h"
 #include "device/vr/android/gvr/gvr_delegate.h"
@@ -98,15 +99,6 @@ static constexpr int kNumSamplesPerPixelBrowserUi = 2;
 static constexpr int kNumSamplesPerPixelWebVr = 1;
 
 static constexpr float kRedrawSceneAngleDeltaDegrees = 1.0;
-
-// Provides the direction the head is looking towards as a 3x1 unit vector.
-gfx::Vector3dF GetForwardVector(const gfx::Transform& head_pose) {
-  // Same as multiplying the inverse of the rotation component of the matrix by
-  // (0, 0, -1, 0).
-  return gfx::Vector3dF(-head_pose.matrix().get(2, 0),
-                        -head_pose.matrix().get(2, 1),
-                        -head_pose.matrix().get(2, 2));
-}
 
 gfx::Transform PerspectiveMatrixFromView(const gvr::Rectf& fov,
                                          float z_near,
@@ -250,6 +242,9 @@ void VrShellGl::InitializeGl(gfx::AcceleratedWidget window) {
     ForceExitVr();
     return;
   }
+
+  glDisable(GL_DEPTH_TEST);
+  glDepthMask(GL_FALSE);
 
   unsigned int textures[2];
   glGenTextures(2, textures);
@@ -486,11 +481,15 @@ void VrShellGl::InitializeRenderer() {
 
   specs_[kFramePrimaryBuffer].SetSamples(
       web_vr_mode_ ? kNumSamplesPerPixelWebVr : kNumSamplesPerPixelBrowserUi);
+  specs_[kFramePrimaryBuffer].SetDepthStencilFormat(
+      GVR_DEPTH_STENCIL_FORMAT_NONE);
 
   specs_[kFrameWebVrBrowserUiBuffer].SetSize(
       {render_size_default.width / kWebVrBrowserUiSizeFactor,
        render_size_default.height / kWebVrBrowserUiSizeFactor});
   specs_[kFrameWebVrBrowserUiBuffer].SetSamples(2);
+  specs_[kFrameWebVrBrowserUiBuffer].SetDepthStencilFormat(
+      GVR_DEPTH_STENCIL_FORMAT_NONE);
   render_size_webvr_ui_ = {
       render_size_default.width / kWebVrBrowserUiSizeFactor,
       render_size_default.height / kWebVrBrowserUiSizeFactor};
@@ -556,7 +555,7 @@ void VrShellGl::UpdateController(const gfx::Transform& head_pose,
     controller_data.connected = false;
   browser_->UpdateGamepadData(controller_data);
 
-  HandleControllerInput(laser_origin, GetForwardVector(head_pose),
+  HandleControllerInput(laser_origin, vr::GetForwardVector(head_pose),
                         current_time);
 }
 
@@ -820,7 +819,7 @@ void VrShellGl::DrawFrame(int16_t frame_index, base::TimeTicks current_time) {
   }
 
   gfx::Vector3dF forward_vector =
-      GetForwardVector(render_info_primary_.head_pose);
+      vr::GetForwardVector(render_info_primary_.head_pose);
 
   // Update the render position of all UI elements (including desktop).
   bool scene_changed = ui_->scene()->OnBeginFrame(current_time, forward_vector);
@@ -840,10 +839,9 @@ void VrShellGl::DrawFrame(int16_t frame_index, base::TimeTicks current_time) {
   bool redraw_needed = controller_dirty || scene_changed || textures_changed ||
                        content_frame_available_;
 
-  gfx::Vector3dF old_forward_vector = GetForwardVector(last_used_head_pose_);
-  float angle =
-      gfx::AngleBetweenVectorsInDegrees(forward_vector, old_forward_vector);
-  bool head_moved = std::abs(angle) > kRedrawSceneAngleDeltaDegrees;
+  bool head_moved = vr::HeadMoveExceedsThreshold(last_used_head_pose_,
+                                                 render_info_primary_.head_pose,
+                                                 kRedrawSceneAngleDeltaDegrees);
 
   bool dirty = ShouldDrawWebVr() || head_moved || redraw_needed;
 
@@ -1043,14 +1041,12 @@ void VrShellGl::DrawWebVr() {
   TRACE_EVENT0("gpu", "VrShellGl::DrawWebVr");
   // Don't need face culling, depth testing, blending, etc. Turn it all off.
   glDisable(GL_CULL_FACE);
-  glDepthMask(GL_FALSE);
-  glDisable(GL_DEPTH_TEST);
   glDisable(GL_SCISSOR_TEST);
   glDisable(GL_BLEND);
   glDisable(GL_POLYGON_OFFSET_FILL);
 
   glViewport(0, 0, webvr_surface_size_.width(), webvr_surface_size_.height());
-  ui_->vr_shell_renderer()->GetWebVrRenderer()->Draw(webvr_texture_id_);
+  ui_->ui_element_renderer()->DrawWebVr(webvr_texture_id_);
 }
 
 void VrShellGl::OnPause() {
@@ -1113,7 +1109,7 @@ base::WeakPtr<vr::BrowserUiInterface> VrShellGl::GetBrowserUiWeakPtr() {
 }
 
 void VrShellGl::SetControllerMesh(std::unique_ptr<vr::ControllerMesh> mesh) {
-  ui_->vr_shell_renderer()->GetControllerRenderer()->SetUp(std::move(mesh));
+  ui_->ui_element_renderer()->SetUpController(std::move(mesh));
 }
 
 void VrShellGl::OnVSync(base::TimeTicks frame_time) {

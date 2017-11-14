@@ -172,7 +172,7 @@
   </if>
   <if expr="use_titlecase">
     <message name="IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK" desc="Mac/In Title Case::The text shown as an option in the suggestion drop down when a password field is clicked">
-    Show all Saved Passwords
+    Show All Saved Passwords
   </message>
   </if>
   <message name="IDS_AUTOFILL_GENERATE_PASSWORD_FALLBACK" desc="The text shown as an option in the suggestion drop down when a password field is clicked">
@@ -324,6 +324,9 @@
     </message>
     <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_INSTRUCTIONS" desc="Text explaining what the user should do in the card unmasking dialog.">
       Once you confirm, your card details will be shared with this site.
+    </message>
+    <message name="IDS_AUTOFILL_CARD_UNMASK_CVC_IMAGE_DESCRIPTION" desc="Accessible description for the CVC image. It should describe where to find the CVC on a credit card.">
+      The CVC is located behind your card.
     </message>
   </if>
   <if expr="is_ios">

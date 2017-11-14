@@ -36,8 +36,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerErrorType,
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerState,
                           blink::mojom::ServiceWorkerState::kLast)
 
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerResponseError,
-                          blink::kWebServiceWorkerResponseErrorLast)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerResponseError,
+                          blink::mojom::ServiceWorkerResponseError::kLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerClientType,
                           blink::kWebServiceWorkerClientTypeLast)
@@ -163,16 +163,6 @@ IPC_MESSAGE_ROUTED3(
     std::string /* uuid */,
     base::string16 /* message */,
     std::vector<blink::MessagePortChannel> /* sent_message_ports */)
-
-// ServiceWorker -> Browser message to request that the ServiceWorkerStorage
-// cache |data| associated with |url|.
-IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_SetCachedMetadata,
-                    GURL /* url */,
-                    std::vector<char> /* data */)
-
-// ServiceWorker -> Browser message to request that the ServiceWorkerStorage
-// clear the cache associated with |url|.
-IPC_MESSAGE_ROUTED1(ServiceWorkerHostMsg_ClearCachedMetadata, GURL /* url */)
 
 // Ask the browser to open a tab/window (renderer->browser).
 IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_OpenNewTab,

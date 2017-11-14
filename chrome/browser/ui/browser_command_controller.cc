@@ -33,6 +33,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/extensions/hosted_app_browser_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/inspect_ui.h"
 #include "chrome/common/content_restriction.h"
@@ -394,6 +395,15 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+    case IDC_MINIMIZE_WINDOW:
+      browser_->window()->Minimize();
+      break;
+    case IDC_MAXIMIZE_WINDOW:
+      browser_->window()->Maximize();
+      break;
+    case IDC_RESTORE_WINDOW:
+      browser_->window()->Restore();
+      break;
     case IDC_USE_SYSTEM_TITLE_BAR: {
       PrefService* prefs = profile()->GetPrefs();
       prefs->SetBoolean(prefs::kUseCustomChromeFrame,
@@ -654,6 +664,19 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       PinTab(browser_);
       break;
 
+    // Hosted App commands
+    case IDC_COPY_URL:
+      CopyURL(browser_);
+      break;
+    case IDC_OPEN_IN_CHROME:
+      OpenInChrome(browser_);
+      break;
+    case IDC_SITE_SETTINGS:
+      ShowSiteSettings(
+          browser_,
+          browser_->tab_strip_model()->GetActiveWebContents()->GetVisibleURL());
+      break;
+
     default:
       LOG(WARNING) << "Received Unimplemented Command: " << id;
       break;
@@ -773,6 +796,9 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_VISIT_DESKTOP_OF_LRU_USER_3, true);
 #endif
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  command_updater_.UpdateCommandEnabled(IDC_MINIMIZE_WINDOW, true);
+  command_updater_.UpdateCommandEnabled(IDC_MAXIMIZE_WINDOW, true);
+  command_updater_.UpdateCommandEnabled(IDC_RESTORE_WINDOW, true);
   command_updater_.UpdateCommandEnabled(IDC_USE_SYSTEM_TITLE_BAR, true);
 #endif
 
@@ -824,6 +850,17 @@ void BrowserCommandController::InitCommandState() {
       IDC_HOME,
       normal_window ||
           (extensions::util::IsNewBookmarkAppsEnabled() && browser_->is_app()));
+
+  const bool is_experimental_hosted_app =
+      extensions::HostedAppBrowserController::IsForExperimentalHostedAppBrowser(
+          browser_);
+  // Hosted app browser commands.
+  command_updater_.UpdateCommandEnabled(IDC_COPY_URL,
+                                        is_experimental_hosted_app);
+  command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_CHROME,
+                                        is_experimental_hosted_app);
+  command_updater_.UpdateCommandEnabled(IDC_SITE_SETTINGS,
+                                        is_experimental_hosted_app);
 
   // Window management commands
   command_updater_.UpdateCommandEnabled(IDC_SELECT_NEXT_TAB, normal_window);

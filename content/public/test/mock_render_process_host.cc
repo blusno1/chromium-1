@@ -51,6 +51,7 @@ MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
       fast_shutdown_started_(false),
       deletion_callback_called_(false),
       is_for_guests_only_(false),
+      is_never_suitable_for_reuse_(false),
       is_process_backgrounded_(false),
       is_unused_(true),
       keep_alive_ref_count_(0),
@@ -81,9 +82,14 @@ MockRenderProcessHost::~MockRenderProcessHost() {
 }
 
 void MockRenderProcessHost::SimulateCrash() {
+  SimulateRenderProcessExit(base::TERMINATION_STATUS_PROCESS_CRASHED, 0);
+}
+
+void MockRenderProcessHost::SimulateRenderProcessExit(
+    base::TerminationStatus status,
+    int exit_code) {
   has_connection_ = false;
-  RenderProcessHost::RendererClosedDetails details(
-      base::TERMINATION_STATUS_PROCESS_CRASHED, 0);
+  RenderProcessHost::RendererClosedDetails details(status, exit_code);
   NotificationService::current()->Notify(
       NOTIFICATION_RENDERER_PROCESS_CLOSED, Source<RenderProcessHost>(this),
       Details<RenderProcessHost::RendererClosedDetails>(&details));
@@ -369,11 +375,11 @@ MockRenderProcessHost::GetProcessResourceCoordinator() {
 }
 
 void MockRenderProcessHost::SetIsNeverSuitableForReuse() {
-  NOTREACHED();
+  is_never_suitable_for_reuse_ = true;
 }
 
 bool MockRenderProcessHost::MayReuseHost() {
-  return true;
+  return !is_never_suitable_for_reuse_;
 }
 
 bool MockRenderProcessHost::IsUnused() {

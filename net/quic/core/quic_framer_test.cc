@@ -2126,10 +2126,7 @@ TEST_P(QuicFramerTest, FirstAckFrameUnderflow) {
       {"Unable to read first ack block length.",
        {0x88, 0x88}},
       // num timestamps.
-      {FLAGS_quic_reloadable_flag_sanitize_framer_addrange_input
-           ? "Underflow with first ack block length 34952 largest acked is "
-             "4661."
-           : "Unable to read num received packets.",
+      {"Underflow with first ack block length 34952 largest acked is 4661.",
        {0x00}}
   };
 
@@ -2157,10 +2154,7 @@ TEST_P(QuicFramerTest, FirstAckFrameUnderflow) {
       {"Unable to read first ack block length.",
        {0x88, 0x88}},
       // num timestamps.
-      {FLAGS_quic_reloadable_flag_sanitize_framer_addrange_input
-           ? "Underflow with first ack block length 34952 largest acked is "
-             "4661."
-           : "Unable to read num received packets.",
+      {"Underflow with first ack block length 34952 largest acked is 4661.",
        {0x00}}
   };
 
@@ -2198,8 +2192,7 @@ TEST_P(QuicFramerTest, FirstAckFrameUnderflow) {
           : (framer_.transport_version() > QUIC_VERSION_38 ? packet39 : packet);
   std::unique_ptr<QuicEncryptedPacket> encrypted(
       AssemblePacketFromFragments(fragments));
-  EXPECT_EQ(!FLAGS_quic_reloadable_flag_sanitize_framer_addrange_input,
-            framer_.ProcessPacket(*encrypted));
+  EXPECT_FALSE(framer_.ProcessPacket(*encrypted));
   CheckFramingBoundaries(fragments, QUIC_INVALID_ACK_DATA);
 }
 
@@ -4950,6 +4943,73 @@ TEST_P(QuicFramerTest, BuildPingPacket) {
 
   test::CompareCharArraysWithHexError(
       "constructed packet", data->data(), data->length(),
+      AsChars(framer_.transport_version() <= QUIC_VERSION_38 ? packet
+                                                             : packet39),
+      arraysize(packet));
+}
+
+// Test that the connectivity probing packet is serialized correctly as a
+// padded PING packet.
+TEST_P(QuicFramerTest, BuildConnectivityProbingPacket) {
+  QuicPacketHeader header;
+  header.connection_id = kConnectionId;
+  header.reset_flag = false;
+  header.version_flag = false;
+  header.packet_number = kPacketNumber;
+
+  // clang-format off
+  unsigned char packet[] = {
+    // public flags (8 byte connection_id)
+    0x38,
+    // connection_id
+    0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10,
+    // packet number
+    0xBC, 0x9A, 0x78, 0x56,
+    0x34, 0x12,
+
+    // frame type (ping frame)
+    0x07,
+    // frame type (padding frame)
+    0x00,
+    0x00, 0x00, 0x00, 0x00
+  };
+
+  unsigned char packet39[] = {
+    // public flags (8 byte connection_id)
+    0x38,
+    // connection_id
+    0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10,
+    // packet number
+    0x12, 0x34, 0x56, 0x78,
+    0x9A, 0xBC,
+
+    // frame type (ping frame)
+    0x07,
+    // frame type (padding frame)
+    0x00,
+    0x00, 0x00, 0x00, 0x00
+  };
+  // clang-format on
+
+  unsigned char* p = packet;
+  size_t packet_size = arraysize(packet);
+  if (framer_.transport_version() > QUIC_VERSION_38) {
+    p = packet39;
+    packet_size = arraysize(packet39);
+  }
+
+  std::unique_ptr<char[]> buffer(new char[kMaxPacketSize]);
+
+  size_t length =
+      framer_.BuildConnectivityProbingPacket(header, buffer.get(), packet_size);
+
+  EXPECT_NE(0u, length);
+  QuicPacket data(buffer.release(), length, true, header.connection_id_length,
+                  header.version_flag, header.nonce != nullptr,
+                  header.packet_number_length);
+
+  test::CompareCharArraysWithHexError(
+      "constructed packet", data.data(), data.length(),
       AsChars(framer_.transport_version() <= QUIC_VERSION_38 ? packet
                                                              : packet39),
       arraysize(packet));

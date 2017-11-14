@@ -30,7 +30,9 @@
 #include "components/viz/common/quads/compositor_frame_metadata.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
+#include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/hit_test/hit_test_manager.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/test/begin_frame_args_test.h"
 #include "components/viz/test/fake_external_begin_frame_source.h"
@@ -241,11 +243,45 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   }
 
   double get_last_device_scale_factor() { return last_device_scale_factor_; }
+  void ResizeDueToAutoResize(RenderWidgetHostImpl* render_widget_host,
+                             const gfx::Size& new_size,
+                             uint64_t sequence_number) override {
+    RenderWidgetHostViewBase* rwhv = rwh_->GetView();
+    if (rwhv)
+      rwhv->ResizeDueToAutoResize(new_size, sequence_number);
+  }
   void ScreenInfoChanged() override {
     display::Screen* screen = display::Screen::GetScreen();
     const display::Display display = screen->GetPrimaryDisplay();
     last_device_scale_factor_ = display.device_scale_factor();
   }
+
+  void GetScreenInfo(ScreenInfo* result) override {
+    display::Screen* screen = display::Screen::GetScreen();
+    const display::Display display = screen->GetPrimaryDisplay();
+    result->rect = display.bounds();
+    result->available_rect = display.work_area();
+    result->depth = display.color_depth();
+    result->depth_per_component = display.depth_per_component();
+    result->is_monochrome = display.is_monochrome();
+    result->device_scale_factor = display.device_scale_factor();
+    result->color_space = display.color_space();
+    result->color_space.GetICCProfile(&result->icc_profile);
+
+    // The Display rotation and the ScreenInfo orientation are not the same
+    // angle. The former is the physical display rotation while the later is the
+    // rotation required by the content to be shown properly on the screen, in
+    // other words, relative to the physical display.
+    result->orientation_angle = display.RotationAsDegree();
+    if (result->orientation_angle == 90)
+      result->orientation_angle = 270;
+    else if (result->orientation_angle == 270)
+      result->orientation_angle = 90;
+
+    result->orientation_type =
+        RenderWidgetHostViewBase::GetOrientationTypeForDesktop(display);
+  }
+
   void set_pre_handle_keyboard_event_result(
       KeyboardEventProcessingResult result) {
     pre_handle_keyboard_event_result_ = result;
@@ -1911,11 +1947,16 @@ TEST_F(RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest,
   EXPECT_EQ(WebInputEvent::kGestureScrollEnd, gesture_event->GetType());
 }
 
-// Tests that a gesture fling start with touchpad source stops the
-// RenderWidgetHostViewEventHandler::mouse_wheel_phase_timer_ and no synthetic
-// wheel event will be sent.
+// Tests that a gesture fling start with touchpad source resets wheel phase
+// state.
 TEST_F(RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest,
-       TouchpadFlingStartStopsWheelPhaseTimer) {
+       TouchpadFlingStartResetsWheelPhaseState) {
+  // When the user puts their fingers down a GFC is receieved.
+  ui::ScrollEvent fling_cancel(ui::ET_SCROLL_FLING_CANCEL, gfx::Point(2, 2),
+                               ui::EventTimeForNow(), 0, 0, 0, 0, 0, 2);
+  view_->OnScrollEvent(&fling_cancel);
+
+  // Scrolling starts.
   ui::ScrollEvent scroll0(ui::ET_SCROLL, gfx::Point(2, 2),
                           ui::EventTimeForNow(), 0, 0, 5, 0, 5, 2);
   view_->OnScrollEvent(&scroll0);
@@ -1944,6 +1985,36 @@ TEST_F(RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest,
   EXPECT_EQ(5U, gesture_event->data.scroll_update.delta_y);
   events[1]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
 
+  // Wait for some time and resume scrolling. The second scroll will latch since
+  // the user hasn't lifted their fingers, yet.
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(),
+      base::TimeDelta::FromMilliseconds(
+          2 * kDefaultMouseWheelLatchingTransactionMs));
+  run_loop.Run();
+  ui::ScrollEvent scroll1(ui::ET_SCROLL, gfx::Point(2, 2),
+                          ui::EventTimeForNow(), 0, 0, 15, 0, 15, 2);
+  view_->OnScrollEvent(&scroll1);
+  base::RunLoop().RunUntilIdle();
+  events = GetAndResetDispatchedMessages();
+  EXPECT_EQ(1U, events.size());
+  wheel_event = static_cast<const WebMouseWheelEvent*>(
+      events[0]->ToEvent()->Event()->web_event.get());
+  EXPECT_EQ(WebMouseWheelEvent::kPhaseChanged, wheel_event->phase);
+  events[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
+  events = GetAndResetDispatchedMessages();
+  EXPECT_EQ("GestureScrollUpdate", GetMessageNames(events));
+  gesture_event = static_cast<const WebGestureEvent*>(
+      events[0]->ToEvent()->Event()->web_event.get());
+  EXPECT_EQ(WebInputEvent::kGestureScrollUpdate, gesture_event->GetType());
+  EXPECT_EQ(0U, gesture_event->data.scroll_update.delta_x);
+  EXPECT_EQ(15U, gesture_event->data.scroll_update.delta_y);
+  events[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
+
+  // A GFS is received showing that the user has lifted their fingers. This will
+  // reset the scroll state of the wheel phase handler.
   ui::ScrollEvent fling_start(ui::ET_SCROLL_FLING_START, gfx::Point(2, 2),
                               ui::EventTimeForNow(), 0, 0, 10, 0, 10, 2);
   view_->OnScrollEvent(&fling_start);
@@ -1957,22 +2028,11 @@ TEST_F(RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest,
   events[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
   SendNotConsumedAcks(events);
 
-  // Let the MouseWheelPhaseHandler::mouse_wheel_end_dispatch_timer_ fire. No
-  // synthetic wheel event will be sent since the timer has stopped.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
-      base::TimeDelta::FromMilliseconds(
-          kDefaultMouseWheelLatchingTransactionMs));
-  base::RunLoop().Run();
-
-  events = GetAndResetDispatchedMessages();
-  EXPECT_EQ(0U, events.size());
-
   // Handling the next ui::ET_SCROLL event will send a fling cancellation and a
   // mouse wheel with kPhaseBegan.
-  ui::ScrollEvent scroll1(ui::ET_SCROLL, gfx::Point(2, 2),
+  ui::ScrollEvent scroll2(ui::ET_SCROLL, gfx::Point(2, 2),
                           ui::EventTimeForNow(), 0, 0, 15, 0, 15, 2);
-  view_->OnScrollEvent(&scroll1);
+  view_->OnScrollEvent(&scroll2);
   base::RunLoop().RunUntilIdle();
   events = GetAndResetDispatchedMessages();
   EXPECT_EQ(2U, events.size());
@@ -2237,6 +2297,56 @@ TEST_F(RenderWidgetHostViewAuraTest, PhysicalBackingSizeWithScale) {
   EXPECT_EQ("100x100", view_->GetPhysicalBackingSize().ToString());
 }
 
+// This test verifies that in AutoResize mode a new
+// ViewMsg_SetLocalSurfaceIdForAutoResize message is sent when ScreenInfo
+// changes and that message contains the latest ScreenInfo.
+TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
+  view_->InitAsChild(nullptr);
+  aura::client::ParentWindowWithContext(
+      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
+      gfx::Rect());
+  sink_->ClearMessages();
+  widget_host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
+  ViewHostMsg_ResizeOrRepaint_ACK_Params params;
+  params.view_size = gfx::Size(75, 75);
+  params.sequence_number = 1;
+  widget_host_->OnResizeOrRepaintACK(params);
+
+  // RenderWidgetHostImpl has delayed auto-resize processing. Yield here to
+  // let it complete.
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop.QuitClosure());
+  run_loop.Run();
+
+  EXPECT_EQ(1u, sink_->message_count());
+  {
+    const IPC::Message* msg = sink_->GetMessageAt(0);
+    EXPECT_EQ(ViewMsg_SetLocalSurfaceIdForAutoResize::ID, msg->type());
+    ViewMsg_SetLocalSurfaceIdForAutoResize::Param params;
+    ViewMsg_SetLocalSurfaceIdForAutoResize::Read(msg, &params);
+    EXPECT_EQ(1u, std::get<0>(params));  // sequence_number
+    EXPECT_EQ("50x50", std::get<1>(params).ToString());
+    EXPECT_EQ("100x100", std::get<2>(params).ToString());
+    EXPECT_EQ(1, std::get<3>(params).device_scale_factor);
+  }
+
+  sink_->ClearMessages();
+  aura_test_helper_->test_screen()->SetDeviceScaleFactor(2.0f);
+
+  EXPECT_EQ(2u, sink_->message_count());
+  {
+    const IPC::Message* msg = sink_->GetMessageAt(1);
+    EXPECT_EQ(ViewMsg_SetLocalSurfaceIdForAutoResize::ID, msg->type());
+    ViewMsg_SetLocalSurfaceIdForAutoResize::Param params;
+    ViewMsg_SetLocalSurfaceIdForAutoResize::Read(msg, &params);
+    EXPECT_EQ(1u, std::get<0>(params));  // sequence_number
+    EXPECT_EQ("50x50", std::get<1>(params).ToString());
+    EXPECT_EQ("100x100", std::get<2>(params).ToString());
+    EXPECT_EQ(2, std::get<3>(params).device_scale_factor);
+  }
+}
+
 // Checks that InputMsg_CursorVisibilityChange IPC messages are dispatched
 // to the renderer at the correct times.
 TEST_F(RenderWidgetHostViewAuraTest, CursorVisibilityChange) {
@@ -2437,7 +2547,8 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   viz::TransferableResource resource;
   resource.id = 1;
   frame.resource_list.push_back(resource);
-  view_->SubmitCompositorFrame(kArbitraryLocalSurfaceId, std::move(frame));
+  view_->SubmitCompositorFrame(kArbitraryLocalSurfaceId, std::move(frame),
+                               nullptr);
   EXPECT_EQ(0u, sink_->message_count());
 
   // Signal that a new RendererCompositorFrameSink was created by the renderer.
@@ -2446,7 +2557,8 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   // Submit another frame. The resources for the previous frame belong to the
   // old RendererCompositorFrameSink and should not be returned.
   view_->SubmitCompositorFrame(local_surface_id_allocator_.GenerateId(),
-                               MakeDelegatedFrame(1.f, view_size, view_rect));
+                               MakeDelegatedFrame(1.f, view_size, view_rect),
+                               nullptr);
   EXPECT_EQ(0u, sink_->message_count());
 
   // Report that the surface is drawn to trigger an ACK.
@@ -2487,7 +2599,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_FullscreenResize) {
     view_->SubmitCompositorFrame(
         kArbitraryLocalSurfaceId,
         MakeDelegatedFrame(1.f, std::get<0>(params).new_size,
-                           gfx::Rect(std::get<0>(params).new_size)));
+                           gfx::Rect(std::get<0>(params).new_size)),
+        nullptr);
     ui::DrawWaiterForTest::WaitForCommit(
         root_window->GetHost()->compositor());
   }
@@ -2511,7 +2624,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_FullscreenResize) {
     view_->SubmitCompositorFrame(
         kArbitraryLocalSurfaceId,
         MakeDelegatedFrame(1.f, std::get<0>(params).new_size,
-                           gfx::Rect(std::get<0>(params).new_size)));
+                           gfx::Rect(std::get<0>(params).new_size)),
+        nullptr);
     ui::DrawWaiterForTest::WaitForCommit(
         root_window->GetHost()->compositor());
   }
@@ -2536,14 +2650,15 @@ TEST_F(RenderWidgetHostViewAuraTest, SwapNotifiesWindow) {
   // Delegated renderer path
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_, view_rect));
   view_->SubmitCompositorFrame(kArbitraryLocalSurfaceId,
-                               MakeDelegatedFrame(1.f, view_size, view_rect));
+                               MakeDelegatedFrame(1.f, view_size, view_rect),
+                               nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
 
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_,
                                                gfx::Rect(5, 5, 5, 5)));
   view_->SubmitCompositorFrame(
       kArbitraryLocalSurfaceId,
-      MakeDelegatedFrame(1.f, view_size, gfx::Rect(5, 5, 5, 5)));
+      MakeDelegatedFrame(1.f, view_size, gfx::Rect(5, 5, 5, 5)), nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
 
   view_->window_->RemoveObserver(&observer);
@@ -2570,7 +2685,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DelegatedFrameGutter) {
   viz::CompositorFrame frame =
       MakeDelegatedFrame(1.f, small_size, gfx::Rect(small_size));
   frame.metadata.root_background_color = SK_ColorRED;
-  view_->SubmitCompositorFrame(small_id, std::move(frame));
+  view_->SubmitCompositorFrame(small_id, std::move(frame), nullptr);
 
   ui::Layer* parent_layer = view_->GetNativeView()->layer();
 
@@ -2591,7 +2706,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DelegatedFrameGutter) {
   EXPECT_EQ(SK_ColorBLACK, parent_layer->children()[0]->background_color());
 
   frame = MakeDelegatedFrame(1.f, medium_size, gfx::Rect(medium_size));
-  view_->SubmitCompositorFrame(medium_id, std::move(frame));
+  view_->SubmitCompositorFrame(medium_id, std::move(frame), nullptr);
   EXPECT_EQ(0u, parent_layer->children().size());
 
   view_->SetSize(large_size);
@@ -2620,7 +2735,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_Resize) {
   view_->Show();
   view_->SetSize(size1);
   view_->SubmitCompositorFrame(
-      id1, MakeDelegatedFrame(1.f, size1, gfx::Rect(size1)));
+      id1, MakeDelegatedFrame(1.f, size1, gfx::Rect(size1)), nullptr);
   ui::DrawWaiterForTest::WaitForCommit(
       root_window->GetHost()->compositor());
   ViewHostMsg_ResizeOrRepaint_ACK_Params update_params;
@@ -2659,7 +2774,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_Resize) {
   // message.
   view_->renderer_compositor_frame_sink_->Reset();
   view_->SubmitCompositorFrame(
-      id3, MakeDelegatedFrame(1.f, size3, gfx::Rect(size3)));
+      id3, MakeDelegatedFrame(1.f, size3, gfx::Rect(size3)), nullptr);
   view_->renderer_compositor_frame_sink_->Flush();
   // Expect the frame ack;
   EXPECT_TRUE(view_->renderer_compositor_frame_sink_->did_receive_ack());
@@ -2669,7 +2784,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_Resize) {
   // produce a Resize message after the commit.
   view_->renderer_compositor_frame_sink_->Reset();
   view_->SubmitCompositorFrame(
-      id2, MakeDelegatedFrame(1.f, size2, gfx::Rect(size2)));
+      id2, MakeDelegatedFrame(1.f, size2, gfx::Rect(size2)), nullptr);
   view_->renderer_compositor_frame_sink_->Flush();
   viz::SurfaceId surface_id = view_->surface_id();
   if (!surface_id.is_valid()) {
@@ -2729,7 +2844,8 @@ TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
   // A full frame of damage.
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_, view_rect));
   view_->SubmitCompositorFrame(local_surface_id,
-                               MakeDelegatedFrame(1.f, frame_size, view_rect));
+                               MakeDelegatedFrame(1.f, frame_size, view_rect),
+                               nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
 
@@ -2738,7 +2854,8 @@ TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
   EXPECT_CALL(observer,
               OnDelegatedFrameDamage(view_->window_, partial_view_rect));
   view_->SubmitCompositorFrame(
-      local_surface_id, MakeDelegatedFrame(1.f, frame_size, partial_view_rect));
+      local_surface_id, MakeDelegatedFrame(1.f, frame_size, partial_view_rect),
+      nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
 
@@ -2756,7 +2873,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
   EXPECT_CALL(observer, OnDelegatedFrameDamage(_, _)).Times(0);
   view_->SubmitCompositorFrame(
       local_surface_id,
-      MakeDelegatedFrame(1.f, frame_size, dropped_damage_rect_1));
+      MakeDelegatedFrame(1.f, frame_size, dropped_damage_rect_1), nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
 
@@ -2764,7 +2881,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
   EXPECT_CALL(observer, OnDelegatedFrameDamage(_, _)).Times(0);
   view_->SubmitCompositorFrame(
       local_surface_id,
-      MakeDelegatedFrame(1.f, frame_size, dropped_damage_rect_2));
+      MakeDelegatedFrame(1.f, frame_size, dropped_damage_rect_2), nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
 
@@ -2779,7 +2896,8 @@ TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
   EXPECT_CALL(observer,
               OnDelegatedFrameDamage(view_->window_, view_rect));
   view_->SubmitCompositorFrame(
-      local_surface_id, MakeDelegatedFrame(1.f, frame_size, new_damage_rect));
+      local_surface_id, MakeDelegatedFrame(1.f, frame_size, new_damage_rect),
+      nullptr);
   // The swap unlocks the compositor.
   EXPECT_TRUE(view_->resize_locked());
   EXPECT_FALSE(view_->compositor_locked());
@@ -2793,7 +2911,8 @@ TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
   EXPECT_CALL(observer,
               OnDelegatedFrameDamage(view_->window_, partial_view_rect));
   view_->SubmitCompositorFrame(
-      local_surface_id, MakeDelegatedFrame(1.f, frame_size, partial_view_rect));
+      local_surface_id, MakeDelegatedFrame(1.f, frame_size, partial_view_rect),
+      nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
   EXPECT_FALSE(view_->resize_locked());
@@ -2817,7 +2936,8 @@ TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
   // This frame should not be dropped.
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_, view_rect));
   view_->SubmitCompositorFrame(local_surface_id,
-                               MakeDelegatedFrame(1.f, frame_size, view_rect));
+                               MakeDelegatedFrame(1.f, frame_size, view_rect),
+                               nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   EXPECT_TRUE(view_->resize_locked());
   EXPECT_FALSE(view_->compositor_locked());
@@ -2847,7 +2967,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ResizeAfterReceivingFrame) {
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_, view_rect));
   view_->SubmitCompositorFrame(
       local_surface_id,
-      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)));
+      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)), nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
 
@@ -2855,7 +2975,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ResizeAfterReceivingFrame) {
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_, _));
   view_->SubmitCompositorFrame(
       local_surface_id,
-      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)));
+      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)), nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
 
   EXPECT_FALSE(view_->resize_locked());
@@ -2870,7 +2990,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ResizeAfterReceivingFrame) {
   EXPECT_CALL(observer, OnDelegatedFrameDamage(_, _)).Times(0);
   view_->SubmitCompositorFrame(
       local_surface_id,
-      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)));
+      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)), nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
 
   // If the CompositorLock times out in the meantime, a commit would happen.
@@ -2885,7 +3005,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ResizeAfterReceivingFrame) {
   EXPECT_CALL(observer, OnDelegatedFrameDamage(_, _)).Times(0);
   view_->SubmitCompositorFrame(
       local_surface_id,
-      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)));
+      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)), nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
 
   // A frame arrives of the new size, which will be accepted.
@@ -2894,7 +3014,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ResizeAfterReceivingFrame) {
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_, _));
   view_->SubmitCompositorFrame(
       local_surface_id,
-      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)));
+      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)), nullptr);
   // Receiving the frame unlocks the compositor so it can commit.
   EXPECT_TRUE(view_->resize_locked());
   EXPECT_FALSE(view_->compositor_locked());
@@ -2932,7 +3052,7 @@ TEST_F(RenderWidgetHostViewAuraTest, MissingFramesDontLock) {
   // DelegatedFrameHost, at which point locking becomes feasible if resized.
   view_->SubmitCompositorFrame(
       kArbitraryLocalSurfaceId,
-      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)));
+      MakeDelegatedFrame(1.f, frame_size, gfx::Rect(frame_size)), nullptr);
   view_->RunOnCompositingDidCommit();
 
   EXPECT_FALSE(view_->resize_locked());
@@ -2975,7 +3095,8 @@ TEST_F(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange) {
   // Swap a frame.
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_, view_rect));
   view_->SubmitCompositorFrame(kArbitraryLocalSurfaceId,
-                               MakeDelegatedFrame(1.f, frame_size, view_rect));
+                               MakeDelegatedFrame(1.f, frame_size, view_rect),
+                               nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
 
@@ -2985,7 +3106,8 @@ TEST_F(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange) {
   // Submit a frame from the new RendererCompositorFrameSink.
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_, view_rect));
   view_->SubmitCompositorFrame(local_surface_id_allocator_.GenerateId(),
-                               MakeDelegatedFrame(1.f, frame_size, view_rect));
+                               MakeDelegatedFrame(1.f, frame_size, view_rect),
+                               nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
 
@@ -2995,7 +3117,7 @@ TEST_F(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange) {
   // Submit a frame from the new RendererCompositorFrameSink.
   view_->SubmitCompositorFrame(
       local_surface_id_allocator_.GenerateId(),
-      MakeDelegatedFrame(1.f, gfx::Size(), gfx::Rect()));
+      MakeDelegatedFrame(1.f, gfx::Size(), gfx::Rect()), nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
 
@@ -3005,7 +3127,8 @@ TEST_F(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange) {
   // Swap another frame, with a different surface id.
   EXPECT_CALL(observer, OnDelegatedFrameDamage(view_->window_, view_rect));
   view_->SubmitCompositorFrame(local_surface_id_allocator_.GenerateId(),
-                               MakeDelegatedFrame(1.f, frame_size, view_rect));
+                               MakeDelegatedFrame(1.f, frame_size, view_rect),
+                               nullptr);
   testing::Mock::VerifyAndClearExpectations(&observer);
   view_->RunOnCompositingDidCommit();
 
@@ -3044,7 +3167,8 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest, SurfaceChanges) {
   // Submitting a CompositorFrame should update the fallback SurfaceInfo
   view_->SubmitCompositorFrame(
       kArbitraryLocalSurfaceId,
-      MakeDelegatedFrame(1.f, gfx::Size(400, 400), gfx::Rect(400, 400)));
+      MakeDelegatedFrame(1.f, gfx::Size(400, 400), gfx::Rect(400, 400)),
+      nullptr);
   EXPECT_EQ(gfx::Size(400, 400),
             view_->window_->layer()->GetPrimarySurfaceInfo()->size_in_pixels());
 }
@@ -3100,7 +3224,8 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 
   // Swap a frame.
   view_->SubmitCompositorFrame(kArbitraryLocalSurfaceId,
-                               MakeDelegatedFrame(1.f, frame_size, view_rect));
+                               MakeDelegatedFrame(1.f, frame_size, view_rect),
+                               nullptr);
   view_->RunOnCompositingDidCommit();
 
   // Signal that a new RendererCompositorFrameSink was created.
@@ -3108,7 +3233,8 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 
   // Submit a frame from the new RendererCompositorFrameSink.
   view_->SubmitCompositorFrame(local_surface_id_allocator_.GenerateId(),
-                               MakeDelegatedFrame(1.f, frame_size, view_rect));
+                               MakeDelegatedFrame(1.f, frame_size, view_rect),
+                               nullptr);
   view_->RunOnCompositingDidCommit();
 }
 
@@ -3263,7 +3389,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
     views[i]->Show();
     views[i]->SubmitCompositorFrame(
         kArbitraryLocalSurfaceId,
-        MakeDelegatedFrame(1.f, frame_size, view_rect));
+        MakeDelegatedFrame(1.f, frame_size, view_rect), nullptr);
     EXPECT_TRUE(views[i]->HasPrimarySurface());
     views[i]->Hide();
   }
@@ -3284,7 +3410,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
 
   // Swap a frame on it, it should evict the next LRU [1].
   views[0]->SubmitCompositorFrame(
-      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect));
+      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect),
+      nullptr);
   EXPECT_TRUE(views[0]->HasPrimarySurface());
   EXPECT_FALSE(views[1]->HasPrimarySurface());
   // Now that [0] got a frame, it shouldn't be waiting any more.
@@ -3294,7 +3421,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   // LRU renderer is [1], still hidden. Swap a frame on it, it should evict
   // the next LRU [2].
   views[1]->SubmitCompositorFrame(
-      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect));
+      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect),
+      nullptr);
   EXPECT_TRUE(views[0]->HasPrimarySurface());
   EXPECT_TRUE(views[1]->HasPrimarySurface());
   EXPECT_FALSE(views[2]->HasPrimarySurface());
@@ -3312,7 +3440,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
               views[i]->released_front_lock_active());
     views[i]->SubmitCompositorFrame(
         kArbitraryLocalSurfaceId,
-        MakeDelegatedFrame(1.f, frame_size, view_rect));
+        MakeDelegatedFrame(1.f, frame_size, view_rect), nullptr);
     // Now everyone has a frame.
     EXPECT_FALSE(views[i]->released_front_lock_active());
     EXPECT_TRUE(views[i]->HasPrimarySurface());
@@ -3321,7 +3449,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
 
   // Swap a frame on [0], it should be evicted immediately.
   views[0]->SubmitCompositorFrame(
-      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect));
+      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect),
+      nullptr);
   EXPECT_FALSE(views[0]->HasPrimarySurface());
 
   // Make [0] visible, and swap a frame on it. Nothing should be evicted
@@ -3330,7 +3459,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   // We don't have a frame, wait.
   EXPECT_TRUE(views[0]->released_front_lock_active());
   views[0]->SubmitCompositorFrame(
-      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect));
+      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect),
+      nullptr);
   EXPECT_FALSE(views[0]->released_front_lock_active());
   for (size_t i = 0; i < renderer_count; ++i)
     EXPECT_TRUE(views[i]->HasPrimarySurface());
@@ -3357,7 +3487,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   views[1]->Show();
   EXPECT_TRUE(views[1]->released_front_lock_active());
   views[1]->SubmitCompositorFrame(
-      id2, MakeDelegatedFrame(1.f, size2, gfx::Rect(size2)));
+      id2, MakeDelegatedFrame(1.f, size2, gfx::Rect(size2)), nullptr);
   EXPECT_FALSE(views[1]->released_front_lock_active());
 
   for (size_t i = 0; i < renderer_count; ++i) {
@@ -3405,7 +3535,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
     views[i]->Show();
     views[i]->SubmitCompositorFrame(
         i ? local_surface_id_allocator_.GenerateId() : kArbitraryLocalSurfaceId,
-        MakeDelegatedFrame(1.f, frame_size, view_rect));
+        MakeDelegatedFrame(1.f, frame_size, view_rect), nullptr);
     EXPECT_TRUE(views[i]->HasPrimarySurface());
   }
 
@@ -3416,7 +3546,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
   // If we lock [0] before hiding it, then [0] should not be evicted.
   views[0]->Show();
   views[0]->SubmitCompositorFrame(
-      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect));
+      kArbitraryLocalSurfaceId, MakeDelegatedFrame(1.f, frame_size, view_rect),
+      nullptr);
   EXPECT_TRUE(views[0]->HasPrimarySurface());
   views[0]->GetDelegatedFrameHost()->LockResources();
   views[0]->Hide();
@@ -3478,7 +3609,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
     views[i]->Show();
     views[i]->SubmitCompositorFrame(
         kArbitraryLocalSurfaceId,
-        MakeDelegatedFrame(1.f, frame_size, view_rect));
+        MakeDelegatedFrame(1.f, frame_size, view_rect), nullptr);
     EXPECT_TRUE(views[i]->HasPrimarySurface());
   }
 
@@ -3561,7 +3692,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardsBeginFrameAcks) {
     viz::BeginFrameAck ack(source_id, 5, true);
     viz::CompositorFrame frame = MakeDelegatedFrame(1.f, frame_size, view_rect);
     frame.metadata.begin_frame_ack = ack;
-    view_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+    view_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr);
     view_->RunOnCompositingDidCommit();
     EXPECT_EQ(ack, observer.last_ack());
   }
@@ -3631,7 +3762,7 @@ class RenderWidgetHostViewAuraCopyRequestTest
   void SubmitCompositorFrame() {
     view_->SubmitCompositorFrame(
         kArbitraryLocalSurfaceId,
-        MakeDelegatedFrame(1.f, view_rect_.size(), view_rect_));
+        MakeDelegatedFrame(1.f, view_rect_.size(), view_rect_), nullptr);
     viz::SurfaceId surface_id =
         view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
     if (surface_id.is_valid())
@@ -5865,6 +5996,38 @@ TEST_F(RenderWidgetHostViewAuraTest, GestureTapFromStylusHasPointerType) {
   EXPECT_EQ(WebInputEvent::kGestureTap, gesture_event->GetType());
   EXPECT_EQ(blink::WebPointerProperties::PointerType::kPen,
             gesture_event->primary_pointer_type);
+}
+
+// Verify that a hit test region list that was provided to the view in a
+// SubmitCompositorFrame becomes the active hit test region in the
+// viz::HitTestManager.
+TEST_F(RenderWidgetHostViewAuraTest, HitTestRegionListSubmitted) {
+  gfx::Rect view_rect(0, 0, 100, 100);
+  gfx::Size frame_size = view_rect.size();
+
+  view_->InitAsChild(nullptr);
+  aura::client::ParentWindowWithContext(
+      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
+      gfx::Rect());
+  view_->SetSize(view_rect.size());
+
+  viz::SurfaceId surface_id(view_->GetFrameSinkId(), kArbitraryLocalSurfaceId);
+
+  auto hit_test_region_list = viz::mojom::HitTestRegionList::New();
+  hit_test_region_list->flags = viz::mojom::kHitTestMine;
+  hit_test_region_list->bounds.SetRect(0, 0, 100, 100);
+  view_->SubmitCompositorFrame(kArbitraryLocalSurfaceId,
+                               MakeDelegatedFrame(1.f, frame_size, view_rect),
+                               std::move(hit_test_region_list));
+
+  const viz::mojom::HitTestRegionList* active_hit_test_region_list =
+      view_->GetDelegatedFrameHost()
+          ->GetCompositorFrameSinkSupportForTesting()
+          ->frame_sink_manager()
+          ->hit_test_manager()
+          ->GetActiveHitTestRegionList(surface_id);
+  EXPECT_EQ(active_hit_test_region_list->flags, viz::mojom::kHitTestMine);
+  EXPECT_EQ(active_hit_test_region_list->bounds, view_rect);
 }
 
 // This class provides functionality to test a RenderWidgetHostViewAura

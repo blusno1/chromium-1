@@ -208,8 +208,24 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_SUPPORT_LEGACY_BLUR_IMAGE
 #endif
 
+// Skia is enabling this feature soon. Chrome probably does
+// not want it for M64
+#ifndef SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
+#define SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
+#endif
+
+// Skia is enabling this feature soon. Chrome probably does
+// not want it for M64
+#ifndef SK_DISABLE_RENDER_TARGET_SORTING
+#define SK_DISABLE_RENDER_TARGET_SORTING
+#endif
+
 #ifndef SK_SUPPORT_LEGACY_DELTA_AA
 #define SK_SUPPORT_LEGACY_DELTA_AA
+#endif
+
+#ifndef SK_USE_LEGACY_INTERP_BLUR
+#define SK_USE_LEGACY_INTERP_BLUR
 #endif
 
 #ifndef SK_SUPPORT_LEGACY_SMALLRECT_AA

@@ -213,8 +213,22 @@ TEST_F(NetworkStateTest, VPNThirdPartyProvider) {
   EXPECT_TRUE(SetProperty(shill::kProviderProperty, std::move(provider)));
   SignalInitialPropertiesReceived();
   EXPECT_EQ(network_state_.vpn_provider_type(), shill::kProviderThirdPartyVpn);
-  EXPECT_EQ(network_state_.third_party_vpn_provider_extension_id(),
+  EXPECT_EQ(network_state_.vpn_provider_id(),
             "third-party-vpn-provider-extension-id");
+}
+
+// Arc VPN provider.
+TEST_F(NetworkStateTest, VPNArcProvider) {
+  EXPECT_TRUE(SetStringProperty(shill::kTypeProperty, shill::kTypeVPN));
+  EXPECT_TRUE(SetStringProperty(shill::kNameProperty, "VPN"));
+
+  std::unique_ptr<base::DictionaryValue> provider(new base::DictionaryValue);
+  provider->SetKey(shill::kTypeProperty, base::Value(shill::kProviderArcVpn));
+  provider->SetKey(shill::kHostProperty, base::Value("package.name.foo"));
+  EXPECT_TRUE(SetProperty(shill::kProviderProperty, std::move(provider)));
+  SignalInitialPropertiesReceived();
+  EXPECT_EQ(network_state_.vpn_provider_type(), shill::kProviderArcVpn);
+  EXPECT_EQ(network_state_.vpn_provider_id(), "package.name.foo");
 }
 
 TEST_F(NetworkStateTest, Visible) {

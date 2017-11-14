@@ -172,6 +172,12 @@ void SetPublicAccountDelegates() {
       new extensions::ActiveTabPermissionGranterDelegateChromeOS);
 }
 
+policy::MinimumVersionPolicyHandler* GetMinimumVersionPolicyHandler() {
+  return g_browser_process->platform_part()
+      ->browser_policy_connector_chromeos()
+      ->GetMinimumVersionPolicyHandler();
+}
+
 }  // namespace
 
 // static
@@ -249,6 +255,11 @@ ChromeUserManagerImpl::ChromeUserManagerImpl()
       g_browser_process->platform_part()
           ->browser_policy_connector_chromeos()
           ->GetDeviceLocalAccountPolicyService();
+
+  if (GetMinimumVersionPolicyHandler()) {
+    GetMinimumVersionPolicyHandler()->AddObserver(this);
+  }
+
   if (!device_local_account_policy_service) {
     return;
   }
@@ -274,6 +285,10 @@ ChromeUserManagerImpl::~ChromeUserManagerImpl() {}
 void ChromeUserManagerImpl::Shutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   ChromeUserManager::Shutdown();
+
+  if (GetMinimumVersionPolicyHandler()) {
+    GetMinimumVersionPolicyHandler()->RemoveObserver(this);
+  }
 
   local_accounts_subscription_.reset();
 
@@ -770,7 +785,7 @@ void ChromeUserManagerImpl::GuestUserLoggedIn() {
       user_manager::User::USER_IMAGE_INVALID, false);
 
   // Initializes wallpaper after active_user_ is set.
-  WallpaperManager::Get()->SetUserWallpaper(user_manager::GuestAccountId());
+  WallpaperManager::Get()->ShowUserWallpaper(user_manager::GuestAccountId());
 }
 
 void ChromeUserManagerImpl::RegularUserLoggedIn(const AccountId& account_id) {
@@ -785,7 +800,7 @@ void ChromeUserManagerImpl::RegularUserLoggedIn(const AccountId& account_id) {
   }
 
   if (IsCurrentUserNew())
-    WallpaperManager::Get()->SetUserWallpaper(account_id);
+    WallpaperManager::Get()->ShowUserWallpaper(account_id);
 
   GetUserImageManager(account_id)->UserLoggedIn(IsCurrentUserNew(), false);
 
@@ -801,7 +816,7 @@ void ChromeUserManagerImpl::RegularUserLoggedInAsEphemeral(
   ChromeUserManager::RegularUserLoggedInAsEphemeral(account_id);
 
   GetUserImageManager(account_id)->UserLoggedIn(IsCurrentUserNew(), false);
-  WallpaperManager::Get()->SetUserWallpaper(account_id);
+  WallpaperManager::Get()->ShowUserWallpaper(account_id);
 }
 
 void ChromeUserManagerImpl::SupervisedUserLoggedIn(
@@ -816,11 +831,11 @@ void ChromeUserManagerImpl::SupervisedUserLoggedIn(
     SetIsCurrentUserNew(true);
     active_user_ = user_manager::User::CreateSupervisedUser(account_id);
     // Leaving OAuth token status at the default state = unknown.
-    WallpaperManager::Get()->SetUserWallpaper(account_id);
+    WallpaperManager::Get()->ShowUserWallpaper(account_id);
   } else {
     if (supervised_user_manager_->CheckForFirstRun(account_id.GetUserEmail())) {
       SetIsCurrentUserNew(true);
-      WallpaperManager::Get()->SetUserWallpaper(account_id);
+      WallpaperManager::Get()->ShowUserWallpaper(account_id);
     } else {
       SetIsCurrentUserNew(false);
     }
@@ -860,7 +875,7 @@ void ChromeUserManagerImpl::PublicAccountUserLoggedIn(
   // always fetched/cleared inside a user session), in the case the user-policy
   // controlled wallpaper was cached/cleared by not updated in the login screen,
   // so we need to update the wallpaper after the public user logged in.
-  WallpaperManager::Get()->SetUserWallpaper(user->GetAccountId());
+  WallpaperManager::Get()->ShowUserWallpaper(user->GetAccountId());
   WallpaperManager::Get()->EnsureLoggedInUserWallpaperLoaded();
 
   SetPublicAccountDelegates();
@@ -877,7 +892,7 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(user_manager::User* user) {
       user_manager::User::USER_IMAGE_INVALID, false);
 
   const AccountId& kiosk_app_account_id = user->GetAccountId();
-  WallpaperManager::Get()->SetUserWallpaper(kiosk_app_account_id);
+  WallpaperManager::Get()->ShowUserWallpaper(kiosk_app_account_id);
 
   // TODO(bartfab): Add KioskAppUsers to the users_ list and keep metadata like
   // the kiosk_app_id in these objects, removing the need to re-parse the
@@ -947,7 +962,7 @@ void ChromeUserManagerImpl::DemoAccountLoggedIn() {
           *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
               IDR_LOGIN_DEFAULT_USER)),
       user_manager::User::USER_IMAGE_INVALID, false);
-  WallpaperManager::Get()->SetUserWallpaper(user_manager::DemoAccountId());
+  WallpaperManager::Get()->ShowUserWallpaper(user_manager::DemoAccountId());
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitch(::switches::kForceAppMode);
@@ -982,7 +997,7 @@ void ChromeUserManagerImpl::RemoveNonCryptohomeData(
     const AccountId& account_id) {
   ChromeUserManager::RemoveNonCryptohomeData(account_id);
 
-  WallpaperManager::Get()->RemoveUserWallpaperInfo(account_id);
+  WallpaperManager::Get()->RemoveUserWallpaper(account_id);
   GetUserImageManager(account_id)->DeleteUserImage();
 
   supervised_user_manager_->RemoveNonCryptohomeData(account_id.GetUserEmail());
@@ -1186,6 +1201,17 @@ bool ChromeUserManagerImpl::IsGaiaUserAllowed(
                                      nullptr);
 }
 
+void ChromeUserManagerImpl::OnMinimumVersionStateChanged() {
+  NotifyUsersSignInConstraintsChanged();
+}
+
+bool ChromeUserManagerImpl::MinVersionConstraintsSatisfied() const {
+  return g_browser_process->platform_part()
+      ->browser_policy_connector_chromeos()
+      ->GetMinimumVersionPolicyHandler()
+      ->RequirementsAreSatisfied();
+}
+
 bool ChromeUserManagerImpl::IsUserAllowed(
     const user_manager::User& user) const {
   DCHECK(user.GetType() == user_manager::USER_TYPE_REGULAR ||
@@ -1200,6 +1226,9 @@ bool ChromeUserManagerImpl::IsUserAllowed(
       !AreSupervisedUsersAllowed())
     return false;
   if (user.HasGaiaAccount() && !IsGaiaUserAllowed(user))
+    return false;
+  if (!MinVersionConstraintsSatisfied() &&
+      user.GetType() != user_manager::USER_TYPE_GUEST)
     return false;
   return true;
 }

@@ -46,6 +46,11 @@ void RecordInterventionUserDecision(bool accepted) {
                         accepted);
 }
 
+void RecordInterventionStateOnCrash(bool accepted) {
+  UMA_HISTOGRAM_BOOLEAN(
+      "Memory.Experimental.OomIntervention.InterventionStateOnCrash", accepted);
+}
+
 const char kRendererPauseParamName[] = "pause_renderer";
 
 bool RendererPauseIsEnabled() {
@@ -63,20 +68,25 @@ bool OomInterventionTabHelper::IsEnabled() {
 
 OomInterventionTabHelper::OomInterventionTabHelper(
     content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {}
+    : content::WebContentsObserver(web_contents) {
+  OutOfMemoryReporter::FromWebContents(web_contents)->AddObserver(this);
+}
 
 OomInterventionTabHelper::~OomInterventionTabHelper() = default;
 
 void OomInterventionTabHelper::AcceptIntervention() {
   RecordInterventionUserDecision(true);
+  intervention_state_ = InterventionState::ACCEPTED;
 }
 
 void OomInterventionTabHelper::DeclineIntervention() {
   RecordInterventionUserDecision(false);
   intervention_.reset();
+  intervention_state_ = InterventionState::DECLINED;
 }
 
 void OomInterventionTabHelper::WebContentsDestroyed() {
+  OutOfMemoryReporter::FromWebContents(web_contents())->RemoveObserver(this);
   StopMonitoring();
 }
 
@@ -86,33 +96,24 @@ void OomInterventionTabHelper::RenderProcessGone(
 
   // Skip background process termination.
   if (!IsLastVisibleWebContents(web_contents())) {
-    near_oom_detected_time_.reset();
+    ResetInterventionState();
     return;
   }
+
+  // OOM crash is handled in OnForegroundOOMDetected().
+  if (status == base::TERMINATION_STATUS_OOM_PROTECTED)
+    return;
 
   if (near_oom_detected_time_) {
     base::TimeDelta elapsed_time =
         base::TimeTicks::Now() - near_oom_detected_time_.value();
-    if (status == base::TERMINATION_STATUS_OOM_PROTECTED) {
-      UMA_HISTOGRAM_MEDIUM_TIMES(
-          "Memory.Experimental.OomIntervention."
-          "OomProtectedCrashAfterDetectionTime",
-          elapsed_time);
-    } else {
-      UMA_HISTOGRAM_MEDIUM_TIMES(
-          "Memory.Experimental.OomIntervention."
-          "RendererGoneAfterDetectionTime",
-          elapsed_time);
-    }
-    near_oom_detected_time_.reset();
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "Memory.Experimental.OomIntervention."
+        "RendererGoneAfterDetectionTime",
+        elapsed_time);
+    ResetInterventionState();
   } else {
-    if (status == base::TERMINATION_STATUS_OOM_PROTECTED) {
-      RecordNearOomMonitoringEndReason(
-          NearOomMonitoringEndReason::OOM_PROTECTED_CRASH);
-    } else {
-      RecordNearOomMonitoringEndReason(
-          NearOomMonitoringEndReason::RENDERER_GONE);
-    }
+    RecordNearOomMonitoringEndReason(NearOomMonitoringEndReason::RENDERER_GONE);
   }
 }
 
@@ -135,7 +136,7 @@ void OomInterventionTabHelper::DidStartNavigation(
 
   // Filter out background navigation.
   if (!IsLastVisibleWebContents(navigation_handle->GetWebContents())) {
-    near_oom_detected_time_.reset();
+    ResetInterventionState();
     return;
   }
 
@@ -147,7 +148,7 @@ void OomInterventionTabHelper::DidStartNavigation(
         "Memory.Experimental.OomIntervention."
         "NavigatedAfterDetectionTime",
         elapsed_time);
-    near_oom_detected_time_.reset();
+    ResetInterventionState();
   } else {
     // Monitoring but near-OOM hasn't been detected.
     RecordNearOomMonitoringEndReason(NearOomMonitoringEndReason::NAVIGATION);
@@ -166,6 +167,31 @@ void OomInterventionTabHelper::WasShown() {
 
 void OomInterventionTabHelper::WasHidden() {
   StopMonitoring();
+}
+
+void OomInterventionTabHelper::OnForegroundOOMDetected(
+    const GURL& url,
+    ukm::SourceId source_id) {
+  DCHECK(IsLastVisibleWebContents(web_contents()));
+  if (near_oom_detected_time_) {
+    base::TimeDelta elapsed_time =
+        base::TimeTicks::Now() - near_oom_detected_time_.value();
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "Memory.Experimental.OomIntervention."
+        "OomProtectedCrashAfterDetectionTime",
+        elapsed_time);
+
+    if (intervention_state_ != InterventionState::NOT_TRIGGERED) {
+      // Consider UI_SHOWN as ACCEPTED because we already triggered the
+      // intervention and the user didn't decline.
+      bool accepted = intervention_state_ != InterventionState::DECLINED;
+      RecordInterventionStateOnCrash(accepted);
+    }
+    ResetInterventionState();
+  } else {
+    RecordNearOomMonitoringEndReason(
+        NearOomMonitoringEndReason::OOM_PROTECTED_CRASH);
+  }
 }
 
 void OomInterventionTabHelper::StartMonitoringIfNeeded() {
@@ -197,5 +223,11 @@ void OomInterventionTabHelper::OnNearOomDetected() {
     content::BindInterface(render_process_host,
                            mojo::MakeRequest(&intervention_));
     NearOomInfoBar::Show(web_contents(), this);
+    intervention_state_ = InterventionState::UI_SHOWN;
   }
+}
+
+void OomInterventionTabHelper::ResetInterventionState() {
+  near_oom_detected_time_.reset();
+  intervention_state_ = InterventionState::NOT_TRIGGERED;
 }

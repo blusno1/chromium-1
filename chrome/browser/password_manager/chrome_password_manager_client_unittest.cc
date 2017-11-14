@@ -92,7 +92,9 @@ class MockPasswordProtectionService
                     safe_browsing::LoginReputationClientRequest::Frame*));
   MOCK_METHOD0(IsExtendedReporting, bool());
   MOCK_METHOD0(IsIncognito, bool());
-  MOCK_METHOD2(IsPingingEnabled, bool(const base::Feature&, RequestOutcome*));
+  MOCK_METHOD2(IsPingingEnabled,
+               bool(safe_browsing::LoginReputationClientRequest::TriggerType,
+                    RequestOutcome*));
   MOCK_METHOD0(IsHistorySyncEnabled, bool());
   MOCK_METHOD3(MaybeLogPasswordReuseLookupEvent,
                void(WebContents*,
@@ -110,7 +112,8 @@ class MockPasswordProtectionService
   MOCK_METHOD3(ShowPhishingInterstitial,
                void(const GURL&, const std::string&, content::WebContents*));
   MOCK_METHOD0(GetSyncAccountType,
-               safe_browsing::PasswordProtectionService::SyncAccountType());
+               safe_browsing::LoginReputationClientRequest::PasswordReuseEvent::
+                   SyncAccountType());
   MOCK_METHOD2(ShowModalWarning,
                void(content::WebContents*, const std::string&));
   MOCK_METHOD3(OnUserAction,
@@ -118,6 +121,8 @@ class MockPasswordProtectionService
   MOCK_METHOD2(UpdateSecurityState,
                void(safe_browsing::SBThreatType, content::WebContents*));
   MOCK_METHOD1(UserClickedThroughSBInterstitial, bool(content::WebContents*));
+  MOCK_METHOD2(RemoveUnhandledSyncPasswordReuseOnURLsDeleted,
+               void(bool, const history::URLRows&));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockPasswordProtectionService);

@@ -36,7 +36,9 @@ cr.define('extension_error_page_tests', function() {
     },
   };
 
-  suite('ExtensionErrorPageTest', function() {
+  var suiteName = 'ExtensionErrorPageTest';
+
+  suite(suiteName, function() {
     /** @type {chrome.developerPrivate.ExtensionInfo} */
     var extensionData;
 
@@ -176,7 +178,8 @@ cr.define('extension_error_page_tests', function() {
 
       // The first error should be focused by default, and we should have
       // requested the source for it.
-      expectEquals(extensionData.runtimeErrors[0], errorPage.selectedError_);
+      expectEquals(
+          extensionData.runtimeErrors[0], errorPage.getSelectedError());
       expectTrue(!!mockDelegate.requestFileSourceArgs);
       var args = mockDelegate.requestFileSourceArgs;
       expectEquals('source.html', args.pathSuffix);
@@ -190,9 +193,9 @@ cr.define('extension_error_page_tests', function() {
       // Tap the second error. It should now be selected and we should request
       // the source for it.
       MockInteractions.tap(errorElements[1]);
-      expectEquals(nextRuntimeError, errorPage.selectedError_);
+      expectEquals(nextRuntimeError, errorPage.getSelectedError());
       expectTrue(!!mockDelegate.requestFileSourceArgs);
-      args = mockDelegate.requestFileSourceArgs
+      args = mockDelegate.requestFileSourceArgs;
       expectEquals('other_source.html', args.pathSuffix);
       expectTrue(ironCollapses[1].opened);
       expectFalse(ironCollapses[0].opened);
@@ -211,6 +214,7 @@ cr.define('extension_error_page_tests', function() {
   });
 
   return {
+    suiteName: suiteName,
     TestNames: TestNames,
   };
 });

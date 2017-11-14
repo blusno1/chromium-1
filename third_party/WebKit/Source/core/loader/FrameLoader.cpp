@@ -41,7 +41,6 @@
 #include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
@@ -97,6 +96,7 @@
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
@@ -316,6 +316,41 @@ void FrameLoader::SetDefersLoading(bool defers) {
     frame_->GetNavigationScheduler().StartTimer();
 }
 
+bool FrameLoader::ShouldSerializeScrollAnchor() {
+  return RuntimeEnabledFeatures::ScrollAnchorSerializationEnabled();
+}
+
+void FrameLoader::SaveScrollAnchor() {
+  if (!ShouldSerializeScrollAnchor())
+    return;
+
+  if (!document_loader_ || !document_loader_->GetHistoryItem() ||
+      !frame_->View())
+    return;
+
+  // Shouldn't clobber anything if we might still restore later.
+  if (NeedsHistoryItemRestore(document_loader_->LoadType()) &&
+      !document_loader_->GetInitialScrollState().was_scrolled_by_user)
+    return;
+
+  HistoryItem* history_item = document_loader_->GetHistoryItem();
+  if (ScrollableArea* layout_scrollable_area =
+          frame_->View()->LayoutViewportScrollableArea()) {
+    ScrollAnchor* scroll_anchor = layout_scrollable_area->GetScrollAnchor();
+    DCHECK(scroll_anchor);
+
+    ScrollAnchor::SerializedAnchor serialized_anchor =
+        scroll_anchor->SerializeAnchor();
+    if (serialized_anchor.IsValid()) {
+      history_item->SetScrollAnchorData(
+          {serialized_anchor.selector,
+           WebFloatPoint(serialized_anchor.relative_offset.X(),
+                         serialized_anchor.relative_offset.Y()),
+           serialized_anchor.simhash});
+    }
+  }
+}
+
 void FrameLoader::SaveScrollState() {
   if (!document_loader_ || !document_loader_->GetHistoryItem() ||
       !frame_->View())
@@ -346,6 +381,9 @@ void FrameLoader::DispatchUnloadEvent() {
   // protected. It will be detached soon.
   protect_provisional_loader_ = false;
   SaveScrollState();
+  // TODO(pnoland): move this SaveScrollAnchorCall to where we fire the
+  // visibilitychange event with value 'hidden.'
+  SaveScrollAnchor();
 
   if (frame_->GetDocument() && !SVGImage::IsInSVGImage(frame_->GetDocument()))
     frame_->GetDocument()->DispatchUnloadEvents();
@@ -581,7 +619,7 @@ void FrameLoader::LoadInSameDocument(
   std::unique_ptr<HistoryItem::ViewState> view_state;
   if (history_item && history_item->GetViewState()) {
     view_state =
-        WTF::MakeUnique<HistoryItem::ViewState>(*history_item->GetViewState());
+        std::make_unique<HistoryItem::ViewState>(*history_item->GetViewState());
   }
 
   frame_->DomWindow()->StatePopped(state_object
@@ -1141,8 +1179,19 @@ void FrameLoader::RestoreScrollPositionAndViewState(
     return;
 
   if (should_restore_scroll) {
-    view->LayoutViewportScrollableArea()->SetScrollOffset(
-        view_state->scroll_offset_, kProgrammaticScroll);
+    // TODO(pnoland): attempt to restore the anchor in more places than this.
+    // Anchor-based restore should allow for earlier restoration.
+    bool did_restore =
+        ShouldSerializeScrollAnchor() &&
+        view->RestoreScrollAnchor(
+            {view_state->scroll_anchor_data_.selector_,
+             LayoutPoint(view_state->scroll_anchor_data_.offset_.x,
+                         view_state->scroll_anchor_data_.offset_.y),
+             view_state->scroll_anchor_data_.simhash_});
+    if (!did_restore) {
+      view->LayoutViewportScrollableArea()->SetScrollOffset(
+          view_state->scroll_offset_, kProgrammaticScroll);
+    }
   }
 
   // For main frame restore scale and visual viewport position
@@ -1468,6 +1517,16 @@ void FrameLoader::StartLoad(FrameLoadRequest& frame_load_request,
   if (had_placeholder_client_document_loader)
     provisional_document_loader_->SetSentDidFinishLoad();
   frame_->GetDocument()->CancelParsing();
+
+  // If we're starting a regular navigation on a regular document (i.e., there
+  // was no placeholder DocumentLoader), it's not enough to cancel parsing, but
+  // we also have to check whether the document was completed, so it's in a
+  // defined state should the navigation fail.
+  if (!had_placeholder_client_document_loader &&
+      type == kFrameLoadTypeStandard &&
+      navigation_policy == kNavigationPolicyCurrentTab) {
+    frame_->GetDocument()->CheckCompleted();
+  }
   DetachDocumentLoader(provisional_document_loader_);
 
   // beforeunload fired above, and detaching a DocumentLoader can fire events,
@@ -1743,6 +1802,8 @@ DocumentLoader* FrameLoader::CreateDocumentLoader(
   bool replace_current_item = load_type == kFrameLoadTypeReplaceCurrentItem &&
                               (!Opener() || !request.Url().IsEmpty());
   loader->SetReplacesCurrentHistoryItem(replace_current_item);
+
+  probe::lifecycleEvent(frame_, loader, "init", MonotonicallyIncreasingTime());
   return loader;
 }
 

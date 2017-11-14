@@ -28,7 +28,6 @@
 #include "content/common/throttling_url_loader.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/resource_request.h"
-#include "content/public/common/resource_request_completion_status.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/renderer/fixed_received_data.h"
@@ -44,6 +43,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
+#include "services/network/public/cpp/url_loader_status.h"
 
 namespace content {
 
@@ -340,7 +340,7 @@ void ResourceDispatcher::FollowPendingRedirect(
 
 void ResourceDispatcher::OnRequestComplete(
     int request_id,
-    const ResourceRequestCompletionStatus& request_complete_data) {
+    const network::URLLoaderStatus& status) {
   TRACE_EVENT0("loader", "ResourceDispatcher::OnRequestComplete");
 
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
@@ -358,13 +358,10 @@ void ResourceDispatcher::OnRequestComplete(
   if (delegate_) {
     std::unique_ptr<RequestPeer> new_peer = delegate_->OnRequestComplete(
         std::move(request_info->peer), request_info->resource_type,
-        request_complete_data.error_code);
+        status.error_code);
     DCHECK(new_peer);
     request_info->peer = std::move(new_peer);
   }
-
-  base::TimeTicks renderer_completion_time = ToRendererCompletionTime(
-      *request_info, request_complete_data.completion_time);
 
   // The request ID will be removed from our pending list in the destructor.
   // Normally, dispatching this message causes the reference-counted request to
@@ -372,12 +369,10 @@ void ResourceDispatcher::OnRequestComplete(
   // TODO(kinuko): Revisit here. This probably needs to call request_info->peer
   // but the past attempt to change it seems to have caused crashes.
   // (crbug.com/547047)
-  peer->OnCompletedRequest(request_complete_data.error_code,
-                           request_complete_data.exists_in_cache,
-                           renderer_completion_time,
-                           request_complete_data.encoded_data_length,
-                           request_complete_data.encoded_body_length,
-                           request_complete_data.decoded_body_length);
+  network::URLLoaderStatus renderer_status(status);
+  renderer_status.completion_time =
+      ToRendererCompletionTime(*request_info, status.completion_time);
+  peer->OnCompletedRequest(renderer_status);
 }
 
 bool ResourceDispatcher::RemovePendingRequest(int request_id) {
@@ -780,14 +775,14 @@ void ResourceDispatcher::ContinueForNavigation(
 
   // Call OnComplete now too, as it won't get called on the client.
   // TODO(kinuko): Fill this properly.
-  ResourceRequestCompletionStatus completion_status;
-  completion_status.error_code = net::OK;
-  completion_status.exists_in_cache = false;
-  completion_status.completion_time = base::TimeTicks::Now();
-  completion_status.encoded_data_length = -1;
-  completion_status.encoded_body_length = -1;
-  completion_status.decoded_body_length = -1;
-  client_ptr->OnComplete(completion_status);
+  network::URLLoaderStatus status;
+  status.error_code = net::OK;
+  status.exists_in_cache = false;
+  status.completion_time = base::TimeTicks::Now();
+  status.encoded_data_length = -1;
+  status.encoded_body_length = -1;
+  status.decoded_body_length = -1;
+  client_ptr->OnComplete(status);
 }
 
 // static

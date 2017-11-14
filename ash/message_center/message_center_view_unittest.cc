@@ -32,7 +32,7 @@ namespace ash {
 using message_center::FakeMessageCenter;
 using message_center::MessageCenter;
 using message_center::MessageViewDelegate;
-using message_center::MessageCenterTray;
+using message_center::UiController;
 using message_center::MessageView;
 using message_center::Notification;
 using message_center::NotificationList;
@@ -116,10 +116,8 @@ class FakeMessageCenterImpl : public FakeMessageCenter {
     if (type == RemoveType::NON_PINNED)
       remove_all_closable_notification_called_ = true;
   }
-  bool IsLockedState() const override { return locked_; }
   bool remove_all_closable_notification_called_ = false;
   NotificationList::Notifications visible_notifications_;
-  bool locked_ = false;
 };
 
 // This is the class we are testing, but we need to override some functions
@@ -127,7 +125,7 @@ class FakeMessageCenterImpl : public FakeMessageCenter {
 class MockMessageCenterView : public MessageCenterView {
  public:
   MockMessageCenterView(MessageCenter* message_center,
-                        MessageCenterTray* tray,
+                        UiController* ui_controller,
                         int max_height,
                         bool initially_settings_visible);
 
@@ -140,11 +138,11 @@ class MockMessageCenterView : public MessageCenterView {
 };
 
 MockMessageCenterView::MockMessageCenterView(MessageCenter* message_center,
-                                             MessageCenterTray* tray,
+                                             UiController* ui_controller,
                                              int max_height,
                                              bool initially_settings_visible)
     : MessageCenterView(message_center,
-                        tray,
+                        ui_controller,
                         max_height,
                         initially_settings_visible) {}
 
@@ -343,7 +341,7 @@ int MessageCenterViewTest::GetCallCount(CallType type) {
 }
 
 void MessageCenterViewTest::SetLockedState(bool locked) {
-  GetMessageCenterView()->OnLockedStateChanged(locked);
+  GetMessageCenterView()->OnLockStateChanged(locked);
 }
 
 void MessageCenterViewTest::ClickOnNotification(

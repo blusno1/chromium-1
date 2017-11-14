@@ -1,4 +1,9 @@
 {
+  "Mac Builder": {
+    "additional_compile_targets": [
+      "pdf_fuzzers"
+    ]
+  },
   "Mac10.10 Tests": {
     "gtest_tests": [
       {
@@ -97,6 +102,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -397,6 +408,9 @@
         }
       },
       {
+        "args": [
+          "--jobs=1"
+        ],
         "isolate_name": "telemetry_perf_unittests",
         "name": "telemetry_perf_unittests",
         "swarming": {
@@ -564,6 +578,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -862,6 +882,9 @@
         }
       },
       {
+        "args": [
+          "--jobs=1"
+        ],
         "isolate_name": "telemetry_perf_unittests",
         "name": "telemetry_perf_unittests",
         "swarming": {
@@ -1017,6 +1040,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -1477,6 +1506,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "crashpad_tests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "crypto_unittests"
       },
       {
@@ -1757,6 +1792,13 @@
     ],
     "isolated_scripts": [
       {
+        "isolate_name": "content_shell_crash_test",
+        "name": "content_shell_crash_test",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
+      },
+      {
         "isolate_name": "metrics_python_tests",
         "name": "metrics_python_tests",
         "swarming": {
@@ -1891,6 +1933,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "crashpad_tests"
       },
       {
         "swarming": {

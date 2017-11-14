@@ -133,7 +133,7 @@ class DeleteWatcher : public BaseWatcher {
   void OnFileCanWriteWithoutBlocking(int /* fd */) override {
     DCHECK(controller_);
     delete controller_;
-    controller_ = NULL;
+    controller_ = nullptr;
   }
 };
 
@@ -176,8 +176,7 @@ TEST_F(MessagePumpLibeventTest, StopWatcher) {
 void QuitMessageLoopAndStart(const Closure& quit_closure) {
   quit_closure.Run();
 
-  MessageLoop::ScopedNestableTaskAllower allow(MessageLoop::current());
-  RunLoop runloop;
+  RunLoop runloop(RunLoop::Type::kNestableTasksAllowed);
   ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, runloop.QuitClosure());
   runloop.Run();
 }

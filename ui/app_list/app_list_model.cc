@@ -22,7 +22,7 @@ AppListModel::AppListModel()
       results_(new SearchResults),
       status_(STATUS_NORMAL),
       state_(INVALID_STATE),
-      state_fullscreen_(AppListView::CLOSED),
+      state_fullscreen_(AppListViewState::CLOSED),
       folders_enabled_(false),
       custom_launcher_page_enabled_(true),
       search_engine_is_google_(false),
@@ -63,7 +63,7 @@ void AppListModel::SetState(State state) {
     observer.OnAppListModelStateChanged(old_state, state_);
 }
 
-void AppListModel::SetStateFullscreen(AppListView::AppListState state) {
+void AppListModel::SetStateFullscreen(AppListViewState state) {
   state_fullscreen_ = state;
 }
 
@@ -330,25 +330,22 @@ void AppListModel::SetFoldersEnabled(bool folders_enabled) {
     DeleteItem(folder_ids[i]);
 }
 
-void AppListModel::RecordItemsInFoldersForUMA() {
-  int number_of_items_in_folders = 0;
-  for (size_t i = 0; i < top_level_item_list_->item_count(); i++) {
+void AppListModel::RecordFolderMetrics() {
+  int number_of_apps_in_folders = 0;
+  int number_of_folders = 0;
+  for (size_t i = 0; i < top_level_item_list_->item_count(); ++i) {
     AppListItem* item = top_level_item_list_->item_at(i);
     if (item->GetItemType() != AppListFolderItem::kItemType)
       continue;
-
+    ++number_of_folders;
     AppListFolderItem* folder = static_cast<AppListFolderItem*>(item);
     if (folder->folder_type() == AppListFolderItem::FOLDER_TYPE_OEM)
-      continue;  // Don't count OEM folders.
-    number_of_items_in_folders += folder->item_list()->item_count();
+      continue;  // Don't count items in OEM folders.
+    number_of_apps_in_folders += folder->item_list()->item_count();
   }
-  if (features::IsFullscreenAppListEnabled()) {
-    UMA_HISTOGRAM_COUNTS_100("Apps.AppsInFolders.FullscreenAppListEnabled",
-                             number_of_items_in_folders);
-  } else {
-    UMA_HISTOGRAM_COUNTS_100("Apps.AppsInFolders.FullscreenAppListDisabled",
-                             number_of_items_in_folders);
-  }
+  UMA_HISTOGRAM_COUNTS_100(kNumberOfFoldersHistogram, number_of_folders);
+  UMA_HISTOGRAM_COUNTS_100(kNumberOfAppsInFoldersHistogram,
+                           number_of_apps_in_folders);
 }
 
 void AppListModel::SetCustomLauncherPageEnabled(bool enabled) {

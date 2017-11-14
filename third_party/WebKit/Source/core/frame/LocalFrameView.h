@@ -283,6 +283,7 @@ class CORE_EXPORT LocalFrameView final
   void DidAttachDocument();
 
   void RestoreScrollbar();
+  bool RestoreScrollAnchor(const ScrollAnchor::SerializedAnchor&);
 
   void PostLayoutTimerFired(TimerBase*);
 
@@ -978,7 +979,6 @@ class CORE_EXPORT LocalFrameView final
   void UpdateStyleAndLayoutIfNeededRecursive();
   void PrePaint();
   void PaintTree();
-  void PaintGraphicsLayerRecursively(GraphicsLayer*);
 
   void UpdateStyleAndLayoutIfNeededRecursiveInternal();
 
@@ -1061,7 +1061,7 @@ class CORE_EXPORT LocalFrameView final
 
   void UpdateScrollCorner();
 
-  AXObjectCache* AxObjectCache() const;
+  AXObjectCache* ExistingAXObjectCache() const;
 
   void SetLayoutSizeInternal(const IntSize&);
 

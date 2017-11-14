@@ -159,7 +159,8 @@ void TabletModeWindowManager::OnWindowPropertyChanged(aura::Window* window,
 void TabletModeWindowManager::OnWindowBoundsChanged(
     aura::Window* window,
     const gfx::Rect& old_bounds,
-    const gfx::Rect& new_bounds) {
+    const gfx::Rect& new_bounds,
+    ui::PropertyChangeReason reason) {
   if (!IsContainerWindow(window))
     return;
   // Reposition all non maximizeable windows.
@@ -218,6 +219,13 @@ void TabletModeWindowManager::OnSplitViewStateChanged(
       SetDeferBoundsUpdates(split_view_controller->left_window(), false);
     if (split_view_controller->right_window())
       SetDeferBoundsUpdates(split_view_controller->right_window(), false);
+  } else {
+    // If split view mode is ended when overview mode is still active, defer
+    // all bounds change until overview mode is ended.
+    if (Shell::Get()->window_selector_controller()->IsSelecting()) {
+      for (auto& pair : window_state_map_)
+        SetDeferBoundsUpdates(pair.first, true);
+    }
   }
 }
 

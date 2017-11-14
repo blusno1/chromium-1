@@ -328,7 +328,7 @@ static void AdjustStyleForDisplay(ComputedStyle& style,
       style.GetWritingMode() != layout_parent_style.GetWritingMode())
     style.SetDisplay(EDisplay::kInlineBlock);
 
-  // We do not honor position: relative or sticky for table rows, headers, and
+  // We do not honor position: sticky for table rows, headers, and
   // footers. This is correct for position: relative in CSS2.1 (and caused a
   // crash in containingBlock() on some sites) and position: sticky is defined
   // as following position: relative behavior for table elements. It is
@@ -337,7 +337,7 @@ static void AdjustStyleForDisplay(ComputedStyle& style,
        style.Display() == EDisplay::kTableRowGroup ||
        style.Display() == EDisplay::kTableFooterGroup ||
        style.Display() == EDisplay::kTableRow) &&
-      style.HasInFlowPosition())
+      style.GetPosition() == EPosition::kSticky)
     style.SetPosition(EPosition::kStatic);
 
   // Cannot support position: sticky for table columns and column groups because
@@ -576,7 +576,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     // position.
     if (!(IsSVGSVGElement(*element) && element->parentNode() &&
           !element->parentNode()->IsSVGElement()))
-      style.SetPosition(ComputedStyle::InitialPosition());
+      style.SetPosition(ComputedStyleInitialValues::InitialPosition());
 
     // SVG text layout code expects us to be a block-level style element.
     if ((IsSVGForeignObjectElement(*element) || IsSVGTextElement(*element)) &&

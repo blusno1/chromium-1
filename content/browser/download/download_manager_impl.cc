@@ -22,6 +22,8 @@
 #include "base/supports_user_data.h"
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
+#include "components/download/downloader/in_progress/download_entry.h"
+#include "components/download/downloader/in_progress/in_progress_cache.h"
 #include "content/browser/byte_stream.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/download/download_create_info.h"
@@ -56,8 +58,6 @@
 #include "net/base/load_flags.h"
 #include "net/base/request_priority.h"
 #include "net/base/upload_bytes_element_reader.h"
-#include "net/log/net_log_source_type.h"
-#include "net/log/net_log_with_source.h"
 #include "net/url_request/url_request_context.h"
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "url/origin.h"
@@ -103,7 +103,7 @@ void CreateInterruptedDownload(
     base::WeakPtr<DownloadManagerImpl> download_manager) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   std::unique_ptr<DownloadCreateInfo> failed_created_info(
-      new DownloadCreateInfo(base::Time::Now(), net::NetLogWithSource(),
+      new DownloadCreateInfo(base::Time::Now(),
                              base::WrapUnique(new DownloadSaveInfo)));
   failed_created_info->url_chain.push_back(params->url());
   failed_created_info->result = reason;
@@ -199,13 +199,13 @@ void InterceptNavigationResponse(
     std::unique_ptr<ResourceRequest> resource_request,
     std::unique_ptr<ThrottlingURLLoader> url_loader,
     std::vector<GURL> url_chain,
-    base::Optional<ResourceRequestCompletionStatus> completion_status) {
+    base::Optional<network::URLLoaderStatus> status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DownloadManagerImpl::UniqueUrlDownloadHandlerPtr resource_downloader(
       ResourceDownloader::InterceptNavigationResponse(
           download_manager, std::move(resource_request), response,
           std::move(consumer_handle), ssl_status, std::move(url_loader),
-          std::move(url_chain), std::move(completion_status))
+          std::move(url_chain), std::move(status))
           .release());
 
   BrowserThread::PostTask(
@@ -244,22 +244,20 @@ class DownloadItemFactoryImpl : public DownloadItemFactory {
       bool opened,
       base::Time last_access_time,
       bool transient,
-      const std::vector<DownloadItem::ReceivedSlice>& received_slices,
-      const net::NetLogWithSource& net_log) override {
+      const std::vector<DownloadItem::ReceivedSlice>& received_slices)
+      override {
     return new DownloadItemImpl(
         delegate, guid, download_id, current_path, target_path, url_chain,
         referrer_url, site_url, tab_url, tab_refererr_url, mime_type,
         original_mime_type, start_time, end_time, etag, last_modified,
         received_bytes, total_bytes, hash, state, danger_type, interrupt_reason,
-        opened, last_access_time, transient, received_slices, net_log);
+        opened, last_access_time, transient, received_slices);
   }
 
-  DownloadItemImpl* CreateActiveItem(
-      DownloadItemImplDelegate* delegate,
-      uint32_t download_id,
-      const DownloadCreateInfo& info,
-      const net::NetLogWithSource& net_log) override {
-    return new DownloadItemImpl(delegate, download_id, info, net_log);
+  DownloadItemImpl* CreateActiveItem(DownloadItemImplDelegate* delegate,
+                                     uint32_t download_id,
+                                     const DownloadCreateInfo& info) override {
+    return new DownloadItemImpl(delegate, download_id, info);
   }
 
   DownloadItemImpl* CreateSavePageItem(
@@ -268,10 +266,9 @@ class DownloadItemFactoryImpl : public DownloadItemFactory {
       const base::FilePath& path,
       const GURL& url,
       const std::string& mime_type,
-      std::unique_ptr<DownloadRequestHandleInterface> request_handle,
-      const net::NetLogWithSource& net_log) override {
+      std::unique_ptr<DownloadRequestHandleInterface> request_handle) override {
     return new DownloadItemImpl(delegate, download_id, path, url, mime_type,
-                                std::move(request_handle), net_log);
+                                std::move(request_handle));
   }
 };
 
@@ -284,6 +281,53 @@ base::FilePath GetTemporaryDownloadDirectory() {
 
 }  // namespace
 
+// Responsible for persisting the in-progress metadata associated with a
+// download.
+class InProgressDownloadObserver : public DownloadItem::Observer {
+ public:
+  explicit InProgressDownloadObserver(
+      download::InProgressCache* in_progress_cache);
+  ~InProgressDownloadObserver() override;
+
+ private:
+  // DownloadItem::Observer
+  void OnDownloadUpdated(DownloadItem* download) override;
+  void OnDownloadRemoved(DownloadItem* download) override;
+
+  // The persistent cache to store in-progress metadata.
+  download::InProgressCache* in_progress_cache_;
+
+  DISALLOW_COPY_AND_ASSIGN(InProgressDownloadObserver);
+};
+
+InProgressDownloadObserver::InProgressDownloadObserver(
+    download::InProgressCache* in_progress_cache)
+    : in_progress_cache_(in_progress_cache) {}
+
+InProgressDownloadObserver::~InProgressDownloadObserver() = default;
+
+void InProgressDownloadObserver::OnDownloadUpdated(DownloadItem* download) {
+  // TODO(crbug.com/778425): Properly handle fail/resume/retry for downloads
+  // that are in the INTERRUPTED state for a long time.
+  switch (download->GetState()) {
+    case DownloadItem::DownloadState::COMPLETE:
+    case DownloadItem::DownloadState::CANCELLED:
+      if (in_progress_cache_)
+        in_progress_cache_->RemoveEntry(download->GetGuid());
+      break;
+    case DownloadItem::DownloadState::IN_PROGRESS:
+      // TODO(crbug.com/778425): After RetrieveEntry has been implemented, do a
+      // check to make sure the entry exists in the cache.
+      break;
+    default:
+      break;
+  }
+}
+
+void InProgressDownloadObserver::OnDownloadRemoved(DownloadItem* download) {
+  in_progress_cache_->RemoveEntry(download->GetGuid());
+}
+
 DownloadManagerImpl::DownloadManagerImpl(BrowserContext* browser_context)
     : item_factory_(new DownloadItemFactoryImpl()),
       file_factory_(new DownloadFileFactory()),
@@ -291,7 +335,6 @@ DownloadManagerImpl::DownloadManagerImpl(BrowserContext* browser_context)
       initialized_(false),
       browser_context_(browser_context),
       delegate_(nullptr),
-      net_log_(nullptr),
       weak_factory_(this) {
   DCHECK(browser_context);
 }
@@ -305,10 +348,7 @@ DownloadItemImpl* DownloadManagerImpl::CreateActiveItem(
     const DownloadCreateInfo& info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!base::ContainsKey(downloads_, id));
-  net::NetLogWithSource net_log =
-      net::NetLogWithSource::Make(net_log_, net::NetLogSourceType::DOWNLOAD);
-  DownloadItemImpl* download =
-      item_factory_->CreateActiveItem(this, id, info, net_log);
+  DownloadItemImpl* download = item_factory_->CreateActiveItem(this, id, info);
   downloads_[id] = base::WrapUnique(download);
   downloads_by_guid_[download->GetGuid()] = download;
   return download;
@@ -482,14 +522,23 @@ void DownloadManagerImpl::StartDownloadWithId(
   }
 #endif
 
+  if (delegate_) {
+    if (!in_progress_download_observer_) {
+      in_progress_download_observer_.reset(
+          new InProgressDownloadObserver(delegate_->GetInProgressCache()));
+    }
+    // May already observe this item, remove observer first.
+    download->RemoveObserver(in_progress_download_observer_.get());
+    download->AddObserver(in_progress_download_observer_.get());
+  }
+
   std::unique_ptr<DownloadFile> download_file;
 
   if (info->result == DOWNLOAD_INTERRUPT_REASON_NONE) {
     DCHECK(stream.get());
     download_file.reset(file_factory_->CreateFile(
         std::move(info->save_info), default_download_directory,
-        std::move(stream), download->GetNetLogWithSource(),
-        download->DestinationObserverAsWeakPtr()));
+        std::move(stream), id, download->DestinationObserverAsWeakPtr()));
   }
   // It is important to leave info->save_info intact in the case of an interrupt
   // so that the DownloadItem can salvage what it can out of a failed resumption
@@ -574,11 +623,8 @@ void DownloadManagerImpl::CreateSavePackageDownloadItemWithId(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK_NE(content::DownloadItem::kInvalidId, id);
   DCHECK(!base::ContainsKey(downloads_, id));
-  net::NetLogWithSource net_log =
-      net::NetLogWithSource::Make(net_log_, net::NetLogSourceType::DOWNLOAD);
   DownloadItemImpl* download_item = item_factory_->CreateSavePageItem(
-      this, id, main_file_path, page_url, mime_type, std::move(request_handle),
-      net_log);
+      this, id, main_file_path, page_url, mime_type, std::move(request_handle));
   downloads_[download_item->GetId()] = base::WrapUnique(download_item);
   DCHECK(!base::ContainsKey(downloads_by_guid_, download_item->GetGuid()));
   downloads_by_guid_[download_item->GetGuid()] = download_item;
@@ -636,6 +682,7 @@ DownloadInterruptReason DownloadManagerImpl::BeginDownloadRequest(
     int render_view_route_id,
     int render_frame_route_id,
     bool do_not_prompt_for_login) {
+  LOG(ERROR) << "BeginDownloadRequest";
   if (ResourceDispatcherHostImpl::Get()->is_shutdown())
     return DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN;
 
@@ -773,8 +820,7 @@ DownloadItem* DownloadManagerImpl::CreateDownloadItem(
       site_url, tab_url, tab_refererr_url, mime_type, original_mime_type,
       start_time, end_time, etag, last_modified, received_bytes, total_bytes,
       hash, state, danger_type, interrupt_reason, opened, last_access_time,
-      transient, received_slices,
-      net::NetLogWithSource::Make(net_log_, net::NetLogSourceType::DOWNLOAD));
+      transient, received_slices);
   downloads_[id] = base::WrapUnique(item);
   downloads_by_guid_[guid] = item;
   for (auto& observer : observers_)
@@ -874,6 +920,13 @@ void DownloadManagerImpl::ShowDownloadInShell(DownloadItemImpl* download) {
 void DownloadManagerImpl::BeginDownloadInternal(
     std::unique_ptr<content::DownloadUrlParameters> params,
     uint32_t id) {
+  download::InProgressCache* in_progress_cache =
+      GetBrowserContext()->GetDownloadManagerDelegate()->GetInProgressCache();
+  if (in_progress_cache) {
+    in_progress_cache->AddOrReplaceEntry(download::DownloadEntry(
+        params.get()->guid(), params.get()->request_origin()));
+  }
+
   if (base::FeatureList::IsEnabled(features::kNetworkService)) {
     std::unique_ptr<ResourceRequest> request = CreateResourceRequest(
         params.get());

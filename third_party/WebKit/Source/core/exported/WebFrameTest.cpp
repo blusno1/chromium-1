@@ -3200,7 +3200,7 @@ TEST_P(ParameterizedWebFrameTest, updateOverlayScrollbarLayers)
 
   std::unique_ptr<FakeCompositingWebViewClient>
       fake_compositing_web_view_client =
-          WTF::MakeUnique<FakeCompositingWebViewClient>();
+          std::make_unique<FakeCompositingWebViewClient>();
   FrameTestHelpers::WebViewHelper web_view_helper;
   web_view_helper.Initialize(nullptr, fake_compositing_web_view_client.get(),
                              nullptr, &ConfigureCompositingWebView);
@@ -4456,20 +4456,20 @@ class ContextLifetimeTestWebFrameClient
                                   const ParsedFeaturePolicy& container_policy,
                                   const WebFrameOwnerProperties&) override {
     return CreateLocalChild(*parent, scope,
-                            WTF::MakeUnique<ContextLifetimeTestWebFrameClient>(
+                            std::make_unique<ContextLifetimeTestWebFrameClient>(
                                 create_notifications_, release_notifications_));
   }
 
   void DidCreateScriptContext(v8::Local<v8::Context> context,
                               int world_id) override {
     create_notifications_.push_back(
-        WTF::MakeUnique<Notification>(Frame(), context, world_id));
+        std::make_unique<Notification>(Frame(), context, world_id));
   }
 
   void WillReleaseScriptContext(v8::Local<v8::Context> context,
                                 int world_id) override {
     release_notifications_.push_back(
-        WTF::MakeUnique<Notification>(Frame(), context, world_id));
+        std::make_unique<Notification>(Frame(), context, world_id));
   }
 
  private:
@@ -4731,7 +4731,7 @@ TEST_P(ParameterizedWebFrameTest, GetContentAsPlainText) {
 
   text = WebFrameContentDumper::DumpWebViewAsText(
       web_view_helper.WebView(), std::numeric_limits<size_t>::max());
-  EXPECT_EQ("Hello world\n\nsub\ntext", text.Utf8());
+  EXPECT_EQ("Hello world\n\nsub\n\ntext", text.Utf8());
 
   // Get the frame text where the subframe separator falls on the boundary of
   // what we'll take. There used to be a crash in this case.
@@ -5884,7 +5884,7 @@ class CompositedSelectionBoundsTestLayerTreeView : public WebLayerTreeView {
 
   // WebLayerTreeView:
   void RegisterSelection(const WebSelection& selection) override {
-    selection_ = WTF::MakeUnique<WebSelection>(selection);
+    selection_ = std::make_unique<WebSelection>(selection);
   }
   void ClearSelection() override {
     selection_cleared_ = true;
@@ -6539,7 +6539,7 @@ TEST_P(ParameterizedWebFrameTest, ReplaceNavigationAfterHistoryNavigation) {
   // FrameLoader::didReceiveData() wasn't getting called in this case, which
   // resulted in the SubstituteData document not getting displayed.
   std::string error_url = "http://0.0.0.0";
-  WebURLError error(WebURLError::Domain::kTest, 1337, ToKURL(error_url));
+  ResourceError error = ResourceError::Failure(ToKURL(error_url));
   WebURLResponse response;
   response.SetURL(URLTestHelpers::ToKURL(error_url));
   response.SetMIMEType("text/html");
@@ -7467,7 +7467,7 @@ class TestCachePolicyWebFrameClient
       WebSandboxFlags,
       const ParsedFeaturePolicy&,
       const WebFrameOwnerProperties& frame_owner_properties) override {
-    auto child = WTF::MakeUnique<TestCachePolicyWebFrameClient>();
+    auto child = std::make_unique<TestCachePolicyWebFrameClient>();
     auto* child_ptr = child.get();
     child_clients_.push_back(std::move(child));
     return CreateLocalChild(*parent, scope, child_ptr);
@@ -7821,7 +7821,7 @@ TEST_P(ParameterizedWebFrameTest, overflowHiddenRewrite) {
   RegisterMockedHttpURLLoad("non-scrollable.html");
   std::unique_ptr<FakeCompositingWebViewClient>
       fake_compositing_web_view_client =
-          WTF::MakeUnique<FakeCompositingWebViewClient>();
+          std::make_unique<FakeCompositingWebViewClient>();
   FrameTestHelpers::WebViewHelper web_view_helper;
   web_view_helper.Initialize(nullptr, fake_compositing_web_view_client.get(),
                              nullptr, &ConfigureCompositingWebView);
@@ -9007,7 +9007,10 @@ class SwapMainFrameWhenTitleChangesWebFrameClient
   ~SwapMainFrameWhenTitleChangesWebFrameClient() override {}
 
   // FrameTestHelpers::TestWebFrameClient:
-  void DidReceiveTitle(const WebString&, WebTextDirection) override {
+  void DidReceiveTitle(const WebString& title, WebTextDirection) override {
+    if (title.IsEmpty())
+      return;
+
     if (!Frame()->Parent())
       Frame()->Swap(FrameTestHelpers::CreateRemote());
   }
@@ -9058,7 +9061,7 @@ TEST_P(WebFrameSwapTest, SwapFirstChild) {
   FrameTestHelpers::LoadFrame(local_frame, base_url_ + "subframe-hello.html");
   std::string content =
       WebFrameContentDumper::DumpWebViewAsText(WebView(), 1024).Utf8();
-  EXPECT_EQ("  \n\nhello\n\nb \n\na\n\nc", content);
+  EXPECT_EQ("\n\nhello\n\nb\n\n\na\n\nc", content);
 }
 
 void WebFrameTest::SwapAndVerifyMiddleChildConsistency(
@@ -9094,7 +9097,7 @@ TEST_P(WebFrameSwapTest, SwapMiddleChild) {
   FrameTestHelpers::LoadFrame(local_frame, base_url_ + "subframe-hello.html");
   std::string content =
       WebFrameContentDumper::DumpWebViewAsText(WebView(), 1024).Utf8();
-  EXPECT_EQ("  \n\na\n\nhello\n\nc", content);
+  EXPECT_EQ("\n\na\n\nhello\n\nc", content);
 }
 
 void WebFrameTest::SwapAndVerifyLastChildConsistency(const char* const message,
@@ -9124,7 +9127,7 @@ TEST_P(WebFrameSwapTest, SwapLastChild) {
   FrameTestHelpers::LoadFrame(local_frame, base_url_ + "subframe-hello.html");
   std::string content =
       WebFrameContentDumper::DumpWebViewAsText(WebView(), 1024).Utf8();
-  EXPECT_EQ("  \n\na\n\nb \n\na\n\nhello", content);
+  EXPECT_EQ("\n\na\n\nb\n\n\na\n\nhello", content);
 }
 
 TEST_P(WebFrameSwapTest, DetachProvisionalFrame) {
@@ -9187,7 +9190,7 @@ TEST_P(WebFrameSwapTest, SwapParentShouldDetachChildren) {
   FrameTestHelpers::LoadFrame(local_frame, base_url_ + "subframe-hello.html");
   std::string content =
       WebFrameContentDumper::DumpWebViewAsText(WebView(), 1024).Utf8();
-  EXPECT_EQ("  \n\na\n\nhello\n\nc", content);
+  EXPECT_EQ("\n\na\n\nhello\n\nc", content);
 }
 
 TEST_P(WebFrameSwapTest, SwapPreservesGlobalContext) {
@@ -10941,7 +10944,7 @@ class TestResourcePriorityWebFrameClient
 
   void AddExpectedRequest(const KURL& url, WebURLRequest::Priority priority) {
     expected_requests_.insert(url,
-                              WTF::MakeUnique<ExpectedRequest>(url, priority));
+                              std::make_unique<ExpectedRequest>(url, priority));
   }
 
   void VerifyAllRequests() {
@@ -11730,8 +11733,9 @@ TEST_P(ParameterizedWebFrameTest, FallbackForNonexistentProvisionalNavigation) {
   // content shouldn't crash. It should return NoLoadInProgress. This is so the
   // caller won't attempt to replace the correctly empty frame with an error
   // page.
-  EXPECT_EQ(WebLocalFrame::NoLoadInProgress,
-            child->MaybeRenderFallbackContent(WebURLError()));
+  EXPECT_EQ(
+      WebLocalFrame::NoLoadInProgress,
+      child->MaybeRenderFallbackContent(ResourceError::Failure(request.Url())));
 }
 
 TEST_P(ParameterizedWebFrameTest, AltTextOnAboutBlankPage) {
@@ -11882,7 +11886,7 @@ class SlimmingPaintWebFrameTest : public PaintTestConfigurations,
                                   public WebFrameTest {
  public:
   void SetUp() override {
-    web_view_helper_ = WTF::MakeUnique<FrameTestHelpers::WebViewHelper>();
+    web_view_helper_ = std::make_unique<FrameTestHelpers::WebViewHelper>();
     web_view_helper_->Initialize(nullptr, &web_view_client_, nullptr,
                                  &ConfigureCompositingWebView);
     web_view_helper_->Resize(WebSize(200, 200));
@@ -12062,6 +12066,52 @@ TEST_F(WebFrameTest, ExecuteCommandProducesUserGesture) {
   EXPECT_FALSE(frame->GetFrame()->HasBeenActivated());
   frame->ExecuteCommand(WebString::FromUTF8("Paste"));
   EXPECT_TRUE(frame->GetFrame()->HasBeenActivated());
+}
+
+TEST_F(WebFrameTest, GetCanonicalUrlForSharingNone) {
+  FrameTestHelpers::WebViewHelper web_view_helper;
+  web_view_helper.InitializeAndLoad("about:blank");
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
+  EXPECT_TRUE(frame->GetDocument().CanonicalUrlForSharing().IsNull());
+}
+
+TEST_F(WebFrameTest, GetCanonicalUrlForSharingNotInHead) {
+  FrameTestHelpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
+  FrameTestHelpers::LoadHTMLString(
+      frame, R"(
+    <body>
+      <link rel="canonical" href="https://example.com/canonical.html">
+    </body>)", ToKURL("https://example.com/test_page.html"));
+  EXPECT_TRUE(frame->GetDocument().CanonicalUrlForSharing().IsNull());
+}
+
+TEST_F(WebFrameTest, GetCanonicalUrlForSharing) {
+  FrameTestHelpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
+  FrameTestHelpers::LoadHTMLString(
+      frame, R"(
+    <head>
+      <link rel="canonical" href="https://example.com/canonical.html">
+    </head>)", ToKURL("https://example.com/test_page.html"));
+  EXPECT_EQ(WebURL(ToKURL("https://example.com/canonical.html")),
+            frame->GetDocument().CanonicalUrlForSharing());
+}
+
+TEST_F(WebFrameTest, GetCanonicalUrlForSharingMultiple) {
+  FrameTestHelpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
+  FrameTestHelpers::LoadHTMLString(
+      frame, R"(
+    <head>
+      <link rel="canonical" href="https://example.com/canonical1.html">
+      <link rel="canonical" href="https://example.com/canonical2.html">
+    </head>)", ToKURL("https://example.com/test_page.html"));
+  EXPECT_EQ(WebURL(ToKURL("https://example.com/canonical1.html")),
+            frame->GetDocument().CanonicalUrlForSharing());
 }
 
 }  // namespace blink

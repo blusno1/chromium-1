@@ -55,6 +55,7 @@
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
+#include "chrome/browser/component_updater/downloadable_strings_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
 #include "chrome/browser/component_updater/optimization_hints_component_installer.h"
 #include "chrome/browser/component_updater/origin_trials_component_installer.h"
@@ -530,6 +531,10 @@ void RegisterComponentsForUpdate(PrefService* profile_prefs) {
 
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
     RegisterSSLErrorAssistantComponent(cus, path);
+#endif
+
+#if BUILDFLAG(ENABLE_DOWNLOADABLE_STRINGS)
+    RegisterDownloadableStringsComponent(cus);
 #endif
   }
 
@@ -1455,11 +1460,10 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
       break;
 
     case ProcessSingleton::PROCESS_NOTIFIED:
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
-      // On POSIX systems, print a message notifying the process is running.
-      printf("%s\n", base::SysWideToNativeMB(base::UTF16ToWide(
-          l10n_util::GetStringUTF16(IDS_USED_EXISTING_BROWSER))).c_str());
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
+      printf("%s\n", base::SysWideToNativeMB(
+                         base::UTF16ToWide(l10n_util::GetStringUTF16(
+                             IDS_USED_EXISTING_BROWSER)))
+                         .c_str());
 
       // Having a differentiated return type for testing allows for tests to
       // verify proper handling of some switches. When not testing, stick to

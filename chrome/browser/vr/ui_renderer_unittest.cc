@@ -9,6 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/vr/elements/ui_element.h"
+#include "chrome/browser/vr/elements/ui_element_name.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
@@ -67,11 +68,20 @@ TEST_P(UiRendererTest, UiRendererSortingTest) {
   auto unsorted = ((*scene_).*GetParam().f)();
   auto sorted = UiRenderer::GetElementsInDrawOrder(unsorted);
 
+  // Filter elements with no name. These elements usually created in ctor of
+  // their root element. See button.cc for example.
+  // We shouldn't need this once crbug.com/782395 is fixed.
+  sorted.erase(
+      std::remove_if(sorted.begin(), sorted.end(),
+                     [](const UiElement* e) { return e->name() == kNone; }),
+      sorted.end());
+
   EXPECT_EQ(GetParam().expected_order.size(), sorted.size());
 
   for (size_t i = 0; i < sorted.size(); ++i) {
     EXPECT_NE(0, sorted[i]->name());
-    EXPECT_EQ(GetParam().expected_order[i], sorted[i]->name());
+    EXPECT_EQ(UiElementNameToString(GetParam().expected_order[i]),
+              sorted[i]->DebugName());
   }
 }
 
@@ -93,8 +103,9 @@ TestParams params[] = {
          kScreenCaptureIndicator,
          kBluetoothConnectedIndicator,
          kLocationAccessIndicator,
-         kExitPrompt,
          kExitPromptBackplane,
+         kExitPrompt,
+         kAudioPermissionPrompt,
          kUrlBar,
          kLoadingIndicator,
          kLoadingIndicatorForeground,
@@ -102,10 +113,14 @@ TestParams params[] = {
          kVoiceSearchButton,
          kCloseButton,
          kExclusiveScreenToast,
-         kSpeechRecognitionPromptGrowingCircle,
-         kSpeechRecognitionPromptInnerCircle,
-         kSpeechRecognitionPromptMicrophoneIcon,
-         kSpeechRecognitionPromptBackplane,
+         kSpeechRecognitionResultText,
+         kSpeechRecognitionResultCircle,
+         kSpeechRecognitionResultMicrophoneIcon,
+         kSpeechRecognitionResultBackplane,
+         kSpeechRecognitionListeningGrowingCircle,
+         kSpeechRecognitionListeningInnerCircle,
+         kSpeechRecognitionListeningMicrophoneIcon,
+         kSpeechRecognitionListeningBackplane,
      }},
     {&UiScene::GetVisible2dBrowsingOverlayElements,
      {

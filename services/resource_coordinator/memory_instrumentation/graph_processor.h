@@ -15,8 +15,9 @@ namespace memory_instrumentation {
 
 class GraphProcessor {
  public:
+  // This map does not own the pointers inside.
   using MemoryDumpMap =
-      std::map<base::ProcessId, base::trace_event::ProcessMemoryDump>;
+      std::map<base::ProcessId, const base::trace_event::ProcessMemoryDump*>;
 
   static std::unique_ptr<GlobalDumpGraph> CreateMemoryGraph(
       const MemoryDumpMap& process_dumps);
@@ -48,6 +49,15 @@ class GraphProcessor {
   static void AssignTracingOverhead(base::StringPiece allocator,
                                     GlobalDumpGraph* global_graph,
                                     GlobalDumpGraph::Process* process);
+
+  static GlobalDumpGraph::Node::Entry AggregateNumericWithNameForNode(
+      GlobalDumpGraph::Node* node,
+      base::StringPiece name);
+
+  static void AggregateNumericsRecursively(GlobalDumpGraph::Node* node);
+
+  static void PropagateNumericsAndDiagnosticsRecursively(
+      GlobalDumpGraph::Node* node);
 };
 
 }  // namespace memory_instrumentation

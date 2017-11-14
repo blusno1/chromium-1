@@ -5,10 +5,10 @@
 #include "core/workers/WorkletModuleTreeClient.h"
 
 #include "core/dom/ModuleScript.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkletGlobalScope.h"
 #include "platform/CrossThreadFunctional.h"
+#include "public/platform/TaskType.h"
 
 namespace blink {
 
@@ -29,6 +29,24 @@ void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
     // Step 3: "If script is null, then queue a task on outsideSettings's
     // responsible event loop to run these steps:"
     // The steps are implemented in WorkletPendingTasks::Abort().
+    outside_settings_task_runner_->PostTask(
+        BLINK_FROM_HERE,
+        CrossThreadBind(&WorkletPendingTasks::Abort,
+                        WrapCrossThreadPersistent(pending_tasks_.Get())));
+    return;
+  }
+
+  // "Note: Specifically, if a script fails to parse or fails to load over the
+  // network, it will reject the promise. If the script throws an error while
+  // first evaluating the promise it will resolve as classes may have been
+  // registered correctly."
+  // https://drafts.css-houdini.org/worklets/#fetch-a-worklet-script
+  //
+  // When a network failure happens, |module_script| should be nullptr and the
+  // case should already be handled above.
+  //
+  // Check whether a syntax error happens.
+  if (module_script->IsErrored()) {
     outside_settings_task_runner_->PostTask(
         BLINK_FROM_HERE,
         CrossThreadBind(&WorkletPendingTasks::Abort,

@@ -32,6 +32,8 @@
 // won't function.
 #if BUILDFLAG(USE_ALLOCATOR_SHIM)
 
+namespace profiling {
+
 namespace {
 
 // Make some specific allocations in Browser to do a deeper test of the
@@ -46,8 +48,9 @@ constexpr int kPartitionAllocSize = 8 * 23;
 constexpr int kPartitionAllocCount = 107;
 static const char* kPartitionAllocTypeName = "kPartitionAllocTypeName";
 
-bool HasProcessWithName(base::Value* dump_json, std::string name) {
+int NumProcessesWithName(base::Value* dump_json, std::string name) {
   base::Value* events = dump_json->FindKey("traceEvents");
+  int num_found = 0;
   for (base::Value& event : events->GetList()) {
     const base::Value* found_name =
         event.FindKeyOfType("name", base::Value::Type::STRING);
@@ -65,9 +68,10 @@ bool HasProcessWithName(base::Value* dump_json, std::string name) {
       continue;
     if (found_process_name->GetString() != name)
       continue;
-    return true;
+    num_found++;
   }
-  return false;
+
+  return num_found;
 }
 
 base::Value* FindHeapsV2(base::ProcessId pid, base::Value* dump_json) {
@@ -161,6 +165,8 @@ void ValidateDump(base::Value* heaps_v2,
   }
 }
 
+}  // namespace
+
 class MemlogBrowserTest : public InProcessBrowserTest,
                           public testing::WithParamInterface<const char*> {
  protected:
@@ -171,6 +177,13 @@ class MemlogBrowserTest : public InProcessBrowserTest,
   }
 
   void SetUp() override {
+    // Force the renderer to be sampled in RendererSampling mode for
+    // deterministic tests.
+    if (GetParam() == switches::kMemlogModeRendererSampling) {
+      profiling::ProfilingProcessHost::GetInstance()
+          ->SetRendererSamplingAlwaysProfileForTest();
+    }
+
     partition_allocator_.init();
     InProcessBrowserTest::SetUp();
   }
@@ -230,7 +243,7 @@ class MemlogBrowserTest : public InProcessBrowserTest,
       ASSERT_FALSE(heaps_v2) << "There should be no heap dump for the browser.";
     }
 
-    EXPECT_TRUE(HasProcessWithName(dump_json, "Browser"));
+    EXPECT_EQ(1, NumProcessesWithName(dump_json, "Browser"));
   }
 
   void ValidateRendererAllocations(base::Value* dump_json) {
@@ -242,7 +255,8 @@ class MemlogBrowserTest : public InProcessBrowserTest,
                                                        ->GetProcess()
                                                        ->GetHandle());
     base::Value* heaps_v2 = FindHeapsV2(renderer_pid, dump_json);
-    if (GetParam() == switches::kMemlogModeAll) {
+    if (GetParam() == switches::kMemlogModeAll ||
+        GetParam() == switches::kMemlogModeRendererSampling) {
       ASSERT_TRUE(heaps_v2);
 
       // ValidateDump doesn't always succeed for the renderer, since we don't do
@@ -254,7 +268,13 @@ class MemlogBrowserTest : public InProcessBrowserTest,
       ASSERT_FALSE(heaps_v2)
           << "There should be no heap dump for the renderer.";
     }
-    EXPECT_TRUE(HasProcessWithName(dump_json, "Renderer"));
+
+    // RendererSampling guarantees only 1 renderer is ever sampled at a time.
+    if (GetParam() == switches::kMemlogModeRendererSampling) {
+      EXPECT_EQ(1, NumProcessesWithName(dump_json, "Renderer"));
+    } else {
+      EXPECT_GT(NumProcessesWithName(dump_json, "Renderer"), 0);
+    }
   }
 
  private:
@@ -350,7 +370,7 @@ IN_PROC_BROWSER_TEST_P(MemlogBrowserTest, EndToEnd) {
         GetParam() == switches::kMemlogModeBrowser ||
         GetParam() == switches::kMemlogModeMinimal) {
       ASSERT_TRUE(dump_json);
-      EXPECT_FALSE(HasProcessWithName(dump_json.get(), "Renderer"));
+      EXPECT_EQ(0, NumProcessesWithName(dump_json.get(), "Renderer"));
       ValidateBrowserAllocations(dump_json.get());
     } else {
       ASSERT_FALSE(dump_json) << "Browser process unexpectedly profiled.";
@@ -370,12 +390,12 @@ IN_PROC_BROWSER_TEST_P(MemlogBrowserTest, EndToEnd) {
     DumpProcess(renderer_pid, renderer_dumpfile_path);
     std::unique_ptr<base::Value> dump_json =
         ReadDumpFile(renderer_dumpfile_path);
-    // TODO(ajwong): Test kMemlogModeRendererSampling correctly.
-    // http://crbug.com/780955
-    if (GetParam() == switches::kMemlogModeAll) {
+
+    if (GetParam() == switches::kMemlogModeAll ||
+        GetParam() == switches::kMemlogModeRendererSampling) {
       ASSERT_TRUE(dump_json);
       ValidateRendererAllocations(dump_json.get());
-      EXPECT_FALSE(HasProcessWithName(dump_json.get(), "Browser"));
+      EXPECT_EQ(0, NumProcessesWithName(dump_json.get(), "Browser"));
     } else {
       ASSERT_FALSE(dump_json) << "Renderer process unexpectedly profiled.";
     }
@@ -467,6 +487,6 @@ INSTANTIATE_TEST_CASE_P(
     MemlogBrowserTest,
     ::testing::Values(switches::kMemlogModeRendererSampling));
 
-}  // namespace
+}  // namespace profiling
 
 #endif  // BUILDFLAG(USE_ALLOCATOR_SHIM)

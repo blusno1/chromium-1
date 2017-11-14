@@ -24,12 +24,12 @@
 #ifndef HTMLImageElement_h
 #define HTMLImageElement_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/canvas/ImageElementBase.h"
 #include "core/html/forms/FormAssociated.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/heap/HeapAllocator.h"
 #include "platform/loader/fetch/FetchParameters.h"
@@ -165,9 +165,10 @@ class CORE_EXPORT HTMLImageElement final
 
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const override;
-  void CollectStyleForPresentationAttribute(const QualifiedName&,
-                                            const AtomicString&,
-                                            MutableStylePropertySet*) override;
+  void CollectStyleForPresentationAttribute(
+      const QualifiedName&,
+      const AtomicString&,
+      MutableCSSPropertyValueSet*) override;
   void SetLayoutDisposition(LayoutDisposition, bool force_reattach = false);
 
   void AttachLayoutTree(AttachContext&) override;

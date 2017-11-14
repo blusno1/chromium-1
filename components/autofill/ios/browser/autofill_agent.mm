@@ -36,6 +36,7 @@
 #import "components/autofill/ios/browser/js_autofill_manager.h"
 #include "components/prefs/pref_service.h"
 #include "ios/web/public/url_scheme_util.h"
+#include "ios/web/public/web_state/form_activity_params.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
 #import "ios/web/public/web_state/web_state.h"
@@ -97,13 +98,17 @@ void GetFormAndField(autofill::FormData* form,
 
 // Invokes the form extraction script and loads the output into the format
 // expected by the AutofillManager.
-// If |formName| is non-empty, only a form of that name is extracted.
+// If |filtered| is NO, all forms are extracted.
+// If |filtered| is YES,
+//   - if |formName| is non-empty, only a form of that name is extracted.
+//   - if |formName| is empty, unowned fields are extracted.
 // Only forms with at least |requiredFieldsCount| fields are extracted.
 // Calls |completionHandler| with a success BOOL of YES and the form data that
 // was extracted.
 // Calls |completionHandler| with NO if the forms could not be extracted.
 // |completionHandler| cannot be nil.
-- (void)fetchFormsWithName:(const base::string16&)formName
+- (void)fetchFormsFiltered:(BOOL)filtered
+                      withName:(const base::string16&)formName
     minimumRequiredFieldsCount:(NSUInteger)requiredFieldsCount
                        pageURL:(const GURL&)pageURL
              completionHandler:(FetchFormsCompletionHandler)completionHandler;
@@ -111,9 +116,14 @@ void GetFormAndField(autofill::FormData* form,
 // Processes the JSON form data extracted from the page into the format expected
 // by AutofillManager and fills it in |formsData|.
 // |formsData| cannot be nil.
+// |filtered| and |formName| limit the field that will be returned in
+// |formData|. See
+// |fetchFormsFiltered:withName:minimumRequiredFieldsCount:pageURL:
+// completionHandler:| for details.
 // Returns a BOOL indicating the success value and the vector of form data.
 - (BOOL)getExtractedFormsData:(FormDataVector*)formsData
                      fromJSON:(NSString*)formJSON
+                     filtered:(BOOL)filtered
                      formName:(const base::string16&)formName
                       pageURL:(const GURL&)pageURL;
 
@@ -308,7 +318,8 @@ void GetFormAndField(autofill::FormData* form,
   autofill::KeyboardAccessoryMetricsLogger::OnFormSubmitted();
 }
 
-- (void)fetchFormsWithName:(const base::string16&)formName
+- (void)fetchFormsFiltered:(BOOL)filtered
+                      withName:(const base::string16&)formName
     minimumRequiredFieldsCount:(NSUInteger)requiredFieldsCount
                        pageURL:(const GURL&)pageURL
              completionHandler:(FetchFormsCompletionHandler)completionHandler {
@@ -336,6 +347,7 @@ void GetFormAndField(autofill::FormData* form,
                                BOOL success =
                                    [weakSelf getExtractedFormsData:&formData
                                                           fromJSON:formJSON
+                                                          filtered:filtered
                                                           formName:formNameCopy
                                                            pageURL:pageURLCopy];
                                completionHandler(success, formData);
@@ -344,6 +356,7 @@ void GetFormAndField(autofill::FormData* form,
 
 - (BOOL)getExtractedFormsData:(FormDataVector*)formsData
                      fromJSON:(NSString*)formJSON
+                     filtered:(BOOL)filtered
                      formName:(const base::string16&)formName
                       pageURL:(const GURL&)pageURL {
   DCHECK(formsData);
@@ -381,7 +394,7 @@ void GetFormAndField(autofill::FormData* form,
     autofill::FormData form;
     if (!formData->GetString("name", &form.name))
       return NO;
-    if (!formName.empty() && formName != form.name)
+    if (filtered && formName != form.name)
       continue;
 
     // Origin is mandatory.
@@ -521,6 +534,7 @@ void GetFormAndField(autofill::FormData* form,
 
 - (void)checkIfSuggestionsAvailableForForm:(NSString*)formName
                                      field:(NSString*)fieldName
+                                 fieldType:(NSString*)fieldType
                                       type:(NSString*)type
                                 typedValue:(NSString*)typedValue
                                   webState:(web::WebState*)webState
@@ -551,7 +565,8 @@ void GetFormAndField(autofill::FormData* form,
   // Re-extract the active form and field only. All forms with at least one
   // input element are considered because key/value suggestions are offered
   // even on short forms.
-  [self fetchFormsWithName:base::SysNSStringToUTF16(formName)
+  [self fetchFormsFiltered:YES
+                        withName:base::SysNSStringToUTF16(formName)
       minimumRequiredFieldsCount:1
                          pageURL:pageURL
                completionHandler:completionHandler];
@@ -559,6 +574,7 @@ void GetFormAndField(autofill::FormData* form,
 
 - (void)retrieveSuggestionsForForm:(NSString*)formName
                              field:(NSString*)fieldName
+                         fieldType:(NSString*)fieldType
                               type:(NSString*)type
                         typedValue:(NSString*)typedValue
                           webState:(web::WebState*)webState
@@ -643,7 +659,8 @@ void GetFormAndField(autofill::FormData* form,
   // password form data if the page has changed. In most cases this code wins
   // the race.
   // TODO(crbug.com/418827): Fix this by passing in more data from the JS side.
-  [self fetchFormsWithName:base::UTF8ToUTF16(formName)
+  [self fetchFormsFiltered:YES
+                        withName:base::UTF8ToUTF16(formName)
       minimumRequiredFieldsCount:1
                          pageURL:pageURL
                completionHandler:completionHandler];
@@ -695,18 +712,15 @@ void GetFormAndField(autofill::FormData* form,
   // Because of the cost of communicating with the server, only forms that have
   // enough forms to make them likely candidates for profile completion are
   // extracted.
-  [self fetchFormsWithName:base::string16()
+  [self fetchFormsFiltered:NO
+                        withName:base::string16()
       minimumRequiredFieldsCount:autofill::kRequiredFieldsForPredictionRoutines
                          pageURL:pageURL
                completionHandler:completionHandler];
 }
 
 - (void)webState:(web::WebState*)webState
-    didRegisterFormActivityWithFormNamed:(const std::string&)formName
-                               fieldName:(const std::string&)fieldName
-                                    type:(const std::string&)type
-                                   value:(const std::string&)value
-                            inputMissing:(BOOL)inputMissing {
+    didRegisterFormActivity:(const web::FormActivityParams&)params {
   if (!prefService_->GetBoolean(autofill::prefs::kAutofillEnabled))
     return;
   web::URLVerificationTrustLevel trustLevel;
@@ -721,7 +735,7 @@ void GetFormAndField(autofill::FormData* form,
     return;
 
   // Returns early and reset the suggestion state if an error occurs.
-  if (inputMissing)
+  if (params.input_missing)
     return;
 
   // Processing the page can be needed here if Autofill is enabled in settings
@@ -733,12 +747,12 @@ void GetFormAndField(autofill::FormData* form,
   // keyboard is about to be dismissed there's no point. If not it means the
   // next focus event will update the suggestion state within milliseconds, so
   // if we do it now a flicker will be seen.
-  if (type.compare("blur") == 0)
+  if (params.type.compare("blur") == 0)
     return;
 
   // Necessary so the strings can be used inside a block.
-  std::string fieldNameCopy = fieldName;
-  std::string typeCopy = type;
+  std::string fieldNameCopy = params.field_name;
+  std::string typeCopy = params.type;
 
   __weak AutofillAgent* weakSelf = self;
   id completionHandler = ^(BOOL success, const FormDataVector& forms) {
@@ -751,8 +765,9 @@ void GetFormAndField(autofill::FormData* form,
   };
 
   // Re-extract the active form and field only. There is no minimum field
-  // requirement because key/value suggestions are offered event on short forms.
-  [self fetchFormsWithName:base::UTF8ToUTF16(formName)
+  // requirement because key/value suggestions are offered even on short forms.
+  [self fetchFormsFiltered:YES
+                        withName:base::UTF8ToUTF16(params.form_name)
       minimumRequiredFieldsCount:1
                          pageURL:pageURL
                completionHandler:completionHandler];

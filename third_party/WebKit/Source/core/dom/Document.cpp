@@ -42,6 +42,7 @@
 #include "core/animation/DocumentTimeline.h"
 #include "core/animation/PendingAnimations.h"
 #include "core/css/CSSFontSelector.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/CSSTiming.h"
@@ -51,7 +52,6 @@
 #include "core/css/SelectorQuery.h"
 #include "core/css/StyleChangeReason.h"
 #include "core/css/StyleEngine.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/StyleSheetList.h"
 #include "core/css/invalidation/StyleInvalidator.h"
@@ -644,7 +644,7 @@ Document::Document(const DocumentInit& initializer,
           &Document::ElementDataCacheClearTimerFired),
       timeline_(DocumentTimeline::Create(this)),
       pending_animations_(new PendingAnimations(*this)),
-      worklet_animation_controller_(new WorkletAnimationController),
+      worklet_animation_controller_(new WorkletAnimationController(this)),
       template_document_host_(nullptr),
       did_associate_form_controls_timer_(
           GetTaskRunner(TaskType::kUnspecedLoading),
@@ -729,7 +729,7 @@ Document::~Document() {
 
 SelectorQueryCache& Document::GetSelectorQueryCache() {
   if (!selector_query_cache_)
-    selector_query_cache_ = WTF::MakeUnique<SelectorQueryCache>();
+    selector_query_cache_ = std::make_unique<SelectorQueryCache>();
   return *selector_query_cache_;
 }
 
@@ -1532,14 +1532,15 @@ AtomicString Document::contentType() const {
   return AtomicString("application/xml");
 }
 
-Element* Document::ElementFromPoint(int x, int y) const {
+Element* Document::ElementFromPoint(double x, double y) const {
   if (GetLayoutViewItem().IsNull())
     return nullptr;
 
   return TreeScope::ElementFromPoint(x, y);
 }
 
-HeapVector<Member<Element>> Document::ElementsFromPoint(int x, int y) const {
+HeapVector<Member<Element>> Document::ElementsFromPoint(double x,
+                                                        double y) const {
   if (GetLayoutViewItem().IsNull())
     return HeapVector<Member<Element>>();
   return TreeScope::ElementsFromPoint(x, y);
@@ -1636,6 +1637,10 @@ void Document::UpdateTitle(const String& title) {
 
   if (!frame_ || old_title == title_)
     return;
+  DispatchDidReceiveTitle();
+}
+
+void Document::DispatchDidReceiveTitle() {
   frame_->Client()->DispatchDidReceiveTitle(title_);
 }
 
@@ -2613,7 +2618,7 @@ StyleResolver& Document::EnsureStyleResolver() const {
 
 void Document::Initialize() {
   DCHECK_EQ(lifecycle_.GetState(), DocumentLifecycle::kInactive);
-  DCHECK(!ax_object_cache_ || this != &AxObjectCacheOwner());
+  DCHECK(!ax_object_cache_ || this != &AXObjectCacheOwner());
 
   layout_view_ = new LayoutView(this);
   SetLayoutObject(layout_view_);
@@ -2722,7 +2727,7 @@ void Document::Shutdown() {
   }
   sequential_focus_navigation_starting_point_ = nullptr;
 
-  if (this == &AxObjectCacheOwner())
+  if (this == &AXObjectCacheOwner())
     ClearAXObjectCache();
 
   layout_view_ = nullptr;
@@ -2730,7 +2735,7 @@ void Document::Shutdown() {
   // TODO(crbug.com/729196): Trace why LocalFrameView::DetachFromLayout crashes.
   CHECK(!View()->IsAttached());
 
-  if (this != &AxObjectCacheOwner()) {
+  if (this != &AXObjectCacheOwner()) {
     if (AXObjectCache* cache = ExistingAXObjectCache()) {
       // Documents that are not a root document use the AXObjectCache in
       // their root document. Node::removedFrom is called after the
@@ -2805,7 +2810,7 @@ void Document::RemoveAllEventListeners() {
     dom_window->RemoveAllEventListeners();
 }
 
-Document& Document::AxObjectCacheOwner() const {
+Document& Document::AXObjectCacheOwner() const {
   // Every document has its own axObjectCache if accessibility is enabled,
   // except for page popups, which share the axObjectCache of their owner.
   Document* doc = const_cast<Document*>(this);
@@ -2814,13 +2819,13 @@ Document& Document::AxObjectCacheOwner() const {
     return doc->GetFrame()
         ->PagePopupOwner()
         ->GetDocument()
-        .AxObjectCacheOwner();
+        .AXObjectCacheOwner();
   }
   return *doc;
 }
 
 void Document::ClearAXObjectCache() {
-  DCHECK_EQ(&AxObjectCacheOwner(), this);
+  DCHECK_EQ(&AXObjectCacheOwner(), this);
   // Clear the cache member variable before calling delete because attempts
   // are made to access it during destruction.
   if (ax_object_cache_)
@@ -2829,7 +2834,7 @@ void Document::ClearAXObjectCache() {
 }
 
 AXObjectCache* Document::ExistingAXObjectCache() const {
-  auto& cache_owner = AxObjectCacheOwner();
+  auto& cache_owner = AXObjectCacheOwner();
 
   // If the layoutObject is gone then we are in the process of destruction.
   // This method will be called before m_frame = nullptr.
@@ -2839,7 +2844,7 @@ AXObjectCache* Document::ExistingAXObjectCache() const {
   return cache_owner.ax_object_cache_.Get();
 }
 
-AXObjectCache* Document::AxObjectCache() const {
+AXObjectCache* Document::GetOrCreateAXObjectCache() const {
   Settings* settings = GetSettings();
   if (!settings || !settings->GetAccessibilityEnabled())
     return nullptr;
@@ -2849,7 +2854,7 @@ AXObjectCache* Document::AxObjectCache() const {
   // which share the AXObjectCache of their owner.
   //
   // See http://crbug.com/532249
-  Document& cache_owner = AxObjectCacheOwner();
+  Document& cache_owner = AXObjectCacheOwner();
 
   // If the document has already been detached, do not make a new axObjectCache.
   if (!cache_owner.GetLayoutView())
@@ -3230,8 +3235,8 @@ void Document::ImplicitClose() {
 
   if (GetFrame() && !GetLayoutViewItem().IsNull() &&
       GetSettings()->GetAccessibilityEnabled()) {
-    if (AXObjectCache* cache = AxObjectCache()) {
-      if (this == &AxObjectCacheOwner())
+    if (AXObjectCache* cache = GetOrCreateAXObjectCache()) {
+      if (this == &AXObjectCacheOwner())
         cache->HandleLoadComplete(this);
       else
         cache->HandleLayoutComplete(this);
@@ -4537,7 +4542,8 @@ bool Document::SetFocusedElement(Element* new_focused_element,
       goto SetFocusedElementDone;
     }
     CancelFocusAppearanceUpdate();
-    focused_element_->UpdateFocusAppearance(params.selection_behavior);
+    focused_element_->UpdateFocusAppearanceWithOptions(
+        params.selection_behavior, params.options);
 
     // Dispatch the focus event and let the node do any other focus related
     // activities (important for text fields)
@@ -4581,9 +4587,10 @@ bool Document::SetFocusedElement(Element* new_focused_element,
   if (!focus_change_blocked && focused_element_) {
     // Create the AXObject cache in a focus change because Chromium relies on
     // it.
-    if (AXObjectCache* cache = AxObjectCache())
+    if (AXObjectCache* cache = GetOrCreateAXObjectCache()) {
       cache->HandleFocusedUIElementChanged(old_focused_element,
                                            new_focused_element);
+    }
   }
 
   if (!focus_change_blocked && GetPage()) {
@@ -5780,6 +5787,11 @@ void Document::FinishedParsing() {
   well_formed_ = parser && parser->WellFormed();
 
   if (LocalFrame* frame = GetFrame()) {
+    // Guarantee at least one call to the client specifying a title. (If
+    // |title_| is not empty, then the title has already been dispatched.)
+    if (title_.IsEmpty())
+      DispatchDidReceiveTitle();
+
     // Don't update the layout tree if we haven't requested the main resource
     // yet to avoid adding extra latency. Note that the first layout tree update
     // can be expensive since it triggers the parsing of the default stylesheets
@@ -5917,23 +5929,31 @@ Color Document::ThemeColor() const {
   return Color();
 }
 
-HTMLLinkElement* Document::LinkManifest() const {
-  HTMLHeadElement* head = this->head();
+static HTMLLinkElement* GetLinkElement(const Document* doc,
+                                       bool (*match_fn)(HTMLLinkElement&)) {
+  HTMLHeadElement* head = doc->head();
   if (!head)
     return nullptr;
 
-  // The first link element with a manifest rel must be used. Others are
-  // ignored.
-  for (HTMLLinkElement* link_element =
-           Traversal<HTMLLinkElement>::FirstChild(*head);
-       link_element;
-       link_element = Traversal<HTMLLinkElement>::NextSibling(*link_element)) {
-    if (!link_element->RelAttribute().IsManifest())
-      continue;
-    return link_element;
+  // The first matching link element is used. Others are ignored.
+  for (HTMLLinkElement& link_element :
+       Traversal<HTMLLinkElement>::ChildrenOf(*head)) {
+    if (match_fn(link_element))
+      return &link_element;
   }
-
   return nullptr;
+}
+
+HTMLLinkElement* Document::LinkManifest() const {
+  return GetLinkElement(this, [](HTMLLinkElement& link_element) {
+    return link_element.RelAttribute().IsManifest();
+  });
+}
+
+HTMLLinkElement* Document::LinkCanonical() const {
+  return GetLinkElement(this, [](HTMLLinkElement& link_element) {
+    return link_element.RelAttribute().IsCanonical();
+  });
 }
 
 void Document::SetFeaturePolicy(const String& feature_policy_header) {
@@ -5979,10 +5999,8 @@ ukm::UkmRecorder* Document::UkmRecorder() {
   if (ukm_recorder_)
     return ukm_recorder_.get();
 
-  ukm::mojom::UkmRecorderInterfacePtr interface;
-  Platform::Current()->GetInterfaceProvider()->GetInterface(
-      mojo::MakeRequest(&interface));
-  ukm_recorder_.reset(new ukm::MojoUkmRecorder(std::move(interface)));
+  ukm_recorder_ =
+      ukm::MojoUkmRecorder::Create(Platform::Current()->GetConnector());
   ukm_source_id_ = ukm_recorder_->GetNewSourceID();
   ukm_recorder_->UpdateSourceURL(ukm_source_id_, url_);
   return ukm_recorder_.get();
@@ -6384,7 +6402,7 @@ void Document::AddConsoleMessage(ConsoleMessage* console_message) {
   frame_->Console().AddMessage(console_message);
 }
 
-void Document::TasksWereSuspended() {
+void Document::TasksWerePaused() {
   GetScriptRunner()->Suspend();
 
   if (parser_)
@@ -6393,7 +6411,7 @@ void Document::TasksWereSuspended() {
     scripted_animation_controller_->Pause();
 }
 
-void Document::TasksWereResumed() {
+void Document::TasksWereUnpaused() {
   GetScriptRunner()->Resume();
 
   if (parser_)
@@ -6406,7 +6424,7 @@ void Document::TasksWereResumed() {
     DOMWindowPerformance::performance(*dom_window_)->ResumeSuspendedObservers();
 }
 
-bool Document::TasksNeedSuspension() {
+bool Document::TasksNeedPause() {
   Page* page = GetPage();
   return page && page->Paused();
 }

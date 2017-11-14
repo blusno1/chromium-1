@@ -259,10 +259,6 @@ void ChromePasswordProtectionService::ShowModalWarning(
       base::Value(
           base::Int64ToString(GetLastCommittedNavigationID(web_contents))));
 
-  // Informs observers.
-  for (auto& observer : observer_list_)
-    observer.OnGaiaPasswordReuseWarningShown();
-
   // Starts preparing post-warning report.
   MaybeStartThreatDetailsCollection(web_contents, verdict_token);
 }
@@ -354,20 +350,13 @@ bool ChromePasswordProtectionService::IsIncognito() {
 }
 
 bool ChromePasswordProtectionService::IsPingingEnabled(
-    const base::Feature& feature,
+    LoginReputationClientRequest::TriggerType trigger_type,
     RequestOutcome* reason) {
   if (!IsSafeBrowsingEnabled())
     return false;
 
-  DCHECK(feature.name == kProtectedPasswordEntryPinging.name ||
-         feature.name == kPasswordFieldOnFocusPinging.name);
-  if (!base::FeatureList::IsEnabled(feature)) {
-    *reason = DISABLED_DUE_TO_FEATURE_DISABLED;
-    return false;
-  }
-
   // Protected password entry pinging is enabled for all users.
-  if (feature.name == kProtectedPasswordEntryPinging.name)
+  if (trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT)
     return true;
 
   // Password field on focus pinging is enabled for !incognito &&
@@ -453,7 +442,7 @@ void ChromePasswordProtectionService::LogPasswordReuseDialogInteraction(
   user_event_service->RecordUserEvent(std::move(specifics));
 }
 
-PasswordProtectionService::SyncAccountType
+LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType
 ChromePasswordProtectionService::GetSyncAccountType() {
   const AccountInfo account_info = GetAccountInfo();
   if (account_info.account_id.empty() || account_info.hosted_domain.empty()) {
@@ -623,6 +612,28 @@ void ChromePasswordProtectionService::UpdateSecurityState(
                                     /*is_pending=*/true, threat_type);
 }
 
+void ChromePasswordProtectionService::
+    RemoveUnhandledSyncPasswordReuseOnURLsDeleted(
+        bool all_history,
+        const history::URLRows& deleted_rows) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(all_history || !deleted_rows.empty());
+
+  DictionaryPrefUpdate unhandled_sync_password_reuses(
+      profile_->GetPrefs(), prefs::kSafeBrowsingUnhandledSyncPasswordReuses);
+  if (all_history) {
+    unhandled_sync_password_reuses->Clear();
+    return;
+  }
+
+  for (const history::URLRow& row : deleted_rows) {
+    if (!row.url().SchemeIsHTTPOrHTTPS())
+      continue;
+    unhandled_sync_password_reuses->RemoveKey(
+        Origin::Create(row.url()).Serialize());
+  }
+}
+
 void ChromePasswordProtectionService::CheckGaiaPasswordChange() {
   std::string new_gaia_password_hash = profile_->GetPrefs()->GetString(
       password_manager::prefs::kSyncPasswordHash);
@@ -704,6 +715,8 @@ void ChromePasswordProtectionService::HandleUserActionOnModalWarning(
         navigation_id, PasswordReuseDialogInteraction::WARNING_ACTION_TAKEN);
     // Opens chrome://settings page in a new tab.
     OpenUrlInNewTab(GURL(chrome::kChromeUISettingsURL), web_contents);
+    RecordWarningAction(PasswordProtectionService::CHROME_SETTINGS,
+                        PasswordProtectionService::SHOWN);
   } else if (action == PasswordProtectionService::IGNORE_WARNING) {
     // No need to change state.
     LogPasswordReuseDialogInteraction(
@@ -735,6 +748,8 @@ void ChromePasswordProtectionService::HandleUserActionOnPageInfo(
 
     // Opens chrome://settings page in a new tab.
     OpenUrlInNewTab(GURL(chrome::kChromeUISettingsURL), web_contents);
+    RecordWarningAction(PasswordProtectionService::CHROME_SETTINGS,
+                        PasswordProtectionService::SHOWN);
     return;
   }
 

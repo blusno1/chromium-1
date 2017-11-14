@@ -9,10 +9,10 @@
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "platform/scheduler/base/task_time_observer.h"
-#include "platform/scheduler/base/thread_load_tracker.h"
 #include "platform/scheduler/child/idle_canceled_delayed_task_sweeper.h"
 #include "platform/scheduler/child/idle_helper.h"
 #include "platform/scheduler/child/worker_scheduler.h"
+#include "platform/scheduler/util/thread_load_tracker.h"
 
 namespace blink {
 namespace scheduler {
@@ -31,6 +31,7 @@ class PLATFORM_EXPORT WorkerSchedulerImpl : public WorkerScheduler,
   scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
   scoped_refptr<WorkerTaskQueue> DefaultTaskQueue() override;
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> IPCTaskRunner() override;
   bool CanExceedIdleDeadlineIfRequired() const override;
   bool ShouldYieldForHighPriorityWork() override;
   void AddTaskObserver(base::MessageLoop::TaskObserver* task_observer) override;

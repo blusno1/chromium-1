@@ -19,11 +19,11 @@
 #include "content/renderer/service_worker/service_worker_provider_context.h"
 #include "ipc/ipc_sync_channel.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
+#include "third_party/WebKit/common/sandbox_flags.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebSandboxFlags.h"
 
 namespace content {
 
@@ -88,8 +88,8 @@ class WebServiceWorkerNetworkProviderForFrame
   }
 
   int64_t ControllerServiceWorkerID() override {
-    if (provider_->context() && provider_->context()->controller())
-      return provider_->context()->controller()->version_id();
+    if (provider_->context())
+      return provider_->context()->GetControllerVersionId();
     return blink::mojom::kInvalidServiceWorkerVersionId;
   }
 
@@ -247,7 +247,8 @@ int ServiceWorkerNetworkProvider::provider_id() const {
 }
 
 bool ServiceWorkerNetworkProvider::IsControlledByServiceWorker() const {
-  return context() && context()->controller();
+  return context() && context()->GetControllerVersionId() !=
+                          blink::mojom::kInvalidServiceWorkerVersionId;
 }
 
 // Creates an invalid instance (provider_id() returns

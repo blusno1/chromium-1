@@ -26,11 +26,11 @@
 #define HTMLInputElement_h
 
 #include "base/gtest_prod_util.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/html/forms/FileChooser.h"
 #include "core/html/forms/StepRange.h"
 #include "core/html/forms/TextControlElement.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 
 namespace blink {
 
@@ -180,7 +180,8 @@ class CORE_EXPORT HTMLInputElement
   bool LayoutObjectIsNeeded(const ComputedStyle&) final;
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   void DetachLayoutTree(const AttachContext& = AttachContext()) final;
-  void UpdateFocusAppearance(SelectionBehaviorOnFocus) final;
+  void UpdateFocusAppearanceWithOptions(SelectionBehaviorOnFocus,
+                                        const FocusOptions&) final;
 
   // FIXME: For isActivatedSubmit and setActivatedSubmit, we should use the
   // NVI-idiom here by making it private virtual in all classes and expose a
@@ -337,7 +338,7 @@ class CORE_EXPORT HTMLInputElement
   bool IsPresentationAttribute(const QualifiedName&) const final;
   void CollectStyleForPresentationAttribute(const QualifiedName&,
                                             const AtomicString&,
-                                            MutableStylePropertySet*) final;
+                                            MutableCSSPropertyValueSet*) final;
   void FinishParsingChildren() final;
   void ParserDidSetAttributes() final;
 

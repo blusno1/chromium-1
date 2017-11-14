@@ -12,7 +12,6 @@
 #import "ios/chrome/browser/ui/ntp/google_landing_data_source.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_toolbar_controller.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_snapshot_providing.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -62,7 +61,7 @@
 
   [self addSubview:[_toolbarController view]];
 
-  if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
+  if (IsSafeAreaCompatibleToolbarEnabled()) {
     [self addConstraintsToToolbar];
   } else {
     CGRect toolbarFrame = self.bounds;
@@ -148,7 +147,7 @@
       ntp_header::kToolbarHeight - content_suggestions::kSearchFieldHeight;
 
   widthConstraint.constant = searchFieldNormalWidth - 2 * maxXInset * percent;
-  topMarginConstraint.constant = content_suggestions::searchFieldTopMargin() +
+  topMarginConstraint.constant = -content_suggestions::searchFieldTopMargin() +
                                  ntp_header::kMaxTopMarginDiff * percent;
   heightConstraint.constant =
       content_suggestions::kSearchFieldHeight + maxHeightDiff * percent;
@@ -170,7 +169,7 @@
 
 - (void)safeAreaInsetsDidChange {
   [super safeAreaInsetsDidChange];
-  if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
+  if (IsSafeAreaCompatibleToolbarEnabled()) {
     _toolbarController.heightConstraint.constant =
         ToolbarHeightWithTopOfScreenOffset(
             [_toolbarController statusBarOffset]);
@@ -186,23 +185,6 @@
 
 #pragma mark - ToolbarOwner
 
-- (ToolbarController*)relinquishedToolbarController {
-  ToolbarController* relinquishedToolbarController = nil;
-  if ([[_toolbarController view] isDescendantOfView:self]) {
-    // Only relinquish the toolbar controller if it's in the hierarchy.
-    relinquishedToolbarController = _toolbarController;
-  }
-  return relinquishedToolbarController;
-}
-
-- (void)reparentToolbarController {
-  DCHECK(![[_toolbarController view] isDescendantOfView:self]);
-  [self addSubview:[_toolbarController view]];
-  if (base::FeatureList::IsEnabled(kSafeAreaCompatibleToolbar)) {
-    [self addConstraintsToToolbar];
-  }
-}
-
 - (CGRect)toolbarFrame {
   return _toolbarController.view.frame;
 }
@@ -217,12 +199,16 @@
   return nil;
 }
 
-- (UIView*)snapshotForStackViewWithWidth:(CGFloat)width {
+- (UIView*)snapshotForStackViewWithWidth:(CGFloat)width
+                          safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
   UIView* toolbar = _toolbarController.view;
   CGRect oldFrame = toolbar.frame;
   CGRect newFrame = oldFrame;
   newFrame.size.width = width;
+
   toolbar.frame = newFrame;
+  [_toolbarController activateFakeSafeAreaInsets:safeAreaInsets];
+
   UIView* toolbarSnapshotView;
   if ([toolbar window]) {
     // Take a snapshot only if it has been added to the view hierarchy.
@@ -232,7 +218,10 @@
     [toolbarSnapshotView layer].contents = static_cast<id>(
         CaptureViewWithOption(toolbar, 0, kClientSideRendering).CGImage);
   }
+
   toolbar.frame = oldFrame;
+  [_toolbarController deactivateFakeSafeAreaInsets];
+
   return toolbarSnapshotView;
 }
 

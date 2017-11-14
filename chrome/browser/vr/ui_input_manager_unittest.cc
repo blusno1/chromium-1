@@ -18,6 +18,8 @@
 #include "chrome/browser/vr/test/ui_scene_manager_test.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_constants.h"
+#include "chrome/browser/vr/ui_scene_manager.h"
+#include "chrome/browser/vr/ui_unsupported_mode.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 
@@ -263,19 +265,18 @@ TEST_F(UiInputManagerContentTest, NoMouseMovesDuringClick) {
                               &gesture_list);
 }
 
-TEST_F(UiInputManagerContentTest, TreeVsZOrder) {
+TEST_F(UiInputManagerContentTest, ExitPromptHitTesting) {
+  manager_->SetExitVrPromptEnabled(true, UiUnsupportedMode::kUnhandledPageInfo);
   EXPECT_TRUE(AnimateBy(MsToDelta(500)));
-  // It would be nice if the controller weren't platform specific and we could
-  // mock out the underlying sensor data. For now, we will hallucinate
-  // parameters to HandleInput.
-  UiElement* content_quad =
-      scene_->GetUiElementByName(UiElementName::kContentQuad);
-  gfx::Point3F content_quad_center;
-  content_quad->world_space_transform().TransformPoint(&content_quad_center);
+
+  UiElement* exit_prompt =
+      scene_->GetUiElementByName(UiElementName::kExitPrompt);
+  gfx::Point3F exit_prompt_center;
+  exit_prompt->world_space_transform().TransformPoint(&exit_prompt_center);
   gfx::Point3F origin;
 
   ControllerModel controller_model;
-  controller_model.laser_direction = content_quad_center - origin;
+  controller_model.laser_direction = exit_prompt_center - origin;
   controller_model.laser_origin = origin;
   controller_model.touchpad_button_state = UiInputManager::ButtonState::DOWN;
   ReticleModel reticle_model;
@@ -283,20 +284,9 @@ TEST_F(UiInputManagerContentTest, TreeVsZOrder) {
   input_manager_->HandleInput(MsToTicks(1), controller_model, &reticle_model,
                               &gesture_list);
 
-  // We should have hit the content quad if our math was correct.
+  // We should have hit the exit prompt if our math was correct.
   ASSERT_NE(0, reticle_model.target_element_id);
-  EXPECT_EQ(content_quad->id(), reticle_model.target_element_id);
-
-  // We will now move the content quad behind the backplane.
-  content_quad->SetTranslate(0, 0, -2.0 * kTextureOffset);
-  EXPECT_TRUE(AnimateBy(MsToDelta(500)));
-  input_manager_->HandleInput(MsToTicks(1), controller_model, &reticle_model,
-                              &gesture_list);
-
-  // We should have hit the content quad even though, geometrically, it stacks
-  // behind the backplane.
-  ASSERT_NE(0, reticle_model.target_element_id);
-  EXPECT_EQ(content_quad->id(), reticle_model.target_element_id);
+  EXPECT_EQ(exit_prompt->id(), reticle_model.target_element_id);
 }
 
 }  // namespace vr

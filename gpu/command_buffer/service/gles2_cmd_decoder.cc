@@ -36,7 +36,6 @@
 #include "gpu/command_buffer/service/command_buffer_service.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/context_state.h"
-#include "gpu/command_buffer/service/create_gr_gl_interface.h"
 #include "gpu/command_buffer/service/error_state.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/framebuffer_manager.h"
@@ -97,6 +96,7 @@
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/gpu_timing.h"
+#include "ui/gl/init/create_gr_gl_interface.h"
 
 #if defined(OS_MACOSX)
 #include <IOSurface/IOSurface.h>
@@ -630,6 +630,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   ErrorState* GetErrorState() override;
   const ContextState* GetContextState() override { return &state_; }
   scoped_refptr<ShaderTranslatorInterface> GetTranslator(GLenum type) override;
+  scoped_refptr<ShaderTranslatorInterface> GetOrCreateTranslator(GLenum type);
 
   void SetIgnoreCachedStateForTest(bool ignore) override;
   void SetForceShaderNameHashingForTest(bool force) override;
@@ -795,7 +796,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   }
 
   bool IsOffscreenBufferMultisampled() const {
-    return offscreen_target_samples_ > 1;
+    return offscreen_target_samples_ > 0;
   }
 
   // Creates a Texture for the given texture.
@@ -2985,25 +2986,16 @@ bool BackRenderbuffer::AllocateStorage(const gfx::Size& size,
     return false;
   }
 
-  // TODO(kainino): "samples <= 1" is technically incorrect (it should be
-  // "samples == 0"), but it causes framebuffer incompleteness in some
-  // situations. Once this is fixed, this entire arm is no longer necessary -
-  // RenderbufferStorageMultisampleHelper implements it. http://crbug.com/731286
-  if (samples <= 1) {
-    api()->glRenderbufferStorageEXTFn(GL_RENDERBUFFER, format, size.width(),
-                                      size.height());
-  } else {
-    // TODO(kainino): This path will not perform RegenerateRenderbufferIfNeeded
-    // on devices where multisample_renderbuffer_resize_emulation is needed.
-    // Thus any code using this path (pepper?) could encounter issues on those
-    // devices. RenderbufferStorageMultisampleWithWorkaround should be used
-    // instead, but can only be used if BackRenderbuffer tracks its
-    // renderbuffers in the renderbuffer manager instead of manually.
-    // http://crbug.com/731287
-    decoder_->RenderbufferStorageMultisampleHelper(GL_RENDERBUFFER, samples,
-                                                   format, size.width(),
-                                                   size.height(), kDoNotForce);
-  }
+  // TODO(kainino): This path will not perform RegenerateRenderbufferIfNeeded
+  // on devices where multisample_renderbuffer_resize_emulation is needed.
+  // Thus any code using this path (nacl/ppapi?) could encounter issues on those
+  // devices. RenderbufferStorageMultisampleWithWorkaround should be used
+  // instead, but can only be used if BackRenderbuffer tracks its
+  // renderbuffers in the renderbuffer manager instead of manually.
+  // http://crbug.com/731287
+  decoder_->RenderbufferStorageMultisampleHelper(GL_RENDERBUFFER, samples,
+                                                 format, size.width(),
+                                                 size.height(), kDoNotForce);
 
   bool alpha_channel_needs_clear =
       (format == GL_RGBA || format == GL_RGBA8) &&
@@ -3424,12 +3416,12 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
       // Per ext_framebuffer_multisample spec, need max bound on sample count.
       // max_sample_count must be initialized to a sane value.  If
       // glGetIntegerv() throws a GL error, it leaves its argument unchanged.
-      GLint max_sample_count = 1;
+      GLint max_sample_count = 0;
       api()->glGetIntegervFn(GL_MAX_SAMPLES_EXT, &max_sample_count);
       offscreen_target_samples_ = std::min(attrib_helper.samples,
                                            max_sample_count);
     } else {
-      offscreen_target_samples_ = 1;
+      offscreen_target_samples_ = 0;
     }
     offscreen_target_buffer_preserved_ = attrib_helper.buffer_preserved;
     offscreen_single_buffer_ = attrib_helper.single_buffer;
@@ -3439,11 +3431,11 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
       // The only available default render buffer formats in GLES2 have very
       // little precision.  Don't enable multisampling unless 8-bit render
       // buffer formats are available--instead fall back to 8-bit textures.
-      if (rgb8_supported && offscreen_target_samples_ > 1) {
+      if (rgb8_supported && offscreen_target_samples_ > 0) {
         offscreen_target_color_format_ =
             offscreen_buffer_texture_needs_alpha ? GL_RGBA8 : GL_RGB8;
       } else {
-        offscreen_target_samples_ = 1;
+        offscreen_target_samples_ = 0;
         offscreen_target_color_format_ =
             offscreen_buffer_texture_needs_alpha ||
                     workarounds().disable_gl_rgb_format
@@ -3769,7 +3761,7 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
     // there's a failure.
     supports_oop_raster_ = true;
     sk_sp<const GrGLInterface> interface(
-        CreateGrGLInterface(gl_version_info()));
+        gl::init::CreateGrGLInterface(gl_version_info()));
     if (!interface) {
       DLOG(ERROR) << "OOP raster support disabled: GrGLInterface creation "
                      "failed.";
@@ -5862,6 +5854,9 @@ uint32_t GLES2DecoderImpl::GetAndClearBackbufferClearBitsForTest() {
 
 void GLES2DecoderImpl::OnFboChanged() const {
   state_.fbo_binding_for_scissor_workaround_dirty = true;
+
+  if (workarounds().flush_on_framebuffer_change)
+    api()->glFlushFn();
 }
 
 // Called after the FBO is checked for completeness.
@@ -10753,10 +10748,15 @@ void GLES2DecoderImpl::DoTransformFeedbackVaryings(
 
 scoped_refptr<ShaderTranslatorInterface> GLES2DecoderImpl::GetTranslator(
     GLenum type) {
+  return type == GL_VERTEX_SHADER ? vertex_translator_ : fragment_translator_;
+}
+
+scoped_refptr<ShaderTranslatorInterface>
+GLES2DecoderImpl::GetOrCreateTranslator(GLenum type) {
   if (!InitializeShaderTranslator()) {
     return nullptr;
   }
-  return type == GL_VERTEX_SHADER ? vertex_translator_ : fragment_translator_;
+  return GetTranslator(type);
 }
 
 void GLES2DecoderImpl::DoCompileShader(GLuint client_id) {
@@ -10768,7 +10768,7 @@ void GLES2DecoderImpl::DoCompileShader(GLuint client_id) {
 
   scoped_refptr<ShaderTranslatorInterface> translator;
   if (!feature_info_->disable_shader_translator())
-      translator = GetTranslator(shader->shader_type());
+    translator = GetOrCreateTranslator(shader->shader_type());
 
   const Shader::TranslatedShaderSourceType source_type =
       feature_info_->feature_flags().angle_translated_shader_source ?
@@ -20285,7 +20285,7 @@ void GLES2DecoderImpl::DoBeginRasterCHROMIUM(GLuint texture_id,
 
   // Resolve requested msaa samples with GrGpu capabilities.
   int final_msaa_count = gr_context_->caps()->getSampleCount(
-      msaa_sample_count, gr_texture.config());
+      msaa_sample_count, static_cast<GrPixelConfig>(pixel_config));
   sk_surface_ = SkSurface::MakeFromBackendTextureAsRenderTarget(
       gr_context_.get(), gr_texture, kTopLeft_GrSurfaceOrigin, final_msaa_count,
       nullptr, &surface_props);

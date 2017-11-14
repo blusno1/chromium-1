@@ -79,6 +79,7 @@
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/layout_ng_list_item.h"
+#include "core/layout/ng/layout_ng_table_cell.h"
 #include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_unpositioned_float.h"
 #include "core/layout/svg/LayoutSVGResourceClipper.h"
@@ -110,6 +111,14 @@ namespace blink {
 namespace {
 
 static bool g_modify_layout_tree_structure_any_state = false;
+
+bool ShouldUseNewLayout(const ComputedStyle& style) {
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
+    return false;
+  // TODO(layout-dev): Remove user-modify style check once editing handles
+  // LayoutNG.
+  return style.UserModify() == EUserModify::kReadOnly;
+}
 
 }  // namespace
 
@@ -195,11 +204,11 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kBlock:
     case EDisplay::kFlowRoot:
     case EDisplay::kInlineBlock:
-      if (RuntimeEnabledFeatures::LayoutNGEnabled())
+      if (ShouldUseNewLayout(style))
         return new LayoutNGBlockFlow(element);
       return new LayoutBlockFlow(element);
     case EDisplay::kListItem:
-      if (RuntimeEnabledFeatures::LayoutNGEnabled())
+      if (ShouldUseNewLayout(style))
         return new LayoutNGListItem(element);
       return new LayoutListItem(element);
     case EDisplay::kTable:
@@ -215,6 +224,8 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kTableColumn:
       return new LayoutTableCol(element);
     case EDisplay::kTableCell:
+      if (RuntimeEnabledFeatures::LayoutNGEnabled())
+        return new LayoutNGTableCell(element);
       return new LayoutTableCell(element);
     case EDisplay::kTableCaption:
       return new LayoutTableCaption(element);

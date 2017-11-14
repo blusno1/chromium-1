@@ -9,7 +9,6 @@
 #include <tuple>
 #include <utility>
 
-#include "base/auto_reset.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/field_trial.h"
@@ -33,11 +32,9 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_verifier.h"
 #include "net/dns/host_resolver.h"
-#include "net/http/bidirectional_stream_impl.h"
 #include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source_type.h"
-#include "net/quic/chromium/bidirectional_stream_quic_impl.h"
 #include "net/quic/chromium/crypto/channel_id_chromium.h"
 #include "net/quic/chromium/crypto/proof_verifier_chromium.h"
 #include "net/quic/chromium/properties_based_quic_server_info.h"
@@ -46,6 +43,7 @@
 #include "net/quic/chromium/quic_chromium_packet_reader.h"
 #include "net/quic/chromium/quic_chromium_packet_writer.h"
 #include "net/quic/chromium/quic_crypto_client_stream_factory.h"
+#include "net/quic/chromium/quic_http_stream.h"
 #include "net/quic/chromium/quic_server_info.h"
 #include "net/quic/core/crypto/proof_verifier.h"
 #include "net/quic/core/crypto/quic_random.h"
@@ -333,13 +331,12 @@ class QuicStreamFactory::Job {
   size_t EstimateMemoryUsage() const;
 
   void AddRequest(QuicStreamRequest* request) {
-    CHECK(request->server_id() == key_.server_id());
     stream_requests_.insert(request);
   }
 
   void RemoveRequest(QuicStreamRequest* request) {
     auto request_iter = stream_requests_.find(request);
-    CHECK(request_iter != stream_requests_.end());
+    DCHECK(request_iter != stream_requests_.end());
     stream_requests_.erase(request_iter);
   }
 
@@ -356,7 +353,6 @@ class QuicStreamFactory::Job {
     STATE_CONNECT_COMPLETE,
   };
 
-  bool in_loop_;  // Temporary to investigate crbug.com/750271.
   IoState io_state_;
   QuicStreamFactory* factory_;
   QuicTransportVersion quic_version_;
@@ -385,8 +381,7 @@ QuicStreamFactory::Job::Job(QuicStreamFactory* factory,
                             bool was_alternative_service_recently_broken,
                             int cert_verify_flags,
                             const NetLogWithSource& net_log)
-    : in_loop_(false),
-      io_state_(STATE_RESOLVE_HOST),
+    : io_state_(STATE_RESOLVE_HOST),
       factory_(factory),
       quic_version_(quic_version),
       host_resolver_(host_resolver),
@@ -414,7 +409,6 @@ QuicStreamFactory::Job::Job(QuicStreamFactory* factory,
 
 QuicStreamFactory::Job::~Job() {
   net_log_.EndEvent(NetLogEventType::QUIC_STREAM_FACTORY_JOB);
-  CHECK(!in_loop_);
   // If |this| is destroyed in QuicStreamFactory's destructor, |callback_| is
   // non-null.
 }
@@ -429,8 +423,6 @@ int QuicStreamFactory::Job::Run(const CompletionCallback& callback) {
 
 int QuicStreamFactory::Job::DoLoop(int rv) {
   TRACE_EVENT0(kNetTracingCategory, "QuicStreamFactory::Job::DoLoop");
-  CHECK(!in_loop_);
-  base::AutoReset<bool> auto_reset_in_loop(&in_loop_, true);
 
   do {
     IoState state = io_state_;
@@ -461,7 +453,6 @@ int QuicStreamFactory::Job::DoLoop(int rv) {
 void QuicStreamFactory::Job::OnIOComplete(int rv) {
   rv = DoLoop(rv);
   if (rv != ERR_IO_PENDING && !callback_.is_null()) {
-    CHECK(!in_loop_);
     base::ResetAndReturn(&callback_).Run(rv);
   }
 }
@@ -592,7 +583,6 @@ int QuicStreamRequest::Request(const HostPortPair& destination,
                                PrivacyMode privacy_mode,
                                int cert_verify_flags,
                                const GURL& url,
-                               QuicStringPiece method,
                                const NetLogWithSource& net_log,
                                NetErrorDetails* net_error_details,
                                const CompletionCallback& callback) {
@@ -605,7 +595,7 @@ int QuicStreamRequest::Request(const HostPortPair& destination,
   server_id_ = QuicServerId(HostPortPair::FromURL(url), privacy_mode);
 
   int rv = factory_->Create(server_id_, destination, quic_version,
-                            cert_verify_flags, url, method, net_log, this);
+                            cert_verify_flags, url, net_log, this);
   if (rv == ERR_IO_PENDING) {
     net_log_ = net_log;
     callback_ = callback;
@@ -633,19 +623,12 @@ base::TimeDelta QuicStreamRequest::GetTimeDelayForWaitingJob() const {
   return factory_->GetTimeDelayForWaitingJob(server_id_);
 }
 
-std::unique_ptr<HttpStream> QuicStreamRequest::CreateStream() {
+std::unique_ptr<QuicChromiumClientSession::Handle>
+QuicStreamRequest::ReleaseSessionHandle() {
   if (!session_ || !session_->IsConnected())
     return nullptr;
 
-  return std::make_unique<QuicHttpStream>(std::move(session_));
-}
-
-std::unique_ptr<BidirectionalStreamImpl>
-QuicStreamRequest::CreateBidirectionalStreamImpl() {
-  if (!session_ || !session_->IsConnected())
-    return nullptr;
-
-  return std::make_unique<BidirectionalStreamQuicImpl>(std::move(session_));
+  return std::move(session_);
 }
 
 QuicStreamFactory::QuicStreamFactory(
@@ -712,7 +695,9 @@ QuicStreamFactory::QuicStreamFactory(
       connect_using_default_network_(
           connect_using_default_network &&
           NetworkChangeNotifier::AreNetworkHandlesSupported()),
-      migrate_sessions_on_network_change_(migrate_sessions_on_network_change),
+      migrate_sessions_on_network_change_(
+          migrate_sessions_on_network_change &&
+          NetworkChangeNotifier::AreNetworkHandlesSupported()),
       migrate_sessions_early_(migrate_sessions_early &&
                               migrate_sessions_on_network_change_),
       allow_server_migration_(allow_server_migration),
@@ -857,7 +842,6 @@ int QuicStreamFactory::Create(const QuicServerId& server_id,
                               QuicTransportVersion quic_version,
                               int cert_verify_flags,
                               const GURL& url,
-                              QuicStringPiece method,
                               const NetLogWithSource& net_log,
                               QuicStreamRequest* request) {
   if (clock_skew_detector_.ClockSkewDetected(base::TimeTicks::Now(),
@@ -1001,9 +985,7 @@ bool QuicStreamFactory::OnResolution(const QuicSessionKey& key,
 
 void QuicStreamFactory::OnJobComplete(Job* job, int rv) {
   auto iter = active_jobs_.find(job->key().server_id());
-  // TODO(xunjieli): Change following CHECKs back to DCHECKs after
-  // crbug.com/750271 is fixed.
-  CHECK(iter != active_jobs_.end());
+  DCHECK(iter != active_jobs_.end());
   if (rv == OK) {
     set_require_confirmation(false);
 
@@ -1012,7 +994,6 @@ void QuicStreamFactory::OnJobComplete(Job* job, int rv) {
     CHECK(session_it != active_sessions_.end());
     QuicChromiumClientSession* session = session_it->second;
     for (auto* request : iter->second->stream_requests()) {
-      CHECK(request->server_id() == job->key().server_id());
       // Do not notify |request| yet.
       request->SetSession(session->CreateHandle());
     }

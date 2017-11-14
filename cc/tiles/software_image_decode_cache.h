@@ -143,7 +143,7 @@ class CC_EXPORT SoftwareImageDecodeCache
   // Decode the given image and store it in the cache. This is only called by an
   // image decode task from a worker thread.
   void DecodeImageInTask(const ImageKey& key,
-                         const DrawImage& image,
+                         const PaintImage& paint_image,
                          DecodeTaskType task_type);
 
   void OnImageDecodeTaskCompleted(const ImageKey& key,
@@ -248,15 +248,14 @@ class CC_EXPORT SoftwareImageDecodeCache
   std::unique_ptr<CacheEntry> DecodeImageInternal(const ImageKey& key,
                                                   const DrawImage& draw_image);
 
-  // Get the decoded draw image for the given key and draw_image. Note that this
-  // function has to be called with no lock acquired, since it will acquire its
-  // own locks and might call DecodeImageInternal above. Also note that this
-  // function will use the provided key, even if
-  // ImageKey::FromDrawImage(draw_image) would return a different key.
-  // Note that when used internally, we still require that
-  // DrawWithImageFinished() is called afterwards.
-  DecodedDrawImage GetDecodedImageForDrawInternal(const ImageKey& key,
-                                                  const DrawImage& draw_image);
+  // Get the decoded draw image for the given key and paint_image. Note that
+  // this function has to be called with no lock acquired, since it will acquire
+  // its own locks and might call DecodeImageInternal above. Note that
+  // when used internally, we still require that DrawWithImageFinished() is
+  // called afterwards.
+  DecodedDrawImage GetDecodedImageForDrawInternal(
+      const ImageKey& key,
+      const PaintImage& paint_image);
 
   // Removes unlocked decoded images until the number of decoded images is
   // reduced within the given limit.
@@ -275,7 +274,7 @@ class CC_EXPORT SoftwareImageDecodeCache
   CacheEntry* AddCacheEntry(const ImageKey& key);
 
   void DecodeImageIfNecessary(const ImageKey& key,
-                              const DrawImage& draw_image,
+                              const PaintImage& paint_image,
                               CacheEntry* cache_entry);
   void AddBudgetForImage(const ImageKey& key, CacheEntry* entry);
   void RemoveBudgetForImage(const ImageKey& key, CacheEntry* entry);
@@ -313,6 +312,9 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   SkColorType color_type_;
   size_t max_items_in_cache_;
+  // Records the maximum number of items in the cache over the lifetime of the
+  // cache. This is updated anytime we are requested to reduce cache usage.
+  size_t lifetime_max_items_in_cache_ = 0u;
 };
 
 }  // namespace cc

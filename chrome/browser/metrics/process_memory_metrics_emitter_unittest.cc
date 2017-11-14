@@ -8,6 +8,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/process/process_handle.h"
 #include "base/test/scoped_task_environment.h"
+#include "build/build_config.h"
 #include "chrome/browser/metrics/renderer_uptime_tracker.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -76,7 +77,8 @@ class ProcessMemoryMetricsEmitterFake : public ProcessMemoryMetricsEmitter {
 };
 
 OSMemDumpPtr GetFakeOSMemDump(uint32_t resident_set_kb,
-                              uint32_t private_footprint_kb) {
+                              uint32_t private_footprint_kb,
+                              uint32_t shared_footprint_kb) {
   using memory_instrumentation::mojom::VmRegion;
 
   std::vector<memory_instrumentation::mojom::VmRegionPtr> vm_regions;
@@ -93,7 +95,8 @@ OSMemDumpPtr GetFakeOSMemDump(uint32_t resident_set_kb,
                     500,    // byte_stats_swapped,
                     200));  // byte_stats_proportional_resident
   return memory_instrumentation::mojom::OSMemDump::New(
-      resident_set_kb, private_footprint_kb, std::move(vm_regions));
+      resident_set_kb, private_footprint_kb, shared_footprint_kb,
+      std::move(vm_regions));
 }
 
 void PopulateBrowserMetrics(GlobalMemoryDumpPtr& global_dump,
@@ -102,10 +105,12 @@ void PopulateBrowserMetrics(GlobalMemoryDumpPtr& global_dump,
       memory_instrumentation::mojom::ProcessMemoryDump::New());
   pmd->process_type = ProcessType::BROWSER;
   pmd->chrome_dump = memory_instrumentation::mojom::ChromeMemDump::New();
+#if !defined(OS_WIN)
   pmd->chrome_dump->malloc_total_kb = metrics_mb["Malloc"] * 1024;
+#endif
   OSMemDumpPtr os_dump =
       GetFakeOSMemDump(metrics_mb["Resident"] * 1024,
-                       metrics_mb["PrivateMemoryFootprint"] * 1024);
+                       metrics_mb["PrivateMemoryFootprint"] * 1024, 0);
   pmd->os_dump = std::move(os_dump);
   global_dump->process_dumps.push_back(std::move(pmd));
 }
@@ -113,11 +118,12 @@ void PopulateBrowserMetrics(GlobalMemoryDumpPtr& global_dump,
 base::flat_map<const char*, int64_t> GetExpectedBrowserMetrics() {
   return base::flat_map<const char*, int64_t>(
       {
-          {"ProcessType", static_cast<int64_t>(ProcessType::BROWSER)},
-          {"Resident", 10},
-          {"Malloc", 20},
-          {"PrivateMemoryFootprint", 30},
-          {"Uptime", 42},
+        {"ProcessType", static_cast<int64_t>(ProcessType::BROWSER)},
+            {"Resident", 10},
+#if !defined(OS_WIN)
+            {"Malloc", 20},
+#endif
+            {"PrivateMemoryFootprint", 30}, {"Uptime", 42},
       },
       base::KEEP_FIRST_OF_DUPES);
 }
@@ -129,14 +135,16 @@ void PopulateRendererMetrics(GlobalMemoryDumpPtr& global_dump,
       memory_instrumentation::mojom::ProcessMemoryDump::New());
   pmd->process_type = ProcessType::RENDERER;
   pmd->chrome_dump = memory_instrumentation::mojom::ChromeMemDump::New();
+#if !defined(OS_WIN)
   pmd->chrome_dump->malloc_total_kb = metrics_mb["Malloc"] * 1024;
+#endif
   pmd->chrome_dump->partition_alloc_total_kb =
       metrics_mb["PartitionAlloc"] * 1024;
   pmd->chrome_dump->blink_gc_total_kb = metrics_mb["BlinkGC"] * 1024;
   pmd->chrome_dump->v8_total_kb = metrics_mb["V8"] * 1024;
   OSMemDumpPtr os_dump =
       GetFakeOSMemDump(metrics_mb["Resident"] * 1024,
-                       metrics_mb["PrivateMemoryFootprint"] * 1024);
+                       metrics_mb["PrivateMemoryFootprint"] * 1024, 0);
   pmd->os_dump = std::move(os_dump);
   pmd->pid = pid;
   global_dump->process_dumps.push_back(std::move(pmd));
@@ -144,15 +152,17 @@ void PopulateRendererMetrics(GlobalMemoryDumpPtr& global_dump,
 
 base::flat_map<const char*, int64_t> GetExpectedRendererMetrics() {
   return base::flat_map<const char*, int64_t>(
-      {{"ProcessType", static_cast<int64_t>(ProcessType::RENDERER)},
-       {"Resident", 110},
-       {"Malloc", 120},
-       {"PrivateMemoryFootprint", 130},
-       {"PartitionAlloc", 140},
-       {"BlinkGC", 150},
-       {"V8", 160},
-       {"NumberOfExtensions", 0},
-       {"Uptime", 42}},
+      {
+        {"ProcessType", static_cast<int64_t>(ProcessType::RENDERER)},
+            {"Resident", 110},
+#if !defined(OS_WIN)
+            {"Malloc", 120},
+#endif
+            {"PrivateMemoryFootprint", 130}, {"PartitionAlloc", 140},
+            {"BlinkGC", 150}, {"V8", 160}, {"NumberOfExtensions", 0}, {
+          "Uptime", 42
+        }
+      },
       base::KEEP_FIRST_OF_DUPES);
 }
 
@@ -168,12 +178,14 @@ void PopulateGpuMetrics(GlobalMemoryDumpPtr& global_dump,
       memory_instrumentation::mojom::ProcessMemoryDump::New());
   pmd->process_type = ProcessType::GPU;
   pmd->chrome_dump = memory_instrumentation::mojom::ChromeMemDump::New();
+#if !defined(OS_WIN)
   pmd->chrome_dump->malloc_total_kb = metrics_mb["Malloc"] * 1024;
+#endif
   pmd->chrome_dump->command_buffer_total_kb =
       metrics_mb["CommandBuffer"] * 1024;
   OSMemDumpPtr os_dump =
       GetFakeOSMemDump(metrics_mb["Resident"] * 1024,
-                       metrics_mb["PrivateMemoryFootprint"] * 1024);
+                       metrics_mb["PrivateMemoryFootprint"] * 1024, 0);
   pmd->os_dump = std::move(os_dump);
   global_dump->process_dumps.push_back(std::move(pmd));
 }
@@ -181,12 +193,13 @@ void PopulateGpuMetrics(GlobalMemoryDumpPtr& global_dump,
 base::flat_map<const char*, int64_t> GetExpectedGpuMetrics() {
   return base::flat_map<const char*, int64_t>(
       {
-          {"ProcessType", static_cast<int64_t>(ProcessType::GPU)},
-          {"Resident", 210},
-          {"Malloc", 220},
-          {"PrivateMemoryFootprint", 230},
-          {"CommandBuffer", 240},
-          {"Uptime", 42},
+        {"ProcessType", static_cast<int64_t>(ProcessType::GPU)},
+            {"Resident", 210},
+#if !defined(OS_WIN)
+            {"Malloc", 220},
+#endif
+            {"PrivateMemoryFootprint", 230}, {"CommandBuffer", 240},
+            {"Uptime", 42},
       },
       base::KEEP_FIRST_OF_DUPES);
 }

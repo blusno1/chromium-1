@@ -193,6 +193,8 @@ extern const char kTouchpadSensitivity[];
 extern const char kUse24HourClock[];
 extern const char kUserTimezone[];
 extern const char kResolveTimezoneByGeolocation[];
+extern const char kResolveTimezoneByGeolocationMethod[];
+extern const char kResolveTimezoneByGeolocationMigratedToMethod[];
 // TODO(yusukes): Change "kLanguageABC" to "kABC". The current form is too long
 // to remember and confusing. The prefs are actually for input methods and i18n
 // keyboards, not UI languages.
@@ -294,6 +296,7 @@ extern const char kInstantTetheringAllowed[];
 extern const char kInstantTetheringEnabled[];
 extern const char kInstantTetheringBleAdvertisingSupported[];
 extern const char kCastReceiverEnabled[];
+extern const char kMinimumAllowedChromeVersion[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kSpeechRecognitionFilterProfanities[];
@@ -716,6 +719,7 @@ extern const char kDebuggingFeaturesRequested[];
 #if defined(OS_CHROMEOS)
 extern const char kSigninScreenTimezone[];
 extern const char kResolveDeviceTimezoneByGeolocation[];
+extern const char kResolveDeviceTimezoneByGeolocationMethod[];
 extern const char kSystemTimezoneAutomaticDetectionPolicy[];
 #endif  // defined(OS_CHROMEOS)
 
@@ -757,7 +761,6 @@ extern const char kAppLauncherHasBeenEnabled[];
 extern const char kAppListEnableMethod[];
 extern const char kAppListEnableTime[];
 extern const char kAppListLocalState[];
-extern const char kShowAppLauncherPromo[];
 extern const char kAppLauncherDriveAppMapping[];
 extern const char kAppLauncherUninstalledDriveApps[];
 #endif  // BUILDFLAG(ENABLE_APP_LIST)
@@ -890,6 +893,12 @@ extern const char kPrefetchUsageMixedCount[];
 #endif
 
 extern const char kMediaEngagementSchemaVersion[];
+
+// Preferences for recording metrics about tab and window usage.
+extern const char kTabStatsTotalTabCountMax[];
+extern const char kTabStatsMaxTabsPerWindow[];
+extern const char kTabStatsWindowCountMax[];
+extern const char kTabStatsDailySample[];
 
 }  // namespace prefs
 

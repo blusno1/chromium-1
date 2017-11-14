@@ -15,8 +15,10 @@ CrashRestoreComplexTest.*
 CrashRestoreSimpleTest.*
 DriveIntegrationServiceBrowserTest.*
 EnterpriseEnrollmentTest.*
-EulaTest.*
-KioskAppManagerTest.*
+# Works, but flaky CHECK in TransportIdForWindow(). http://crbug.com/781391
+# EulaTest.*
+# Works, but flaky timeouts. http://crbug.com/783450
+# KioskAppManagerTest.*
 KioskAppUpdateServiceTest.*
 LoginPromptBrowserTest.*
 LoginUtilsTest.*
@@ -31,7 +33,8 @@ ShutdownPolicyLockerTest.*
 UpdateScreenTest.*
 UserImageManagerTest.*
 UserSelectionScreenTest.*
-WebviewLoginTest.*
+# Works, but flaky CHECK in TransportIdForWindow(). http://crbug.com/781391
+# WebviewLoginTest.*
 
 # Tests from //chrome/browser/ui/ash.
 AcceleratorCommandsFullscreenBrowserTest.*
@@ -42,6 +45,139 @@ SystemTrayClientClockTest.*
 SystemTrayClientEnterpriseTest.*
 SystemTrayClientTest.*
 VolumeControllerTest.*
+
+# Tests from //chrome/browser/ui/views.
+AutofillPopupBaseViewTest.*
+AutofillPopupViewViewsTest.*
+BookmarkBubbleSignInDelegateTest.*
+BrowserTestParam.*
+BrowserViewFocusTest.*
+BrowserViewTest.*
+CertificateSelectorTest.*
+CollectedCookiesViewsTest.*
+ConstrainedWindowViewTest.*
+ExtensionUninstallDialogViewBrowserTest.*
+ImeWindowBrowserTest.*
+KeyboardAccessTest.*
+LocationIconViewBrowserTest.*
+MediaRouterUIBrowserTest.*
+NavigationAccessibilityTest.*
+OmniboxViewViewsTest.*
+SSLClientCertificateSelectorTest.*
+StarViewTest.*
+TabScrubberTest.*
+TaskManagerViewTest.*
+TranslateBubbleViewBrowserTest.*
+TranslateLanguageBrowserTest.*
+TryChromeDialogBrowserTest.*
+TryChromeDialogBrowserTestBase.*
+WebDialogBrowserTest.*
+WebNotificationTrayTest.*
+
+# Tests from //chrome/browser/extensions.
+ActivityLogApiTest.*
+ActivityLogPrerenderTest.*
+AllUrlsApiTest.*
+AppApiTest.*
+# AtExit crash in task_manager::WebContentsTaskProvider::~WebContentsTaskProvider.
+# AppBackgroundPageApiTest.*
+AudioWaitingExtensionTest.*
+AutofillPrivateApiTest.*
+# ash::Shell::GetPrimaryRootWindow() access.
+# AutomationApiTest.*
+BluetoothLowEnergyApiTest.*
+BrailleDisplayPrivateApiTest.*
+BrowserActionApiTest.*
+BrowserActionInteractiveTest.*
+CastStreamingApiTest.*
+CertificateProviderApiTest.*
+ClipboardApiTest.*
+ClipboardExtensionApiTest.*
+CommandLinePrivateApiTest.*
+CommandsApiTest.*
+ContentCapabilitiesTest.*
+ContentScriptApiTest.*
+ContentScriptCssInjectionTest.*
+CrazyExtensionTest.*
+CrossOriginXHR.*
+DebuggerApiTest.*
+# DCHECK in ui::ws::WindowManagerState::DispatchInputEventToWindowImpl().
+# DeclarativeApiTest.*
+DeclarativeContentApiTest.*
+DesktopCaptureApiTest.*
+DialAPITest.*
+DownloadExtensionTest.*
+DownloadsApiTest.*
+EventsApiTest.*
+# DCHECK in ui::ws::WindowManagerState::DispatchInputEventToWindowImpl().
+# ExecuteScriptApiTest.*
+ExperimentalApiTest.*
+ExtensionApiTabTest.*
+ExtensionApiTestWithManagementPolicy.*
+ExtensionApiTestWithSwitch.*
+ExtensionCloudPrintPrivateApiTest.*
+ExtensionContentSettingsApiTest.*
+ExtensionContextMenuApiTest.*
+ExtensionFetchTest.*
+ExtensionIconSourceTest.*
+ExtensionIdltestApiTest.*
+ExtensionManagementApiTest.*
+ExtensionModuleApiTest.*
+ExtensionOverrideTest.*
+ExtensionPageCaptureApiTest.*
+ExtensionPreferenceApiTest.*
+ExtensionResourceRequestPolicyTest.*
+ExtensionSettingsApiTest.*
+ExtensionTerminalPrivateApiTest.*
+# DCHECK in ui::ws::WindowManagerState::DispatchInputEventToWindowImpl().
+# ExtensionWebRequestApiTest.*
+ExtensionWebstorePrivateApiTest.*
+ExtensionWebUITest.*
+GcmApiTest.*
+GeolocationApiTest.*
+GetUpdateStatusApiTest.*
+HistoryApiTest.*
+HotwordPrivateApiTest.*
+ImageWriterPrivateApiTest.*
+IncognitoApiTest.*
+InstanceIDApiTest.*
+JavscriptApiTest.*
+LazyBackgroundPageApiTest.*
+MDnsAPITest.*
+MediaGalleriesGalleryWatchApiTest.*
+MessagingApiTest.*
+NativeBindingsApiTest.*
+NetworkingCastPrivateApiTest.*
+NetworkingPrivateApiTest.*
+NetworkingPrivateChromeOSApiTest.*
+NetworkingPrivateServiceClientApiTest.*
+NotificationIdleTest.*
+NotificationsApiTest.*
+OmniboxApiTest.*
+PageActionApiTest.*
+PasswordsPrivateApiTest.*
+PermissionsApiTest.*
+PlatformKeysTest.*
+PreferencesPrivateApiTest.*
+ProcessesApiTest.*
+ProxySettingsApiTest.*
+ResourcesPrivateApiTest.*
+ScreenlockPrivateApiTest.*
+ServiceWorkerTest.*
+SetIconAPITest.*
+SettingsPrivateApiTest.*
+SocketApiTest.*
+StreamsPrivateApiTest.*
+SyncFileSystemApiTest.*
+SystemIndicatorApiTest.*
+TabCaptureApiTest.*
+VpnProviderApiTest.*
+WebNavigationApiTest.*
+WebRtcFromWebAccessibleResourceTest.*
+WebrtcLoggingPrivateApiTest.*
+WindowOpenApiTest.*
+# Fails (assertion in JS side of code).
+-WindowOpenApiTest.UpdateWindowToLockedFullscreen
 
 # Tests from elsewhere.
 BrowserDialogTest.*

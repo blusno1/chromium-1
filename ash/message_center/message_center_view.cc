@@ -11,12 +11,15 @@
 #include "ash/message_center/message_center_style.h"
 #include "ash/message_center/notifier_settings_view.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/session/session_controller.h"
+#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
@@ -24,9 +27,9 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/message_center_tray.h"
 #include "ui/message_center/message_center_types.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/ui_controller.h"
 #include "ui/message_center/views/message_view.h"
 #include "ui/message_center/views/message_view_factory.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
@@ -41,7 +44,6 @@
 #include "ui/views/widget/widget.h"
 
 using message_center::MessageCenter;
-using message_center::MessageCenterTray;
 using message_center::MessageView;
 using message_center::Notification;
 using message_center::NotificationList;
@@ -111,26 +113,15 @@ class EmptyNotificationView : public views::View {
 
 // MessageCenterView ///////////////////////////////////////////////////////////
 
-MessageCenterView::MessageCenterView(MessageCenter* message_center,
-                                     MessageCenterTray* tray,
-                                     int max_height,
-                                     bool initially_settings_visible)
+MessageCenterView::MessageCenterView(
+    MessageCenter* message_center,
+    message_center::UiController* ui_controller,
+    int max_height,
+    bool initially_settings_visible)
     : message_center_(message_center),
-      tray_(tray),
-      scroller_(nullptr),
-      settings_view_(nullptr),
-      no_notifications_view_(nullptr),
-      button_bar_(nullptr),
+      ui_controller_(ui_controller),
       settings_visible_(initially_settings_visible),
-      source_view_(nullptr),
-      source_height_(0),
-      target_view_(nullptr),
-      target_height_(0),
-      is_closing_(false),
-      is_locked_(message_center_->IsLockedState()),
-      mode_(Mode::NO_NOTIFICATIONS),
-      context_menu_controller_(this),
-      focus_manager_(nullptr) {
+      is_locked_(Shell::Get()->session_controller()->IsScreenLocked()) {
   if (is_locked_)
     mode_ = Mode::LOCKED;
   else if (initially_settings_visible)
@@ -139,6 +130,7 @@ MessageCenterView::MessageCenterView(MessageCenter* message_center,
   message_center_->AddObserver(this);
   set_notify_enter_exit_on_child(true);
   SetBackground(views::CreateSolidBackground(kBackgroundColor));
+  SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
 
   button_bar_ = new MessageCenterButtonBar(
       this, message_center, initially_settings_visible, GetButtonBarTitle());
@@ -235,6 +227,13 @@ void MessageCenterView::ClearAllClosableNotifications() {
   SetViewHierarchyEnabled(scroller_, false);
   message_list_view_->ClearAllClosableNotifications(
       scroller_->GetVisibleRect());
+}
+
+void MessageCenterView::OnLockStateChanged(bool locked) {
+  is_locked_ = locked;
+  Update(true /* animate */);
+  // Refresh a11y information, because accessible name of the view changes.
+  NotifyAccessibilityEvent(ui::AX_EVENT_ARIA_ATTRIBUTE_CHANGED, true);
 }
 
 void MessageCenterView::OnAllNotificationsCleared() {
@@ -358,6 +357,11 @@ void MessageCenterView::OnMouseExited(const ui::MouseEvent& event) {
   Update(true /* animate */);
 }
 
+void MessageCenterView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_DIALOG;
+  node_data->SetName(GetButtonBarTitle());
+}
+
 void MessageCenterView::OnNotificationAdded(const std::string& id) {
   int index = 0;
   const NotificationList::Notifications& notifications =
@@ -441,12 +445,6 @@ void MessageCenterView::OnNotificationUpdated(const std::string& id) {
   UpdateNotification(id);
 }
 
-void MessageCenterView::OnLockedStateChanged(bool locked) {
-  is_locked_ = locked;
-  UpdateButtonBarStatus();
-  Update(true /* animate */);
-}
-
 void MessageCenterView::OnQuietModeChanged(bool is_quiet_mode) {
   settings_view_->SetQuietModeState(is_quiet_mode);
   button_bar_->SetQuietModeState(is_quiet_mode);
@@ -464,7 +462,7 @@ void MessageCenterView::RemoveNotification(const std::string& notification_id,
 
 std::unique_ptr<ui::MenuModel> MessageCenterView::CreateMenuModel(
     const message_center::Notification& notification) {
-  return tray_->CreateNotificationMenuModel(notification);
+  return ui_controller_->CreateNotificationMenuModel(notification);
 }
 
 void MessageCenterView::ClickOnNotificationButton(

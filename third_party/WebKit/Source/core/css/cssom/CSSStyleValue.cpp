@@ -26,12 +26,14 @@ CSSStyleValueVector ParseCSSStyleValue(const String& property_name,
     return CSSStyleValueVector();
   }
 
-  if (isShorthandProperty(property_id)) {
+  if (CSSProperty::Get(property_id).IsShorthand()) {
     exception_state.ThrowTypeError(
         "Parsing shorthand properties is not supported");
     return CSSStyleValueVector();
   }
 
+  // TODO(crbug.com/783031): This should probably use an existing parser context
+  // (e.g. from execution context) to parse relative URLs correctly.
   const CSSValue* css_value =
       CSSParser::ParseSingleValue(property_id, value, StrictCSSParserContext());
   if (!css_value) {

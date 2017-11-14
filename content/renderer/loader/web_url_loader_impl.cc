@@ -410,12 +410,7 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
   void OnReceivedData(std::unique_ptr<ReceivedData> data);
   void OnTransferSizeUpdated(int transfer_size_diff);
   void OnReceivedCachedMetadata(const char* data, int len);
-  void OnCompletedRequest(int error_code,
-                          bool stale_copy_in_cache,
-                          const base::TimeTicks& completion_time,
-                          int64_t total_transfer_size,
-                          int64_t encoded_body_size,
-                          int64_t decoded_body_size);
+  void OnCompletedRequest(const network::URLLoaderStatus& status);
 
  private:
   friend class base::RefCounted<Context>;
@@ -473,12 +468,7 @@ class WebURLLoaderImpl::RequestPeerImpl : public RequestPeer {
   void OnReceivedData(std::unique_ptr<ReceivedData> data) override;
   void OnTransferSizeUpdated(int transfer_size_diff) override;
   void OnReceivedCachedMetadata(const char* data, int len) override;
-  void OnCompletedRequest(int error_code,
-                          bool stale_copy_in_cache,
-                          const base::TimeTicks& completion_time,
-                          int64_t total_transfer_size,
-                          int64_t encoded_body_size,
-                          int64_t decoded_body_size) override;
+  void OnCompletedRequest(const network::URLLoaderStatus& status) override;
 
  private:
   scoped_refptr<Context> context_;
@@ -754,11 +744,6 @@ void WebURLLoaderImpl::Context::OnReceivedResponse(
   // received on the browser side, and has been passed down to the renderer.
   if (stream_override_) {
     CHECK(IsBrowserSideNavigationEnabled());
-    // Compute the delta between the response sizes so that the accurate
-    // transfer size can be reported at the end of the request.
-    stream_override_->total_transfer_size_delta =
-        stream_override_->response.encoded_data_length -
-        initial_info.encoded_data_length;
     info = stream_override_->response;
 
     // Replay the redirects that happened during navigation.
@@ -894,12 +879,10 @@ void WebURLLoaderImpl::Context::OnReceivedCachedMetadata(
 }
 
 void WebURLLoaderImpl::Context::OnCompletedRequest(
-    int error_code,
-    bool stale_copy_in_cache,
-    const base::TimeTicks& completion_time,
-    int64_t total_transfer_size,
-    int64_t encoded_body_size,
-    int64_t decoded_body_size) {
+    const network::URLLoaderStatus& status) {
+  int64_t total_transfer_size = status.encoded_data_length;
+  int64_t encoded_body_size = status.encoded_body_length;
+
   if (stream_override_ && stream_override_->stream_url.is_empty()) {
     // TODO(kinuko|scottmg|jam): This is wrong. https://crbug.com/705744.
     total_transfer_size = stream_override_->total_transferred;
@@ -911,7 +894,7 @@ void WebURLLoaderImpl::Context::OnCompletedRequest(
     ftp_listing_delegate_.reset(nullptr);
   }
 
-  if (body_stream_writer_ && error_code != net::OK)
+  if (body_stream_writer_ && status.error_code != net::OK)
     body_stream_writer_->Fail();
   body_stream_writer_.reset();
 
@@ -920,24 +903,18 @@ void WebURLLoaderImpl::Context::OnCompletedRequest(
         "loading", "WebURLLoaderImpl::Context::OnCompletedRequest",
         this, TRACE_EVENT_FLAG_FLOW_IN);
 
-    if (error_code != net::OK) {
-      WebURLError error(WebURLError::Domain::kNet, error_code,
-                        stale_copy_in_cache
+    if (status.error_code != net::OK) {
+      WebURLError error(status.error_code,
+                        status.exists_in_cache
                             ? WebURLError::HasCopyInCache::kTrue
                             : WebURLError::HasCopyInCache::kFalse,
                         WebURLError::IsWebSecurityViolation::kFalse, url_);
       client_->DidFail(error, total_transfer_size, encoded_body_size,
-                       decoded_body_size);
+                       status.decoded_body_length);
     } else {
-      // PlzNavigate: compute the accurate transfer size for navigations.
-      if (stream_override_) {
-        DCHECK(IsBrowserSideNavigationEnabled());
-        total_transfer_size += stream_override_->total_transfer_size_delta;
-      }
-
-      client_->DidFinishLoading((completion_time - TimeTicks()).InSecondsF(),
-                                total_transfer_size, encoded_body_size,
-                                decoded_body_size);
+      client_->DidFinishLoading(
+          (status.completion_time - TimeTicks()).InSecondsF(),
+          total_transfer_size, encoded_body_size, status.decoded_body_length);
     }
   }
 }
@@ -962,9 +939,8 @@ void WebURLLoaderImpl::Context::CancelBodyStreaming() {
   }
   if (client_) {
     // TODO(yhirano): Set |stale_copy_in_cache| appropriately if possible.
-    client_->DidFail(
-        WebURLError(WebURLError::Domain::kNet, net::ERR_ABORTED, url_),
-        WebURLLoaderClient::kUnknownEncodedDataLength, 0, 0);
+    client_->DidFail(WebURLError(net::ERR_ABORTED, url_),
+                     WebURLLoaderClient::kUnknownEncodedDataLength, 0, 0);
   }
 
   // Notify the browser process that the request is canceled.
@@ -1037,118 +1013,10 @@ void WebURLLoaderImpl::Context::HandleDataURL() {
       OnReceivedData(std::make_unique<FixedReceivedData>(data.data(), size));
   }
 
-  OnCompletedRequest(error_code, false, base::TimeTicks::Now(), 0, data.size(),
-                     data.size());
-}
-
-// static
-net::NetworkTrafficAnnotationTag
-WebURLLoaderImpl::Context::GetTrafficAnnotationTag(
-    const blink::WebURLRequest& request) {
-  switch (request.GetRequestContext()) {
-    case WebURLRequest::kRequestContextUnspecified:
-    case WebURLRequest::kRequestContextAudio:
-    case WebURLRequest::kRequestContextBeacon:
-    case WebURLRequest::kRequestContextCSPReport:
-    case WebURLRequest::kRequestContextDownload:
-    case WebURLRequest::kRequestContextEventSource:
-    case WebURLRequest::kRequestContextFetch:
-    case WebURLRequest::kRequestContextFont:
-    case WebURLRequest::kRequestContextForm:
-    case WebURLRequest::kRequestContextFrame:
-    case WebURLRequest::kRequestContextHyperlink:
-    case WebURLRequest::kRequestContextIframe:
-    case WebURLRequest::kRequestContextImage:
-    case WebURLRequest::kRequestContextImageSet:
-    case WebURLRequest::kRequestContextImport:
-    case WebURLRequest::kRequestContextInternal:
-    case WebURLRequest::kRequestContextLocation:
-    case WebURLRequest::kRequestContextManifest:
-    case WebURLRequest::kRequestContextPing:
-    case WebURLRequest::kRequestContextPrefetch:
-    case WebURLRequest::kRequestContextScript:
-    case WebURLRequest::kRequestContextServiceWorker:
-    case WebURLRequest::kRequestContextSharedWorker:
-    case WebURLRequest::kRequestContextSubresource:
-    case WebURLRequest::kRequestContextStyle:
-    case WebURLRequest::kRequestContextTrack:
-    case WebURLRequest::kRequestContextVideo:
-    case WebURLRequest::kRequestContextWorker:
-    case WebURLRequest::kRequestContextXMLHttpRequest:
-    case WebURLRequest::kRequestContextXSLT:
-      return net::DefineNetworkTrafficAnnotation("blink_resource_loader", R"(
-      semantics {
-        sender: "Blink Resource Loader"
-        description:
-          "Blink-initiated request, which includes all resources for "
-          "normal page loads, chrome URLs, and downloads."
-        trigger:
-          "The user navigates to a URL or downloads a file. Also when a "
-          "webpage, ServiceWorker, or chrome:// uses any network communication."
-        data: "Anything the initiator wants to send."
-        destination: OTHER
-      }
-      policy {
-        cookies_allowed: YES
-        cookies_store: "user"
-        setting: "These requests cannot be disabled in settings."
-        policy_exception_justification:
-          "Not implemented. Without these requests, Chrome will be unable "
-          "to load any webpage."
-      })");
-
-    case WebURLRequest::kRequestContextEmbed:
-    case WebURLRequest::kRequestContextObject:
-    case WebURLRequest::kRequestContextPlugin:
-      return net::DefineNetworkTrafficAnnotation(
-          "blink_extension_resource_loader", R"(
-        semantics {
-          sender: "Blink Resource Loader"
-          description:
-            "Blink-initiated request for resources required for NaCl instances "
-            "tagged with <embed> or <object>, or installed extensions."
-          trigger:
-            "An extension or NaCl instance may initiate a request at any time, "
-            "even in the background."
-          data: "Anything the initiator wants to send."
-          destination: OTHER
-        }
-        policy {
-          cookies_allowed: YES
-          cookies_store: "user"
-          setting:
-            "These requests cannot be disabled in settings, but they are "
-            "sent only if user installs extensions."
-          chrome_policy {
-            ExtensionInstallBlacklist {
-              ExtensionInstallBlacklist: {
-                entries: '*'
-              }
-            }
-          }
-        })");
-
-    case WebURLRequest::kRequestContextFavicon:
-      return net::DefineNetworkTrafficAnnotation("favicon_loader", R"(
-        semantics {
-          sender: "Blink Resource Loader"
-          description:
-            "Chrome sends a request to download favicon for a URL."
-          trigger:
-            "Navigating to a URL."
-          data: "None."
-          destination: WEBSITE
-        }
-        policy {
-          cookies_allowed: YES
-          cookies_store: "user"
-          setting: "These requests cannot be disabled in settings."
-          policy_exception_justification:
-            "Not implemented."
-        })");
-  }
-
-  return net::NetworkTrafficAnnotationTag::NotReached();
+  network::URLLoaderStatus status(error_code);
+  status.encoded_body_length = data.size();
+  status.decoded_body_length = data.size();
+  OnCompletedRequest(status);
 }
 
 // WebURLLoaderImpl::RequestPeerImpl ------------------------------------------
@@ -1195,15 +1063,8 @@ void WebURLLoaderImpl::RequestPeerImpl::OnReceivedCachedMetadata(
 }
 
 void WebURLLoaderImpl::RequestPeerImpl::OnCompletedRequest(
-    int error_code,
-    bool stale_copy_in_cache,
-    const base::TimeTicks& completion_time,
-    int64_t total_transfer_size,
-    int64_t encoded_body_size,
-    int64_t decoded_body_size) {
-  context_->OnCompletedRequest(error_code, stale_copy_in_cache, completion_time,
-                               total_transfer_size, encoded_body_size,
-                               decoded_body_size);
+    const network::URLLoaderStatus& status) {
+  context_->OnCompletedRequest(status);
 }
 
 // WebURLLoaderImpl -----------------------------------------------------------
@@ -1365,7 +1226,7 @@ void WebURLLoaderImpl::PopulateURLResponse(const WebURL& url,
 
 void WebURLLoaderImpl::LoadSynchronously(const WebURLRequest& request,
                                          WebURLResponse& response,
-                                         WebURLError& error,
+                                         base::Optional<WebURLError>& error,
                                          WebData& data,
                                          int64_t& encoded_data_length,
                                          int64_t& encoded_body_length) {
@@ -1382,8 +1243,7 @@ void WebURLLoaderImpl::LoadSynchronously(const WebURLRequest& request,
     // SyncResourceHandler returns ERR_ABORTED for CORS redirect errors,
     // so we treat the error as a web security violation.
     const bool is_web_security_violation = error_code == net::ERR_ABORTED;
-    error = WebURLError(WebURLError::Domain::kNet, error_code,
-                        WebURLError::HasCopyInCache::kFalse,
+    error = WebURLError(error_code, WebURLError::HasCopyInCache::kFalse,
                         is_web_security_violation
                             ? WebURLError::IsWebSecurityViolation::kTrue
                             : WebURLError::IsWebSecurityViolation::kFalse,
@@ -1420,6 +1280,118 @@ void WebURLLoaderImpl::SetDefersLoading(bool value) {
 void WebURLLoaderImpl::DidChangePriority(WebURLRequest::Priority new_priority,
                                          int intra_priority_value) {
   context_->DidChangePriority(new_priority, intra_priority_value);
+}
+
+// static
+// We have this function at the bottom of this file because it confuses
+// syntax highliting.
+net::NetworkTrafficAnnotationTag
+WebURLLoaderImpl::Context::GetTrafficAnnotationTag(
+    const blink::WebURLRequest& request) {
+  switch (request.GetRequestContext()) {
+    case WebURLRequest::kRequestContextUnspecified:
+    case WebURLRequest::kRequestContextAudio:
+    case WebURLRequest::kRequestContextBeacon:
+    case WebURLRequest::kRequestContextCSPReport:
+    case WebURLRequest::kRequestContextDownload:
+    case WebURLRequest::kRequestContextEventSource:
+    case WebURLRequest::kRequestContextFetch:
+    case WebURLRequest::kRequestContextFont:
+    case WebURLRequest::kRequestContextForm:
+    case WebURLRequest::kRequestContextFrame:
+    case WebURLRequest::kRequestContextHyperlink:
+    case WebURLRequest::kRequestContextIframe:
+    case WebURLRequest::kRequestContextImage:
+    case WebURLRequest::kRequestContextImageSet:
+    case WebURLRequest::kRequestContextImport:
+    case WebURLRequest::kRequestContextInternal:
+    case WebURLRequest::kRequestContextLocation:
+    case WebURLRequest::kRequestContextManifest:
+    case WebURLRequest::kRequestContextPing:
+    case WebURLRequest::kRequestContextPrefetch:
+    case WebURLRequest::kRequestContextScript:
+    case WebURLRequest::kRequestContextServiceWorker:
+    case WebURLRequest::kRequestContextSharedWorker:
+    case WebURLRequest::kRequestContextSubresource:
+    case WebURLRequest::kRequestContextStyle:
+    case WebURLRequest::kRequestContextTrack:
+    case WebURLRequest::kRequestContextVideo:
+    case WebURLRequest::kRequestContextWorker:
+    case WebURLRequest::kRequestContextXMLHttpRequest:
+    case WebURLRequest::kRequestContextXSLT:
+      return net::DefineNetworkTrafficAnnotation("blink_resource_loader", R"(
+      semantics {
+        sender: "Blink Resource Loader"
+        description:
+          "Blink-initiated request, which includes all resources for "
+          "normal page loads, chrome URLs, and downloads."
+        trigger:
+          "The user navigates to a URL or downloads a file. Also when a "
+          "webpage, ServiceWorker, or chrome:// uses any network communication."
+        data: "Anything the initiator wants to send."
+        destination: OTHER
+      }
+      policy {
+        cookies_allowed: YES
+        cookies_store: "user"
+        setting: "These requests cannot be disabled in settings."
+        policy_exception_justification:
+          "Not implemented. Without these requests, Chrome will be unable "
+          "to load any webpage."
+      })");
+
+    case WebURLRequest::kRequestContextEmbed:
+    case WebURLRequest::kRequestContextObject:
+    case WebURLRequest::kRequestContextPlugin:
+      return net::DefineNetworkTrafficAnnotation(
+          "blink_extension_resource_loader", R"(
+        semantics {
+          sender: "Blink Resource Loader"
+          description:
+            "Blink-initiated request for resources required for NaCl instances "
+            "tagged with <embed> or <object>, or installed extensions."
+          trigger:
+            "An extension or NaCl instance may initiate a request at any time, "
+            "even in the background."
+          data: "Anything the initiator wants to send."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: YES
+          cookies_store: "user"
+          setting:
+            "These requests cannot be disabled in settings, but they are "
+            "sent only if user installs extensions."
+          chrome_policy {
+            ExtensionInstallBlacklist {
+              ExtensionInstallBlacklist: {
+                entries: '*'
+              }
+            }
+          }
+        })");
+
+    case WebURLRequest::kRequestContextFavicon:
+      return net::DefineNetworkTrafficAnnotation("favicon_loader", R"(
+        semantics {
+          sender: "Blink Resource Loader"
+          description:
+            "Chrome sends a request to download favicon for a URL."
+          trigger:
+            "Navigating to a URL."
+          data: "None."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: YES
+          cookies_store: "user"
+          setting: "These requests cannot be disabled in settings."
+          policy_exception_justification:
+            "Not implemented."
+        })");
+  }
+
+  return net::NetworkTrafficAnnotationTag::NotReached();
 }
 
 }  // namespace content

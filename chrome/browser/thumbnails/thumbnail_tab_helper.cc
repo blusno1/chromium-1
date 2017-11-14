@@ -69,7 +69,9 @@ ThumbnailTabHelper::ThumbnailTabHelper(content::WebContents* contents)
     : content::WebContentsObserver(contents),
       capture_on_navigating_away_(base::FeatureList::IsEnabled(
           features::kCaptureThumbnailOnNavigatingAway)),
-      has_painted_since_navigation_start_(false),
+      did_navigation_finish_(false),
+      has_received_document_since_navigation_finished_(false),
+      has_painted_since_document_received_(false),
       page_transition_(ui::PAGE_TRANSITION_LINK),
       load_interrupted_(false),
       waiting_for_capture_(false),
@@ -89,6 +91,9 @@ void ThumbnailTabHelper::Observe(int type,
                                  const content::NotificationSource& source,
                                  const content::NotificationDetails& details) {
   switch (type) {
+    // TODO(treib): We should probably just override
+    // WebContentsObserver::RenderViewCreated instead of relying on this
+    // notification.
     case content::NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED:
       RenderViewHostCreated(
           content::Details<content::RenderViewHost>(details).ptr());
@@ -104,18 +109,16 @@ void ThumbnailTabHelper::Observe(int type,
   }
 }
 
+void ThumbnailTabHelper::RenderViewHostChanged(
+    content::RenderViewHost* old_host,
+    content::RenderViewHost* new_host) {
+  StopWatchingRenderViewHost(old_host);
+  StartWatchingRenderViewHost(new_host);
+}
+
 void ThumbnailTabHelper::RenderViewDeleted(
     content::RenderViewHost* render_view_host) {
-  bool registered = registrar_.IsRegistered(
-      this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-      content::Source<content::RenderWidgetHost>(
-          render_view_host->GetWidget()));
-  if (registered) {
-    registrar_.Remove(this,
-                      content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-                      content::Source<content::RenderWidgetHost>(
-                          render_view_host->GetWidget()));
-  }
+  StopWatchingRenderViewHost(render_view_host);
 }
 
 void ThumbnailTabHelper::DidStartNavigation(
@@ -134,7 +137,9 @@ void ThumbnailTabHelper::DidStartNavigation(
 
   // Now reset navigation-related state. It's important that this happens after
   // calling UpdateThumbnailIfNecessary.
-  has_painted_since_navigation_start_ = false;
+  did_navigation_finish_ = false;
+  has_received_document_since_navigation_finished_ = false;
+  has_painted_since_document_received_ = false;
   // Reset the page transition to some uninteresting type, since the actual
   // type isn't available at this point. We'll get it in DidFinishNavigation
   // (if that happens, which isn't guaranteed).
@@ -148,6 +153,7 @@ void ThumbnailTabHelper::DidFinishNavigation(
       navigation_handle->IsSameDocument()) {
     return;
   }
+  did_navigation_finish_ = true;
   page_transition_ = navigation_handle->GetPageTransition();
 }
 
@@ -158,17 +164,29 @@ void ThumbnailTabHelper::DocumentAvailableInMainFrame() {
   // would be a better signal for this, but it uses a weird heuristic to detect
   // "visually non empty" paints, so it might not be entirely safe.
   waiting_for_capture_ = false;
+
+  // Mark that we got the document, unless we're in the middle of a navigation.
+  // In that case, this refers to the previous document, but we're tracking the
+  // state of the new one.
+  if (did_navigation_finish_) {
+    // From now on, we'll start watching for paint events.
+    has_received_document_since_navigation_finished_ = true;
+  }
 }
 
 void ThumbnailTabHelper::DocumentOnLoadCompletedInMainFrame() {
   // Usually, DocumentAvailableInMainFrame always gets called first, so this one
   // shouldn't be necessary. However, DocumentAvailableInMainFrame is not fired
   // for empty documents (i.e. about:blank), which are thus handled here.
-  waiting_for_capture_ = false;
+  DocumentAvailableInMainFrame();
 }
 
 void ThumbnailTabHelper::DidFirstVisuallyNonEmptyPaint() {
-  has_painted_since_navigation_start_ = true;
+  // If we haven't gotten the current document since navigating, then this paint
+  // refers to the *previous* document, so ignore it.
+  if (has_received_document_since_navigation_finished_) {
+    has_painted_since_document_received_ = true;
+  }
 }
 
 void ThumbnailTabHelper::DidStartLoading() {
@@ -183,12 +201,46 @@ void ThumbnailTabHelper::NavigationStopped() {
   load_interrupted_ = true;
 }
 
+void ThumbnailTabHelper::StartWatchingRenderViewHost(
+    content::RenderViewHost* render_view_host) {
+  // NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED is really a new
+  // RenderView, not RenderViewHost, and there is no good way to get
+  // notifications of RenderViewHosts. So just be tolerant of re-registrations.
+  bool registered = registrar_.IsRegistered(
+      this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+      content::Source<content::RenderWidgetHost>(
+          render_view_host->GetWidget()));
+  if (!registered) {
+    registrar_.Add(this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+                   content::Source<content::RenderWidgetHost>(
+                       render_view_host->GetWidget()));
+  }
+}
+
+void ThumbnailTabHelper::StopWatchingRenderViewHost(
+    content::RenderViewHost* render_view_host) {
+  if (!render_view_host) {
+    return;
+  }
+
+  bool registered = registrar_.IsRegistered(
+      this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+      content::Source<content::RenderWidgetHost>(
+          render_view_host->GetWidget()));
+  if (registered) {
+    registrar_.Remove(this,
+                      content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+                      content::Source<content::RenderWidgetHost>(
+                          render_view_host->GetWidget()));
+  }
+}
+
 void ThumbnailTabHelper::UpdateThumbnailIfNecessary() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Don't take a screenshot if we haven't painted anything since the last
   // navigation. This can happen when navigating away again very quickly.
-  if (!has_painted_since_navigation_start_) {
+  if (!has_painted_since_document_received_) {
     return;
   }
 
@@ -223,12 +275,6 @@ void ThumbnailTabHelper::UpdateThumbnailIfNecessary() {
     return;
   }
 
-  AsyncProcessThumbnail(thumbnail_service);
-}
-
-void ThumbnailTabHelper::AsyncProcessThumbnail(
-    scoped_refptr<thumbnails::ThumbnailService> thumbnail_service) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   content::RenderWidgetHost* render_widget_host =
       web_contents()->GetRenderViewHost()->GetWidget();
   content::RenderWidgetHostView* view = render_widget_host->GetView();
@@ -293,6 +339,8 @@ void ThumbnailTabHelper::ProcessCapturedBitmap(
   } else {
     // On failure because of shutdown we are not on the UI thread, so ensure
     // that cleanup happens on that thread.
+    // TODO(treib): Figure out whether it actually happen that we get called
+    // back on something other than the UI thread.
     content::BrowserThread::PostTask(
         content::BrowserThread::UI,
         FROM_HERE,
@@ -320,18 +368,8 @@ void ThumbnailTabHelper::CleanUpFromThumbnailGeneration() {
 }
 
 void ThumbnailTabHelper::RenderViewHostCreated(
-    content::RenderViewHost* renderer) {
-  // NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED is really a new
-  // RenderView, not RenderViewHost, and there is no good way to get
-  // notifications of RenderViewHosts. So just be tolerant of re-registrations.
-  bool registered = registrar_.IsRegistered(
-      this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-      content::Source<content::RenderWidgetHost>(renderer->GetWidget()));
-  if (!registered) {
-    registrar_.Add(
-        this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-        content::Source<content::RenderWidgetHost>(renderer->GetWidget()));
-  }
+    content::RenderViewHost* render_view_host) {
+  StartWatchingRenderViewHost(render_view_host);
 }
 
 void ThumbnailTabHelper::WidgetHidden(content::RenderWidgetHost* widget) {

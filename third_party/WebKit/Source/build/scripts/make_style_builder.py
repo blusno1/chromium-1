@@ -36,22 +36,26 @@ from name_utilities import lower_first
 import template_expander
 
 
-def calculate_functions_to_declare(property_):
+def calculate_apply_functions_to_declare(property_):
     property_['should_declare_functions'] = \
         not property_['longhands'] \
         and not property_['direction_aware_options'] \
         and not property_['builder_skip'] \
         and property_['is_property']
-    # Functions should only be used in StyleBuilder if the CSSPropertyAPI
+    # Functions should only be used in StyleBuilder if the CSSProperty
     # class is shared or not implemented yet (shared classes are denoted by
-    # api_class = "some string").
-    property_['use_api_in_stylebuilder'] = \
+    # property_class = "some string").
+    property_['use_property_class_in_stylebuilder'] = \
         property_['should_declare_functions'] \
-        and not (property_['api_custom_apply_functions_initial'] or
-                 property_['api_custom_apply_functions_inherit'] or
-                 property_['api_custom_apply_functions_value']) \
-        and property_['api_class'] \
-        and isinstance(property_['api_class'], types.BooleanType)
+        and not (property_['custom_apply_functions_initial'] or
+                 property_['custom_apply_functions_inherit'] or
+                 property_['custom_apply_functions_value']) \
+        and property_['property_class'] \
+        and isinstance(property_['property_class'], types.BooleanType)
+    if property_['custom_apply_functions_all']:
+        if (property_['upper_camel_name'] in
+                ['Clip', 'ColumnCount', 'ColumnGap', 'ColumnWidth', 'ZIndex']):
+            property_['use_property_class_in_stylebuilder'] = True
 
 
 class StyleBuilderWriter(json5_generator.Writer):
@@ -73,7 +77,7 @@ class StyleBuilderWriter(json5_generator.Writer):
         self._properties = self._json5_properties.longhands + \
             self._json5_properties.shorthands
         for property_ in self._properties:
-            calculate_functions_to_declare(property_)
+            calculate_apply_functions_to_declare(property_)
 
     @property
     def css_properties(self):

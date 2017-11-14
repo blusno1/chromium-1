@@ -437,9 +437,6 @@ class BASE_EXPORT DictionaryValue : public Value {
   DictionaryValue* SetDictionaryWithoutPathExpansion(
       StringPiece path,
       std::unique_ptr<DictionaryValue> in_value);
-  // DEPRECATED, use Value::SetKey(key, Value(Type::LIST)) instead.
-  ListValue* SetListWithoutPathExpansion(StringPiece path,
-                                         std::unique_ptr<ListValue> in_value);
 
   // Gets the Value associated with the given path starting from this object.
   // A path has the form "<key>" or "<key>.<key>.[...]", where "." indexes
@@ -610,10 +607,6 @@ class BASE_EXPORT ListValue : public Value {
   // Returns the number of Values in this list.
   // DEPRECATED, use GetList()::size() instead.
   size_t GetSize() const { return list_.size(); }
-
-  // Returns the capacity of storage for Values in this list.
-  // DEPRECATED, use GetList()::capacity() instead.
-  size_t capacity() const { return list_.capacity(); }
 
   // Returns whether the list is empty.
   // DEPRECATED, use GetList()::empty() instead.

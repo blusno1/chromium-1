@@ -1148,6 +1148,12 @@
         "swarming": {
           "can_use_on_swarming_builders": false
         },
+        "test": "crashpad_tests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false
+        },
         "test": "crypto_unittests"
       },
       {
@@ -1405,6 +1411,12 @@
           "can_use_on_swarming_builders": false
         },
         "test": "content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false
+        },
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -1704,6 +1716,12 @@
         "swarming": {
           "can_use_on_swarming_builders": false
         },
+        "test": "crashpad_tests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false
+        },
         "test": "crypto_unittests"
       },
       {
@@ -1961,6 +1979,12 @@
           "can_use_on_swarming_builders": false
         },
         "test": "content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": false
+        },
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -4348,6 +4372,19 @@
       },
       {
         "args": [
+          "--mus",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/mojo.fyi.mus.content_browsertests.filter"
+        ],
+        "name": "mus_content_browsertests",
+        "override_isolate_target": "content_browsertests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 2
+        },
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
           "--enable-viz",
           "--ozone-platform=headless",
           "--override-use-software-gl-for-tests",
@@ -4356,8 +4393,7 @@
         "name": "viz_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "hard_timeout": 1500,
-          "shards": 5
+          "shards": 2
         },
         "test": "content_browsertests"
       },
@@ -5472,6 +5508,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "crashpad_tests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "crypto_unittests"
       },
       {
@@ -5791,7 +5833,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "crashpad_util_test"
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -6241,6 +6283,8 @@
         "args": [
           "--additional-driver-flag",
           "--site-per-process",
+          "--additional-driver-flag",
+          "--isolate-origins=http://www.web-platform.test:8001/,http://www1.web-platform.test:8001/,http://www2.web-platform.test:8001/,http://xn--n8j6ds53lwwkrqhv28a.web-platform.test:8001/,http://xn--lve-6lad.web-platform.test:8001/,http://www.web-platform.test:8081/,http://www1.web-platform.test:8081/,http://www2.web-platform.test:8081/,http://xn--n8j6ds53lwwkrqhv28a.web-platform.test:8081/,http://xn--lve-6lad.web-platform.test:8081/,https://www.web-platform.test:8444/,https://www1.web-platform.test:8444/,https://www2.web-platform.test:8444/,https://xn--n8j6ds53lwwkrqhv28a.web-platform.test:8444/,https://xn--lve-6lad.web-platform.test:8444/",
           "--additional-expectations",
           "src/third_party/WebKit/LayoutTests/FlagExpectations/site-per-process"
         ],
@@ -7277,9 +7321,9 @@
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": false
         },
-        "test": "crashpad_util_test"
+        "test": "crashpad_tests"
       },
       {
         "swarming": {

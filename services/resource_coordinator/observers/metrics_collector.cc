@@ -11,6 +11,7 @@
 #include "services/resource_coordinator/coordination_unit/process_coordination_unit_impl.h"
 #include "services/resource_coordinator/public/cpp/coordination_unit_id.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
+#include "services/resource_coordinator/resource_coordinator_clock.h"
 
 namespace resource_coordinator {
 
@@ -51,8 +52,7 @@ size_t GetNumCoresidentTabs(const PageCoordinationUnitImpl* page_cu) {
 }
 
 MetricsCollector::MetricsCollector()
-    : clock_(&default_tick_clock_),
-      max_ukm_cpu_usage_measurements_(kDefaultMaxCPUUsageMeasurements) {
+    : max_ukm_cpu_usage_measurements_(kDefaultMaxCPUUsageMeasurements) {
   UpdateWithFieldTrialParams();
 }
 
@@ -75,9 +75,7 @@ void MetricsCollector::OnCoordinationUnitCreated(
 
 void MetricsCollector::OnBeforeCoordinationUnitDestroyed(
     const CoordinationUnitBase* coordination_unit) {
-  if (coordination_unit->id().type == CoordinationUnitType::kFrame) {
-    frame_data_map_.erase(coordination_unit->id());
-  } else if (coordination_unit->id().type == CoordinationUnitType::kPage) {
+  if (coordination_unit->id().type == CoordinationUnitType::kPage) {
     metrics_report_record_map_.erase(coordination_unit->id());
     ukm_cpu_usage_collection_state_map_.erase(coordination_unit->id());
   }
@@ -87,13 +85,10 @@ void MetricsCollector::OnFramePropertyChanged(
     const FrameCoordinationUnitImpl* frame_cu,
     const mojom::PropertyType property_type,
     int64_t value) {
-  FrameData& frame_data = frame_data_map_[frame_cu->id()];
   if (property_type == mojom::PropertyType::kAudible) {
     bool audible = static_cast<bool>(value);
-    if (!audible) {
-      frame_data.last_audible_time = clock_->NowTicks();
+    if (!audible)
       return;
-    }
     auto* page_cu = frame_cu->GetPageCoordinationUnit();
     // Only record metrics while it is backgrounded.
     if (!page_cu || page_cu->IsVisible() || !ShouldReportMetrics(page_cu)) {
@@ -101,8 +96,8 @@ void MetricsCollector::OnFramePropertyChanged(
     }
     // Audio is considered to have started playing if the page has never
     // previously played audio, or has been silent for at least one minute.
-    auto now = clock_->NowTicks();
-    if (frame_data.last_audible_time + kMaxAudioSlientTimeout < now) {
+    auto now = ResourceCoordinatorClock::NowTicks();
+    if (frame_cu->last_audible_time() + kMaxAudioSlientTimeout < now) {
       MetricsReportRecord& record =
           metrics_report_record_map_.find(page_cu->id())->second;
       record.first_audible.OnSignalReceived(
@@ -197,10 +192,6 @@ void MetricsCollector::OnPageEventReceived(
         true, page_cu->TimeSinceLastVisibilityChange(),
         coordination_unit_manager().ukm_recorder());
   }
-}
-
-void MetricsCollector::SetClockForTest(base::TickClock* test_clock) {
-  const_cast<base::TickClock*&>(clock_) = test_clock;
 }
 
 bool MetricsCollector::ShouldReportMetrics(

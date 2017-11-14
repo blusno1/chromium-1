@@ -138,6 +138,7 @@ void SurfaceTreeHost::SetRootSurface(Surface* root_surface) {
     root_surface_ = root_surface;
     root_surface_->SetSurfaceDelegate(this);
     host_window_->AddChild(root_surface_->window());
+    UpdateHostWindowBounds();
     root_surface_->window()->Show();
   }
 }
@@ -210,14 +211,8 @@ void SurfaceTreeHost::UpdateNeedsBeginFrame() {
 
 void SurfaceTreeHost::OnSurfaceCommit() {
   DCHECK(presentation_callbacks_.empty());
-  gfx::Rect bounds = root_surface_->CommitSurfaceHierarchy(
-      &frame_callbacks_, &presentation_callbacks_, false);
-
-  host_window_->SetBounds(
-      gfx::Rect(host_window_->bounds().origin(), bounds.size()));
-  host_window_->layer()->SetFillsBoundsOpaquely(
-      bounds.size() == root_surface_->content_size() &&
-      root_surface_->FillsBoundsOpaquely());
+  root_surface_->CommitSurfaceHierarchy(false);
+  UpdateHostWindowBounds();
 }
 
 bool SurfaceTreeHost::IsSurfaceSynchronized() const {
@@ -276,6 +271,8 @@ void SurfaceTreeHost::SubmitCompositorFrame() {
     current_begin_frame_ack_.has_damage = true;
   }
   frame.metadata.begin_frame_ack = current_begin_frame_ack_;
+  root_surface_->AppendSurfaceHierarchyCallbacks(&frame_callbacks_,
+                                                 &presentation_callbacks_);
   if (!presentation_callbacks_.empty()) {
     // If overflow happens, we increase it again.
     if (!++presentation_token_)
@@ -321,6 +318,18 @@ void SurfaceTreeHost::SubmitCompositorFrame() {
     if (begin_frame_source_)
       begin_frame_source_->DidFinishFrame(this);
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SurfaceTreeHost, private:
+
+void SurfaceTreeHost::UpdateHostWindowBounds() {
+  gfx::Rect bounds = root_surface_->surface_hierarchy_content_bounds();
+  host_window_->SetBounds(
+      gfx::Rect(host_window_->bounds().origin(), bounds.size()));
+  host_window_->layer()->SetFillsBoundsOpaquely(
+      bounds.size() == root_surface_->content_size() &&
+      root_surface_->FillsBoundsOpaquely());
 }
 
 }  // namespace exo

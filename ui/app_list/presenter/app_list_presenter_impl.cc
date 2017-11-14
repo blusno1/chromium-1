@@ -164,7 +164,7 @@ void AppListPresenterImpl::EndDragFromShelf(
     if (app_list_state == mojom::AppListState::CLOSED)
       view_->Dismiss();
     else
-      view_->SetState(AppListView::AppListState(app_list_state));
+      view_->SetState(AppListViewState(app_list_state));
     view_->SetIsInDrag(false);
     view_->DraggingLayout();
   }
@@ -277,9 +277,11 @@ void AppListPresenterImpl::OnWindowFocused(aura::Window* gained_focus,
 
 ////////////////////////////////////////////////////////////////////////////////
 // AppListPresenterImpl,  aura::WindowObserver implementation:
-void AppListPresenterImpl::OnWindowBoundsChanged(aura::Window* root,
-                                                 const gfx::Rect& old_bounds,
-                                                 const gfx::Rect& new_bounds) {
+void AppListPresenterImpl::OnWindowBoundsChanged(
+    aura::Window* root,
+    const gfx::Rect& old_bounds,
+    const gfx::Rect& new_bounds,
+    ui::PropertyChangeReason reason) {
   if (presenter_delegate_)
     presenter_delegate_->UpdateBounds();
 }

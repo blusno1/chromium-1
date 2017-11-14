@@ -503,7 +503,7 @@ void LayerTreeHostImpl::AnimateInternal(bool active_tree) {
   }
 
   did_animate |= AnimatePageScale(monotonic_time);
-  did_animate |= AnimateLayers(monotonic_time);
+  did_animate |= AnimateLayers(monotonic_time, active_tree);
   did_animate |= AnimateScrollbars(monotonic_time);
   did_animate |= AnimateBrowserControls(monotonic_time);
 
@@ -2463,7 +2463,7 @@ void LayerTreeHostImpl::CreateResourceAndRasterBufferProvider(
   if (!compositor_context_provider) {
     *resource_pool =
         ResourcePool::Create(resource_provider_.get(), GetTaskRunner(),
-                             ResourceProvider::TEXTURE_HINT_DEFAULT,
+                             viz::ResourceTextureHint::kDefault,
                              ResourcePool::kDefaultExpirationDelay,
                              settings_.disallow_non_exact_resource_reuse);
 
@@ -2479,7 +2479,7 @@ void LayerTreeHostImpl::CreateResourceAndRasterBufferProvider(
 
     *resource_pool =
         ResourcePool::Create(resource_provider_.get(), GetTaskRunner(),
-                             ResourceProvider::TEXTURE_HINT_FRAMEBUFFER,
+                             viz::ResourceTextureHint::kFramebuffer,
                              ResourcePool::kDefaultExpirationDelay,
                              settings_.disallow_non_exact_resource_reuse);
 
@@ -2519,11 +2519,10 @@ void LayerTreeHostImpl::CreateResourceAndRasterBufferProvider(
     return;
   }
 
-  *resource_pool =
-      ResourcePool::Create(resource_provider_.get(), GetTaskRunner(),
-                           ResourceProvider::TEXTURE_HINT_DEFAULT,
-                           ResourcePool::kDefaultExpirationDelay,
-                           settings_.disallow_non_exact_resource_reuse);
+  *resource_pool = ResourcePool::Create(
+      resource_provider_.get(), GetTaskRunner(),
+      viz::ResourceTextureHint::kDefault, ResourcePool::kDefaultExpirationDelay,
+      settings_.disallow_non_exact_resource_reuse);
 
   const int max_copy_texture_chromium_size =
       compositor_context_provider->ContextCapabilities()
@@ -3693,7 +3692,9 @@ InputHandlerScrollResult LayerTreeHostImpl::ScrollBy(
   }
 
   // Run animations which need to respond to updated scroll offset.
-  mutator_host_->TickScrollAnimations(CurrentBeginFrameArgs().frame_time);
+  mutator_host_->TickScrollAnimations(
+      CurrentBeginFrameArgs().frame_time,
+      active_tree_->property_trees()->scroll_tree);
 
   return scroll_result;
 }
@@ -3975,8 +3976,13 @@ bool LayerTreeHostImpl::AnimateScrollbars(base::TimeTicks monotonic_time) {
   return animated;
 }
 
-bool LayerTreeHostImpl::AnimateLayers(base::TimeTicks monotonic_time) {
-  const bool animated = mutator_host_->TickAnimations(monotonic_time);
+bool LayerTreeHostImpl::AnimateLayers(base::TimeTicks monotonic_time,
+                                      bool is_active_tree) {
+  const ScrollTree& scroll_tree =
+      is_active_tree ? active_tree_->property_trees()->scroll_tree
+                     : pending_tree_->property_trees()->scroll_tree;
+  const bool animated =
+      mutator_host_->TickAnimations(monotonic_time, scroll_tree);
 
   // TODO(crbug.com/551134): Only do this if the animations are on the active
   // tree, or if they are on the pending tree waiting for some future time to
@@ -4252,7 +4258,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
   }
 
   id = resource_provider_->CreateResource(
-      upload_size, ResourceProvider::TEXTURE_HINT_DEFAULT, format,
+      upload_size, viz::ResourceTextureHint::kDefault, format,
       gfx::ColorSpace::CreateSRGB());
 
   if (!scaled) {
@@ -4439,7 +4445,8 @@ void LayerTreeHostImpl::SetTreeLayerScrollOffsetMutated(
   property_trees->scroll_tree.OnScrollOffsetAnimated(
       element_id, scroll_node_index, scroll_offset, tree);
   // Run animations which need to respond to updated scroll offset.
-  mutator_host_->TickScrollAnimations(CurrentBeginFrameArgs().frame_time);
+  mutator_host_->TickScrollAnimations(CurrentBeginFrameArgs().frame_time,
+                                      property_trees->scroll_tree);
 }
 
 void LayerTreeHostImpl::SetNeedUpdateGpuRasterizationStatus() {

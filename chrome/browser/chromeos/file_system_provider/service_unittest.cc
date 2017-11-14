@@ -21,12 +21,12 @@
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/chromeos/file_system_provider/registry_interface.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/extension_registry.h"
@@ -41,6 +41,7 @@ namespace {
 
 const char kProviderId[] = "mbflcebpggnecokmikipoihdbecnjfoj";
 const char kDisplayName[] = "Camera Pictures";
+const char kCustomProviderId[] = "custom_provider_id";
 
 // The dot in the file system ID is there in order to check that saving to
 // preferences works correctly. File System ID is used as a key in
@@ -182,6 +183,21 @@ scoped_refptr<extensions::Extension> CreateFakeExtension(
 }  // namespace
 
 class FileSystemProviderServiceTest : public testing::Test {
+ public:
+  std::unique_ptr<ProvidedFileSystemInterface> CreateDefaultFakeFileSystem(
+      Profile* profile,
+      const ProvidedFileSystemInfo& file_system_info) {
+    called_default_factory_ = true;
+    return base::MakeUnique<FakeProvidedFileSystem>(file_system_info);
+  }
+
+  std::unique_ptr<ProvidedFileSystemInterface> CreateCustomFakeFileSystem(
+      Profile* profile,
+      const ProvidedFileSystemInfo& file_system_info) {
+    called_custom_factory_ = true;
+    return base::MakeUnique<FakeProvidedFileSystem>(file_system_info);
+  }
+
  protected:
   FileSystemProviderServiceTest() : profile_(NULL) {}
 
@@ -195,11 +211,12 @@ class FileSystemProviderServiceTest : public testing::Test {
     user_manager_ = new FakeChromeUserManager();
     user_manager_->AddUser(
         AccountId::FromUserEmail(profile_->GetProfileUserName()));
-    user_manager_enabler_.reset(new ScopedUserManagerEnabler(user_manager_));
+    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
+        base::WrapUnique(user_manager_));
     extension_registry_.reset(new extensions::ExtensionRegistry(profile_));
 
     service_.reset(new Service(profile_, extension_registry_.get()));
-    service_->SetFileSystemFactoryForTesting(
+    service_->SetDefaultFileSystemFactoryForTesting(
         base::Bind(&FakeProvidedFileSystem::Create));
     extension_ = CreateFakeExtension(kProviderId);
 
@@ -210,19 +227,49 @@ class FileSystemProviderServiceTest : public testing::Test {
     fake_watcher_.entry_path = base::FilePath(FILE_PATH_LITERAL("/a/b/c"));
     fake_watcher_.recursive = true;
     fake_watcher_.last_tag = "hello-world";
+    called_default_factory_ = false;
+    called_custom_factory_ = false;
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   TestingProfile* profile_;
   FakeChromeUserManager* user_manager_;
-  std::unique_ptr<ScopedUserManagerEnabler> user_manager_enabler_;
+  std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
   std::unique_ptr<extensions::ExtensionRegistry> extension_registry_;
   std::unique_ptr<Service> service_;
   scoped_refptr<extensions::Extension> extension_;
   FakeRegistry* registry_;  // Owned by Service.
   Watcher fake_watcher_;
+  bool called_default_factory_;
+  bool called_custom_factory_;
 };
+
+TEST_F(FileSystemProviderServiceTest, RegisterFileSystemFactory) {
+  service_->RegisterFileSystemFactory(
+      kCustomProviderId,
+      base::Bind(&FileSystemProviderServiceTest::CreateCustomFakeFileSystem,
+                 base::Unretained(this)));
+  service_->SetDefaultFileSystemFactoryForTesting(
+      base::Bind(&FileSystemProviderServiceTest::CreateDefaultFakeFileSystem,
+                 base::Unretained(this)));
+
+  EXPECT_FALSE(FileSystemProviderServiceTest::called_default_factory_);
+
+  EXPECT_EQ(base::File::FILE_OK,
+            service_->MountFileSystem(
+                kProviderId, MountOptions(kFileSystemId, kDisplayName)));
+
+  EXPECT_TRUE(FileSystemProviderServiceTest::called_default_factory_);
+
+  EXPECT_FALSE(FileSystemProviderServiceTest::called_custom_factory_);
+
+  EXPECT_EQ(base::File::FILE_OK,
+            service_->MountFileSystem(
+                kCustomProviderId, MountOptions(kFileSystemId, kDisplayName)));
+
+  EXPECT_TRUE(FileSystemProviderServiceTest::called_custom_factory_);
+}
 
 TEST_F(FileSystemProviderServiceTest, MountFileSystem) {
   LoggingObserver observer;

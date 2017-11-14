@@ -352,10 +352,11 @@ class CORE_EXPORT InlineBox : public DisplayItemClient {
            GetLineLayoutItem().Parent().IsBox();
   }
   EVerticalAlign VerticalAlign() const {
-    return IsAnonymousInline() ? ComputedStyle::InitialVerticalAlign()
-                               : GetLineLayoutItem()
-                                     .Style(bitfields_.FirstLine())
-                                     ->VerticalAlign();
+    return IsAnonymousInline()
+               ? ComputedStyleInitialValues::InitialVerticalAlign()
+               : GetLineLayoutItem()
+                     .Style(bitfields_.FirstLine())
+                     ->VerticalAlign();
   }
 
   // Use with caution! The type is not checked!
@@ -537,6 +538,10 @@ inline void InlineBox::SetHasBadParent() {
 // Allow equality comparisons of InlineBox's by reference or pointer,
 // interchangeably.
 DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES(InlineBox)
+
+// TODO(layout-dev): Once LayoutNG supports inline layout, we should remove
+// |CanUseInlineBox()|.
+bool CanUseInlineBox(const LayoutObject&);
 
 }  // namespace blink
 

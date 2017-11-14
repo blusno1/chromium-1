@@ -133,6 +133,10 @@ ResultExpr GpuProcessPolicy::EvaluateSyscall(int sysno) const {
   }
 }
 
+std::unique_ptr<BPFBasePolicy> GpuProcessPolicy::GetBrokerSandboxPolicy() {
+  return std::make_unique<GpuBrokerProcessPolicy>();
+}
+
 GpuBrokerProcessPolicy::GpuBrokerProcessPolicy() {}
 
 GpuBrokerProcessPolicy::~GpuBrokerProcessPolicy() {}

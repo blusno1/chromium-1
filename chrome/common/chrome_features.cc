@@ -32,6 +32,10 @@ const base::Feature kAppleScriptExecuteJavaScriptMenuItem{
 const base::Feature kFullscreenToolbarReveal{"FullscreenToolbarReveal",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Use toolkit-views for profile chooser menu.
+const base::Feature kViewsProfileChooser{"ViewsProfileChooser",
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Use the Toolkit-Views Task Manager window.
 const base::Feature kViewsTaskManager{"ViewsTaskManager",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
@@ -150,6 +154,11 @@ const base::Feature kContentFullscreen{"ContentFullscreen",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+// Enables a site-wide permission in the UI which controls access to the
+// asynchronous Clipboard web API.
+const base::Feature kClipboardContentSetting{"ClipboardContentSetting",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 #if defined(OS_ANDROID)
 // Experiment to extract structured metadata for app indexing.
 const base::Feature kCopylessPaste{"CopylessPaste",
@@ -181,7 +190,7 @@ const base::Feature kDoodlesOnLocalNtp{"DoodlesOnLocalNtp",
 #if defined(OS_ANDROID)
 // Enables downloads as a foreground service for all versions of Android.
 const base::Feature kDownloadsForeground{"DownloadsForeground",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enables Expect CT reporting, which sends reports for opted-in sites
@@ -243,7 +252,7 @@ const base::Feature kMacFullSizeContentView{"MacFullSizeContentView",
 
 // Enables "Share" submenu in File menu.
 const base::Feature kMacSystemShareMenu{"MacSystemShareMenu",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enables or disables the Material Design version of chrome://bookmarks.

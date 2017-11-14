@@ -36,7 +36,8 @@ TestWebState::TestWebState()
       is_evicted_(false),
       has_opener_(false),
       trust_level_(kAbsolute),
-      content_is_html_(true) {}
+      content_is_html_(true),
+      web_view_proxy_(nil) {}
 
 TestWebState::~TestWebState() {
   for (auto& observer : observers_)
@@ -126,6 +127,10 @@ void TestWebState::SetIsCrashed(bool value) {
 
 void TestWebState::SetIsEvicted(bool value) {
   is_evicted_ = value;
+}
+
+void TestWebState::SetWebViewProxy(CRWWebViewProxyType web_view_proxy) {
+  web_view_proxy_ = web_view_proxy;
 }
 
 CRWJSInjectionReceiver* TestWebState::GetJSInjectionReceiver() const {
@@ -247,14 +252,9 @@ void TestWebState::OnRenderProcessGone() {
     observer.RenderProcessGone(this);
 }
 
-void TestWebState::OnFormActivity(const std::string& form_name,
-                                  const std::string& field_name,
-                                  const std::string& type,
-                                  const std::string& value,
-                                  bool input_missing) {
+void TestWebState::OnFormActivity(const FormActivityParams& params) {
   for (auto& observer : observers_) {
-    observer.FormActivityRegistered(this, form_name, field_name, type, value,
-                                    input_missing);
+    observer.FormActivityRegistered(this, params);
   }
 }
 
@@ -285,7 +285,7 @@ void TestWebState::SetTrustLevel(URLVerificationTrustLevel trust_level) {
 }
 
 CRWWebViewProxyType TestWebState::GetWebViewProxy() const {
-  return nullptr;
+  return web_view_proxy_;
 }
 
 WebStateInterfaceProvider* TestWebState::GetWebStateInterfaceProvider() {

@@ -14,7 +14,7 @@
 #include "core/css/ComputedStyleCSSValueMapping.h"
 #include "core/css/PropertyRegistration.h"
 #include "core/css/parser/CSSTokenizer.h"
-#include "core/css/properties/CSSPropertyAPI.h"
+#include "core/css/properties/CSSProperty.h"
 #include "core/css/resolver/CSSVariableResolver.h"
 #include "core/css/resolver/StyleBuilder.h"
 #include "core/css/resolver/StyleResolverState.h"
@@ -137,7 +137,7 @@ CSSInterpolationType::CSSInterpolationType(
     const PropertyRegistration* registration)
     : InterpolationType(property), registration_(registration) {
   DCHECK(!GetProperty().IsCSSCustomProperty() || registration);
-  DCHECK(!isShorthandProperty(CssProperty()));
+  DCHECK(!CSSProperty::Get(CssProperty()).IsShorthand());
 }
 
 InterpolationValue CSSInterpolationType::MaybeConvertSingle(
@@ -185,7 +185,7 @@ InterpolationValue CSSInterpolationType::MaybeConvertSingleInternal(
     value = resolved_value;
   }
 
-  bool is_inherited = CSSPropertyAPI::Get(CssProperty()).IsInherited();
+  bool is_inherited = CSSProperty::Get(CssProperty()).IsInherited();
   if (value->IsInitialValue() || (value->IsUnsetValue() && !is_inherited)) {
     return MaybeConvertInitial(state, conversion_checkers);
   }

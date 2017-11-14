@@ -142,8 +142,9 @@ void CvcUnmaskViewController::OnUnmaskVerificationResult(
 }
 
 base::string16 CvcUnmaskViewController::GetSheetTitle() {
-  return l10n_util::GetStringFUTF16(IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE,
-                                    credit_card_.NetworkAndLastFourDigits());
+  return l10n_util::GetStringFUTF16(
+      IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE,
+      credit_card_.NetworkOrBankNameAndLastFourDigits());
 }
 
 void CvcUnmaskViewController::FillContentView(views::View* content_view) {
@@ -220,6 +221,8 @@ void CvcUnmaskViewController::FillContentView(views::View* content_view) {
       credit_card_.network() == autofill::kAmericanExpressCard
           ? IDR_CREDIT_CARD_CVC_HINT_AMEX
           : IDR_CREDIT_CARD_CVC_HINT));
+  cvc_image->SetTooltipText(l10n_util::GetStringUTF16(
+      IDS_AUTOFILL_CARD_UNMASK_CVC_IMAGE_DESCRIPTION));
   layout->AddView(cvc_image.release());
 
   std::unique_ptr<views::Textfield> cvc_field =

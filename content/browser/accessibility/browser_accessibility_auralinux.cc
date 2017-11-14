@@ -9,6 +9,7 @@
 
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "content/browser/accessibility/browser_accessibility_atk_hyperlink.h"
 #include "content/browser/accessibility/browser_accessibility_manager_auralinux.h"
 #include "content/common/accessibility_messages.h"
 #include "ui/accessibility/ax_text_utils.h"
@@ -289,6 +290,40 @@ static const GInterfaceInfo DocumentInfo = {
     nullptr};
 
 //
+// AtkHyperlinkImpl interface.
+//
+
+static BrowserAccessibilityAuraLinux* ToBrowserAccessibilityAuraLinux(
+    AtkHyperlinkImpl* atk_hyperlink_impl) {
+  if (!IS_BROWSER_ACCESSIBILITY(atk_hyperlink_impl))
+    return nullptr;
+
+  return ToBrowserAccessibilityAuraLinux(
+      BROWSER_ACCESSIBILITY(atk_hyperlink_impl));
+}
+
+static AtkHyperlink* browser_accessibility_get_hyperlink(
+    AtkHyperlinkImpl* atk_hyperlink_impl) {
+  g_return_val_if_fail(ATK_HYPERLINK_IMPL(atk_hyperlink_impl), 0);
+  BrowserAccessibilityAuraLinux* obj =
+      ToBrowserAccessibilityAuraLinux(atk_hyperlink_impl);
+  if (!obj)
+    return 0;
+
+  AtkHyperlink* atk_hyperlink = obj->GetAtkHyperlink();
+  g_object_ref(atk_hyperlink);
+
+  return atk_hyperlink;
+}
+
+void HyperlinkImplInterfaceInit(AtkHyperlinkImplIface* iface) {
+  iface->get_hyperlink = browser_accessibility_get_hyperlink;
+}
+
+static const GInterfaceInfo HyperlinkImplInfo = {
+    reinterpret_cast<GInterfaceInitFunc>(HyperlinkImplInterfaceInit), nullptr,
+    nullptr};
+//
 // AtkImage interface.
 //
 
@@ -520,8 +555,9 @@ static AtkObject* browser_accessibility_ref_child(AtkObject* atk_object,
   if (index < 0 || index >= static_cast<gint>(obj->PlatformChildCount()))
     return nullptr;
 
-  AtkObject* result = ToBrowserAccessibilityAuraLinux(
-      obj->InternalGetChild(index))->GetAtkObject();
+  AtkObject* result =
+      ToBrowserAccessibilityAuraLinux(obj->PlatformGetChild(index))
+          ->GetAtkObject();
   g_object_ref(result);
   return result;
 }
@@ -703,6 +739,9 @@ static int GetInterfaceMaskFromObject(BrowserAccessibilityAuraLinux* obj) {
   if (role == ui::AX_ROLE_IMAGE || role == ui::AX_ROLE_IMAGE_MAP)
     interface_mask |= 1 << ATK_IMAGE_INTERFACE;
 
+  if (role == ui::AX_ROLE_LINK)
+    interface_mask |= 1 << ATK_HYPERLINK_INTERFACE;
+
   return interface_mask;
 }
 
@@ -739,6 +778,9 @@ static GType GetAccessibilityTypeFromObject(
     g_type_add_interface_static(type, ATK_TYPE_IMAGE, &ImageInfo);
   if (interface_mask & (1 << ATK_VALUE_INTERFACE))
     g_type_add_interface_static(type, ATK_TYPE_VALUE, &ValueInfo);
+  if (interface_mask & (1 << ATK_HYPERLINK_INTERFACE))
+    g_type_add_interface_static(type, ATK_TYPE_HYPERLINK_IMPL,
+                                &HyperlinkImplInfo);
 
   return type;
 }
@@ -771,9 +813,14 @@ BrowserAccessibility* BrowserAccessibility::Create() {
 }
 
 BrowserAccessibilityAuraLinux::BrowserAccessibilityAuraLinux()
-    : atk_object_(nullptr) {}
+    : atk_object_(nullptr), atk_hyperlink_(nullptr) {}
 
 BrowserAccessibilityAuraLinux::~BrowserAccessibilityAuraLinux() {
+  if (atk_hyperlink_) {
+    browser_accessibility_atk_hyperlink_set_object(
+        BROWSER_ACCESSIBILITY_ATK_HYPERLINK(atk_hyperlink_), nullptr);
+    g_object_unref(atk_hyperlink_);
+  }
   browser_accessibility_detach(BROWSER_ACCESSIBILITY(atk_object_));
   if (atk_object_)
     g_object_unref(atk_object_);
@@ -783,6 +830,19 @@ AtkObject* BrowserAccessibilityAuraLinux::GetAtkObject() const {
   if (!G_IS_OBJECT(atk_object_))
     return nullptr;
   return atk_object_;
+}
+
+AtkHyperlink* BrowserAccessibilityAuraLinux::GetAtkHyperlink() {
+  g_return_val_if_fail(ATK_HYPERLINK_IMPL(atk_object_), 0);
+
+  if (!atk_hyperlink_) {
+    atk_hyperlink_ = ATK_HYPERLINK(
+        g_object_new(BROWSER_ACCESSIBILITY_ATK_HYPERLINK_TYPE, 0));
+    browser_accessibility_atk_hyperlink_set_object(
+        BROWSER_ACCESSIBILITY_ATK_HYPERLINK(atk_hyperlink_), this);
+  }
+
+  return atk_hyperlink_;
 }
 
 void BrowserAccessibilityAuraLinux::OnDataChanged() {
@@ -895,6 +955,17 @@ void BrowserAccessibilityAuraLinux::InitRoleAndState() {
       break;
     case ui::AX_ROLE_LIST_ITEM:
       atk_role_ = ATK_ROLE_LIST_ITEM;
+      break;
+    case ui::AX_ROLE_MATH:
+#if defined(ATK_CHECK_VERSION)
+#if ATK_CHECK_VERSION(2, 12, 0)
+      atk_role_ = ATK_ROLE_MATH;
+#else
+      atk_role_ = ATK_ROLE_TEXT;
+#endif
+#else
+      atk_role_ = ATK_ROLE_TEXT;
+#endif
       break;
     case ui::AX_ROLE_MENU:
       atk_role_ = ATK_ROLE_MENU;

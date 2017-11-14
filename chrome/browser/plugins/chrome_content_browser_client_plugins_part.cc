@@ -5,7 +5,7 @@
 #include "chrome/browser/plugins/chrome_content_browser_client_plugins_part.h"
 
 #include "base/command_line.h"
-#include "chrome/browser/plugins/plugin_info_message_filter.h"
+#include "chrome/browser/plugins/plugin_info_host_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_host/pepper/chrome_browser_pepper_host_factory.h"
 #include "chrome/common/channel_info.h"
@@ -13,9 +13,11 @@
 #include "chrome/common/pepper_permission_util.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/common/associated_interface_registry.h"
 #include "extensions/features/features.h"
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/extension_service.h"
@@ -34,10 +36,14 @@ ChromeContentBrowserClientPluginsPart::
     ~ChromeContentBrowserClientPluginsPart() {
 }
 
-void ChromeContentBrowserClientPluginsPart::RenderProcessWillLaunch(
+void ChromeContentBrowserClientPluginsPart::ExposeInterfacesToRenderer(
+    service_manager::BinderRegistry* registry,
+    content::AssociatedInterfaceRegistry* associated_registry,
     content::RenderProcessHost* host) {
   Profile* profile = Profile::FromBrowserContext(host->GetBrowserContext());
-  host->AddFilter(new PluginInfoMessageFilter(host->GetID(), profile));
+  host->GetChannel()->AddAssociatedInterfaceForIOThread(base::Bind(
+      &PluginInfoHostImpl::OnPluginInfoHostRequest,
+      base::MakeRefCounted<PluginInfoHostImpl>(host->GetID(), profile)));
 }
 
 bool ChromeContentBrowserClientPluginsPart::

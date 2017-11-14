@@ -8,7 +8,6 @@
 #include <algorithm>
 
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/render_frame_host.h"
@@ -21,6 +20,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/upload_bytes_element_reader.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
@@ -118,7 +118,7 @@ void GenericURLRequestJob::OnCookiesAvailable(
   DCHECK(origin_task_runner_->RunsTasksInCurrentSequence());
   // TODO(alexclarke): Set user agent.
   // Pass cookies, the referrer and any extra headers into the fetch request.
-  std::string cookie = net::CookieStore::BuildCookieLine(cookie_list);
+  std::string cookie = net::CanonicalCookie::BuildCookieLine(cookie_list);
   if (!cookie.empty())
     extra_request_headers_.SetHeader(net::HttpRequestHeaders::kCookie, cookie);
 
@@ -342,9 +342,7 @@ std::string GenericURLRequestJob::GetPostData() const {
     int init_result = reader->Init(
         base::Bind(&CompletionCallback, &init_result, &quit_closure));
     if (init_result == net::ERR_IO_PENDING) {
-      base::RunLoop nested_run_loop;
-      base::MessageLoop::ScopedNestableTaskAllower allow_nested(
-          base::MessageLoop::current());
+      base::RunLoop nested_run_loop(base::RunLoop::Type::kNestableTasksAllowed);
       quit_closure = nested_run_loop.QuitClosure();
       nested_run_loop.Run();
     }
@@ -366,9 +364,7 @@ std::string GenericURLRequestJob::GetPostData() const {
         base::Bind(&CompletionCallback, &bytes_read, &quit_closure));
 
     if (bytes_read == net::ERR_IO_PENDING) {
-      base::MessageLoop::ScopedNestableTaskAllower allow_nested(
-          base::MessageLoop::current());
-      base::RunLoop nested_run_loop;
+      base::RunLoop nested_run_loop(base::RunLoop::Type::kNestableTasksAllowed);
       quit_closure = nested_run_loop.QuitClosure();
       nested_run_loop.Run();
     }

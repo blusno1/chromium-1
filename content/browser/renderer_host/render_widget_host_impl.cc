@@ -2053,14 +2053,15 @@ void RenderWidgetHostImpl::OnResizeOrRepaintACK(
 
   DidCompleteResizeOrRepaint(params, paint_start);
 
+  last_auto_resize_request_number_ = params.sequence_number;
+
   if (auto_resize_enabled_) {
     bool post_callback = new_auto_size_.IsEmpty();
     new_auto_size_ = params.view_size;
     if (post_callback) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE,
-          base::BindOnce(&RenderWidgetHostImpl::DelayedAutoResized,
-                         weak_factory_.GetWeakPtr(), params.sequence_number));
+          FROM_HERE, base::BindOnce(&RenderWidgetHostImpl::DelayedAutoResized,
+                                    weak_factory_.GetWeakPtr()));
     }
   }
 
@@ -2448,7 +2449,7 @@ bool RenderWidgetHostImpl::GotResponseToLockMouseRequest(bool allowed) {
   return true;
 }
 
-void RenderWidgetHostImpl::DelayedAutoResized(uint64_t sequence_number) {
+void RenderWidgetHostImpl::DelayedAutoResized() {
   gfx::Size new_size = new_auto_size_;
   // Clear the new_auto_size_ since the empty value is used as a flag to
   // indicate that no callback is in progress (i.e. without this line
@@ -2457,10 +2458,10 @@ void RenderWidgetHostImpl::DelayedAutoResized(uint64_t sequence_number) {
   if (!auto_resize_enabled_)
     return;
 
-  last_auto_resize_request_number_ = sequence_number;
-
-  if (delegate_)
-    delegate_->ResizeDueToAutoResize(this, new_size, sequence_number);
+  if (delegate_) {
+    delegate_->ResizeDueToAutoResize(this, new_size,
+                                     last_auto_resize_request_number_);
+  }
 }
 
 void RenderWidgetHostImpl::DetachDelegate() {
@@ -2470,13 +2471,16 @@ void RenderWidgetHostImpl::DetachDelegate() {
 
 void RenderWidgetHostImpl::DidAllocateLocalSurfaceIdForAutoResize(
     uint64_t sequence_number) {
-  if (last_auto_resize_request_number_ != sequence_number)
+  if (!view_ || last_auto_resize_request_number_ != sequence_number)
     return;
 
   viz::LocalSurfaceId local_surface_id(view_->GetLocalSurfaceId());
   if (local_surface_id.is_valid()) {
+    ScreenInfo screen_info;
+    GetScreenInfo(&screen_info);
     Send(new ViewMsg_SetLocalSurfaceIdForAutoResize(
-        routing_id_, sequence_number, local_surface_id));
+        routing_id_, sequence_number, min_size_for_auto_resize_,
+        max_size_for_auto_resize_, screen_info, local_surface_id));
   }
 }
 
@@ -2726,7 +2730,8 @@ void RenderWidgetHostImpl::SubmitCompositorFrame(
   // compositor frame can arrive before the navigation commit message that
   // updates that value.
   if (view_ && frame.metadata.content_source_id >= current_content_source_id_) {
-    view_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+    view_->SubmitCompositorFrame(local_surface_id, std::move(frame),
+                                 std::move(hit_test_region_list));
     view_->DidReceiveRendererFrame();
   } else {
     if (view_) {
@@ -2796,8 +2801,8 @@ device::mojom::WakeLock* RenderWidgetHostImpl::GetWakeLock() {
       connector->BindInterface(device::mojom::kServiceName,
                                mojo::MakeRequest(&wake_lock_provider));
       wake_lock_provider->GetWakeLockWithoutContext(
-          device::mojom::WakeLockType::PreventDisplaySleep,
-          device::mojom::WakeLockReason::ReasonOther, "GetSnapshot",
+          device::mojom::WakeLockType::kPreventDisplaySleep,
+          device::mojom::WakeLockReason::kOther, "GetSnapshot",
           std::move(request));
     }
   }

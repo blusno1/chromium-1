@@ -4,6 +4,7 @@
 
 #include "modules/indexeddb/IDBValueWrapping.h"
 
+#include <memory>
 #include <utility>
 
 #include "bindings/core/v8/ScriptValue.h"
@@ -85,8 +86,13 @@ void IDBValueWrapper::Clone(ScriptState* script_state, ScriptValue* clone) {
                           << " called on wrapper with serialization exception";
   DCHECK(!wrap_called_) << "Clone() called after WrapIfBiggerThan()";
 #endif  // DCHECK_IS_ON()
+
+  bool read_wasm_from_stream = true;
+  // It is safe to unconditionally enable WASM module decoding because the
+  // relevant checks were already performed in SerializedScriptValue::Serialize,
+  // called by the IDBValueWrapper constructor.
   *clone = DeserializeScriptValue(script_state, serialized_value_.get(),
-                                  &blob_info_);
+                                  &blob_info_, read_wasm_from_stream);
 }
 
 void IDBValueWrapper::WriteVarint(unsigned value, Vector<char>& output) {
@@ -190,10 +196,10 @@ scoped_refptr<IDBValue> IDBValueUnwrapper::Unwrap(
   // Create an IDBValue with the same blob information, minus the last blob.
   unsigned blob_count = wrapped_value->BlobInfo()->size() - 1;
   std::unique_ptr<Vector<scoped_refptr<BlobDataHandle>>> blob_data =
-      WTF::MakeUnique<Vector<scoped_refptr<BlobDataHandle>>>();
+      std::make_unique<Vector<scoped_refptr<BlobDataHandle>>>();
   blob_data->ReserveCapacity(blob_count);
   std::unique_ptr<Vector<WebBlobInfo>> blob_info =
-      WTF::MakeUnique<Vector<WebBlobInfo>>();
+      std::make_unique<Vector<WebBlobInfo>>();
   blob_info->ReserveCapacity(blob_count);
 
   for (unsigned i = 0; i < blob_count; ++i) {

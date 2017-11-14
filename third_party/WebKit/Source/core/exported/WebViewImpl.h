@@ -35,7 +35,6 @@
 
 #include "build/build_config.h"
 #include "core/CoreExport.h"
-#include "core/editing/spellcheck/SpellCheckerClientImpl.h"
 #include "core/exported/WebPagePopupImpl.h"
 #include "core/frame/ResizeViewportAnchor.h"
 #include "core/page/ChromeClient.h"
@@ -143,7 +142,6 @@ class CORE_EXPORT WebViewImpl final
                                          bool has_scrolled_by_touch) override;
   void MouseCaptureLost() override;
   void SetFocus(bool enable) override;
-  WebRange CompositionRange() override;
   WebColor BackgroundColor() const override;
   WebPagePopupImpl* GetPagePopup() const override;
   bool SelectionBounds(WebRect& anchor, WebRect& focus) const override;
@@ -575,7 +573,6 @@ class CORE_EXPORT WebViewImpl final
   Persistent<ChromeClient> chrome_client_;
   ContextMenuClient context_menu_client_;
   EditorClient editor_client_;
-  SpellCheckerClientImpl spell_checker_client_impl_;
 
   WebSize size_;
   // If true, automatically resize the layout view around its content.

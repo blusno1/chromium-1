@@ -75,6 +75,9 @@ extern const char kBlockTabUndersDescription[];
 extern const char kBrowserSideNavigationName[];
 extern const char kBrowserSideNavigationDescription[];
 
+extern const char kNavigationMojoResponseName[];
+extern const char kNavigationMojoResponseDescription[];
+
 extern const char kBrowserTaskSchedulerName[];
 extern const char kBrowserTaskSchedulerDescription[];
 
@@ -92,6 +95,9 @@ extern const char kCastStreamingHwEncodingDescription[];
 
 extern const char kClickToOpenPDFName[];
 extern const char kClickToOpenPDFDescription[];
+
+extern const char kClipboardContentSettingName[];
+extern const char kClipboardContentSettingDescription[];
 
 extern const char kCloudImportName[];
 extern const char kCloudImportDescription[];
@@ -274,8 +280,8 @@ extern const char kEnableMaterialDesignExtensionsDescription[];
 extern const char kEnablePolicyToolName[];
 extern const char kEnablePolicyToolDescription[];
 
-extern const char kEnableMidiManagerDynamicInstantiationName[];
-extern const char kEnableMidiManagerDynamicInstantiationDescription[];
+extern const char kEnableMultiMirroringName[];
+extern const char kEnableMultiMirroringDescription[];
 
 extern const char kEnableNavigationTracingName[];
 extern const char kEnableNavigationTracingDescription[];
@@ -311,6 +317,9 @@ extern const char kEnablePictureInPictureDescription[];
 
 extern const char kEnablePixelCanvasRecordingName[];
 extern const char kEnablePixelCanvasRecordingDescription[];
+
+extern const char kEnablePWAFullCodeCacheName[];
+extern const char kEnablePWAFullCodeCacheDescription[];
 
 extern const char kEnableTokenBindingName[];
 extern const char kEnableTokenBindingDescription[];
@@ -1118,6 +1127,9 @@ extern const char kEnableNtpMostLikelyFaviconsFromServerDescription[];
 extern const char kNtpTilesLowerResolutionFaviconsName[];
 extern const char kNtpTilesLowerResolutionFaviconsDescription[];
 
+extern const char kEnableMidiManagerDynamicInstantiationName[];
+extern const char kEnableMidiManagerDynamicInstantiationDescription[];
+
 extern const char kEnableNtpOfflinePageDownloadSuggestionsName[];
 extern const char kEnableNtpOfflinePageDownloadSuggestionsDescription[];
 
@@ -1230,6 +1242,9 @@ extern const char kOffliningRecentPagesDescription[];
 extern const char kPayWithGoogleV1Name[];
 extern const char kPayWithGoogleV1Description[];
 
+extern const char kProgressBarThrottleName[];
+extern const char kProgressBarThrottleDescription[];
+
 extern const char kProgressBarCompletionName[];
 extern const char kProgressBarCompletionDescription[];
 extern const char kProgressBarCompletionLoadEvent[];
@@ -1274,9 +1289,6 @@ extern const char kUpdateMenuItemCustomSummaryName[];
 
 extern const char kUpdateMenuItemName[];
 extern const char kUpdateMenuItemDescription[];
-
-extern const char kUseAndroidMidiApiName[];
-extern const char kUseAndroidMidiApiDescription[];
 
 extern const char kThirdPartyDoodlesName[];
 extern const char kThirdPartyDoodlesDescription[];
@@ -1354,9 +1366,6 @@ extern const char kEnableD3DVsyncDescription[];
 extern const char kEnableDesktopIosPromotionsName[];
 extern const char kEnableDesktopIosPromotionsDescription[];
 
-extern const char kExperimentalTabControllerName[];
-extern const char kExperimentalTabControllerDescription[];
-
 extern const char kGdiTextPrinting[];
 extern const char kGdiTextPrintingDescription[];
 
@@ -1418,6 +1427,9 @@ extern const char kMacV2SandboxDescription[];
 
 extern const char kMacViewsNativeAppWindowsName[];
 extern const char kMacViewsNativeAppWindowsDescription[];
+
+extern const char kMacViewsProfileChooserName[];
+extern const char kMacViewsProfileChooserDescription[];
 
 extern const char kMacViewsTaskManagerName[];
 extern const char kMacViewsTaskManagerDescription[];
@@ -1525,8 +1537,8 @@ extern const char kEnableTabletSplitViewDescription[];
 extern const char kEnableZipArchiverPackerName[];
 extern const char kEnableZipArchiverPackerDescription[];
 
-extern const char kEnableZipArchiverUnpackerName[];
-extern const char kEnableZipArchiverUnpackerDescription[];
+extern const char kZipArchiverUnpackerName[];
+extern const char kZipArchiverUnpackerDescription[];
 
 extern const char kEolNotificationName[];
 extern const char kEolNotificationDescription[];
@@ -1760,6 +1772,13 @@ extern const char kUiSlowAnimationsName[];
 extern const char kUiSlowAnimationsDescription[];
 
 #endif  // defined(OS_CHROMEOS)
+
+#if defined(TOOLKIT_VIEWS)
+
+extern const char kExperimentalTabControllerName[];
+extern const char kExperimentalTabControllerDescription[];
+
+#endif  // defined(TOOLKIT_VIEWS)
 
 #if defined(TOOLKIT_VIEWS) || defined(OS_ANDROID)
 

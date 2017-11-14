@@ -5,12 +5,12 @@
 #ifndef CONTENT_GPU_GPU_SANDBOX_HOOK_LINUX_H_
 #define CONTENT_GPU_GPU_SANDBOX_HOOK_LINUX_H_
 
-#include "services/service_manager/sandbox/linux/sandbox_seccomp_bpf_linux.h"
+#include "services/service_manager/sandbox/linux/sandbox_linux.h"
 
 namespace content {
 
-service_manager::SandboxSeccompBPF::PreSandboxHook GetGpuProcessPreSandboxHook(
-    bool use_amd_specific_policies);
+bool GpuProcessPreSandboxHook(service_manager::BPFBasePolicy* policy,
+                              service_manager::SandboxLinux::Options options);
 
 }  // namespace content
 

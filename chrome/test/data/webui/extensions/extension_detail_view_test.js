@@ -12,7 +12,9 @@ cr.define('extension_detail_view_tests', function() {
     Warnings: 'warnings',
   };
 
-  suite('ExtensionItemTest', function() {
+  var suiteName = 'ExtensionDetailViewTest';
+
+  suite(suiteName, function() {
     /**
      * Extension item created before each test.
      * @type {extensions.Item}
@@ -134,7 +136,7 @@ cr.define('extension_detail_view_tests', function() {
           [extensionData.id, true]);
       mockDelegate.testClickingCalls(
           item.$$('#extensions-options'), 'showItemOptionsPage',
-          [extensionData.id]);
+          [extensionData]);
       mockDelegate.testClickingCalls(
           item.$$('#remove-extension'), 'deleteItem', [extensionData.id]);
     });
@@ -151,7 +153,7 @@ cr.define('extension_detail_view_tests', function() {
       var testWarningVisible = function(id, isVisible) {
         var f = isVisible ? expectTrue : expectFalse;
         f(extension_test_util.isVisible(item, id));
-      }
+      };
 
       testWarningVisible('#corrupted-warning', false);
       testWarningVisible('#suspicious-warning', false);
@@ -205,6 +207,7 @@ cr.define('extension_detail_view_tests', function() {
   });
 
   return {
+    suiteName: suiteName,
     TestNames: TestNames,
   };
 });

@@ -112,6 +112,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
                 UserGestureStatus) override;
   void Navigate(const FrameLoadRequest&) override;
   void Reload(FrameLoadType, ClientRedirectPolicy) override;
+  void AddResourceTiming(const ResourceTimingInfo&) override;
   void Detach(FrameDetachType) override;
   bool ShouldClose() override;
   SecurityContext* GetSecurityContext() const override;
@@ -272,7 +273,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   static std::unique_ptr<UserGestureIndicator> CreateUserGesture(
       LocalFrame*,
       UserGestureToken::Status = UserGestureToken::kPossiblyExistingGesture) {
-    return WTF::MakeUnique<UserGestureIndicator>();
+    return std::make_unique<UserGestureIndicator>();
   }
 
   // Replaces the initial empty document with a Document suitable for

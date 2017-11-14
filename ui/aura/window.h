@@ -345,6 +345,15 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // return a valid FrameSinkId.
   viz::FrameSinkId GetFrameSinkId() const;
 
+  const viz::FrameSinkId& embed_frame_sink_id() const {
+    return embed_frame_sink_id_;
+  }
+  void set_embed_frame_sink_id(const viz::FrameSinkId& embed_frame_sink_id) {
+    embed_frame_sink_id_ = embed_frame_sink_id;
+  }
+  // Returns whether this window is an embed window.
+  bool IsEmbeddingClient() const;
+
  protected:
   // Deletes (or removes if not owned by parent) all child windows. Intended for
   // use from the destructor.
@@ -452,8 +461,10 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // Overridden from ui::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override;
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override;
-  void OnLayerBoundsChanged(const gfx::Rect& old_bounds) override;
-  void OnLayerOpacityChanged(float old_opacity, float new_opacity) override;
+  void OnLayerBoundsChanged(const gfx::Rect& old_bounds,
+                            ui::PropertyChangeReason reason) override;
+  void OnLayerTransformed(ui::PropertyChangeReason reason) override;
+  void OnLayerOpacityChanged(ui::PropertyChangeReason reason) override;
 
   // Overridden from ui::EventTarget:
   bool CanAcceptEvent(const ui::Event& event) override;
@@ -504,6 +515,9 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   bool visible_;
 
   int id_;
+
+  // Only set when it is embedding another client inside.
+  viz::FrameSinkId embed_frame_sink_id_;
 
   // Whether layer is initialized as non-opaque. Defaults to false.
   bool transparent_;

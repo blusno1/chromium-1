@@ -92,9 +92,6 @@ class TabManager : public TabStripModelObserver,
   // Number of discard events since Chrome started.
   int discard_count() const { return discard_count_; }
 
-  // See member comment.
-  bool recent_tab_discard() const { return recent_tab_discard_; }
-
   // Start/Stop the Tab Manager.
   void Start();
   void Stop();
@@ -192,9 +189,9 @@ class TabManager : public TabStripModelObserver,
   // before.
   void OnDidFinishNavigation(content::NavigationHandle* navigation_handle);
 
-  // Notifies TabManager that one tab has finished loading. TabManager can
-  // decide which tab to load next.
-  void OnDidStopLoading(content::WebContents* contents);
+  // Called by TabManager::WebContentsData to notify TabManager that one tab is
+  // considered loaded. TabManager can decide which tab to load next.
+  void OnTabIsLoaded(content::WebContents* contents);
 
   // Notifies TabManager that one tab WebContents has been destroyed. TabManager
   // needs to clean up data related to that tab.
@@ -258,7 +255,7 @@ class TabManager : public TabStripModelObserver,
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, DiscardTabWithNonVisibleTabs);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, MaybeThrottleNavigation);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, OnDidFinishNavigation);
-  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, OnDidStopLoading);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, OnTabIsLoaded);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, OnWebContentsDestroyed);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, OnDelayedTabSelected);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, TimeoutWhenLoadingBackgroundTabs);
@@ -287,6 +284,7 @@ class TabManager : public TabStripModelObserver,
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest,
                            UrgentFastShutdownWithBeforeunloadHandler);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, IsTabRestoredInForeground);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, EnablePageAlmostIdleSignal);
 
   // The time of the first purging after a renderer is backgrounded.
   // The initial value was chosen because most of users activate backgrounded
@@ -323,10 +321,6 @@ class TabManager : public TabStripModelObserver,
   // user triggered discards via chrome://discards/ because that allows to
   // manually test the system.
   void RecordDiscardStatistics();
-
-  // Record whether an out of memory occured during a recent time interval. This
-  // allows the normalization of low memory statistics versus usage.
-  void RecordRecentTabDiscard();
 
   // Purges data structures in the browser that can be easily recomputed.
   void PurgeBrowserMemory();
@@ -426,7 +420,7 @@ class TabManager : public TabStripModelObserver,
 
   void OnSessionRestoreStartedLoadingTabs();
   void OnSessionRestoreFinishedLoadingTabs();
-  void OnWillRestoreTab(content::WebContents* web_contents);
+  void OnWillRestoreTab(content::WebContents* contents);
 
   // Returns true if it is in BackgroundTabOpening session, which is defined as
   // the duration from the time when the browser starts to load background tabs
@@ -490,10 +484,6 @@ class TabManager : public TabStripModelObserver,
   // Timer to periodically update the stats of the renderers.
   base::RepeatingTimer update_timer_;
 
-  // Timer to periodically report whether a tab has been discarded since the
-  // last time the timer has fired.
-  base::RepeatingTimer recent_tab_discard_timer_;
-
   // A listener to global memory pressure events.
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
@@ -506,10 +496,6 @@ class TabManager : public TabStripModelObserver,
 
   // Number of times a tab has been discarded, for statistics.
   int discard_count_;
-
-  // Whether a tab discard event has occurred during the last time interval,
-  // used for statistics normalized by usage.
-  bool recent_tab_discard_;
 
   // Whether a tab can only ever discarded once.
   bool discard_once_;

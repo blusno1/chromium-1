@@ -4,6 +4,8 @@
 
 #include "modules/webaudio/AudioWorkletGlobalScope.h"
 
+#include <memory>
+
 #include "bindings/core/v8/ScriptModule.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptValue.h"
@@ -15,7 +17,6 @@
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/testing/DummyPageHolder.h"
 #include "core/workers/GlobalScopeCreationParams.h"
@@ -34,6 +35,7 @@
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/text/TextPosition.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebURLRequest.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -56,7 +58,7 @@ class AudioWorkletGlobalScopeTest : public ::testing::Test {
     Document* document = page_->GetFrame().GetDocument();
     document->SetURL(KURL("https://example.com/"));
     document->UpdateSecurityOrigin(SecurityOrigin::Create(document->Url()));
-    reporting_proxy_ = WTF::MakeUnique<WorkerReportingProxy>();
+    reporting_proxy_ = std::make_unique<WorkerReportingProxy>();
   }
 
   std::unique_ptr<AudioWorkletThread> CreateAudioWorkletThread() {
@@ -79,7 +81,7 @@ class AudioWorkletGlobalScopeTest : public ::testing::Test {
 
   void RunBasicTest(WorkerThread* thread) {
     WaitableEvent waitable_event;
-    TaskRunnerHelper::Get(TaskType::kUnthrottled, thread)
+    thread->GetTaskRunner(TaskType::kUnthrottled)
         ->PostTask(
             BLINK_FROM_HERE,
             CrossThreadBind(
@@ -91,7 +93,7 @@ class AudioWorkletGlobalScopeTest : public ::testing::Test {
 
   void RunSimpleProcessTest(WorkerThread* thread) {
     WaitableEvent waitable_event;
-    TaskRunnerHelper::Get(TaskType::kUnthrottled, thread)
+    thread->GetTaskRunner(TaskType::kUnthrottled)
         ->PostTask(BLINK_FROM_HERE,
                    CrossThreadBind(&AudioWorkletGlobalScopeTest::
                                        RunSimpleProcessTestOnWorkletThread,
@@ -103,7 +105,7 @@ class AudioWorkletGlobalScopeTest : public ::testing::Test {
 
   void RunParsingTest(WorkerThread* thread) {
     WaitableEvent waitable_event;
-    TaskRunnerHelper::Get(TaskType::kUnthrottled, thread)
+    thread->GetTaskRunner(TaskType::kUnthrottled)
         ->PostTask(
             BLINK_FROM_HERE,
             CrossThreadBind(
@@ -115,7 +117,7 @@ class AudioWorkletGlobalScopeTest : public ::testing::Test {
 
   void RunParsingParameterDescriptorTest(WorkerThread* thread) {
     WaitableEvent waitable_event;
-    TaskRunnerHelper::Get(TaskType::kUnthrottled, thread)
+    thread->GetTaskRunner(TaskType::kUnthrottled)
         ->PostTask(
             BLINK_FROM_HERE,
             CrossThreadBind(
@@ -135,9 +137,8 @@ class AudioWorkletGlobalScopeTest : public ::testing::Test {
     EXPECT_TRUE(script_state);
     ScriptModule module = ScriptModule::Compile(
         script_state->GetIsolate(), source_code, "worklet.js",
-        kSharableCrossOrigin, network::mojom::FetchCredentialsMode::kOmit,
-        "" /* nonce */, kParserInserted, TextPosition::MinimumPosition(),
-        ASSERT_NO_EXCEPTION);
+        ScriptFetchOptions(), kSharableCrossOrigin,
+        TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
     EXPECT_FALSE(module.IsNull());
     ScriptValue exception = module.Instantiate(script_state);
     EXPECT_TRUE(exception.IsEmpty());

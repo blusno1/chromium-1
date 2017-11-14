@@ -25,6 +25,7 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
 #include "platform/network/http_names.h"
+#include "public/platform/modules/cache_storage/cache_storage.mojom-blink.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCache.h"
 #include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
@@ -50,11 +51,11 @@ class CacheMatchCallbacks : public WebServiceWorkerCache::CacheMatchCallbacks {
     resolver_.Clear();
   }
 
-  void OnError(WebServiceWorkerCacheError reason) override {
+  void OnError(mojom::CacheStorageError reason) override {
     if (!resolver_->GetExecutionContext() ||
         resolver_->GetExecutionContext()->IsContextDestroyed())
       return;
-    if (reason == kWebServiceWorkerCacheErrorNotFound)
+    if (reason == mojom::CacheStorageError::kErrorNotFound)
       resolver_->Resolve();
     else
       resolver_->Reject(CacheStorageError::CreateException(reason));
@@ -88,7 +89,7 @@ class CacheWithResponsesCallbacks
     resolver_.Clear();
   }
 
-  void OnError(WebServiceWorkerCacheError reason) override {
+  void OnError(mojom::CacheStorageError reason) override {
     if (!resolver_->GetExecutionContext() ||
         resolver_->GetExecutionContext()->IsContextDestroyed())
       return;
@@ -116,11 +117,11 @@ class CacheDeleteCallback : public WebServiceWorkerCache::CacheBatchCallbacks {
     resolver_.Clear();
   }
 
-  void OnError(WebServiceWorkerCacheError reason) override {
+  void OnError(mojom::CacheStorageError reason) override {
     if (!resolver_->GetExecutionContext() ||
         resolver_->GetExecutionContext()->IsContextDestroyed())
       return;
-    if (reason == kWebServiceWorkerCacheErrorNotFound)
+    if (reason == mojom::CacheStorageError::kErrorNotFound)
       resolver_->Resolve(false);
     else
       resolver_->Reject(CacheStorageError::CreateException(reason));
@@ -154,7 +155,7 @@ class CacheWithRequestsCallbacks
     resolver_.Clear();
   }
 
-  void OnError(WebServiceWorkerCacheError reason) override {
+  void OnError(mojom::CacheStorageError reason) override {
     if (!resolver_->GetExecutionContext() ||
         resolver_->GetExecutionContext()->IsContextDestroyed())
       return;
@@ -275,7 +276,7 @@ class Cache::BarrierCallbackForPut final
     if (--number_of_remaining_operations_ != 0)
       return;
     cache_->WebCache()->DispatchBatch(
-        WTF::MakeUnique<CallbackPromiseAdapter<void, CacheStorageError>>(
+        std::make_unique<CallbackPromiseAdapter<void, CacheStorageError>>(
             resolver_),
         batch_operations_);
   }
@@ -503,7 +504,7 @@ ScriptPromise Cache::MatchImpl(ScriptState* script_state,
     resolver->Resolve();
     return promise;
   }
-  web_cache_->DispatchMatch(WTF::MakeUnique<CacheMatchCallbacks>(resolver),
+  web_cache_->DispatchMatch(std::make_unique<CacheMatchCallbacks>(resolver),
                             web_request, ToWebQueryParams(options));
   return promise;
 }
@@ -512,7 +513,7 @@ ScriptPromise Cache::MatchAllImpl(ScriptState* script_state) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   const ScriptPromise promise = resolver->Promise();
   web_cache_->DispatchMatchAll(
-      WTF::MakeUnique<CacheWithResponsesCallbacks>(resolver),
+      std::make_unique<CacheWithResponsesCallbacks>(resolver),
       WebServiceWorkerRequest(), WebServiceWorkerCache::QueryParams());
   return promise;
 }
@@ -530,7 +531,7 @@ ScriptPromise Cache::MatchAllImpl(ScriptState* script_state,
     return promise;
   }
   web_cache_->DispatchMatchAll(
-      WTF::MakeUnique<CacheWithResponsesCallbacks>(resolver), web_request,
+      std::make_unique<CacheWithResponsesCallbacks>(resolver), web_request,
       ToWebQueryParams(options));
   return promise;
 }
@@ -583,7 +584,7 @@ ScriptPromise Cache::DeleteImpl(ScriptState* script_state,
     resolver->Resolve(false);
     return promise;
   }
-  web_cache_->DispatchBatch(WTF::MakeUnique<CacheDeleteCallback>(resolver),
+  web_cache_->DispatchBatch(std::make_unique<CacheDeleteCallback>(resolver),
                             batch_operations);
   return promise;
 }
@@ -650,7 +651,7 @@ ScriptPromise Cache::KeysImpl(ScriptState* script_state) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   const ScriptPromise promise = resolver->Promise();
   web_cache_->DispatchKeys(
-      WTF::MakeUnique<CacheWithRequestsCallbacks>(resolver),
+      std::make_unique<CacheWithRequestsCallbacks>(resolver),
       WebServiceWorkerRequest(), WebServiceWorkerCache::QueryParams());
   return promise;
 }
@@ -668,7 +669,7 @@ ScriptPromise Cache::KeysImpl(ScriptState* script_state,
     return promise;
   }
   web_cache_->DispatchKeys(
-      WTF::MakeUnique<CacheWithRequestsCallbacks>(resolver), web_request,
+      std::make_unique<CacheWithRequestsCallbacks>(resolver), web_request,
       ToWebQueryParams(options));
   return promise;
 }

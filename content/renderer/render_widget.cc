@@ -68,6 +68,7 @@
 #include "content/renderer/resizing_mode_selector.h"
 #include "ipc/ipc_message_start.h"
 #include "ipc/ipc_sync_message.h"
+#include "ipc/ipc_sync_message_filter.h"
 #include "ppapi/features/features.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
@@ -604,6 +605,30 @@ void RenderWidget::SetExternalPopupOriginAdjustmentsForEmulation(
 }
 #endif
 
+void RenderWidget::SetLocalSurfaceIdForAutoResize(
+    uint64_t sequence_number,
+    const content::ScreenInfo& screen_info,
+    const viz::LocalSurfaceId& local_surface_id) {
+  bool screen_info_changed = screen_info_ != screen_info;
+
+  screen_info_ = screen_info;
+  if (device_scale_factor_ != screen_info_.device_scale_factor) {
+    device_scale_factor_ = screen_info_.device_scale_factor;
+    OnDeviceScaleFactorChanged();
+  }
+
+  if (screen_info_changed) {
+    for (auto& observer : render_frame_proxies_)
+      observer.OnScreenInfoChanged(screen_info);
+
+    // Notify all BrowserPlugins of the updated ScreenInfo.
+    if (BrowserPluginManager::Get())
+      BrowserPluginManager::Get()->ScreenInfoChanged(screen_info);
+  }
+
+  AutoResizeCompositor(local_surface_id);
+}
+
 void RenderWidget::OnShowHostContextMenu(ContextMenuParams* params) {
   if (screen_metrics_emulator_)
     screen_metrics_emulator_->OnShowContextMenu(params);
@@ -768,10 +793,15 @@ void RenderWidget::OnResize(const ResizeParams& params) {
 
 void RenderWidget::OnSetLocalSurfaceIdForAutoResize(
     uint64_t sequence_number,
+    const gfx::Size& min_size,
+    const gfx::Size& max_size,
+    const content::ScreenInfo& screen_info,
     const viz::LocalSurfaceId& local_surface_id) {
   if (!auto_resize_mode_ || resize_or_repaint_ack_num_ != sequence_number)
     return;
-  AutoResizeCompositor(local_surface_id);
+
+  SetLocalSurfaceIdForAutoResize(sequence_number, screen_info,
+                                 local_surface_id);
 }
 
 void RenderWidget::OnEnableDeviceEmulation(
@@ -1170,6 +1200,7 @@ void RenderWidget::UpdateTextInputStateInternal(bool show_virtual_keyboard,
     params.type = new_type;
     params.mode = new_mode;
     params.flags = new_info.flags;
+#if defined(OS_ANDROID)
     if (next_previous_flags_ == kInvalidNextPreviousFlagsValue) {
       // Due to a focus change, values will be reset by the frame.
       // That case we only need fresh NEXT/PREVIOUS information.
@@ -1184,6 +1215,9 @@ void RenderWidget::UpdateTextInputStateInternal(bool show_virtual_keyboard,
         next_previous_flags_ = 0;
       }
     }
+#else
+    next_previous_flags_ = 0;
+#endif
     params.flags |= next_previous_flags_;
     params.value = new_info.value.Utf8();
     params.selection_start = new_info.selection_start;
@@ -2219,7 +2253,8 @@ void RenderWidget::GetCompositionRange(gfx::Range* range) {
   if (GetFocusedPepperPluginInsideWidget())
     return;
 #endif
-  WebRange web_range = GetWebWidget()->CompositionRange();
+  blink::WebInputMethodController* controller = GetInputMethodController();
+  WebRange web_range = controller ? controller->CompositionRange() : WebRange();
   if (web_range.IsNull()) {
     *range = gfx::Range::InvalidRange();
     return;

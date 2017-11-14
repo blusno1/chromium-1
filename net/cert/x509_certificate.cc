@@ -87,31 +87,25 @@ bool GeneralizedTimeToBaseTime(const der::GeneralizedTime& generalized,
   exploded.hour = generalized.hours;
   exploded.minute = generalized.minutes;
   exploded.second = generalized.seconds;
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
+
   if (base::Time::FromUTCExploded(exploded, result))
     return true;
 
-  if (sizeof(time_t) == 4) {
-    // Fail on obviously bad dates before trying the 32-bit hacks.
-    if (!exploded.HasValidValues())
-      return false;
+  // Fail on obviously bad dates.
+  if (!exploded.HasValidValues())
+    return false;
 
-    // Hack to handle dates that can't be converted on 32-bit systems.
-    // TODO(mattm): consider consolidating this with
-    // SaturatedTimeFromUTCExploded from cookie_util.cc
-    if (generalized.year >= 2038) {
-      *result = base::Time::Max();
-      return true;
-    }
-    if (generalized.year < 1970) {
-      *result = base::Time::Min();
-      return true;
-    }
+  // TODO(mattm): consider consolidating this with
+  // SaturatedTimeFromUTCExploded from cookie_util.cc
+  if (static_cast<int>(generalized.year) > base::Time::kExplodedMaxYear) {
+    *result = base::Time::Max();
+    return true;
+  }
+  if (static_cast<int>(generalized.year) < base::Time::kExplodedMinYear) {
+    *result = base::Time::Min();
+    return true;
   }
   return false;
-#else
-  return base::Time::FromUTCExploded(exploded, result);
-#endif
 }
 
 // Sets |value| to the Value from a DER Sequence Tag-Length-Value and return
@@ -859,32 +853,21 @@ SHA256HashValue X509Certificate::CalculateFingerprint256(OSCertHandle cert) {
   return sha256;
 }
 
-// static
-SHA256HashValue X509Certificate::CalculateCAFingerprint256(
-    const OSCertHandles& intermediates) {
+SHA256HashValue X509Certificate::CalculateChainFingerprint256() const {
   SHA256HashValue sha256;
   memset(sha256.data, 0, sizeof(sha256.data));
 
   SHA256_CTX sha256_ctx;
   SHA256_Init(&sha256_ctx);
-  for (CRYPTO_BUFFER* cert : intermediates) {
+  SHA256_Update(&sha256_ctx, CRYPTO_BUFFER_data(cert_handle_),
+                CRYPTO_BUFFER_len(cert_handle_));
+  for (CRYPTO_BUFFER* cert : intermediate_ca_certs_) {
     SHA256_Update(&sha256_ctx, CRYPTO_BUFFER_data(cert),
                   CRYPTO_BUFFER_len(cert));
   }
   SHA256_Final(sha256.data, &sha256_ctx);
 
   return sha256;
-}
-
-// static
-SHA256HashValue X509Certificate::CalculateChainFingerprint256(
-    OSCertHandle leaf,
-    const OSCertHandles& intermediates) {
-  OSCertHandles chain;
-  chain.push_back(leaf);
-  chain.insert(chain.end(), intermediates.begin(), intermediates.end());
-
-  return CalculateCAFingerprint256(chain);
 }
 
 // static

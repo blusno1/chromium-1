@@ -654,6 +654,7 @@ TEST_F(RenderViewImplTest, OnNavigationLoadDataWithBaseURL) {
   request_params.data_url_as_string =
       "data:text/html,<html><head><title>Data page</title></head></html>";
 
+  render_thread_->sink().ClearMessages();
   frame()->Navigate(common_params, StartNavigationParams(),
                     request_params);
   const IPC::Message* frame_title_msg = nullptr;
@@ -1362,12 +1363,8 @@ TEST_F(RenderViewImplTest, OnSetTextDirection) {
     WebTextDirection direction;
     const wchar_t* expected_result;
   } kTextDirection[] = {
-      {blink::kWebTextDirectionRightToLeft,
-       L"\x000A"
-       L"rtl,rtl"},
-      {blink::kWebTextDirectionLeftToRight,
-       L"\x000A"
-       L"ltr,ltr"},
+      {blink::kWebTextDirectionRightToLeft, L"rtl,rtl"},
+      {blink::kWebTextDirectionLeftToRight, L"ltr,ltr"},
   };
   for (size_t i = 0; i < arraysize(kTextDirection); ++i) {
     // Set the text direction of the <textarea> element.
@@ -1397,8 +1394,7 @@ TEST_F(RenderViewImplTest, OnSetTextDirection) {
 // Crashy, http://crbug.com/53247.
 TEST_F(RenderViewImplTest, DISABLED_DidFailProvisionalLoadWithErrorForError) {
   GetMainFrame()->EnableViewSourceMode(true);
-  WebURLError error(WebURLError::Domain::kNet, net::ERR_FILE_NOT_FOUND,
-                    GURL("http://foo"));
+  WebURLError error(net::ERR_FILE_NOT_FOUND, GURL("http://foo"));
   WebLocalFrame* web_frame = GetMainFrame();
 
   // Start a load that will reach provisional state synchronously,
@@ -1418,8 +1414,7 @@ TEST_F(RenderViewImplTest, DISABLED_DidFailProvisionalLoadWithErrorForError) {
 
 TEST_F(RenderViewImplTest, DidFailProvisionalLoadWithErrorForCancellation) {
   GetMainFrame()->EnableViewSourceMode(true);
-  WebURLError error(WebURLError::Domain::kNet, net::ERR_ABORTED,
-                    GURL("http://foo"));
+  WebURLError error(net::ERR_ABORTED, GURL("http://foo"));
   WebLocalFrame* web_frame = GetMainFrame();
 
   // Start a load that will reach provisional state synchronously,
@@ -1899,7 +1894,7 @@ class RendererErrorPageTest : public RenderViewImplTest {
 #endif
 
 TEST_F(RendererErrorPageTest, MAYBE_Suppresses) {
-  WebURLError error(WebURLError::Domain::kNet, net::ERR_FILE_NOT_FOUND,
+  WebURLError error(net::ERR_FILE_NOT_FOUND,
                     GURL("http://example.com/suppress"));
 
   // Start a load that will reach provisional state synchronously,
@@ -1927,7 +1922,7 @@ TEST_F(RendererErrorPageTest, MAYBE_Suppresses) {
 #endif
 
 TEST_F(RendererErrorPageTest, MAYBE_DoesNotSuppress) {
-  WebURLError error(WebURLError::Domain::kNet, net::ERR_FILE_NOT_FOUND,
+  WebURLError error(net::ERR_FILE_NOT_FOUND,
                     GURL("http://example.com/dont-suppress"));
 
   // Start a load that will reach provisional state synchronously,

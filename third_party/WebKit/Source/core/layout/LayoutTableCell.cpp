@@ -25,7 +25,7 @@
 
 #include "core/layout/LayoutTableCell.h"
 
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/html/HTMLTableCellElement.h"
 #include "core/html_names.h"
@@ -490,7 +490,7 @@ bool LayoutTableCell::IsInEndColumn() const {
 
 CSSPropertyID LayoutTableCell::ResolveBorderProperty(
     CSSPropertyID property) const {
-  return CSSPropertyAPI::Get(property).ResolveDirectionAwareProperty(
+  return CSSProperty::Get(property).ResolveDirectionAwareProperty(
       TableStyle().Direction(), TableStyle().GetWritingMode());
 }
 
@@ -1059,7 +1059,7 @@ void LayoutTableCell::UpdateCollapsedBorderValues() const {
 
     collapsed_border_values_valid_ = true;
 
-    auto new_values = WTF::MakeUnique<CollapsedBorderValues>(
+    auto new_values = std::make_unique<CollapsedBorderValues>(
         ComputeCollapsedStartBorder(), ComputeCollapsedEndBorder(),
         ComputeCollapsedBeforeBorder(), ComputeCollapsedAfterBorder());
 

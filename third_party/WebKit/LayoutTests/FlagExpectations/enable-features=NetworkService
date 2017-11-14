@@ -87,7 +87,7 @@ Bug(none) http/tests/background_sync/chromium/stop-worker-no-crash.html [ Crash 
 Bug(none) http/tests/cookies/same-site/popup-cross-site-post.html [ Failure ]
 Bug(none) http/tests/cookies/same-site/popup-cross-site.html [ Failure ]
 Bug(none) http/tests/devtools/sources/compile-javascript.js [ Failure Timeout ]
-Bug(none) http/tests/devtools/sources/debugger-ui/source-frame-count.html [ Failure ]
+Bug(none) http/tests/devtools/sources/debugger-ui/source-frame-count.js [ Failure ]
 Bug(none) http/tests/encoding/meta-switch-mid-parse-with-title.html [ Timeout ]
 Bug(none) http/tests/encoding/meta-switch-mid-parse.html [ Timeout ]
 crbug.com/778542 http/tests/devtools/tracing/timeline-js/timeline-script-id.html [ Failure ]
@@ -121,7 +121,7 @@ crbug.com/721408 http/tests/inspector-protocol/network/request-interception-patt
 crbug.com/721408 http/tests/inspector-protocol/network/request-interception-resource-types.js [ Failure ]
 crbug.com/721408 http/tests/inspector-protocol/network/xhr-interception-auth-fail.js [ Failure ]
 crbug.com/721408 http/tests/inspector-protocol/network/xhr-interception.js [ Timeout ]
-crbug.com/721408 http/tests/devtools/console/console-uncaught-promise.html [ Failure ]
+crbug.com/721408 http/tests/devtools/console/console-uncaught-promise.js [ Failure ]
 crbug.com/721408 http/tests/devtools/sdk/network-interception-wildcard-pattern-matching.js [ Failure ]
 crbug.com/721408 http/tests/devtools/sources/debugger-async/async-callstack-xhrs.js [ Failure Timeout ]
 Bug(none) http/tests/loading/307-after-303-after-post.html [ Failure ]
@@ -183,6 +183,11 @@ crbug.com/764474 http/tests/security/contentSecurityPolicy/1.1/plugintypes-affec
 crbug.com/764474 fast/loader/reload-zero-byte-plugin.html [ Failure ]
 crbug.com/764474 plugins/plugin-document-back-forward.html [ Crash Failure Timeout ]
 
+# DevTools crbug.com/783982
+crbug.com/783982 http/tests/devtools/startup/console/console-uncaught-promise-no-inspector.html [ Failure ]
+crbug.com/783982 http/tests/devtools/elements/styles-2/property-ui-location.html [ Failure ]
+crbug.com/783982 http/tests/devtools/elements/styles-1/empty-background-url.html [ Failure ]
+
 # http/tests/fetch
 crbug.com/778721 http/tests/fetch/serviceworker-proxied/thorough/auth-base-https-other-https.html [ Pass Failure Timeout ]
 crbug.com/778721 http/tests/fetch/serviceworker-proxied/thorough/cookie-nocors-other-https.html [ Pass Failure Timeout ]
@@ -216,3 +221,5 @@ crbug.com/778721 http/tests/fetch/workers/thorough/redirect-nocors-other-https.h
 crbug.com/778721 http/tests/fetch/workers/thorough/redirect-password-other-https.html [ Pass Failure ]
 crbug.com/778721 http/tests/fetch/workers/thorough/redirect-password.html [ Pass Failure ]
 crbug.com/778721 http/tests/fetch/workers/thorough/scheme-blob.html [ Pass Failure ]
+
+crbug.com/721408 http/tests/inspector-protocol/network/navigation-xfer-size.js [ Failure ]

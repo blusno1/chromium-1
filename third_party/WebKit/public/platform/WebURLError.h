@@ -31,32 +31,14 @@
 #ifndef WebURLError_h
 #define WebURLError_h
 
-#include "WebString.h"
 #include "WebURL.h"
+#include "base/logging.h"
 
 namespace blink {
-
-class ResourceError;
 
 // TODO(yhirano): Change this to a class.
 struct WebURLError {
  public:
-  // A namespace for "reason" to support various layers generating resource
-  // errors.
-  enum class Domain {
-    // |reason| should be always zero. An error with this domain is considered
-    // as an empty error (== "no error").
-    // TODO(yhirano): Consider removing this domain.
-    kEmpty,
-
-    // The error is a "net" error. |reason| is an error code specified in
-    // net/base/net_error_list.h.
-    kNet,
-
-    // Used for testing.
-    kTest,
-  };
-
   enum class HasCopyInCache {
     kFalse,
     kTrue,
@@ -66,39 +48,33 @@ struct WebURLError {
     kTrue,
   };
 
-  WebURLError() = default;
-  WebURLError(Domain domain, int reason, const WebURL& url)
-      : domain_(domain), reason_(reason), url_(url) {}
-  WebURLError(Domain domain,
-              int reason,
+  WebURLError() = delete;
+  // |reason| must not be 0.
+  WebURLError(int reason, const WebURL& url) : reason_(reason), url_(url) {
+    DCHECK_NE(reason_, 0);
+  }
+  // |reason| must not be 0.
+  WebURLError(int reason,
               HasCopyInCache has_copy_in_cache,
               IsWebSecurityViolation is_web_security_violation,
               const WebURL& url)
-      : domain_(domain),
-        reason_(reason),
+      : reason_(reason),
         has_copy_in_cache_(has_copy_in_cache == HasCopyInCache::kTrue),
         is_web_security_violation_(is_web_security_violation ==
                                    IsWebSecurityViolation::kTrue),
-        url_(url) {}
+        url_(url) {
+    DCHECK_NE(reason_, 0);
+  }
 
-#if INSIDE_BLINK
-  BLINK_PLATFORM_EXPORT WebURLError(const ResourceError&);
-  BLINK_PLATFORM_EXPORT WebURLError& operator=(const ResourceError&);
-  BLINK_PLATFORM_EXPORT operator ResourceError() const;
-#endif
-
-  Domain domain() const { return domain_; }
   int reason() const { return reason_; }
   bool has_copy_in_cache() const { return has_copy_in_cache_; }
   bool is_web_security_violation() const { return is_web_security_violation_; }
   const WebURL& url() const { return url_; }
 
  private:
-  Domain domain_ = Domain::kEmpty;
-
-  // A numeric error code detailing the reason for this error. A value
-  // of 0 means no error.
-  int reason_ = 0;
+  // A numeric error code detailing the reason for this error. The value must
+  // not be 0.
+  int reason_;
 
   // A flag showing whether or not we have a (possibly stale) copy of the
   // requested resource in the cache.
@@ -110,9 +86,6 @@ struct WebURLError {
   // The url that failed to load.
   WebURL url_;
 };
-
-BLINK_PLATFORM_EXPORT std::ostream& operator<<(std::ostream&,
-                                               WebURLError::Domain);
 
 }  // namespace blink
 

@@ -14,6 +14,7 @@
 #include <limits>
 #include <list>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -34,12 +35,11 @@
 #include "components/storage_monitor/removable_device_constants.h"
 #include "components/storage_monitor/storage_info.h"
 #include "components/storage_monitor/udev_util_linux.h"
-#include "device/media_transfer_protocol/media_transfer_protocol_manager.h"
 #include "device/udev_linux/scoped_udev.h"
 
 namespace storage_monitor {
 
-typedef MtabWatcherLinux::MountPointDeviceMap MountPointDeviceMap;
+using MountPointDeviceMap = MtabWatcherLinux::MountPointDeviceMap;
 
 namespace {
 

@@ -107,7 +107,7 @@ class AnimationWorkletThreadTest : public ::testing::Test {
   // Attempts to run some simple script for |thread|.
   void CheckWorkletCanExecuteScript(WorkerThread* thread) {
     std::unique_ptr<WaitableEvent> wait_event =
-        WTF::MakeUnique<WaitableEvent>();
+        std::make_unique<WaitableEvent>();
     thread->GetWorkerBackingThread().BackingThread().PostTask(
         BLINK_FROM_HERE,
         CrossThreadBind(&AnimationWorkletThreadTest::ExecuteScriptInWorklet,
@@ -125,9 +125,8 @@ class AnimationWorkletThreadTest : public ::testing::Test {
     ScriptState::Scope scope(script_state);
     ScriptModule module = ScriptModule::Compile(
         script_state->GetIsolate(), "var counter = 0; ++counter;", "worklet.js",
-        kSharableCrossOrigin, network::mojom::FetchCredentialsMode::kOmit,
-        "" /* nonce */, kParserInserted, TextPosition::MinimumPosition(),
-        ASSERT_NO_EXCEPTION);
+        ScriptFetchOptions(), kSharableCrossOrigin,
+        TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
     EXPECT_FALSE(module.IsNull());
     ScriptValue exception = module.Instantiate(script_state);
     EXPECT_TRUE(exception.IsEmpty());

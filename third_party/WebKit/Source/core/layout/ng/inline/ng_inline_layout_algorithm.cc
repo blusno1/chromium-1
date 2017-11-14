@@ -4,6 +4,11 @@
 
 #include "core/layout/ng/inline/ng_inline_layout_algorithm.h"
 
+#include <algorithm>
+#include <limits>
+#include <memory>
+#include <utility>
+
 #include "core/layout/ng/inline/ng_baseline.h"
 #include "core/layout/ng/inline/ng_bidi_paragraph.h"
 #include "core/layout/ng/inline/ng_inline_box_state.h"
@@ -56,7 +61,7 @@ NGInlineLayoutAlgorithm::NGInlineLayoutAlgorithm(
           break_token),
       is_horizontal_writing_mode_(
           blink::IsHorizontalWritingMode(space.WritingMode())) {
-  quirks_mode_ = !inline_node.GetLayoutObject()->GetDocument().InNoQuirksMode();
+  quirks_mode_ = inline_node.InLineHeightQuirksMode();
   unpositioned_floats_ = ConstraintSpace().UnpositionedFloats();
 
   if (!is_horizontal_writing_mode_)
@@ -69,13 +74,6 @@ void NGInlineLayoutAlgorithm::CreateLine(NGLineInfo* line_info,
     BidiReorder(&line_info->Results());
 
   PlaceItems(line_info, *exclusion_space);
-}
-
-TextDirection NGInlineLayoutAlgorithm::CurrentDirection(
-    TextDirection default_direction) const {
-  if (!box_states_)
-    return default_direction;
-  return box_states_->LineBoxState().style->Direction();
 }
 
 void NGInlineLayoutAlgorithm::BidiReorder(NGInlineItemResults* line_items) {
@@ -217,9 +215,9 @@ void NGInlineLayoutAlgorithm::PlaceItems(
       DCHECK_GT(line_box_.size(), list_marker_index.value());
     } else if (item.Type() == NGInlineItem::kOutOfFlowPositioned) {
       NGBlockNode node(ToLayoutBox(item.GetLayoutObject()));
-      container_builder_.AddOutOfFlowChildCandidate(
+      container_builder_.AddInlineOutOfFlowChildCandidate(
           node, NGLogicalOffset(position, LayoutUnit()),
-          CurrentDirection(line_info->BaseDirection()));
+          line_info->BaseDirection());
       continue;
     } else {
       continue;
@@ -390,12 +388,10 @@ void NGInlineLayoutAlgorithm::PlaceListMarker(const NGInlineItem& item,
 // Returns false if justification failed and should fall back to start-aligned.
 bool NGInlineLayoutAlgorithm::ApplyJustify(NGLineInfo* line_info) {
   LayoutUnit inline_size;
-  for (const NGInlineItemResult& item_result : line_info->Results())
-    inline_size += item_result.inline_size;
   LayoutUnit available_width = line_info->AvailableWidth();
   if (line_info->LineEndShapeResult())
     available_width -= line_info->LineEndShapeResult()->SnappedWidth();
-  LayoutUnit expansion = available_width - inline_size;
+  LayoutUnit expansion = available_width - line_info->Width();
   if (expansion <= 0)
     return false;  // no expansion is needed.
 
@@ -527,7 +523,7 @@ LayoutUnit NGInlineLayoutAlgorithm::ComputeContentSize(
 
 scoped_refptr<NGLayoutResult> NGInlineLayoutAlgorithm::Layout() {
   std::unique_ptr<NGExclusionSpace> initial_exclusion_space(
-      WTF::MakeUnique<NGExclusionSpace>(ConstraintSpace().ExclusionSpace()));
+      std::make_unique<NGExclusionSpace>(ConstraintSpace().ExclusionSpace()));
 
   bool is_empty_inline = Node().IsEmptyInline();
 
@@ -579,16 +575,16 @@ scoped_refptr<NGLayoutResult> NGInlineLayoutAlgorithm::Layout() {
     // Copy the state stack from the unfinished break token if provided. This
     // enforces the layout inputs immutability constraint. If we weren't
     // provided with a break token we just create an empty state stack.
-    box_states_ = break_token ? WTF::MakeUnique<NGInlineLayoutStateStack>(
+    box_states_ = break_token ? std::make_unique<NGInlineLayoutStateStack>(
                                     break_token->StateStack())
-                              : WTF::MakeUnique<NGInlineLayoutStateStack>();
+                              : std::make_unique<NGInlineLayoutStateStack>();
 
     // Reset any state that may have been modified in a previous pass.
     positioned_floats.clear();
     unpositioned_floats_.clear();
     container_builder_.Reset();
     exclusion_space =
-        WTF::MakeUnique<NGExclusionSpace>(*initial_exclusion_space);
+        std::make_unique<NGExclusionSpace>(*initial_exclusion_space);
 
     NGLineInfo line_info;
     NGLineBreaker line_breaker(Node(), constraint_space_, &positioned_floats,
@@ -676,8 +672,8 @@ unsigned NGInlineLayoutAlgorithm::PositionLeadingItems(
     } else if (is_empty_inline &&
                item.Type() == NGInlineItem::kOutOfFlowPositioned) {
       NGBlockNode node(ToLayoutBox(item.GetLayoutObject()));
-      container_builder_.AddOutOfFlowChildCandidate(
-          node, NGLogicalOffset(), CurrentDirection(node.Style().Direction()));
+      container_builder_.AddInlineOutOfFlowChildCandidate(
+          node, NGLogicalOffset(), Style().Direction());
     }
 
     // Abort if we've found something that makes this a non-empty inline.

@@ -14,6 +14,7 @@
 #include "content/public/common/network_service.mojom.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/test/test_url_loader_client.h"
+#include "net/base/mock_network_change_notifier.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/service_manager/public/cpp/service_context.h"
@@ -182,7 +183,7 @@ class NetworkServiceTestWithService
 // works.
 TEST_F(NetworkServiceTestWithService, Basic) {
   LoadURL(test_server()->GetURL("/echo"));
-  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+  EXPECT_EQ(net::OK, client()->status().error_code);
 }
 
 // Verifies that raw headers are only reported if requested.
@@ -282,21 +283,20 @@ TEST_F(NetworkServiceTestWithService, SetNetworkConditions) {
 
   StartLoadingURL(request, 0);
   client()->RunUntilComplete();
-  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+  EXPECT_EQ(net::OK, client()->status().error_code);
 
   request.headers.AddHeaderFromString(
       "X-DevTools-Emulate-Network-Conditions-Client-Id: 42");
   StartLoadingURL(request, 0);
   client()->RunUntilComplete();
-  EXPECT_EQ(net::ERR_INTERNET_DISCONNECTED,
-            client()->completion_status().error_code);
+  EXPECT_EQ(net::ERR_INTERNET_DISCONNECTED, client()->status().error_code);
 
   network_conditions = mojom::NetworkConditions::New();
   network_conditions->offline = false;
   context()->SetNetworkConditions("42", std::move(network_conditions));
   StartLoadingURL(request, 0);
   client()->RunUntilComplete();
-  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+  EXPECT_EQ(net::OK, client()->status().error_code);
 
   network_conditions = mojom::NetworkConditions::New();
   network_conditions->offline = true;
@@ -306,12 +306,11 @@ TEST_F(NetworkServiceTestWithService, SetNetworkConditions) {
       "X-DevTools-Emulate-Network-Conditions-Client-Id: 42");
   StartLoadingURL(request, 0);
   client()->RunUntilComplete();
-  EXPECT_EQ(net::ERR_INTERNET_DISCONNECTED,
-            client()->completion_status().error_code);
+  EXPECT_EQ(net::ERR_INTERNET_DISCONNECTED, client()->status().error_code);
   context()->SetNetworkConditions("42", nullptr);
   StartLoadingURL(request, 0);
   client()->RunUntilComplete();
-  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+  EXPECT_EQ(net::OK, client()->status().error_code);
 }
 
 class TestNetworkChangeManagerClient
@@ -359,6 +358,29 @@ class TestNetworkChangeManagerClient
   DISALLOW_COPY_AND_ASSIGN(TestNetworkChangeManagerClient);
 };
 
+class NetworkChangeTest : public testing::Test {
+ public:
+  NetworkChangeTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::IO) {
+    service_ = NetworkServiceImpl::CreateForTesting();
+  }
+
+  ~NetworkChangeTest() override {}
+
+  NetworkService* service() const { return service_.get(); }
+
+ private:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+#if defined(OS_ANDROID)
+  // On Android, NetworkChangeNotifier setup is more involved and needs to
+  // to be split between UI thread and network thread. Use a mock
+  // NetworkChangeNotifier in tests, so the test setup is simpler.
+  net::test::MockNetworkChangeNotifier network_change_notifier_;
+#endif
+  std::unique_ptr<NetworkService> service_;
+};
+
 // mojom:NetworkChangeManager currently doesn't support ChromeOS, which has a
 // different code path to set up net::NetworkChangeNotifier.
 #if defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
@@ -366,7 +388,7 @@ class TestNetworkChangeManagerClient
 #else
 #define MAYBE_NetworkChangeManagerRequest NetworkChangeManagerRequest
 #endif
-TEST_F(NetworkServiceTest, MAYBE_NetworkChangeManagerRequest) {
+TEST_F(NetworkChangeTest, MAYBE_NetworkChangeManagerRequest) {
   TestNetworkChangeManagerClient manager_client(service());
   net::NetworkChangeNotifier::NotifyObserversOfNetworkChangeForTests(
       net::NetworkChangeNotifier::CONNECTION_3G);
@@ -416,6 +438,12 @@ class NetworkServiceNetworkChangeTest
   }
 
   mojom::NetworkServicePtr network_service_;
+#if defined(OS_ANDROID)
+  // On Android, NetworkChangeNotifier setup is more involved and needs
+  // to be split between UI thread and network thread. Use a mock
+  // NetworkChangeNotifier in tests, so the test setup is simpler.
+  net::test::MockNetworkChangeNotifier network_change_notifier_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(NetworkServiceNetworkChangeTest);
 };

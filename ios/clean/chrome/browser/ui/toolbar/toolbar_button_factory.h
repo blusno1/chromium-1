@@ -7,14 +7,14 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/clean/chrome/browser/ui/toolbar/toolbar_style.h"
+#import "ios/chrome/browser/ui/toolbar/clean/toolbar_style.h"
 
 @class ToolbarButton;
-@class ToolbarConfiguration;
+@class CleanToolbarConfiguration;
 
 // ToolbarButton Factory protocol to create ToolbarButton objects with certain
 // style and configuration, depending of the implementation.
-@interface ToolbarButtonFactory : NSObject
+@interface CleanToolbarButtonFactory : NSObject
 
 - (instancetype)initWithStyle:(ToolbarStyle)style NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
@@ -23,7 +23,7 @@
 // Configuration object for styling. It is used by the factory to set the style
 // of the buttons title.
 @property(nonatomic, strong, readonly)
-    ToolbarConfiguration* toolbarConfiguration;
+    CleanToolbarConfiguration* toolbarConfiguration;
 
 // Back ToolbarButton.
 - (ToolbarButton*)backToolbarButton;

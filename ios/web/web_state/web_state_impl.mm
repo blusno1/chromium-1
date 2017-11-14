@@ -182,11 +182,6 @@ void WebStateImpl::OnTitleChanged() {
     observer.TitleWasSet(this);
 }
 
-void WebStateImpl::OnVisibleSecurityStateChange() {
-  for (auto& observer : observers_)
-    observer.DidChangeVisibleSecurityState(this);
-}
-
 void WebStateImpl::OnDialogSuppressed() {
   DCHECK(ShouldSuppressDialogs());
   for (auto& observer : observers_)
@@ -261,14 +256,9 @@ void WebStateImpl::OnPageLoaded(const GURL& url, bool load_success) {
     observer.PageLoaded(this, load_completion_status);
 }
 
-void WebStateImpl::OnFormActivityRegistered(const std::string& form_name,
-                                            const std::string& field_name,
-                                            const std::string& type,
-                                            const std::string& value,
-                                            bool input_missing) {
+void WebStateImpl::OnFormActivityRegistered(const FormActivityParams& params) {
   for (auto& observer : observers_) {
-    observer.FormActivityRegistered(this, form_name, field_name, type, value,
-                                    input_missing);
+    observer.FormActivityRegistered(this, params);
   }
 }
 
@@ -350,14 +340,6 @@ bool WebStateImpl::IsShowingWebInterstitial() const {
 
 WebInterstitial* WebStateImpl::GetWebInterstitial() const {
   return interstitial_;
-}
-
-void WebStateImpl::OnPasswordInputShownOnHttp() {
-  [web_controller_ didShowPasswordInputOnHTTP];
-}
-
-void WebStateImpl::OnCreditCardInputShownOnHttp() {
-  [web_controller_ didShowCreditCardInputOnHTTP];
 }
 
 net::HttpResponseHeaders* WebStateImpl::GetHttpResponseHeaders() const {
@@ -538,6 +520,11 @@ WebStateInterfaceProvider* WebStateImpl::GetWebStateInterfaceProvider() {
         base::MakeUnique<WebStateInterfaceProvider>();
   }
   return web_state_interface_provider_.get();
+}
+
+void WebStateImpl::DidChangeVisibleSecurityState() {
+  for (auto& observer : observers_)
+    observer.DidChangeVisibleSecurityState(this);
 }
 
 void WebStateImpl::BindInterfaceRequestFromMainFrame(

@@ -433,6 +433,16 @@ class BlinkPerfCanvas(_BlinkPerfBenchmark):
         # pylint: disable=line-too-long
         self.DisableStory('draw-static-canvas-2d-to-hw-accelerated-canvas-2d.html',
             [story.expectations.ANDROID_NEXUS6], 'crbug.com/765799')
+        self.DisableStory(
+            'draw-static-canvas-2d-to-hw-accelerated-canvas-2d.html',
+            [story.expectations.ANDROID_NEXUS5,
+             story.expectations.ANDROID_NEXUS5X],
+            'crbug.com/784540')
+        self.DisableStory(
+            'draw-dynamic-canvas-2d-to-hw-accelerated-canvas-2d.html',
+            [story.expectations.ANDROID_NEXUS5,
+             story.expectations.ANDROID_NEXUS5X],
+            'crbug.com/784540')
     return StoryExpectations()
 
 @benchmark.Owner(emails=['jbroman@chromium.org',
@@ -570,4 +580,7 @@ class BlinkPerfShadowDOM(_BlinkPerfBenchmark):
       def SetExpectations(self):
         self.DisableBenchmark([story.expectations.ANDROID_NEXUS5X],
                               'crbug.com/702319')
+        self.DisableStory('v0-distribution-with-multiple-shadow-roots.html',
+                          [story.expectations.ALL],
+                          'crbug.com/780506')
     return StoryExpectations()

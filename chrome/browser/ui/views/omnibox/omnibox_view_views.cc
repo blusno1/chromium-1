@@ -197,8 +197,8 @@ void OmniboxViewViews::OnTabChanged(const content::WebContents* web_contents) {
   if (state) {
     // This assumes that the omnibox has already been focused or blurred as
     // appropriate; otherwise, a subsequent OnFocus() or OnBlur() call could
-    // goof up the selection.  See comments at the end of
-    // BrowserView::ActiveTabChanged().
+    // goof up the selection.  See comments on OnActiveTabChanged() call in
+    // Browser::ActiveTabChanged().
     SelectRange(state->selection);
     saved_selection_for_focus_change_ = state->saved_selection_for_focus_change;
   }
@@ -1033,10 +1033,7 @@ void OmniboxViewViews::OnAfterCutOrCopy(ui::ClipboardType clipboard_type) {
     UMA_HISTOGRAM_COUNTS(OmniboxEditModel::kCutOrCopyAllTextHistogram, 1);
 
   ui::ScopedClipboardWriter scoped_clipboard_writer(clipboard_type);
-  if (write_url)
-    scoped_clipboard_writer.WriteURL(selected_text);
-  else
-    scoped_clipboard_writer.WriteText(selected_text);
+  scoped_clipboard_writer.WriteText(selected_text);
 }
 
 void OmniboxViewViews::OnWriteDragData(ui::OSExchangeData* data) {

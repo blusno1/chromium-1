@@ -11,7 +11,6 @@
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/testing/DummyPageHolder.h"
 #include "core/workers/GlobalScopeCreationParams.h"
@@ -25,6 +24,7 @@
 #include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/wtf/text/TextPosition.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebURLRequest.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -77,7 +77,7 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
   void RunTestOnWorkletThread(TestCalback callback) {
     std::unique_ptr<WorkerThread> worklet = CreateAnimationWorkletThread();
     WaitableEvent waitable_event;
-    TaskRunnerHelper::Get(TaskType::kUnthrottled, worklet.get())
+    worklet->GetTaskRunner(TaskType::kUnthrottled)
         ->PostTask(BLINK_FROM_HERE,
                    CrossThreadBind(callback, CrossThreadUnretained(this),
                                    CrossThreadUnretained(worklet.get()),
@@ -184,6 +184,7 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
     CompositorMutatorInputState::AnimationState test_animation_state;
     test_animation_state.animation_player_id = 1;
     test_animation_state.name = "test";
+    test_animation_state.current_time = 5000;
     state.animations = {test_animation_state};
 
     std::unique_ptr<CompositorMutatorOutputState> output =
@@ -235,6 +236,7 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
     CompositorMutatorInputState::AnimationState test_animation_state;
     test_animation_state.animation_player_id = 1;
     test_animation_state.name = "test";
+    test_animation_state.current_time = 5000;
     state.animations = {test_animation_state};
 
     std::unique_ptr<CompositorMutatorOutputState> output =
@@ -265,9 +267,8 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
     EXPECT_TRUE(script_state);
     ScriptModule module = ScriptModule::Compile(
         script_state->GetIsolate(), source_code, "worklet.js",
-        kSharableCrossOrigin, network::mojom::FetchCredentialsMode::kOmit,
-        "" /* nonce */, kParserInserted, TextPosition::MinimumPosition(),
-        ASSERT_NO_EXCEPTION);
+        ScriptFetchOptions(), kSharableCrossOrigin,
+        TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
     EXPECT_FALSE(module.IsNull());
     ScriptValue exception = module.Instantiate(script_state);
     EXPECT_TRUE(exception.IsEmpty());
@@ -290,7 +291,7 @@ TEST_F(AnimationWorkletGlobalScopeTest, ConstructAndAnimate) {
       &AnimationWorkletGlobalScopeTest::RunConstructAndAnimateTestOnWorklet);
 }
 
-TEST_F(AnimationWorkletGlobalScopeTest, AnimtionOutput) {
+TEST_F(AnimationWorkletGlobalScopeTest, AnimationOutput) {
   RunTestOnWorkletThread(
       &AnimationWorkletGlobalScopeTest::RunAnimateOutputTestOnWorklet);
 }

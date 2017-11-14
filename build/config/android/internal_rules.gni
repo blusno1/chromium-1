@@ -1110,7 +1110,7 @@ if (enable_java_templates) {
 
     _enable_assert =
         defined(invoker.enable_build_hooks) && invoker.enable_build_hooks &&
-        (is_java_debug || dcheck_always_on)
+        (is_java_debug || dcheck_always_on || report_java_assert)
 
     _enable_custom_resources = defined(invoker.enable_build_hooks_android) &&
                                invoker.enable_build_hooks_android
@@ -1515,6 +1515,10 @@ if (enable_java_templates) {
         ]
       }
 
+      if (defined(invoker.support_zh_hk) && invoker.support_zh_hk) {
+        args += [ "--support-zh-hk" ]
+      }
+
       if (defined(invoker.args)) {
         args += invoker.args
       }
@@ -1648,6 +1652,9 @@ if (enable_java_templates) {
           args += [ "--xxxhdpi-whitelist=${invoker.xxxhdpi_whitelist}" ]
         }
       }
+      if (defined(invoker.support_zh_hk) && invoker.support_zh_hk) {
+        args += [ "--support-zh-hk" ]
+      }
     }
 
     if (_post_process) {
@@ -1740,6 +1747,15 @@ if (enable_java_templates) {
         # TODO(mlopatkin) We are relying on the fact that assets_build_config is
         # an APK build_config.
         args += [ "--java-resources=@FileArg($_rebased_build_config:java_resources_jars)" ]
+
+        if (defined(invoker.apk_name)) {
+          # The supersize tool will search in this directory for each apk.
+          _apk_pak_info_path = "size-info/${invoker.apk_name}.apk.pak.info"
+          args += [
+            "--apk-pak-info-path",
+            _apk_pak_info_path,
+          ]
+        }
       }
       if (defined(invoker.write_asset_list) && invoker.write_asset_list) {
         args += [ "--write-asset-list" ]
@@ -1960,6 +1976,10 @@ if (enable_java_templates) {
 
       if (defined(_dex_path)) {
         dex_path = _dex_path
+      }
+
+      if (defined(invoker.apk_name)) {
+        apk_name = invoker.apk_name
       }
 
       output_apk_path = _packaged_apk_path

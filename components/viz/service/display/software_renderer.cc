@@ -115,8 +115,10 @@ void SoftwareRenderer::BindFramebufferToOutputSurface() {
   current_canvas_ = root_canvas_;
 }
 
-bool SoftwareRenderer::BindFramebufferToTexture(
-    const cc::ScopedResource* texture) {
+void SoftwareRenderer::BindFramebufferToTexture(
+    const RenderPassId render_pass_id) {
+  cc::ScopedResource* texture = render_pass_textures_[render_pass_id].get();
+  DCHECK(texture);
   DCHECK(texture->id());
 
   // Explicitly release lock, otherwise we can crash when try to lock
@@ -128,7 +130,6 @@ bool SoftwareRenderer::BindFramebufferToTexture(
   current_framebuffer_canvas_ =
       std::make_unique<SkCanvas>(current_framebuffer_lock_->sk_bitmap());
   current_canvas_ = current_framebuffer_canvas_.get();
-  return true;
 }
 
 void SoftwareRenderer::SetScissorTestRect(const gfx::Rect& scissor_rect) {
@@ -199,10 +200,10 @@ void SoftwareRenderer::PrepareSurfaceForPass(
 
 bool SoftwareRenderer::IsSoftwareResource(ResourceId resource_id) const {
   switch (resource_provider_->GetResourceType(resource_id)) {
-    case cc::ResourceProvider::RESOURCE_TYPE_GPU_MEMORY_BUFFER:
-    case cc::ResourceProvider::RESOURCE_TYPE_GL_TEXTURE:
+    case ResourceType::kGpuMemoryBuffer:
+    case ResourceType::kTexture:
       return false;
-    case cc::ResourceProvider::RESOURCE_TYPE_BITMAP:
+    case ResourceType::kBitmap:
       return true;
   }
 
@@ -570,19 +571,6 @@ void SoftwareRenderer::DrawUnsupportedQuad(const DrawQuad* quad) {
 
 void SoftwareRenderer::CopyDrawnRenderPass(
     std::unique_ptr<CopyOutputRequest> request) {
-  // SoftwareRenderer supports RGBA_BITMAP only. For legacy reasons, if a
-  // RGBA_TEXTURE request is being made, clients are prepared to accept
-  // RGBA_BITMAP results.
-  //
-  // TODO(miu): Get rid of the legacy behavior and send empty results for
-  // RGBA_TEXTURE requests once tab capture is moved into VIZ.
-  // http://crbug.com/754872
-  switch (request->result_format()) {
-    case CopyOutputRequest::ResultFormat::RGBA_BITMAP:
-    case CopyOutputRequest::ResultFormat::RGBA_TEXTURE:
-      break;
-  }
-
   // Finalize the source subrect, as the entirety of the RenderPass's output
   // optionally clamped to the requested copy area. Then, compute the result
   // rect, which is the selection clamped to the maximum possible result bounds.
@@ -645,8 +633,20 @@ void SoftwareRenderer::CopyDrawnRenderPass(
       return;
   }
 
-  request->SendResult(
-      std::make_unique<CopyOutputSkBitmapResult>(result_rect, bitmap));
+  // Deliver the result. SoftwareRenderer supports RGBA_BITMAP and I420_PLANES
+  // only. For legacy reasons, if a RGBA_TEXTURE request is being made, clients
+  // are prepared to accept RGBA_BITMAP results.
+  //
+  // TODO(crbug/754872): Get rid of the legacy behavior and send empty results
+  // for RGBA_TEXTURE requests once tab capture is moved into VIZ.
+  const CopyOutputResult::Format result_format =
+      (request->result_format() == CopyOutputResult::Format::RGBA_TEXTURE)
+          ? CopyOutputResult::Format::RGBA_BITMAP
+          : request->result_format();
+  // Note: The CopyOutputSkBitmapResult automatically provides I420 format
+  // conversion, if needed.
+  request->SendResult(std::make_unique<CopyOutputSkBitmapResult>(
+      result_format, result_rect, bitmap));
 }
 
 void SoftwareRenderer::SetEnableDCLayers(bool enable) {
@@ -799,6 +799,74 @@ sk_sp<SkShader> SoftwareRenderer::GetBackgroundFilterShader(
 
   return filter_backdrop_image->makeShader(content_tile_mode, content_tile_mode,
                                            &filter_backdrop_transform);
+}
+
+void SoftwareRenderer::UpdateRenderPassTextures(
+    const RenderPassList& render_passes_in_draw_order,
+    const base::flat_map<RenderPassId, RenderPassRequirements>&
+        render_passes_in_frame) {
+  std::vector<RenderPassId> passes_to_delete;
+  for (const auto& pair : render_pass_textures_) {
+    auto render_pass_it = render_passes_in_frame.find(pair.first);
+    if (render_pass_it == render_passes_in_frame.end()) {
+      passes_to_delete.push_back(pair.first);
+      continue;
+    }
+
+    gfx::Size required_size = render_pass_it->second.size;
+    ResourceTextureHint required_hint = render_pass_it->second.hint;
+    cc::ScopedResource* texture = pair.second.get();
+    DCHECK(texture);
+
+    bool size_appropriate = texture->size().width() >= required_size.width() &&
+                            texture->size().height() >= required_size.height();
+    bool hint_appropriate = (texture->hint() & required_hint) == required_hint;
+    if (texture->id() && (!size_appropriate || !hint_appropriate))
+      texture->Free();
+  }
+
+  // Delete RenderPass textures from the previous frame that will not be used
+  // again.
+  for (size_t i = 0; i < passes_to_delete.size(); ++i)
+    render_pass_textures_.erase(passes_to_delete[i]);
+}
+
+void SoftwareRenderer::AllocateRenderPassResourceIfNeeded(
+    const RenderPassId render_pass_id,
+    const gfx::Size& enlarged_size,
+    ResourceTextureHint texturehint) {
+  auto& resource = render_pass_textures_[render_pass_id];
+  if (resource && resource->id())
+    return;
+
+  if (!resource)
+    resource = std::make_unique<cc::ScopedResource>(resource_provider_);
+  resource->Allocate(enlarged_size, texturehint, BackbufferFormat(),
+                     current_frame()->current_render_pass->color_space);
+}
+
+bool SoftwareRenderer::IsRenderPassResourceAllocated(
+    const RenderPassId render_pass_id) const {
+  auto texture_it = render_pass_textures_.find(render_pass_id);
+  if (texture_it == render_pass_textures_.end())
+    return false;
+
+  cc::ScopedResource* texture = texture_it->second.get();
+  DCHECK(texture);
+  return texture->id() != 0;
+}
+
+const gfx::Size& SoftwareRenderer::GetRenderPassTextureSize(
+    const RenderPassId render_pass_id) {
+  cc::ScopedResource* texture = render_pass_textures_[render_pass_id].get();
+  DCHECK(texture);
+  return texture->size();
+}
+
+bool SoftwareRenderer::HasAllocatedResourcesForTesting(
+    const RenderPassId render_pass_id) const {
+  auto iter = render_pass_textures_.find(render_pass_id);
+  return iter != render_pass_textures_.end() && iter->second->id();
 }
 
 }  // namespace viz

@@ -64,7 +64,6 @@
 #include "core/paint/FirstMeaningfulPaintDetector.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/graphics/SVGImageChromeClient.h"
-#include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "core/timing/PerformanceBase.h"
 #include "platform/WebFrameScheduler.h"
@@ -171,6 +170,12 @@ mojom::FetchCacheMode DetermineFrameCacheMode(Frame* frame,
   return DetermineCacheMode(RequestMethod::kIsNotPost,
                             RequestType::kIsNotConditional,
                             ResourceType::kIsNotMainResource, load_type);
+}
+
+bool IsClientHintsAllowed(const KURL& url) {
+  return (url.ProtocolIs("http") || url.ProtocolIs("https")) &&
+         (SecurityOrigin::IsSecure(url) ||
+          SecurityOrigin::Create(url)->IsLocalhost());
 }
 
 }  // namespace
@@ -510,9 +515,11 @@ void FrameFetchContext::DispatchDidReceiveResponse(
                               ->Loader()
                               .GetProvisionalDocumentLoader()) {
     FrameClientHintsPreferencesContext hints_context(GetFrame());
-    document_loader_->GetClientHintsPreferences()
-        .UpdateFromAcceptClientHintsHeader(
-            response.HttpHeaderField(HTTPNames::Accept_CH), &hints_context);
+    if (IsClientHintsAllowed(response.Url())) {
+      document_loader_->GetClientHintsPreferences()
+          .UpdateFromAcceptClientHintsHeader(
+              response.HttpHeaderField(HTTPNames::Accept_CH), &hints_context);
+    }
     // When response is received with a provisional docloader, the resource
     // haven't committed yet, and we cannot load resources, only preconnect.
     resource_loading_policy = LinkLoader::kDoNotLoadResources;
@@ -682,13 +689,20 @@ void FrameFetchContext::DidLoadResource(Resource* resource) {
 }
 
 void FrameFetchContext::AddResourceTiming(const ResourceTimingInfo& info) {
-  Document* initiator_document = document_ && info.IsMainResource()
-                                     ? document_->ParentDocument()
-                                     : document_.Get();
-  if (!initiator_document || !initiator_document->domWindow())
+  // Normally, |document_| is cleared on Document shutdown. However, Documents
+  // for HTML imports will also not have a LocalFrame set: in that case, also
+  // early return, as there is nothing to report the resource timing to.
+  if (!document_ || !document_->GetFrame())
     return;
-  DOMWindowPerformance::performance(*initiator_document->domWindow())
-      ->AddResourceTiming(info);
+
+  Frame* initiator_frame = info.IsMainResource()
+                               ? document_->GetFrame()->Tree().Parent()
+                               : document_->GetFrame();
+
+  if (!initiator_frame)
+    return;
+
+  initiator_frame->AddResourceTiming(info);
 }
 
 bool FrameFetchContext::AllowImage(bool images_enabled, const KURL& url) const {
@@ -808,6 +822,9 @@ void FrameFetchContext::AddClientHintsIfNecessary(
     const ClientHintsPreferences& hints_preferences,
     const FetchParameters::ResourceWidth& resource_width,
     ResourceRequest& request) {
+  if (!IsClientHintsAllowed(request.Url()))
+    return;
+
   WebEnabledClientHints enabled_hints;
   // Check if |url| is allowed to run JavaScript. If not, client hints are not
   // attached to the requests that initiate on the render side.
@@ -1148,6 +1165,9 @@ bool FrameFetchContext::ShouldSendClientHint(
 
 void FrameFetchContext::ParseAndPersistClientHints(
     const ResourceResponse& response) {
+  if (!IsClientHintsAllowed(response.Url()))
+    return;
+
   ClientHintsPreferences hints_preferences;
   WebEnabledClientHints enabled_client_hints;
   TimeDelta persist_duration;

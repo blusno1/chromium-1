@@ -86,7 +86,7 @@ class DataConsumerHandleTestUtil {
     class Context : public ThreadSafeRefCounted<Context> {
      public:
       static scoped_refptr<Context> Create() {
-        return WTF::AdoptRef(new Context);
+        return base::AdoptRef(new Context);
       }
       void RecordAttach(const String& handle) {
         MutexLocker locker(logging_mutex_);
@@ -222,7 +222,7 @@ class DataConsumerHandleTestUtil {
           : name_(name.IsolatedCopy()), context_(std::move(context)) {}
 
       std::unique_ptr<Reader> ObtainReader(Client*) override {
-        return WTF::MakeUnique<ReaderImpl>(name_, context_);
+        return std::make_unique<ReaderImpl>(name_, context_);
       }
       const char* DebugName() const override {
         return "ThreadingTestBase::DataConsumerHandle";
@@ -267,11 +267,11 @@ class DataConsumerHandleTestUtil {
                                           public WebDataConsumerHandle::Client {
    public:
     using Self = ThreadingHandleNotificationTest;
-    static scoped_refptr<Self> Create() { return WTF::AdoptRef(new Self); }
+    static scoped_refptr<Self> Create() { return base::AdoptRef(new Self); }
 
     void Run(std::unique_ptr<WebDataConsumerHandle> handle) {
       ThreadHolder holder(this);
-      waitable_event_ = WTF::MakeUnique<WaitableEvent>();
+      waitable_event_ = std::make_unique<WaitableEvent>();
       handle_ = std::move(handle);
 
       PostTaskToReadingThreadAndWait(
@@ -299,11 +299,11 @@ class DataConsumerHandleTestUtil {
         public WebDataConsumerHandle::Client {
    public:
     using Self = ThreadingHandleNoNotificationTest;
-    static scoped_refptr<Self> Create() { return WTF::AdoptRef(new Self); }
+    static scoped_refptr<Self> Create() { return base::AdoptRef(new Self); }
 
     void Run(std::unique_ptr<WebDataConsumerHandle> handle) {
       ThreadHolder holder(this);
-      waitable_event_ = WTF::MakeUnique<WaitableEvent>();
+      waitable_event_ = std::make_unique<WaitableEvent>();
       handle_ = std::move(handle);
 
       PostTaskToReadingThreadAndWait(
@@ -369,7 +369,7 @@ class DataConsumerHandleTestUtil {
     class Context final : public ThreadSafeRefCounted<Context> {
      public:
       static scoped_refptr<Context> Create() {
-        return WTF::AdoptRef(new Context);
+        return base::AdoptRef(new Context);
       }
 
       // This function cannot be called after creating a tee.

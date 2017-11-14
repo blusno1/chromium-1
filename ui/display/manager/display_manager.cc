@@ -263,6 +263,9 @@ DisplayManager::BeginEndNotifier::~BeginEndNotifier() {
 DisplayManager::DisplayManager(std::unique_ptr<Screen> screen)
     : screen_(std::move(screen)),
       layout_store_(new DisplayLayoutStore),
+      is_multi_mirroring_enabled_(
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              ::switches::kEnableMultiMirroring)),
       weak_ptr_factory_(this) {
 #if defined(OS_CHROMEOS)
   configure_displays_ = chromeos::IsRunningAsSystemCompositor();
@@ -360,10 +363,12 @@ DisplayIdList DisplayManager::GetCurrentDisplayIdList() const {
   DisplayIdList display_id_list = CreateDisplayIdList(active_display_list_);
 
   if (IsInSoftwareMirrorMode()) {
-    CHECK_EQ(2u, num_connected_displays());
-    // This comment is to make it easy to distinguish the crash
-    // between two checks.
-    CHECK_EQ(1u, active_display_list_.size());
+    if (!is_multi_mirroring_enabled_) {
+      CHECK_EQ(2u, num_connected_displays());
+      // This comment is to make it easy to distinguish the crash
+      // between two checks.
+      CHECK_EQ(1u, active_display_list_.size());
+    }
 
     DisplayIdList software_mirroring_display_id_list =
         CreateDisplayIdList(software_mirroring_display_list_);
@@ -1078,7 +1083,7 @@ bool DisplayManager::IsInHardwareMirrorMode() const {
   return true;
 }
 
-DisplayIdList DisplayManager::GetMirroringDstDisplayIdList() const {
+DisplayIdList DisplayManager::GetMirroringDestinationDisplayIdList() const {
   if (IsInSoftwareMirrorMode())
     return CreateDisplayIdList(software_mirroring_display_list_);
   if (IsInHardwareMirrorMode())
@@ -1108,7 +1113,7 @@ bool DisplayManager::IsInUnifiedMode() const {
 
 void DisplayManager::SetUnifiedDesktopMatrix(
     const UnifiedDesktopLayoutMatrix& matrix) {
-  current_matrix_ = matrix;
+  current_unified_desktop_matrix_ = matrix;
   SetDefaultMultiDisplayModeForCurrentDisplays(UNIFIED);
 }
 
@@ -1172,9 +1177,10 @@ int64_t DisplayManager::GetDisplayIdForUIScaling() const {
 }
 
 void DisplayManager::SetMirrorMode(bool mirror) {
-  // TODO(oshima): Enable mirror mode for 2> displays. crbug.com/589319.
-  if (num_connected_displays() != 2)
+  if ((is_multi_mirroring_enabled_ && num_connected_displays() < 2) ||
+      (!is_multi_mirroring_enabled_ && num_connected_displays() != 2)) {
     return;
+  }
 
 #if defined(OS_CHROMEOS)
   if (configure_displays_) {
@@ -1462,8 +1468,10 @@ void DisplayManager::CreateSoftwareMirroringDisplayInfo(
   // mirrored.
   switch (multi_display_mode_) {
     case MIRRORING: {
-      if (display_info_list->size() != 2)
+      if ((is_multi_mirroring_enabled_ && display_info_list->size() < 2) ||
+          (!is_multi_mirroring_enabled_ && display_info_list->size() != 2)) {
         return;
+      }
 
       int64_t source_id = kInvalidDisplayId;
       if (Display::HasInternalDisplay()) {
@@ -1520,27 +1528,28 @@ void DisplayManager::CreateUnifiedDesktopDisplayInfo(
   if (display_info_list->size() == 1)
     return;
 
-  if (!ValidateMatrix(current_matrix_) ||
-      !ValidateMatrixForDisplayInfoList(*display_info_list, current_matrix_)) {
+  if (!ValidateMatrix(current_unified_desktop_matrix_) ||
+      !ValidateMatrixForDisplayInfoList(*display_info_list,
+                                        current_unified_desktop_matrix_)) {
     // Recreate the default matrix where displays are laid out horizontally from
     // left to right.
-    current_matrix_.clear();
-    current_matrix_.resize(1);
+    current_unified_desktop_matrix_.clear();
+    current_unified_desktop_matrix_.resize(1);
     for (const auto& info : *display_info_list)
-      current_matrix_[0].emplace_back(info.id());
+      current_unified_desktop_matrix_[0].emplace_back(info.id());
   }
 
   software_mirroring_display_list_.clear();
   mirroring_display_id_to_unified_matrix_row_.clear();
   unified_display_rows_heights_.clear();
 
-  const size_t num_rows = current_matrix_.size();
-  const size_t num_columns = current_matrix_[0].size();
+  const size_t num_rows = current_unified_desktop_matrix_.size();
+  const size_t num_columns = current_unified_desktop_matrix_[0].size();
 
   // 1 - Find the maximum height per each row.
   std::vector<int> rows_max_heights;
   rows_max_heights.reserve(num_rows);
-  for (const auto& row : current_matrix_) {
+  for (const auto& row : current_unified_desktop_matrix_) {
     int max_height = std::numeric_limits<int>::min();
     for (const auto& id : row) {
       const ManagedDisplayInfo* info = FindInfoById(*display_info_list, id);
@@ -1567,7 +1576,7 @@ void DisplayManager::CreateUnifiedDesktopDisplayInfo(
   // Calculate the bounds of each row, and the maximum row width.
   int max_total_width = std::numeric_limits<int>::min();
   for (size_t i = 0; i < num_rows; ++i) {
-    const auto& row = current_matrix_[i];
+    const auto& row = current_unified_desktop_matrix_[i];
     const int max_row_height = rows_max_heights[i];
     gfx::Rect this_row_bounds;
     scales[i].resize(num_columns);
@@ -1608,7 +1617,7 @@ void DisplayManager::CreateUnifiedDesktopDisplayInfo(
   modes_param_list.reserve(num_rows * num_columns);
   int internal_display_index = -1;
   for (size_t i = 0; i < num_rows; ++i) {
-    const auto& row = current_matrix_[i];
+    const auto& row = current_unified_desktop_matrix_[i];
     gfx::Rect row_displays_bounds;
     for (size_t j = 0; j < num_columns; ++j) {
       const auto& id = row[j];

@@ -39,6 +39,8 @@
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_source_type.h"
+#include "net/quic/chromium/bidirectional_stream_quic_impl.h"
+#include "net/quic/chromium/quic_http_stream.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool.h"
 #include "net/socket/client_socket_pool_manager.h"
@@ -905,10 +907,10 @@ int HttpStreamFactoryImpl::Job::DoInitConnectionImpl() {
       destination = destination_;
       ssl_config = &server_ssl_config_;
     }
-    int rv = quic_request_.Request(
-        destination, quic_version_, request_info_.privacy_mode,
-        ssl_config->GetCertVerifyFlags(), url, request_info_.method, net_log_,
-        &net_error_details_, io_callback_);
+    int rv = quic_request_.Request(destination, quic_version_,
+                                   request_info_.privacy_mode,
+                                   ssl_config->GetCertVerifyFlags(), url,
+                                   net_log_, &net_error_details_, io_callback_);
     if (rv == OK) {
       using_existing_quic_session_ = true;
     } else {
@@ -989,8 +991,9 @@ int HttpStreamFactoryImpl::Job::DoInitConnectionImpl() {
   return InitSocketHandleForHttpRequest(
       GetSocketGroup(), destination_, request_info_.extra_headers,
       request_info_.load_flags, priority_, session_, proxy_info_, expect_spdy_,
-      server_ssl_config_, proxy_ssl_config_, request_info_.privacy_mode,
-      net_log_, connection_.get(), resolution_callback, io_callback_);
+      quic_version_, server_ssl_config_, proxy_ssl_config_,
+      request_info_.privacy_mode, net_log_, connection_.get(),
+      resolution_callback, io_callback_);
 }
 
 int HttpStreamFactoryImpl::Job::DoInitConnectionComplete(int result) {
@@ -1087,18 +1090,22 @@ int HttpStreamFactoryImpl::Job::DoInitConnectionComplete(int result) {
       return result;
 
     if (stream_type_ == HttpStreamRequest::BIDIRECTIONAL_STREAM) {
-      bidirectional_stream_impl_ =
-          quic_request_.CreateBidirectionalStreamImpl();
-      if (!bidirectional_stream_impl_) {
+      std::unique_ptr<QuicChromiumClientSession::Handle> session =
+          quic_request_.ReleaseSessionHandle();
+      if (!session) {
         // Quic session is closed before stream can be created.
         return ERR_CONNECTION_CLOSED;
       }
+      bidirectional_stream_impl_.reset(
+          new BidirectionalStreamQuicImpl(std::move(session)));
     } else {
-      stream_ = quic_request_.CreateStream();
-      if (!stream_) {
+      std::unique_ptr<QuicChromiumClientSession::Handle> session =
+          quic_request_.ReleaseSessionHandle();
+      if (!session) {
         // Quic session is closed before stream can be created.
         return ERR_CONNECTION_CLOSED;
       }
+      stream_.reset(new QuicHttpStream(std::move(session)));
     }
     next_state_ = STATE_NONE;
     return OK;

@@ -65,6 +65,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kChromeHomeDestroySuggestions,
     &kChromeHomeDropAllButFirstThumbnail,
     &kChromeHomePromo,
+    &kChromeHomePromoOnStartup,
     &kChromeHomeOptOutSnackbar,
     &kChromeHomeSwipeLogic,
     &kChromeMemexFeature,
@@ -81,6 +82,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &data_reduction_proxy::features::kDataReductionSiteBreakdown,
     &kFullscreenActivity,
     &kImprovedA2HS,
+    &kLanguagesPreference,
     &kNewPhotoPicker,
     &kNoCreditCardAbort,
     &kNTPCondensedLayoutFeature,
@@ -92,6 +94,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kPayWithGoogleV1,
     &kPhysicalWebFeature,
     &kPhysicalWebSharing,
+    &kProgressBarThrottleFeature,
     &kPwaImprovedSplashScreen,
     &kPwaPersistentNotification,
     &kReaderModeInCCT,
@@ -181,6 +184,9 @@ const base::Feature kChromeHomeDropAllButFirstThumbnail{
 const base::Feature kChromeHomePromo{"ChromeHomePromo",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kChromeHomePromoOnStartup{"ChromeHomePromoOnStartup",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kChromeHomeOptOutSnackbar{
     "ChromeHomeOptOutSnackbar", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -231,6 +237,9 @@ const base::Feature kFullscreenActivity{"FullscreenActivity",
 const base::Feature kImprovedA2HS{"ImprovedA2HS",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kLanguagesPreference{"LanguagesPreference",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kSearchEnginePromoExistingDevice{
     "SearchEnginePromo.ExistingDevice", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -244,10 +253,10 @@ const base::Feature kNoCreditCardAbort{"NoCreditCardAbort",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNTPCondensedLayoutFeature{
-    "NTPCondensedLayout", base::FEATURE_DISABLED_BY_DEFAULT};
+    "NTPCondensedLayout", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNTPCondensedTileLayoutFeature{
-    "NTPCondensedTileLayout", base::FEATURE_DISABLED_BY_DEFAULT};
+    "NTPCondensedTileLayout", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNTPLaunchAfterInactivity{
     "NTPLaunchAfterInactivity", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -269,6 +278,9 @@ const base::Feature kPhysicalWebFeature{"PhysicalWeb",
 
 const base::Feature kPhysicalWebSharing{"PhysicalWebSharing",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kProgressBarThrottleFeature{
+    "ProgressBarThrottle", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPwaImprovedSplashScreen{"PwaImprovedSplashScreen",
                                              base::FEATURE_DISABLED_BY_DEFAULT};

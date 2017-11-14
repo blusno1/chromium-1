@@ -15,8 +15,8 @@
 #include "media/base/gmock_callback_support.h"
 #include "media/base/test_helpers.h"
 #include "media/gpu/android/android_video_surface_chooser_impl.h"
-#include "media/gpu/android/fake_android_video_surface_chooser.h"
 #include "media/gpu/android/fake_codec_allocator.h"
+#include "media/gpu/android/mock_android_video_surface_chooser.h"
 #include "media/gpu/android/mock_device_info.h"
 #include "media/gpu/android/mock_surface_texture_gl_owner.h"
 #include "media/gpu/android/video_frame_factory.h"
@@ -62,6 +62,7 @@ class MockServiceContextRef : public service_manager::ServiceContextRef {
 class MockVideoFrameFactory : public VideoFrameFactory {
  public:
   MOCK_METHOD1(Initialize, void(InitCb init_cb));
+  MOCK_METHOD1(MockSetSurfaceBundle, void(scoped_refptr<AVDASurfaceBundle>));
   MOCK_METHOD6(
       MockCreateVideoFrame,
       void(CodecOutputBuffer* raw_output_buffer,
@@ -74,14 +75,24 @@ class MockVideoFrameFactory : public VideoFrameFactory {
                void(base::OnceClosure* closure));
   MOCK_METHOD0(CancelPendingCallbacks, void());
 
+  void SetSurfaceBundle(
+      scoped_refptr<AVDASurfaceBundle> surface_bundle) override {
+    MockSetSurfaceBundle(surface_bundle);
+    if (!surface_bundle) {
+      surface_texture_ = nullptr;
+    } else {
+      surface_texture_ =
+          surface_bundle->overlay ? nullptr : surface_bundle->surface_texture;
+    }
+  }
+
   void CreateVideoFrame(
       std::unique_ptr<CodecOutputBuffer> output_buffer,
-      scoped_refptr<SurfaceTextureGLOwner> surface_texture,
       base::TimeDelta timestamp,
       gfx::Size natural_size,
       PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
       OutputWithReleaseMailboxCB output_cb) override {
-    MockCreateVideoFrame(output_buffer.get(), surface_texture, timestamp,
+    MockCreateVideoFrame(output_buffer.get(), surface_texture_, timestamp,
                          natural_size, promotion_hint_cb, output_cb);
     last_output_buffer_ = std::move(output_buffer);
   }
@@ -92,6 +103,7 @@ class MockVideoFrameFactory : public VideoFrameFactory {
   }
 
   std::unique_ptr<CodecOutputBuffer> last_output_buffer_;
+  scoped_refptr<SurfaceTextureGLOwner> surface_texture_;
   base::OnceClosure last_closure_;
 };
 
@@ -114,7 +126,8 @@ class MediaCodecVideoDecoderTest : public testing::Test {
   }
 
   void CreateMcvd() {
-    auto surface_chooser = base::MakeUnique<NiceMock<FakeSurfaceChooser>>();
+    auto surface_chooser =
+        base::MakeUnique<NiceMock<MockAndroidVideoSurfaceChooser>>();
     surface_chooser_ = surface_chooser.get();
 
     auto surface_texture =
@@ -208,7 +221,7 @@ class MediaCodecVideoDecoderTest : public testing::Test {
   scoped_refptr<DecoderBuffer> fake_decoder_buffer_;
   std::unique_ptr<MockDeviceInfo> device_info_;
   std::unique_ptr<FakeCodecAllocator> codec_allocator_;
-  FakeSurfaceChooser* surface_chooser_;
+  MockAndroidVideoSurfaceChooser* surface_chooser_;
   MockSurfaceTextureGLOwner* surface_texture_;
   MockVideoFrameFactory* video_frame_factory_;
   NiceMock<base::MockCallback<VideoDecoder::DecodeCB>> decode_cb_;

@@ -1266,7 +1266,8 @@ bool FreeList::TakeSnapshot(const String& dump_base_name) {
 }
 
 BasePage::BasePage(PageMemory* storage, BaseArena* arena)
-    : storage_(storage),
+    : magic_(GetMagic()),
+      storage_(storage),
       arena_(arena),
       next_(nullptr),
       swept_(true),
@@ -1562,6 +1563,9 @@ void NormalPage::PopulateObjectStartBitMap() {
   for (Address header_address = start; header_address < PayloadEnd();) {
     HeapObjectHeader* header =
         reinterpret_cast<HeapObjectHeader*>(header_address);
+    // HeapObjectHeaders can be either valid or a FreeListEntry with a zapped
+    // magic value.
+    DCHECK(header->IsValidOrZapped());
     size_t object_offset = header_address - start;
     DCHECK(!(object_offset & kAllocationMask));
     size_t object_start_number = object_offset / kAllocationGranularity;
@@ -1832,7 +1836,7 @@ bool LargeObjectPage::Contains(Address object) {
 
 void HeapDoesNotContainCache::Flush() {
   if (has_entries_) {
-    for (int i = 0; i < kNumberOfEntries; ++i)
+    for (size_t i = 0; i < kNumberOfEntries; ++i)
       entries_[i] = nullptr;
     has_entries_ = false;
   }

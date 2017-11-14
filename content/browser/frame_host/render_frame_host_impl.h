@@ -43,6 +43,7 @@
 #include "content/common/image_downloader/image_downloader.mojom.h"
 #include "content/common/input/input_handler.mojom.h"
 #include "content/common/navigation_params.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/previews_state.h"
@@ -87,6 +88,7 @@ class ListValue;
 }
 
 namespace blink {
+struct FramePolicy;
 struct WebRemoteScrollProperties;
 }
 
@@ -123,7 +125,6 @@ class WebBluetoothServiceImpl;
 struct ContextMenuParams;
 struct FileChooserParams;
 struct FrameOwnerProperties;
-struct FramePolicy;
 struct FileChooserParams;
 struct ResourceResponse;
 struct SubresourceLoaderParams;
@@ -284,11 +285,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
                           const std::string& frame_name,
                           const std::string& frame_unique_name,
                           const base::UnguessableToken& devtools_frame_token,
-                          const FramePolicy& frame_policy,
+                          const blink::FramePolicy& frame_policy,
                           const FrameOwnerProperties& frame_owner_properties);
 
-  // Update this frame's last committed origin.
-  void SetLastCommittedOrigin(const url::Origin& origin);
+  // Update this frame's state at the appropriate time when a navigation
+  // commits. This is called by NavigatorImpl::DidNavigate as a helper, in the
+  // midst of a DidCommitProvisionalLoad call.
+  void DidNavigate(const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+                   bool is_same_document_navigation);
 
   RenderViewHostImpl* render_view_host() { return render_view_host_; }
   RenderFrameHostDelegate* delegate() { return delegate_; }
@@ -304,9 +308,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // The most recent non-net-error URL to commit in this frame.  In almost all
   // cases, use GetLastCommittedURL instead.
   const GURL& last_successful_url() { return last_successful_url_; }
-  void set_last_successful_url(const GURL& url) {
-    last_successful_url_ = url;
-  }
+
+  // Fetch the link-rel canonical URL to be used for sharing to external
+  // applications.
+  void GetCanonicalUrlForSharing(
+      mojom::Frame::GetCanonicalUrlForSharingCallback callback);
 
   // Returns the associated WebUI or null if none applies.
   WebUIImpl* web_ui() const { return web_ui_.get(); }
@@ -615,10 +621,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Returns the feature policy which should be enforced on this RenderFrame.
   blink::FeaturePolicy* feature_policy() { return feature_policy_.get(); }
 
-  // Clears any existing policy and constructs a new policy for this frame,
-  // based on its parent frame.
-  void ResetFeaturePolicy();
-
   // Tells the renderer that this RenderFrame will soon be swapped out, and thus
   // not to create any new modal dialogs until it happens.  This must be done
   // separately so that the ScopedPageLoadDeferrers of any current dialogs are
@@ -680,6 +682,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   mojo::AssociatedBinding<mojom::FrameHost>& frame_host_binding_for_testing() {
     return frame_host_associated_binding_;
   }
+
+  void SetKeepAliveTimeoutForTesting(base::TimeDelta timeout);
 
  protected:
   friend class RenderFrameHostFactory;
@@ -785,7 +789,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
   void OnUpdateToUniqueOrigin(bool is_potentially_trustworthy_unique_origin);
   void OnDidChangeFramePolicy(int32_t frame_routing_id,
-                              const FramePolicy& frame_policy);
+                              const blink::FramePolicy& frame_policy);
   void OnDidChangeFrameOwnerProperties(int32_t frame_routing_id,
                                        const FrameOwnerProperties& properties);
   void OnUpdateTitle(const base::string16& title,
@@ -987,10 +991,17 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Called by |beforeunload_timeout_| when the beforeunload timeout fires.
   void BeforeUnloadTimeout();
 
+  // Update this frame's last committed origin.
+  void SetLastCommittedOrigin(const url::Origin& origin);
+
   // Called when a navigation commits succesfully to |url|. This will update
   // |last_committed_site_url_| if it's not equal to the site url corresponding
   // to |url|.
   void SetLastCommittedSiteUrl(const GURL& url);
+
+  // Clears any existing policy and constructs a new policy for this frame,
+  // based on its parent frame.
+  void ResetFeaturePolicy();
 
   // PlzNavigate: Called when the frame has consumed the StreamHandle and it
   // can be released.
@@ -1282,7 +1293,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // A collection of non-network URLLoaderFactory implementations which are used
   // to service any supported non-network subresource requests for the currently
   // committed navigation.
-  std::vector<std::unique_ptr<mojom::URLLoaderFactory>>
+  ContentBrowserClient::NonNetworkURLLoaderFactoryMap
       non_network_url_loader_factories_;
 
   // Bitfield for renderer-side state that blocks fast shutdown of the frame.
@@ -1345,6 +1356,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::unique_ptr<LegacyIPCFrameInputHandler> legacy_frame_input_handler_;
 
   std::unique_ptr<KeepAliveHandleFactory> keep_alive_handle_factory_;
+  base::TimeDelta keep_alive_timeout_;
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;

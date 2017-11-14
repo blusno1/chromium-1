@@ -69,15 +69,15 @@ bool SelectionModifier::ShouldAlwaysUseDirectionalSelection(LocalFrame* frame) {
 
 SelectionModifier::SelectionModifier(
     const LocalFrame& frame,
-    const VisibleSelection& selection,
+    const SelectionInDOMTree& selection,
     LayoutUnit x_pos_for_vertical_arrow_navigation)
     : frame_(const_cast<LocalFrame*>(&frame)),
-      current_selection_(selection.AsSelection()),
+      current_selection_(selection),
       x_pos_for_vertical_arrow_navigation_(
           x_pos_for_vertical_arrow_navigation) {}
 
 SelectionModifier::SelectionModifier(const LocalFrame& frame,
-                                     const VisibleSelection& selection)
+                                     const SelectionInDOMTree& selection)
     : SelectionModifier(frame, selection, NoXPosForVerticalArrowNavigation()) {}
 
 VisibleSelection SelectionModifier::Selection() const {
@@ -91,7 +91,17 @@ static VisiblePosition ComputeVisibleExtent(
 }
 
 TextDirection SelectionModifier::DirectionOfEnclosingBlock() const {
-  return DirectionOfEnclosingBlockOf(selection_.Extent());
+  const Position& selection_extent = selection_.Extent();
+
+  // TODO(editing-dev): Check for Position::IsNotNull is an easy fix for few
+  // editing/ layout tests, that didn't expect that (e.g.
+  // editing/selection/extend-byline-withfloat.html).
+  // That should be fixed in a more appropriate manner.
+  // We should either have SelectionModifier aborted earlier for null selection,
+  // or do not allow null selection in SelectionModifier at all.
+  return selection_extent.IsNotNull()
+             ? DirectionOfEnclosingBlockOf(selection_extent)
+             : TextDirection::kLtr;
 }
 
 static TextDirection DirectionOf(const VisibleSelection& visible_selection) {
@@ -169,7 +179,7 @@ static SelectionInDOMTree PrepareToModifySelection(
 
 VisiblePosition SelectionModifier::PositionForPlatform(
     bool is_get_start) const {
-  Settings* settings = GetFrame() ? GetFrame()->GetSettings() : nullptr;
+  Settings* settings = GetFrame()->GetSettings();
   if (settings && settings->GetEditingBehaviorType() == kEditingMacBehavior)
     return is_get_start ? selection_.VisibleStart() : selection_.VisibleEnd();
   // Linux and Windows always extend selections from the extent endpoint.
@@ -194,8 +204,7 @@ VisiblePosition SelectionModifier::NextWordPositionForPlatform(
   VisiblePosition position_after_current_word =
       NextWordPosition(original_position);
 
-  if (!GetFrame() ||
-      !GetFrame()->GetEditor().Behavior().ShouldSkipSpaceWhenMovingRight())
+  if (!GetFrame()->GetEditor().Behavior().ShouldSkipSpaceWhenMovingRight())
     return position_after_current_word;
   return CreateVisiblePosition(
       SkipWhitespace(position_after_current_word.DeepEquivalent()));
@@ -323,7 +332,6 @@ VisiblePosition SelectionModifier::ModifyMovingRight(
       return CreateVisiblePosition(selection_.Start(), selection_.Affinity());
     case TextGranularity::kWord: {
       const bool skips_space_when_moving_right =
-          GetFrame() &&
           GetFrame()->GetEditor().Behavior().ShouldSkipSpaceWhenMovingRight();
       return RightWordPosition(ComputeVisibleExtent(selection_),
                                skips_space_when_moving_right);
@@ -494,7 +502,6 @@ VisiblePosition SelectionModifier::ModifyMovingLeft(
       return CreateVisiblePosition(selection_.End(), selection_.Affinity());
     case TextGranularity::kWord: {
       const bool skips_space_when_moving_right =
-          GetFrame() &&
           GetFrame()->GetEditor().Behavior().ShouldSkipSpaceWhenMovingRight();
       return LeftWordPosition(ComputeVisibleExtent(selection_),
                               skips_space_when_moving_right);
@@ -640,7 +647,6 @@ bool SelectionModifier::Modify(SelectionModifyAlteration alter,
           (granularity == TextGranularity::kWord ||
            granularity == TextGranularity::kParagraph ||
            granularity == TextGranularity::kLine) &&
-          GetFrame() &&
           !GetFrame()
                ->GetEditor()
                .Behavior()
@@ -661,8 +667,7 @@ bool SelectionModifier::Modify(SelectionModifyAlteration alter,
       // Standard Mac behavior when extending to a boundary is grow the
       // selection rather than leaving the base in place and moving the
       // extent. Matches NSTextView.
-      if (!GetFrame() ||
-          !GetFrame()
+      if (!GetFrame()
                ->GetEditor()
                .Behavior()
                .ShouldAlwaysGrowSelectionWhenExtendingToBoundary() ||
@@ -845,10 +850,6 @@ LayoutUnit SelectionModifier::LineDirectionPointForBlockDirectionNavigation(
   LayoutUnit x;
 
   if (selection_.IsNone())
-    return x;
-
-  LocalFrame* frame = pos.GetDocument()->GetFrame();
-  if (!frame)
     return x;
 
   if (x_pos_for_vertical_arrow_navigation_ ==

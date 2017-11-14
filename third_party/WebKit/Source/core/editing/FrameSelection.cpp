@@ -27,7 +27,7 @@
 
 #include <stdio.h>
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/css/StylePropertySet.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/CharacterData.h"
 #include "core/dom/Document.h"
@@ -344,8 +344,7 @@ bool FrameSelection::Modify(SelectionModifyAlteration alter,
                             SelectionModifyDirection direction,
                             TextGranularity granularity,
                             SetSelectionBy set_selection_by) {
-  SelectionModifier selection_modifier(*GetFrame(),
-                                       ComputeVisibleSelectionInDOMTree(),
+  SelectionModifier selection_modifier(*GetFrame(), GetSelectionInDOMTree(),
                                        x_pos_for_vertical_arrow_navigation_);
   const bool modified =
       selection_modifier.Modify(alter, direction, granularity);
@@ -1070,9 +1069,9 @@ GranularityStrategy* FrameSelection::GetGranularityStrategy() {
     return granularity_strategy_.get();
 
   if (strategy_type == SelectionStrategy::kDirection)
-    granularity_strategy_ = WTF::MakeUnique<DirectionGranularityStrategy>();
+    granularity_strategy_ = std::make_unique<DirectionGranularityStrategy>();
   else
-    granularity_strategy_ = WTF::MakeUnique<CharacterGranularityStrategy>();
+    granularity_strategy_ = std::make_unique<CharacterGranularityStrategy>();
   return granularity_strategy_.get();
 }
 

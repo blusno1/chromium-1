@@ -73,6 +73,9 @@ std::unique_ptr<JSONObject> ContentLayerClientImpl::LayerAsJSON(
   std::unique_ptr<JSONObject> json = JSONObject::Create();
   json->SetString("name", debug_name_);
 
+  if (context.flags & kLayerTreeIncludesDebugInfo)
+    json->SetString("this", String::Format("%p", cc_picture_layer_.get()));
+
   FloatPoint position(cc_picture_layer_->offset_to_transform_parent().x(),
                       cc_picture_layer_->offset_to_transform_parent().y());
   if (position != FloatPoint())
@@ -98,7 +101,7 @@ std::unique_ptr<JSONObject> ContentLayerClientImpl::LayerAsJSON(
                     background_color.NameForLayoutTreeAsText());
   }
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   if (context.flags & kLayerTreeIncludesDebugInfo)
     json->SetValue("paintChunkContents", paint_chunk_debug_data_->Clone());
 #endif
@@ -145,10 +148,11 @@ scoped_refptr<cc::PictureLayer> ContentLayerClientImpl::UpdateCcPictureLayer(
   // TODO(wangxianzhu): Avoid calling DebugName() in official release build.
   debug_name_ = paint_chunks[0]->id.client.DebugName();
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   paint_chunk_debug_data_ = JSONArray::Create();
   for (const auto* chunk : paint_chunks) {
     auto json = JSONObject::Create();
+    json->SetString("data", chunk->ToString());
     json->SetArray("displayItems",
                    paint_artifact.GetDisplayItemList().SubsequenceAsJSON(
                        chunk->begin_index, chunk->end_index,

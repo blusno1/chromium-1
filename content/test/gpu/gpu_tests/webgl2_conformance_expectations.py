@@ -48,6 +48,13 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Skip('conformance/glsl/bugs/sampler-array-struct-function-arg.html',
         bug=757097)
 
+    # Failing on Windows and Linux with NVIDIA GPUs and OpenGL driver.
+    self.Fail('conformance/glsl/bugs/vector-scalar-arithmetic-inside-loop.html',
+        ['nvidia'], bug=772651)
+    self.Fail('conformance/glsl/bugs/' +
+        'vector-scalar-arithmetic-inside-loop-complex.html',
+        ['nvidia'], bug=772651)
+
     # All platforms.
     self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
     self.Fail('conformance2/glsl3/tricky-loop-conditions.html', bug=483282)
@@ -157,6 +164,11 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance2/glsl3/' +
         'vector-dynamic-indexing-swizzled-lvalue.html',
         ['win', 'nvidia', 'opengl'], bug=709874)
+    self.Flaky('conformance2/rendering/attrib-type-match.html',
+        ['win', 'nvidia', 'opengl'], bug=782254)
+    self.Fail('conformance2/textures/canvas_sub_rectangle/' +
+        'tex-2d-rg16f-rg-float.html',
+        ['win', 'nvidia', 'opengl'], bug=784849)
 
     # Win / AMD
     self.Fail('conformance2/rendering/blitframebuffer-stencil-only.html',
@@ -735,10 +747,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     # This test causes a lost device and then the next test fails.
     self.Skip('conformance2/rendering/blitframebuffer-size-overflow.html',
         ['linux', ('nvidia', 0x1cb3)], bug=709320)
-    # Failing reliably on tryservers.
-    self.Fail('conformance2/offscreencanvas/' +
-        'offscreencanvas-transfer-image-bitmap.html',
-        ['linux', ('nvidia', 0x1cb3)], bug=781418)
     # Observed flaky on Swarmed bots. Some of these were directly
     # observed, some not. We can't afford any flakes on the tryservers
     # so mark them all flaky.

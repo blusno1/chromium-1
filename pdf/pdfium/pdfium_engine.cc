@@ -1405,9 +1405,15 @@ bool PDFiumEngine::HandleEvent(const pp::InputEvent& event) {
 
   DCHECK(defer_page_unload_);
   defer_page_unload_ = false;
-  for (int page_index : deferred_page_unloads_)
+
+  // Store the pages to unload away because the act of unloading pages can cause
+  // there to be more pages to unload. We leave those extra pages to be unloaded
+  // on the next go around.
+  std::vector<int> pages_to_unload;
+  std::swap(pages_to_unload, deferred_page_unloads_);
+  for (int page_index : pages_to_unload)
     pages_[page_index]->Unload();
-  deferred_page_unloads_.clear();
+
   return rv;
 }
 
@@ -3998,6 +4004,9 @@ void PDFiumEngine::Form_OutputSelectedRect(FPDF_FORMFILLINFO* param,
   pp::Rect rect = engine->pages_[page_index]->PageToScreen(
       engine->GetVisibleRect().point(), engine->current_zoom_, left, top, right,
       bottom, engine->current_rotation_);
+  if (rect.IsEmpty())
+    return;
+
   engine->form_highlights_.push_back(rect);
 }
 

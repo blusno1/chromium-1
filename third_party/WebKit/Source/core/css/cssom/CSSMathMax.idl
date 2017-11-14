@@ -10,4 +10,5 @@
   RaisesException=Constructor,
   RuntimeEnabled=CSSTypedOM
 ] interface CSSMathMax : CSSMathValue {
+  attribute CSSNumericArray values;
 };

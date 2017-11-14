@@ -27,12 +27,11 @@
 #ifndef ResourceError_h
 #define ResourceError_h
 
-// TODO(toyoshim): Move net/base inclusion from header file.
 #include <iosfwd>
-#include "net/base/net_errors.h"
 #include "platform/PlatformExport.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/Allocator.h"
+#include "platform/wtf/Optional.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebURLError.h"
 
@@ -40,16 +39,12 @@ namespace blink {
 
 enum class ResourceRequestBlockedReason;
 
+// ResourceError represents an error for loading a resource. There is no
+// "no-error" instance. Use Optional for nullable errors.
 class PLATFORM_EXPORT ResourceError final {
-  DISALLOW_NEW();
+  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
  public:
-  using Domain = WebURLError::Domain;
-  enum Error {
-    ACCESS_DENIED = net::ERR_ACCESS_DENIED,
-    BLOCKED_BY_XSS_AUDITOR = net::ERR_BLOCKED_BY_XSS_AUDITOR
-  };
-
   static ResourceError CancelledError(const KURL&);
   static ResourceError CancelledDueToAccessCheckError(
       const KURL&,
@@ -61,53 +56,44 @@ class PLATFORM_EXPORT ResourceError final {
 
   static ResourceError CacheMissError(const KURL&);
   static ResourceError TimeoutError(const KURL&);
+  static ResourceError Failure(const KURL&);
 
-  ResourceError() = default;
-  ResourceError(Domain, int error_code, const KURL& failing_url);
+  ResourceError() = delete;
+  // |error_code| must not be 0.
+  ResourceError(int error_code, const KURL& failing_url);
+  ResourceError(const WebURLError&);
 
   // Makes a deep copy. Useful for when you need to use a ResourceError on
   // another thread.
   ResourceError Copy() const;
 
-  bool IsNull() const { return domain_ == Domain::kEmpty; }
-
-  Domain GetDomain() const { return domain_; }
   int ErrorCode() const { return error_code_; }
   const String& FailingURL() const { return failing_url_; }
   const String& LocalizedDescription() const { return localized_description_; }
 
   bool IsCancellation() const;
-
-  void SetIsAccessCheck(bool is_access_check) {
-    is_access_check_ = is_access_check;
-  }
   bool IsAccessCheck() const { return is_access_check_; }
-
+  bool HasCopyInCache() const { return has_copy_in_cache_; }
   bool IsTimeout() const;
-  void SetStaleCopyInCache(bool stale_copy_in_cache) {
-    stale_copy_in_cache_ = stale_copy_in_cache;
-  }
-  bool StaleCopyInCache() const { return stale_copy_in_cache_; }
-
   bool IsCacheMiss() const;
-  bool WasBlockedByResponse() const {
-    return error_code_ == net::ERR_BLOCKED_BY_RESPONSE;
-  }
-
-  void SetShouldCollapseInitiator(bool should_collapse_initiator) {
-    should_collapse_initiator_ = should_collapse_initiator;
-  }
+  bool WasBlockedByResponse() const;
   bool ShouldCollapseInitiator() const { return should_collapse_initiator_; }
+
+  operator WebURLError() const;
 
   static bool Compare(const ResourceError&, const ResourceError&);
 
+  // Net error code getters are here to avoid unpreferred header inclusion.
+  static int BlockedByXSSAuditorErrorCode();
+
  private:
-  Domain domain_ = Domain::kEmpty;
-  int error_code_ = 0;
+  void InitializeDescription();
+
+  int error_code_;
   KURL failing_url_;
   String localized_description_;
   bool is_access_check_ = false;
-  bool stale_copy_in_cache_ = false;
+  bool has_copy_in_cache_ = false;
   bool should_collapse_initiator_ = false;
 };
 

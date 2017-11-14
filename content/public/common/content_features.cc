@@ -49,6 +49,13 @@ const base::Feature kBrotliEncoding{"brotli-encoding",
 const base::Feature kBrowserSideNavigation{"browser-side-navigation",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Browser side navigation (aka PlzNavigate) is using blob URLs to deliver
+// the body of the main resource to the renderer process. When enabled, the
+// NavigationMojoResponse feature replaces this mechanism by a Mojo DataPipe.
+// Design doc: https://goo.gl/Rrrc7n.
+const base::Feature kNavigationMojoResponse{"NavigationMojoResponse",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 // If Canvas2D Image Chromium is allowed, this feature controls whether it is
 // enabled.
 const base::Feature kCanvas2DImageChromium {
@@ -230,6 +237,10 @@ const base::Feature kPepper3DImageChromium {
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
+
+// Generate V8 full code cache for PWAs.
+const base::Feature kPWAFullCodeCache{"PWAFullCodeCache",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Throttle Blink's rendering pipeline based on frame visibility.
 const base::Feature kRenderingPipelineThrottling{

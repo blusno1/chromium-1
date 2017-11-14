@@ -513,7 +513,7 @@ config("compiler") {
   # example by disabling the optimize configuration.
   # TODO(pcc): Make this conditional on is_official_build rather than on gn
   # flags for specific features.
-  if (!is_debug && use_thin_lto && !is_nacl) {
+  if (!is_debug && use_thin_lto && current_toolchain == default_toolchain) {
     assert(use_lld || target_os == "chromeos",
            "gold plugin only supported with ChromeOS")
 
@@ -645,17 +645,19 @@ config("compiler_cpu_abi") {
         ldflags += [ "--target=aarch64-linux-gnu" ]
       }
     } else if (current_cpu == "mipsel" && !is_nacl) {
-      if (is_clang) {
-        if (is_android) {
-          cflags += [ "--target=mipsel-linux-android" ]
-          ldflags += [ "--target=mipsel-linux-android" ]
+      if (custom_toolchain == "") {
+        if (is_clang) {
+          if (is_android) {
+            cflags += [ "--target=mipsel-linux-android" ]
+            ldflags += [ "--target=mipsel-linux-android" ]
+          } else {
+            cflags += [ "--target=mipsel-linux-gnu" ]
+            ldflags += [ "--target=mipsel-linux-gnu" ]
+          }
         } else {
-          cflags += [ "--target=mipsel-linux-gnu" ]
-          ldflags += [ "--target=mipsel-linux-gnu" ]
+          cflags += [ "-EL" ]
+          ldflags += [ "-EL" ]
         }
-      } else {
-        cflags += [ "-EL" ]
-        ldflags += [ "-EL" ]
       }
 
       if (mips_arch_variant == "r6") {
@@ -736,12 +738,14 @@ config("compiler_cpu_abi") {
 
       cflags += [ "-m${mips_float_abi}-float" ]
     } else if (current_cpu == "mips" && !is_nacl) {
-      if (is_clang) {
-        cflags += [ "--target=mips-linux-gnu" ]
-        ldflags += [ "--target=mips-linux-gnu" ]
-      } else {
-        cflags += [ "-EB" ]
-        ldflags += [ "-EB" ]
+      if (custom_toolchain == "") {
+        if (is_clang) {
+          cflags += [ "--target=mips-linux-gnu" ]
+          ldflags += [ "--target=mips-linux-gnu" ]
+        } else {
+          cflags += [ "-EB" ]
+          ldflags += [ "-EB" ]
+        }
       }
 
       if (mips_arch_variant == "r6") {
@@ -778,23 +782,25 @@ config("compiler_cpu_abi") {
 
       cflags += [ "-m${mips_float_abi}-float" ]
     } else if (current_cpu == "mips64el") {
-      if (is_clang) {
-        if (is_android) {
-          cflags += [ "--target=mips64el-linux-android" ]
-          ldflags += [ "--target=mips64el-linux-android" ]
+      if (custom_toolchain == "") {
+        if (is_clang) {
+          if (is_android) {
+            cflags += [ "--target=mips64el-linux-android" ]
+            ldflags += [ "--target=mips64el-linux-android" ]
+          } else {
+            cflags += [ "--target=mips64el-linux-gnuabi64" ]
+            ldflags += [ "--target=mips64el-linux-gnuabi64" ]
+          }
         } else {
-          cflags += [ "--target=mips64el-linux-gnuabi64" ]
-          ldflags += [ "--target=mips64el-linux-gnuabi64" ]
+          cflags += [
+            "-EL",
+            "-mabi=64",
+          ]
+          ldflags += [
+            "-EL",
+            "-mabi=64",
+          ]
         }
-      } else {
-        cflags += [
-          "-EL",
-          "-mabi=64",
-        ]
-        ldflags += [
-          "-EL",
-          "-mabi=64",
-        ]
       }
 
       if (mips_arch_variant == "r6") {
@@ -830,18 +836,20 @@ config("compiler_cpu_abi") {
         ]
       }
     } else if (current_cpu == "mips64") {
-      if (is_clang) {
-        cflags += [ "--target=mips64-linux-gnuabi64" ]
-        ldflags += [ "--target=mips64-linux-gnuabi64" ]
-      } else {
-        cflags += [
-          "-EB",
-          "-mabi=64",
-        ]
-        ldflags += [
-          "-EB",
-          "-mabi=64",
-        ]
+      if (custom_toolchain == "") {
+        if (is_clang) {
+          cflags += [ "--target=mips64-linux-gnuabi64" ]
+          ldflags += [ "--target=mips64-linux-gnuabi64" ]
+        } else {
+          cflags += [
+            "-EB",
+            "-mabi=64",
+          ]
+          ldflags += [
+            "-EB",
+            "-mabi=64",
+          ]
+        }
       }
 
       if (mips_arch_variant == "r6") {
@@ -1298,14 +1306,13 @@ config("default_warnings") {
         "-Wno-null-pointer-arithmetic",
 
         # TODO(hans): https://crbug.com/767059
-        "-Wno-tautological-unsigned-enum-zero-compare",
-
-        # TODO(hans): https://crbug.com/767059
+        # Disable -Wtautological-constant-compare (and implicitly also
+        # -Wtautological-unsigned-enum-zero-compare), but re-enable
+        # useful sub-diagnostics in that group.
         "-Wno-tautological-constant-compare",
+        "-Wtautological-constant-out-of-range-compare",
       ]
-    } else if (use_xcode_clang && xcode_version_int >= 830) {
-      # This is necessary to allow a progressive transition from using xcode 8.0
-      # to 8.3 or more recent. Remove when all bots are migrated to 8.3.
+    } else if (use_xcode_clang) {
       cflags += [
         # TODO(thakis): https://crbug.com/604888
         "-Wno-undefined-var-template",

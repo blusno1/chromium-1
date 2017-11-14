@@ -18,10 +18,10 @@
 #error "This file requires ARC support."
 #endif
 
-@interface ToolbarMediator ()<CRWWebStateObserver, WebStateListObserving>
+@interface CleanToolbarMediator ()<CRWWebStateObserver, WebStateListObserving>
 @end
 
-@implementation ToolbarMediator {
+@implementation CleanToolbarMediator {
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
   std::unique_ptr<ScopedObserver<WebStateList, WebStateListObserverBridge>>
@@ -104,7 +104,7 @@
   }
 }
 
-- (void)setConsumer:(id<ToolbarConsumer>)consumer {
+- (void)setConsumer:(id<CleanToolbarConsumer>)consumer {
   _consumer = consumer;
   if (self.webState) {
     [self updateConsumer];

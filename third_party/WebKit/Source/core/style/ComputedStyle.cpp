@@ -32,13 +32,14 @@
 #include "core/css/CSSPaintValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPropertyEquality.h"
-#include "core/css/properties/CSSPropertyAPI.h"
+#include "core/css/properties/CSSProperty.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/style/AppliedTextDecoration.h"
 #include "core/style/BorderEdge.h"
 #include "core/style/ComputedStyleConstants.h"
+#include "core/style/ComputedStyleInitialValues.h"
 #include "core/style/ContentData.h"
 #include "core/style/CursorData.h"
 #include "core/style/DataEquivalency.h"
@@ -92,11 +93,11 @@ struct SameSizeAsComputedStyle : public RefCounted<SameSizeAsComputedStyle> {
 ASSERT_SIZE(ComputedStyle, SameSizeAsComputedStyle);
 
 scoped_refptr<ComputedStyle> ComputedStyle::Create() {
-  return WTF::AdoptRef(new ComputedStyle(InitialStyle()));
+  return base::AdoptRef(new ComputedStyle(InitialStyle()));
 }
 
 scoped_refptr<ComputedStyle> ComputedStyle::CreateInitialStyle() {
-  return WTF::AdoptRef(new ComputedStyle());
+  return base::AdoptRef(new ComputedStyle());
 }
 
 ComputedStyle& ComputedStyle::MutableInitialStyle() {
@@ -107,7 +108,8 @@ ComputedStyle& ComputedStyle::MutableInitialStyle() {
 }
 
 void ComputedStyle::InvalidateInitialStyle() {
-  MutableInitialStyle().SetTapHighlightColor(InitialTapHighlightColor());
+  MutableInitialStyle().SetTapHighlightColor(
+      ComputedStyleInitialValues::InitialTapHighlightColor());
 }
 
 scoped_refptr<ComputedStyle> ComputedStyle::CreateAnonymousStyleWithDisplay(
@@ -121,7 +123,7 @@ scoped_refptr<ComputedStyle> ComputedStyle::CreateAnonymousStyleWithDisplay(
 }
 
 scoped_refptr<ComputedStyle> ComputedStyle::Clone(const ComputedStyle& other) {
-  return WTF::AdoptRef(new ComputedStyle(other));
+  return base::AdoptRef(new ComputedStyle(other));
 }
 
 ALWAYS_INLINE ComputedStyle::ComputedStyle()
@@ -652,7 +654,7 @@ bool ComputedStyle::DiffNeedsPaintInvalidationObjectForPaintImage(
   for (CSSPropertyID property_id : *value->NativeInvalidationProperties()) {
     // TODO(ikilpatrick): remove IsInterpolableProperty check once
     // CSSPropertyEquality::PropertiesEqual correctly handles all properties.
-    if (!CSSPropertyAPI::Get(property_id).IsInterpolable() ||
+    if (!CSSProperty::Get(property_id).IsInterpolable() ||
         !CSSPropertyEquality::PropertiesEqual(PropertyHandle(property_id),
                                               *this, other))
       return true;
@@ -717,7 +719,7 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
 
 void ComputedStyle::AddPaintImage(StyleImage* image) {
   if (!MutablePaintImagesInternal()) {
-    SetPaintImagesInternal(WTF::MakeUnique<PaintImages>());
+    SetPaintImagesInternal(std::make_unique<PaintImages>());
   }
   MutablePaintImagesInternal()->push_back(image);
 }
@@ -1744,18 +1746,25 @@ void ComputedStyle::RestoreParentTextDecorations(
 }
 
 void ComputedStyle::ClearMultiCol() {
-  SetColumnGapInternal(InitialColumnGap());
-  SetColumnWidthInternal(InitialColumnWidth());
-  SetColumnRuleStyle(InitialColumnRuleStyle());
-  SetColumnRuleWidthInternal(LayoutUnit(InitialColumnRuleWidth()));
-  SetColumnRuleColorInternal(InitialColumnRuleColor());
-  SetColumnRuleColorIsCurrentColor(InitialColumnRuleColorIsCurrentColor());
-  SetVisitedLinkColumnRuleColorInternal(InitialVisitedLinkColumnRuleColor());
-  SetColumnCountInternal(InitialColumnCount());
-  SetHasAutoColumnCountInternal(InitialHasAutoColumnCount());
-  SetHasAutoColumnWidthInternal(InitialHasAutoColumnWidth());
+  SetColumnGapInternal(ComputedStyleInitialValues::InitialColumnGap());
+  SetColumnWidthInternal(ComputedStyleInitialValues::InitialColumnWidth());
+  SetColumnRuleStyle(ComputedStyleInitialValues::InitialColumnRuleStyle());
+  SetColumnRuleWidthInternal(
+      LayoutUnit(ComputedStyleInitialValues::InitialColumnRuleWidth()));
+  SetColumnRuleColorInternal(
+      ComputedStyleInitialValues::InitialColumnRuleColor());
+  SetColumnRuleColorIsCurrentColor(
+      ComputedStyleInitialValues::InitialColumnRuleColorIsCurrentColor());
+  SetVisitedLinkColumnRuleColorInternal(
+      ComputedStyleInitialValues::InitialVisitedLinkColumnRuleColor());
+  SetColumnCountInternal(ComputedStyleInitialValues::InitialColumnCount());
+  SetHasAutoColumnCountInternal(
+      ComputedStyleInitialValues::InitialHasAutoColumnCount());
+  SetHasAutoColumnWidthInternal(
+      ComputedStyleInitialValues::InitialHasAutoColumnWidth());
   ResetColumnFill();
-  SetHasNormalColumnGapInternal(InitialHasNormalColumnGap());
+  SetHasNormalColumnGapInternal(
+      ComputedStyleInitialValues::InitialHasNormalColumnGap());
   ResetColumnSpan();
 }
 
@@ -1955,18 +1964,6 @@ TextEmphasisMark ComputedStyle::GetTextEmphasisMark() const {
     return TextEmphasisMark::kDot;
 
   return TextEmphasisMark::kSesame;
-}
-
-const FilterOperations& ComputedStyle::InitialFilter() {
-  DEFINE_STATIC_LOCAL(FilterOperationsWrapper, ops,
-                      (FilterOperationsWrapper::Create()));
-  return ops.Operations();
-}
-
-const FilterOperations& ComputedStyle::InitialBackdropFilter() {
-  DEFINE_STATIC_LOCAL(FilterOperationsWrapper, ops,
-                      (FilterOperationsWrapper::Create()));
-  return ops.Operations();
 }
 
 LayoutRectOutsets ComputedStyle::ImageOutsets(

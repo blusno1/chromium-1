@@ -36,6 +36,7 @@
 #include "core/css/CSSImportRule.h"
 #include "core/css/CSSKeyframeRule.h"
 #include "core/css/CSSMediaRule.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSRule.h"
 #include "core/css/CSSRuleList.h"
 #include "core/css/CSSStyleRule.h"
@@ -46,14 +47,13 @@
 #include "core/css/MediaValues.h"
 #include "core/css/StyleChangeReason.h"
 #include "core/css/StyleEngine.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/StyleSheet.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/StyleSheetList.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/css/parser/CSSParserContext.h"
-#include "core/css/properties/CSSPropertyAPI.h"
+#include "core/css/properties/CSSProperty.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleRuleUsageTracker.h"
 #include "core/dom/DOMException.h"
@@ -1100,10 +1100,10 @@ Response InspectorCSSAgent::getComputedStyleForNode(
   *style = protocol::Array<protocol::CSS::CSSComputedStyleProperty>::create();
   for (int id = firstCSSProperty; id <= lastCSSProperty; ++id) {
     CSSPropertyID property_id = static_cast<CSSPropertyID>(id);
-    CSSPropertyAPI property_api =
-        CSSPropertyAPI::Get(resolveCSSPropertyID(property_id));
-    if (!property_api.IsEnabled() || isShorthandProperty(property_id) ||
-        !property_api.IsProperty())
+    const CSSProperty& property_class =
+        CSSProperty::Get(resolveCSSPropertyID(property_id));
+    if (!property_class.IsEnabled() || property_class.IsShorthand() ||
+        !property_class.IsProperty())
       continue;
     (*style)->addItem(
         protocol::CSS::CSSComputedStyleProperty::create()
@@ -2012,13 +2012,13 @@ InspectorCSSAgent::BuildObjectForAttributesStyle(Element* element) {
     return nullptr;
 
   // FIXME: Ugliness below.
-  StylePropertySet* attribute_style =
-      const_cast<StylePropertySet*>(element->PresentationAttributeStyle());
+  CSSPropertyValueSet* attribute_style =
+      const_cast<CSSPropertyValueSet*>(element->PresentationAttributeStyle());
   if (!attribute_style)
     return nullptr;
 
-  MutableStylePropertySet* mutable_attribute_style =
-      ToMutableStylePropertySet(attribute_style);
+  MutableCSSPropertyValueSet* mutable_attribute_style =
+      ToMutableCSSPropertyValueSet(attribute_style);
 
   InspectorStyle* inspector_style = InspectorStyle::Create(
       mutable_attribute_style->EnsureCSSStyleDeclaration(), nullptr, nullptr);
@@ -2310,17 +2310,17 @@ Response InspectorCSSAgent::getBackgroundColors(
   CSSComputedStyleDeclaration* computed_style_info =
       CSSComputedStyleDeclaration::Create(element, true);
   const CSSValue* font_size =
-      computed_style_info->GetPropertyCSSValue(GetCSSPropertyFontSizeAPI());
+      computed_style_info->GetPropertyCSSValue(GetCSSPropertyFontSize());
   *computed_font_size = font_size->CssText();
   const CSSValue* font_weight =
-      computed_style_info->GetPropertyCSSValue(GetCSSPropertyFontWeightAPI());
+      computed_style_info->GetPropertyCSSValue(GetCSSPropertyFontWeight());
   *computed_font_weight = font_weight->CssText();
 
   HTMLElement* body = element->GetDocument().body();
   CSSComputedStyleDeclaration* computed_style_body =
       CSSComputedStyleDeclaration::Create(body, true);
   const CSSValue* body_font_size =
-      computed_style_body->GetPropertyCSSValue(GetCSSPropertyFontSizeAPI());
+      computed_style_body->GetPropertyCSSValue(GetCSSPropertyFontSize());
   *computed_body_font_size = body_font_size->CssText();
 
   return Response::OK();

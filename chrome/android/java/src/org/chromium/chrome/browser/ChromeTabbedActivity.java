@@ -513,6 +513,7 @@ public class ChromeTabbedActivity
         @LaunchIntentDispatcher.Action
         int action = maybeDispatchExplicitMainViewIntent(
                 intentForDispatching, sExplicitMainViewIntentDispatchedOnNewIntent);
+        BrowserActionsService.recordTabOpenedNotificationClicked(intent);
         if (action != LaunchIntentDispatcher.Action.CONTINUE) {
             // Pressing back button in CCT should bring user to the caller activity.
             moveTaskToBack(true);
@@ -727,7 +728,7 @@ public class ChromeTabbedActivity
         super.onStartWithNative();
 
         setInitialOverviewState();
-        BrowserActionsService.cancelBrowserActionsNotification();
+        BrowserActionsService.onTabbedModeForegrounded();
 
         resetSavedInstanceState();
     }
@@ -967,7 +968,11 @@ public class ChromeTabbedActivity
             BottomSheet bottomSheet = getBottomSheet();
             assert bottomSheet != null;
 
-            if (bottomSheet.isSheetOpen()) return false;
+            if (bottomSheet.isSheetOpen()
+                    || (getTimeSinceLastBackgroundedMs()
+                               < TIME_SINCE_BACKGROUNDED_TO_SHOW_BOTTOM_SHEET_HALF_MS)) {
+                return false;
+            }
 
             if (mLayoutManager != null && mLayoutManager.overviewVisible()) {
                 if (reuseOrCreateNewNtp()) {

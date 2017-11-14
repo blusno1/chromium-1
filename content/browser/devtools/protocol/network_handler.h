@@ -22,16 +22,19 @@ class HttpRequestHeaders;
 class URLRequest;
 }  // namespace net
 
+namespace network {
+struct URLLoaderStatus;
+}  // namespace network
+
 namespace content {
 class DevToolsAgentHostImpl;
 class RenderFrameHostImpl;
-struct BeginNavigationParams;
-struct CommonNavigationParams;
-struct GlobalRequestID;
 class NavigationHandle;
+class NavigationRequest;
 class NavigationThrottle;
+struct GlobalRequestID;
+struct InterceptedRequestInfo;
 struct ResourceRequest;
-struct ResourceRequestCompletionStatus;
 struct ResourceResponseHead;
 
 namespace protocol {
@@ -113,10 +116,8 @@ class NetworkHandler : public DevToolsDomainHandler,
                                          const ResourceResponseHead& head);
   void NavigationPreloadCompleted(
       const std::string& request_id,
-      const ResourceRequestCompletionStatus& completion_status);
-  void NavigationFailed(const CommonNavigationParams& common_params,
-                        const BeginNavigationParams& begin_params,
-                        net::Error error_code);
+      const network::URLLoaderStatus& completion_status);
+  void NavigationFailed(NavigationRequest* navigation_request);
 
   bool enabled() const { return enabled_; }
 
@@ -131,6 +132,8 @@ class NetworkHandler : public DevToolsDomainHandler,
   bool ShouldCancelNavigation(const GlobalRequestID& global_request_id);
   void AppendDevToolsHeaders(net::HttpRequestHeaders* headers);
   bool ShouldBypassServiceWorker() const;
+
+  void RequestIntercepted(std::unique_ptr<InterceptedRequestInfo> request_info);
 
  private:
   void SetNetworkConditions(mojom::NetworkConditionsPtr conditions);

@@ -320,6 +320,8 @@ void RationalizePhoneNumberFieldPredictionsInSection(
   // valid set of fields that can compose a whole number. The |found_*| pointers
   // will be set to that set of fields when iteration finishes.
   for (AutofillField* field : *fields_in_section) {
+    if (!field->is_focusable)
+      continue;
     ServerFieldType current_field_type = field->Type().GetStorableType();
     switch (current_field_type) {
       case PHONE_HOME_NUMBER:
@@ -831,6 +833,8 @@ void FormStructure::UpdateFromCache(const FormStructure& cached_form,
       field->set_previously_autofilled(
           cached_field->second->previously_autofilled());
       field->set_section(cached_field->second->section());
+      field->set_only_fill_when_focused(
+          cached_field->second->only_fill_when_focused());
     }
   }
 
@@ -899,7 +903,7 @@ void FormStructure::LogQualityMetrics(
     ++num_detected_field_types;
     if (field->is_autofilled)
       did_autofill_some_possible_fields = true;
-    else
+    else if (!field->only_fill_when_focused())
       did_autofill_all_possible_fields = false;
   }
 

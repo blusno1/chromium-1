@@ -30,10 +30,6 @@
 #include "content/public/browser/download_url_parameters.h"
 #include "content/public/browser/ssl_status.h"
 
-namespace net {
-class NetLog;
-}
-
 namespace content {
 class DownloadFileFactory;
 class DownloadItemFactory;
@@ -245,13 +241,14 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
   // Observers that want to be notified of changes to the set of downloads.
   base::ObserverList<Observer> observers_;
 
+  // Stores information about in-progress download items.
+  std::unique_ptr<DownloadItem::Observer> in_progress_download_observer_;
+
   // The current active browser context.
   BrowserContext* browser_context_;
 
   // Allows an embedder to control behavior. Guaranteed to outlive this object.
   DownloadManagerDelegate* delegate_;
-
-  net::NetLog* net_log_;
 
   std::vector<UniqueUrlDownloadHandlerPtr> url_download_handlers_;
 

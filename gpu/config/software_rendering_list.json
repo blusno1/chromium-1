@@ -1364,16 +1364,6 @@
       ]
     },
     {
-      "id": 138,
-      "description": "Accelerated video encode is unavailable on Linux",
-      "os": {
-        "type": "linux"
-      },
-      "features": [
-        "accelerated_video_encode"
-      ]
-    },
-    {
       "id": 139,
       "description": "GPU Rasterization is disabled on pre-GCN AMD cards",
       "cr_bugs": [643850],
@@ -1534,6 +1524,23 @@
       "gl_renderer": "Adreno \\(TM\\) 4.*",
       "features": [
         "accelerated_webgl2"
+      ]
+    },
+    {
+      "id": 150,
+      "description": "Macs with NVidia GPUs experience rendering issues on High Sierra",
+      "cr_bugs": [773705],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": ">=",
+          "value": "10.13"
+        }
+      },
+      "vendor_id": "0x10de",
+      "multi_gpu_category": "any",
+      "features": [
+        "gpu_rasterization"
       ]
     }
   ]

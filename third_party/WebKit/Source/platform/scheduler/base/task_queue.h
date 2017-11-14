@@ -13,6 +13,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "platform/PlatformExport.h"
+#include "platform/scheduler/base/graceful_queue_shutdown_helper.h"
 #include "platform/scheduler/base/moveable_auto_lock.h"
 #include "public/platform/TaskType.h"
 
@@ -77,23 +78,23 @@ class PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
     // Queues with control priority will run before any other queue, and will
     // explicitly starve other queues. Typically this should only be used for
     // private queues which perform control operations.
-    CONTROL_PRIORITY,
+    kControlPriority,
 
     // The selector will prioritize high over normal and low and normal over
     // low. However it will ensure neither of the lower priority queues can be
     // completely starved by higher priority tasks. All three of these queues
     // will always take priority over and can starve the best effort queue.
-    HIGH_PRIORITY,
+    kHighPriority,
     // Queues with normal priority are the default.
-    NORMAL_PRIORITY,
-    LOW_PRIORITY,
+    kNormalPriority,
+    kLowPriority,
 
     // Queues with best effort priority will only be run if all other queues are
     // empty. They can be starved by the other queues.
-    BEST_EFFORT_PRIORITY,
+    kBestEffortPriority,
     // Must be the last entry.
-    QUEUE_PRIORITY_COUNT,
-    FIRST_QUEUE_PRIORITY = CONTROL_PRIORITY,
+    kQueuePriorityCount,
+    kFirstQueuePriority = kControlPriority,
   };
 
   // Can be called on any thread.
@@ -129,18 +130,11 @@ class PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
       return *this;
     }
 
-    Spec SetShutdownTaskRunner(
-        scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-      shutdown_task_runner = std::move(task_runner);
-      return *this;
-    }
-
     const char* name;
     bool should_monitor_quiescence;
     TimeDomain* time_domain;
     bool should_notify_observers;
     bool should_report_when_execution_blocked;
-    scoped_refptr<base::SingleThreadTaskRunner> shutdown_task_runner;
   };
 
   // Interface to pass per-task metadata to RendererScheduler.
@@ -225,9 +219,9 @@ class PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
   TimeDomain* GetTimeDomain() const;
 
   enum class InsertFencePosition {
-    NOW,  // Tasks posted on the queue up till this point further may run.
-          // All further tasks are blocked.
-    BEGINNING_OF_TIME,  // No tasks posted on this queue may run.
+    kNow,  // Tasks posted on the queue up till this point further may run.
+           // All further tasks are blocked.
+    kBeginningOfTime,  // No tasks posted on this queue may run.
   };
 
   // Inserts a barrier into the task queue which prevents tasks with an enqueue
@@ -239,7 +233,7 @@ class PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
   // Fences come in three flavours:
   // - Regular (InsertFence(NOW)) - all tasks posted after this moment
   //   are blocked.
-  // - Fully blocking (InsertFence(BEGINNING_OF_TIME)) - all tasks including
+  // - Fully blocking (InsertFence(kBeginningOfTime)) - all tasks including
   //   already posted are blocked.
   // - Delayed (InsertFenceAt(timestamp)) - blocks all tasks posted after given
   //   point in time (must be in the future).
@@ -298,12 +292,10 @@ class PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
 
   const base::PlatformThreadId thread_id_;
 
-  // A task runner to post a task to schedule TaskQueueImpl for graceful
-  // shutdown.
-  // Present if this task queue supports graceful shutdown.
-  scoped_refptr<base::SingleThreadTaskRunner> shutdown_task_runner_;
+  const base::WeakPtr<TaskQueueManager> task_queue_manager_;
 
-  base::WeakPtr<TaskQueueManager> task_queue_manager_;
+  const scoped_refptr<internal::GracefulQueueShutdownHelper>
+      graceful_queue_shutdown_helper_;
 
   THREAD_CHECKER(main_thread_checker_);
 

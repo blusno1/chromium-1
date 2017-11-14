@@ -34,7 +34,6 @@
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "core/CoreInitializer.h"
 #include "core/dom/Document.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/MessageEvent.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/FrameLoadRequest.h"
@@ -63,6 +62,7 @@
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebContentSettingsClient.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
@@ -200,7 +200,8 @@ void WebSharedWorkerImpl::Connect(MessagePortChannel web_channel) {
   // The HTML spec requires to queue a connect event using the DOM manipulation
   // task source.
   // https://html.spec.whatwg.org/multipage/workers.html#shared-workers-and-the-sharedworker-interface
-  TaskRunnerHelper::Get(TaskType::kDOMManipulation, GetWorkerThread())
+  GetWorkerThread()
+      ->GetTaskRunner(TaskType::kDOMManipulation)
       ->PostTask(
           BLINK_FROM_HERE,
           CrossThreadBind(&WebSharedWorkerImpl::ConnectTaskOnWorkerThread,
@@ -240,7 +241,7 @@ void WebSharedWorkerImpl::StartWorkerContext(
   pending_interface_provider_.set_handle(std::move(interface_provider));
 
   instrumentation_token_ = instrumentation_token;
-  shadow_page_ = WTF::MakeUnique<WorkerShadowPage>(this);
+  shadow_page_ = std::make_unique<WorkerShadowPage>(this);
 
   // If we were asked to pause worker context on start and wait for debugger
   // then now is a good time to do that.
@@ -289,7 +290,7 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
       *worker_clients);
 
   ProvideContentSettingsClientToWorker(
-      worker_clients, WTF::MakeUnique<SharedWorkerContentSettingsProxy>(
+      worker_clients, std::make_unique<SharedWorkerContentSettingsProxy>(
                           std::move(content_settings_info_)));
 
   if (RuntimeEnabledFeatures::OffMainThreadFetchEnabled()) {
@@ -336,7 +337,7 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
   ParentFrameTaskRunners* task_runners = ParentFrameTaskRunners::Create();
 
   reporting_proxy_ = new SharedWorkerReportingProxy(this, task_runners);
-  worker_thread_ = WTF::MakeUnique<SharedWorkerThread>(
+  worker_thread_ = std::make_unique<SharedWorkerThread>(
       name_, ThreadableLoadingContext::Create(*document), *reporting_proxy_);
   probe::scriptImported(document, main_script_loader_->Identifier(),
                         main_script_loader_->SourceText());

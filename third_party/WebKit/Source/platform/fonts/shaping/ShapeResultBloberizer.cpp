@@ -40,15 +40,15 @@ void ShapeResultBloberizer::CommitPendingRun() {
     builder_rotation_ = pending_rotation;
   }
 
-  SkPaint run_paint;
-  run_paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
-  pending_font_data_->PlatformData().SetupPaint(&run_paint,
-                                                device_scale_factor_, &font_);
+  PaintFont run_font;
+  run_font.SetTextEncoding(SkPaint::kGlyphID_TextEncoding);
+  pending_font_data_->PlatformData().SetupPaintFont(
+      &run_font, device_scale_factor_, &font_);
 
   const auto run_size = pending_glyphs_.size();
   const auto& buffer = HasPendingVerticalOffsets()
-                           ? builder_.allocRunPos(run_paint, run_size)
-                           : builder_.allocRunPosH(run_paint, run_size, 0);
+                           ? builder_.AllocRunPos(run_font, run_size)
+                           : builder_.AllocRunPosH(run_font, run_size, 0);
 
   std::copy(pending_glyphs_.begin(), pending_glyphs_.end(), buffer.glyphs);
   std::copy(pending_offsets_.begin(), pending_offsets_.end(), buffer.pos);
@@ -62,7 +62,7 @@ void ShapeResultBloberizer::CommitPendingBlob() {
   if (!builder_run_count_)
     return;
 
-  blobs_.emplace_back(builder_.make(), builder_rotation_);
+  blobs_.emplace_back(builder_.TakeTextBlob(), builder_rotation_);
   builder_run_count_ = 0;
 }
 
@@ -125,7 +125,7 @@ float ShapeResultBloberizer::FillGlyphs(const StringView& text,
                                         const ShapeResult* result) {
   DCHECK(result);
   DCHECK(to <= text.length());
-  if (CanUseFastPath(from, to, text.length(), result->HasVerticalOffsets()))
+  if (CanUseFastPath(from, to, result))
     return FillFastHorizontalGlyphs(result);
 
   float advance = 0;
@@ -278,6 +278,15 @@ bool ShapeResultBloberizer::CanUseFastPath(unsigned from,
                                            unsigned length,
                                            bool has_vertical_offsets) {
   return !from && to == length && !has_vertical_offsets &&
+         GetType() != ShapeResultBloberizer::Type::kTextIntercepts;
+}
+
+bool ShapeResultBloberizer::CanUseFastPath(unsigned from,
+                                           unsigned to,
+                                           const ShapeResult* shape_result) {
+  return from <= shape_result->StartIndexForResult() &&
+         to >= shape_result->EndIndexForResult() &&
+         !shape_result->HasVerticalOffsets() &&
          GetType() != ShapeResultBloberizer::Type::kTextIntercepts;
 }
 

@@ -37,6 +37,7 @@ buildflag_header("features") {
     "ENABLE_BACKGROUND=$enable_background",
     "ENABLE_BASIC_PRINT_DIALOG=$enable_basic_print_dialog",
     "ENABLE_CAPTIVE_PORTAL_DETECTION=$enable_captive_portal_detection",
+    "ENABLE_DOWNLOADABLE_STRINGS=$enable_downloadable_strings",
     "ENABLE_GOOGLE_NOW=$enable_google_now",
     "ENABLE_HANGOUT_SERVICES_EXTENSION=$enable_hangout_services_extension",
     "ENABLE_ONE_CLICK_SIGNIN=$enable_one_click_signin",
@@ -667,7 +668,6 @@ mojom("mojo_bindings") {
     "cache_stats_recorder.mojom",
     "chrome_render_frame.mojom",
     "constants.mojom",
-    "file_patcher.mojom",
     "insecure_content_renderer.mojom",
     "navigation_corrector.mojom",
     "net_benchmarking.mojom",
@@ -683,19 +683,25 @@ mojom("mojo_bindings") {
     sources += [ "conflicts/module_event_sink_win.mojom" ]
   }
 
-  if (safe_browsing_mode == 1) {
-    sources += [ "safe_browsing/safe_archive_analyzer.mojom" ]
-  }
-
   public_deps = [
     "//components/content_settings/core/common:mojo_bindings",
+    "//content/public/common:interfaces",
     "//mojo/common:common_custom_types",
     "//third_party/WebKit/public:mojo_bindings",
     "//ui/gfx/geometry/mojo",
     "//url/mojo:url_mojom_gurl",
+    "//url/mojo:url_mojom_origin",
   ]
 
-  overridden_deps = [ "//third_party/WebKit/public:mojo_bindings" ]
+  if (safe_browsing_mode == 1) {
+    public_deps += [ "//chrome/services/file_util/public/interfaces" ]
+  }
+
+  overridden_deps = [
+    "//third_party/WebKit/public:mojo_bindings",
+    "//content/public/common:interfaces",
+  ]
+
   component_deps = [ "//content/public/common" ]
 
   # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.

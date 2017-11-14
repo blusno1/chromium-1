@@ -228,9 +228,10 @@ class PLATFORM_EXPORT FontCache {
                                   const char* preferred_locale,
                                   PlatformFallbackFont*);
 #endif
-  scoped_refptr<SimpleFontData> FontDataFromFontPlatformData(const FontPlatformData*,
-                                                      ShouldRetain = kRetain,
-                                                      bool = false);
+  scoped_refptr<SimpleFontData> FontDataFromFontPlatformData(
+      const FontPlatformData*,
+      ShouldRetain = kRetain,
+      bool subpixel_ascent_descent = false);
 
   void InvalidateShapeCache();
 
@@ -277,9 +278,9 @@ class PLATFORM_EXPORT FontCache {
       float font_size);
 
   // Implemented on skia platforms.
-  sk_sp<SkTypeface> CreateTypeface(const FontDescription&,
-                                   const FontFaceCreationParams&,
-                                   CString& name);
+  PaintTypeface CreateTypeface(const FontDescription&,
+                               const FontFaceCreationParams&,
+                               CString& name);
 
 #if defined(OS_ANDROID) || defined(OS_LINUX)
   static AtomicString GetFamilyNameForCharacter(SkFontMgr*,

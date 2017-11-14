@@ -167,6 +167,7 @@ public abstract class ChromeFeatureList {
     public static final String CHROME_HOME_PERSONALIZED_OMNIBOX_SUGGESTIONS =
             "ChromeHomePersonalizedOmniboxSuggestions";
     public static final String CHROME_HOME_PROMO = "ChromeHomePromo";
+    public static final String CHROME_HOME_PROMO_ON_STARTUP = "ChromeHomePromoOnStartup";
     public static final String CHROME_MEMEX = "ChromeMemex";
     public static final String CONTENT_SUGGESTIONS_FAVICONS_FROM_NEW_SERVER =
             "ContentSuggestionsFaviconsFromNewServer";
@@ -194,7 +195,7 @@ public abstract class ChromeFeatureList {
     public static final String FULLSCREEN_ACTIVITY = "FullscreenActivity";
     // Whether we show an important sites dialog in the "Clear Browsing Data" flow.
     public static final String IMPORTANT_SITES_IN_CBD = "ImportantSitesInCBD";
-    public static final String TABS_IN_CBD = "TabsInCBD";
+    public static final String LANGUAGES_PREFERENCE = "LanguagesPreference";
     public static final String SEARCH_ENGINE_PROMO_EXISTING_DEVICE =
             "SearchEnginePromo.ExistingDevice";
     public static final String SEARCH_ENGINE_PROMO_NEW_DEVICE = "SearchEnginePromo.NewDevice";
@@ -213,6 +214,7 @@ public abstract class ChromeFeatureList {
             "NTPTilesLowerResolutionFavicons";
     public static final String OMNIBOX_SPARE_RENDERER = "OmniboxSpareRenderer";
     public static final String PAY_WITH_GOOGLE_V1 = "PayWithGoogleV1";
+    public static final String PROGRESS_BAR_THROTTLE = "ProgressBarThrottle";
     public static final String PWA_PERSISTENT_NOTIFICATION = "PwaPersistentNotification";
     public static final String READER_MODE_IN_CCT = "ReaderModeInCCT";
     public static final String SERVICE_WORKER_PAYMENT_APPS = "ServiceWorkerPaymentApps";

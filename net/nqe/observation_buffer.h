@@ -66,14 +66,16 @@ class NET_EXPORT_PRIVATE ObservationBuffer {
   // value is unavailable, false is returned and |result| is not modified.
   // Percentile value is unavailable if all the values in observation buffer are
   // older than |begin_timestamp|. |current_signal_strength| is the current
-  // signal strength. |result| must not be null.
-  // TODO(tbansal): Move out param |result| as the last param of the function.
+  // signal strength. |result| must not be null. If |observations_count| is not
+  // null, then it is set to the number of observations that were available
+  // in the observation buffer for computing the percentile.
   base::Optional<int32_t> GetPercentile(
       base::TimeTicks begin_timestamp,
       const base::Optional<int32_t>& current_signal_strength,
       int percentile,
       const std::vector<NetworkQualityObservationSource>&
-          disallowed_observation_sources) const;
+          disallowed_observation_sources,
+      size_t* observations_count) const;
 
   void SetTickClockForTesting(base::TickClock* tick_clock) {
     tick_clock_ = tick_clock;
@@ -93,6 +95,13 @@ class NET_EXPORT_PRIVATE ObservationBuffer {
       const base::Optional<std::set<IPHash>>& host_filter,
       std::map<IPHash, int32_t>* host_keyed_percentiles,
       std::map<IPHash, size_t>* host_keyed_counts) const;
+
+  // Removes all observations from the buffer whose corresponding entry in
+  // |deleted_observation_sources| is set to true. For example, if index 1 and
+  // 3 in |deleted_observation_sources| are set to true, then all observations
+  // in the buffer that have source set to either 1 or 3 would be removed.
+  void RemoveObservationsWithSource(
+      bool deleted_observation_sources[NETWORK_QUALITY_OBSERVATION_SOURCE_MAX]);
 
  private:
   // Computes the weighted observations and stores them in

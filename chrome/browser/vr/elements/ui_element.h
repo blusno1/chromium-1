@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "cc/animation/animation_target.h"
 #include "cc/animation/transform_operations.h"
@@ -22,6 +23,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/quaternion.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/gfx/transform.h"
@@ -39,7 +41,6 @@ namespace vr {
 class Animation;
 class SkiaSurfaceProvider;
 class UiElementRenderer;
-class UiElementTransformOperations;
 
 enum LayoutAlignment {
   NONE = 0,
@@ -47,6 +48,44 @@ enum LayoutAlignment {
   RIGHT,
   TOP,
   BOTTOM,
+};
+
+struct EventHandlers {
+  EventHandlers();
+  ~EventHandlers();
+  base::Callback<void()> hover_enter;
+  base::Callback<void()> hover_leave;
+  base::Callback<void(const gfx::PointF&)> hover_move;
+  base::Callback<void()> button_down;
+  base::Callback<void()> button_up;
+};
+
+struct HitTestRequest {
+  gfx::Point3F ray_origin;
+  gfx::Point3F ray_target;
+  float max_distance_to_plane;
+};
+
+// The result of performing a hit test.
+struct HitTestResult {
+  enum Type {
+    // The given ray does not pass through the element.
+    kNone = 0,
+    // The given ray does not pass through the element, but passes through the
+    // element's plane.
+    kHitsPlane,
+    // The given ray passes through the element.
+    kHits,
+  };
+
+  Type type;
+  // The fields below are not set if the result Type is kNone.
+  // The hit position in the element's local coordinate space.
+  gfx::PointF local_hit_point;
+  // The hit position relative to the world.
+  gfx::Point3F hit_point;
+  // The distance from the ray origin to the hit position.
+  float distance_to_plane;
 };
 
 class UiElement : public cc::AnimationTarget {
@@ -62,8 +101,8 @@ class UiElement : public cc::AnimationTarget {
 
   enum UpdatePhase {
     kDirty = 0,
-    kUpdatedAnimations,
     kUpdatedBindings,
+    kUpdatedAnimations,
     kUpdatedComputedOpacity,
     kUpdatedTexturesAndSizes,
     kUpdatedLayout,
@@ -110,7 +149,11 @@ class UiElement : public cc::AnimationTarget {
   // though will extend outside this range when outside of the element:
   // [(0.0, 0.0), (1.0, 0.0)
   //  (1.0, 0.0), (1.0, 1.0)]
-  virtual bool HitTest(const gfx::PointF& point) const;
+  virtual bool LocalHitTest(const gfx::PointF& point) const;
+
+  // Performs a hit test for the ray supplied in the request and populates the
+  // result. The ray is in the world coordinate space.
+  void HitTest(const HitTestRequest& request, HitTestResult* result) const;
 
   int id() const { return id_; }
 
@@ -136,13 +179,14 @@ class UiElement : public cc::AnimationTarget {
   bool scrollable() const { return scrollable_; }
   void set_scrollable(bool scrollable) { scrollable_ = scrollable; }
 
+  void set_event_handlers(const EventHandlers& event_handlers) {
+    event_handlers_ = event_handlers;
+  }
+
   gfx::SizeF size() const;
   void SetSize(float width, float hight);
 
-  // It is assumed that operations is of size 4 with a component for layout
-  // translation, translation, rotation and scale, in that order (see
-  // constructor and the DCHECKs in the implementation of this function).
-  void SetTransformOperations(const UiElementTransformOperations& operations);
+  gfx::PointF local_origin() const { return local_origin_; }
 
   // These are convenience functions for setting the transform operations. They
   // will animate if you've set a transition. If you need to animate more than
@@ -191,6 +235,18 @@ class UiElement : public cc::AnimationTarget {
     y_centering_ = y_centering;
   }
 
+  bool bounds_contain_children() const { return bounds_contain_children_; }
+  void set_bounds_contain_children(bool bounds_contain_children) {
+    bounds_contain_children_ = bounds_contain_children;
+  }
+
+  float x_padding() const { return x_padding_; }
+  float y_padding() const { return y_padding_; }
+  void set_padding(float x_padding, float y_padding) {
+    x_padding_ = x_padding;
+    y_padding_ = y_padding;
+  }
+
   int draw_phase() const { return draw_phase_; }
   void set_draw_phase(int draw_phase) { draw_phase_ = draw_phase; }
 
@@ -224,8 +280,7 @@ class UiElement : public cc::AnimationTarget {
     return bindings_;
   }
 
-  // Return true if any bindings has updates.
-  bool UpdateBindings();
+  void UpdateBindings();
 
   gfx::Point3F GetCenter() const;
   gfx::Vector3dF GetNormal() const;
@@ -264,6 +319,8 @@ class UiElement : public cc::AnimationTarget {
   void RemoveAnimation(int animation_id);
   bool IsAnimatingProperty(TargetProperty property) const;
 
+  void DoLayOutChildren();
+
   // Handles positioning adjustments for children. This will be overridden by
   // UiElements providing custom layout modes. See the documentation of the
   // override for their particular functionality. The base implementation
@@ -272,7 +329,7 @@ class UiElement : public cc::AnimationTarget {
 
   virtual gfx::Transform LocalTransform() const;
 
-  void UpdateComputedOpacityRecursive();
+  void UpdateComputedOpacity();
   void UpdateWorldSpaceTransformRecursive();
 
   std::vector<std::unique_ptr<UiElement>>& children() { return children_; }
@@ -303,6 +360,14 @@ class UiElement : public cc::AnimationTarget {
   // this is ignored (say for head-locked elements that draw in screen space),
   // then this function should return false.
   virtual bool IsWorldPositioned() const;
+
+  bool updated_bindings_this_frame() const {
+    return updated_bindings_this_frame_;
+  }
+
+  bool updated_visiblity_this_frame() const {
+    return updated_visibility_this_frame_;
+  }
 
   std::string DebugName() const;
 
@@ -335,6 +400,11 @@ class UiElement : public cc::AnimationTarget {
   // The size of the object.  This does not affect children.
   gfx::SizeF size_ = {1.0f, 1.0f};
 
+  // The local orgin of the element. This can be updated, say, so that an
+  // element can contain its children, even if they are not centered about its
+  // true origin.
+  gfx::PointF local_origin_ = {0.0f, 0.0f};
+
   // The opacity of the object (between 0.0 and 1.0).
   float opacity_ = 1.0f;
 
@@ -351,6 +421,13 @@ class UiElement : public cc::AnimationTarget {
   // The computed opacity, incorporating opacity of parent objects.
   float computed_opacity_ = 1.0f;
 
+  // Returns true if the last call to UpdateBindings had any effect.
+  bool updated_bindings_this_frame_ = false;
+
+  // Return true if the last call to UpdateComputedOpacity had any effect on
+  // visibility.
+  bool updated_visibility_this_frame_ = false;
+
   // If anchoring is specified, the translation will be relative to the
   // specified edge(s) of the parent, rather than the center.  A parent object
   // must be specified when using anchoring.
@@ -361,6 +438,13 @@ class UiElement : public cc::AnimationTarget {
   // it is positioned relative to its own edge or corner, rather than center.
   LayoutAlignment x_centering_ = LayoutAlignment::NONE;
   LayoutAlignment y_centering_ = LayoutAlignment::NONE;
+
+  // If this is true, after laying out descendants, this element updates its
+  // size to accommodate all descendants, adding in the padding below along the
+  // x and y axes.
+  bool bounds_contain_children_ = false;
+  float x_padding_ = 0.0f;
+  float y_padding_ = 0.0f;
 
   AnimationPlayer animation_player_;
 
@@ -398,6 +482,8 @@ class UiElement : public cc::AnimationTarget {
   std::vector<std::unique_ptr<BindingBase>> bindings_;
 
   UpdatePhase phase_ = kClean;
+
+  EventHandlers event_handlers_;
 
   DISALLOW_COPY_AND_ASSIGN(UiElement);
 };

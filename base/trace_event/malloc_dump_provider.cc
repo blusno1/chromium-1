@@ -197,6 +197,12 @@ MallocDumpProvider::~MallocDumpProvider() {}
 // the current process.
 bool MallocDumpProvider::OnMemoryDump(const MemoryDumpArgs& args,
                                       ProcessMemoryDump* pmd) {
+  {
+    base::AutoLock auto_lock(emit_metrics_on_memory_dump_lock_);
+    if (!emit_metrics_on_memory_dump_)
+      return true;
+  }
+
   size_t total_virtual_size = 0;
   size_t resident_size = 0;
   size_t allocated_objects_size = 0;
@@ -230,17 +236,20 @@ bool MallocDumpProvider::OnMemoryDump(const MemoryDumpArgs& args,
   // https://bugs.chromium.org/p/chromium/issues/detail?id=695263#c1.
   resident_size = stats.size_in_use;
 #elif defined(OS_WIN)
-  WinHeapInfo main_heap_info = {};
-  WinHeapMemoryDumpImpl(&main_heap_info);
-  total_virtual_size =
-      main_heap_info.committed_size + main_heap_info.uncommitted_size;
-  // Resident size is approximated with committed heap size. Note that it is
-  // possible to do this with better accuracy on windows by intersecting the
-  // working set with the virtual memory ranges occuipied by the heap. It's not
-  // clear that this is worth it, as it's fairly expensive to do.
-  resident_size = main_heap_info.committed_size;
-  allocated_objects_size = main_heap_info.allocated_size;
-  allocated_objects_count = main_heap_info.block_count;
+  // This is too expensive on Windows, crbug.com/780735.
+  if (args.level_of_detail == MemoryDumpLevelOfDetail::DETAILED) {
+    WinHeapInfo main_heap_info = {};
+    WinHeapMemoryDumpImpl(&main_heap_info);
+    total_virtual_size =
+        main_heap_info.committed_size + main_heap_info.uncommitted_size;
+    // Resident size is approximated with committed heap size. Note that it is
+    // possible to do this with better accuracy on windows by intersecting the
+    // working set with the virtual memory ranges occuipied by the heap. It's
+    // not clear that this is worth it, as it's fairly expensive to do.
+    resident_size = main_heap_info.committed_size;
+    allocated_objects_size = main_heap_info.allocated_size;
+    allocated_objects_count = main_heap_info.block_count;
+  }
 #elif defined(OS_FUCHSIA)
 // TODO(fuchsia): Port, see https://crbug.com/706592.
 #else
@@ -362,6 +371,16 @@ void MallocDumpProvider::RemoveAllocation(void* address) {
   if (!allocation_register_.is_enabled())
     return;
   allocation_register_.Remove(address);
+}
+
+void MallocDumpProvider::EnableMetrics() {
+  base::AutoLock auto_lock(emit_metrics_on_memory_dump_lock_);
+  emit_metrics_on_memory_dump_ = true;
+}
+
+void MallocDumpProvider::DisableMetrics() {
+  base::AutoLock auto_lock(emit_metrics_on_memory_dump_lock_);
+  emit_metrics_on_memory_dump_ = false;
 }
 
 }  // namespace trace_event

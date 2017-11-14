@@ -32,7 +32,7 @@ namespace test {
 namespace {
 
 ClientWindowId NextUnusedClientWindowId(WindowTree* tree) {
-  for (ClientSpecificId id = 1;; ++id) {
+  for (ClientSpecificId id = kEmbedTreeWindowId;; ++id) {
     // Used the id of the client in the upper bits to simplify things.
     const ClientWindowId client_id = ClientWindowId(tree->id(), id);
     if (!tree->GetWindowByClientId(client_id))
@@ -236,7 +236,7 @@ void TestWindowManager::WmSetModalType(uint32_t window_id, ui::ModalType type) {
 
 void TestWindowManager::WmCreateTopLevelWindow(
     uint32_t change_id,
-    ClientSpecificId requesting_client_id,
+    const viz::FrameSinkId& frame_sink_id,
     const std::unordered_map<std::string, std::vector<uint8_t>>& properties) {
   got_create_top_level_window_ = true;
   change_id_ = change_id;
@@ -515,6 +515,20 @@ TestWindowServerDelegate::TestWindowServerDelegate()
           base::MakeUnique<TestThreadedImageCursorsFactory>()) {}
 TestWindowServerDelegate::~TestWindowServerDelegate() {}
 
+TestWindowTreeBinding* TestWindowServerDelegate::Embed(WindowTree* tree,
+                                                       ServerWindow* window,
+                                                       int flags) {
+  mojom::WindowTreeClientPtr client;
+  mojom::WindowTreeClientRequest client_request = mojo::MakeRequest(&client);
+  ClientWindowId client_window_id;
+  if (!tree->IsWindowKnown(window, &client_window_id))
+    return nullptr;
+
+  tree->Embed(client_window_id, std::move(client), flags);
+  last_client()->Bind(std::move(client_request));
+  return last_binding();
+}
+
 void TestWindowServerDelegate::StartDisplayInit() {}
 
 void TestWindowServerDelegate::OnNoMoreDisplays() {
@@ -624,7 +638,7 @@ void WindowEventTargetingHelper::CreateSecondaryTree(
     ServerWindow** window) {
   WindowTree* tree1 = window_server()->GetTreeWithRoot(embed_window);
   ASSERT_TRUE(tree1 != nullptr);
-  const ClientWindowId child1_id(tree1->id(), 1);
+  const ClientWindowId child1_id(tree1->id(), kEmbedTreeWindowId);
   ASSERT_TRUE(tree1->NewWindow(child1_id, ServerWindow::Properties()));
   ServerWindow* child1 = tree1->GetWindowByClientId(child1_id);
   ASSERT_TRUE(child1);
@@ -802,7 +816,8 @@ ServerWindow* NewWindowInTree(WindowTree* tree, ClientWindowId* client_id) {
 
 ServerWindow* NewWindowInTreeWithParent(WindowTree* tree,
                                         ServerWindow* parent,
-                                        ClientWindowId* client_id) {
+                                        ClientWindowId* client_id,
+                                        const gfx::Rect& bounds) {
   if (!parent)
     return nullptr;
   ClientWindowId parent_client_id;
@@ -815,9 +830,11 @@ ServerWindow* NewWindowInTreeWithParent(WindowTree* tree,
     return nullptr;
   if (!tree->AddWindow(parent_client_id, client_window_id))
     return nullptr;
+  ServerWindow* window = tree->GetWindowByClientId(client_window_id);
+  window->SetBounds(bounds);
   if (client_id)
     *client_id = client_window_id;
-  return tree->GetWindowByClientId(client_window_id);
+  return window;
 }
 
 gfx::Point Atomic32ToPoint(base::subtle::Atomic32 atomic) {

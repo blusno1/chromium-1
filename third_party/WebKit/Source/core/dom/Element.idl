@@ -82,8 +82,8 @@ interface Element : Node {
     // https://w3c.github.io/DOM-Parsing/#extensions-to-the-element-interface
     //
     // TODO(mkwst): Write a spec for the `TrustedHTML` variants.
-    [TreatNullAs=NullString, CEReactions, CustomElementCallbacks, RaisesException=Setter, RuntimeCallStatsCounter=ElementInnerHTML] attribute HTMLString innerHTML;
-    [TreatNullAs=NullString, CEReactions, CustomElementCallbacks, RaisesException=Setter] attribute HTMLString outerHTML;
+    [CEReactions, CustomElementCallbacks, Custom=Setter, RuntimeCallStatsCounter=ElementInnerHTML] attribute HTMLString innerHTML;
+    [CEReactions, CustomElementCallbacks, Custom=Setter] attribute HTMLString outerHTML;
     [CEReactions, CustomElementCallbacks, RaisesException] void insertAdjacentHTML(DOMString position, HTMLString text);
 
     // Pointer Lock
@@ -119,7 +119,7 @@ interface Element : Node {
 
     // Typed OM
     // https://drafts.css-houdini.org/css-typed-om/#inline-stylepropertymap-objects
-    [RuntimeEnabled=CSSTypedOM, SameObject] readonly attribute StylePropertyMap styleMap;
+    [RuntimeEnabled=CSSTypedOM, SameObject] readonly attribute StylePropertyMap attributeStyleMap;
 
     // Non-standard API
     [MeasureAs=ElementScrollIntoViewIfNeeded] void scrollIntoViewIfNeeded(optional boolean centerIfNeeded);

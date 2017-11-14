@@ -80,19 +80,16 @@ class ModuleScriptLoaderTestModulator final : public DummyModulator {
 
   ScriptState* GetScriptState() override { return script_state_.get(); }
 
-  ScriptModule CompileModule(
-      const String& script,
-      const String& url_str,
-      AccessControlStatus access_control_status,
-      network::mojom::FetchCredentialsMode credentials_mode,
-      const String& nonce,
-      ParserDisposition parser_state,
-      const TextPosition& position,
-      ExceptionState& exception_state) override {
+  ScriptModule CompileModule(const String& script,
+                             const String& url_str,
+                             const ScriptFetchOptions& options,
+                             AccessControlStatus access_control_status,
+                             const TextPosition& position,
+                             ExceptionState& exception_state) override {
     ScriptState::Scope scope(script_state_.get());
     return ScriptModule::Compile(script_state_->GetIsolate(), script, url_str,
-                                 access_control_status, credentials_mode, nonce,
-                                 parser_state, position, exception_state);
+                                 options, access_control_status, position,
+                                 exception_state);
   }
 
   void SetModuleRequests(const Vector<String>& requests) {
@@ -204,7 +201,8 @@ void ModuleScriptLoaderTest::TestFetchDataURL(
     TestModuleScriptLoaderClient* client) {
   ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
   KURL url("data:text/javascript,export default 'grapes';");
-  ModuleScriptFetchRequest module_request(url, ScriptFetchOptions());
+  ModuleScriptFetchRequest module_request(url, kReferrerPolicyDefault,
+                                          ScriptFetchOptions());
   registry->Fetch(module_request, ModuleGraphLevel::kTopLevelModuleFetch,
                   GetModulator(), client);
 }
@@ -214,11 +212,8 @@ TEST_F(ModuleScriptLoaderTest, FetchDataURL) {
   TestModuleScriptLoaderClient* client = new TestModuleScriptLoaderClient;
   TestFetchDataURL(client);
 
-  EXPECT_FALSE(client->WasNotifyFinished())
-      << "ModuleScriptLoader should finish asynchronously.";
-  platform_->RunUntilIdle();
-
-  EXPECT_TRUE(client->WasNotifyFinished());
+  EXPECT_TRUE(client->WasNotifyFinished())
+      << "ModuleScriptLoader should finish synchronously.";
   ASSERT_TRUE(client->GetModuleScript());
   EXPECT_FALSE(client->GetModuleScript()->HasEmptyRecord());
 }
@@ -254,7 +249,8 @@ void ModuleScriptLoaderTest::TestInvalidSpecifier(
     TestModuleScriptLoaderClient* client) {
   ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
   KURL url("data:text/javascript,import 'invalid';export default 'grapes';");
-  ModuleScriptFetchRequest module_request(url, ScriptFetchOptions());
+  ModuleScriptFetchRequest module_request(url, kReferrerPolicyDefault,
+                                          ScriptFetchOptions());
   GetModulator()->SetModuleRequests({"invalid"});
   registry->Fetch(module_request, ModuleGraphLevel::kTopLevelModuleFetch,
                   GetModulator(), client);
@@ -265,11 +261,8 @@ TEST_F(ModuleScriptLoaderTest, InvalidSpecifier) {
   TestModuleScriptLoaderClient* client = new TestModuleScriptLoaderClient;
   TestInvalidSpecifier(client);
 
-  EXPECT_FALSE(client->WasNotifyFinished())
-      << "ModuleScriptLoader should finish asynchronously.";
-  platform_->RunUntilIdle();
-
-  EXPECT_TRUE(client->WasNotifyFinished());
+  EXPECT_TRUE(client->WasNotifyFinished())
+      << "ModuleScriptLoader should finish synchronously.";
   ASSERT_TRUE(client->GetModuleScript());
   EXPECT_TRUE(client->GetModuleScript()->HasEmptyRecord());
 }
@@ -293,7 +286,8 @@ void ModuleScriptLoaderTest::TestFetchInvalidURL(
   ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
   KURL url;
   EXPECT_FALSE(url.IsValid());
-  ModuleScriptFetchRequest module_request(url, ScriptFetchOptions());
+  ModuleScriptFetchRequest module_request(url, kReferrerPolicyDefault,
+                                          ScriptFetchOptions());
   registry->Fetch(module_request, ModuleGraphLevel::kTopLevelModuleFetch,
                   GetModulator(), client);
 }
@@ -328,7 +322,8 @@ void ModuleScriptLoaderTest::TestFetchURL(
       url, testing::CoreTestDataPath("module.js"), "text/javascript");
 
   ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
-  ModuleScriptFetchRequest module_request(url, ScriptFetchOptions());
+  ModuleScriptFetchRequest module_request(url, kReferrerPolicyDefault,
+                                          ScriptFetchOptions());
   registry->Fetch(module_request, ModuleGraphLevel::kTopLevelModuleFetch,
                   GetModulator(), client);
 }

@@ -14,6 +14,7 @@
 #include "components/autofill/content/common/autofill_agent.mojom.h"
 #include "components/autofill/content/common/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
+#include "components/autofill/content/renderer/html_based_username_detector.h"
 #include "components/autofill/content/renderer/password_form_conversion_utils.h"
 #include "components/autofill/content/renderer/provisionally_saved_password_form.h"
 #include "components/autofill/core/common/form_data_predictions.h"
@@ -42,6 +43,7 @@ const char kDebugAttributeForFormSignature[] = "form_signature";
 const char kDebugAttributeForFieldSignature[] = "field_signature";
 
 class RendererSavePasswordProgressLogger;
+class PasswordGenerationAgent;
 
 // This class is responsible for filling password forms.
 class PasswordAutofillAgent : public content::RenderFrameObserver,
@@ -54,6 +56,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void BindRequest(mojom::PasswordAutofillAgentRequest request);
 
   void SetAutofillAgent(AutofillAgent* autofill_agent);
+
+  void SetPasswordGenerationAgent(PasswordGenerationAgent* generation_agent);
 
   const mojom::PasswordManagerDriverPtr& GetPasswordManagerDriver();
 
@@ -150,6 +154,13 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   // Called when the focused node has changed.
   void FocusedNodeHasChanged(const blink::WebNode& node);
+
+  // Creates a |PasswordForm| from |web_form|.
+  std::unique_ptr<PasswordForm> GetPasswordFormFromWebForm(
+      const blink::WebFormElement& web_form);
+
+  // Creates a |PasswordForm| of fields that are not enclosed in any <form> tag.
+  std::unique_ptr<PasswordForm> GetPasswordFormFromUnownedInputElements();
 
   bool logging_state_active() const { return logging_state_active_; }
 
@@ -350,7 +361,12 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // fields for individual forms.
   FormsPredictionsMap form_predictions_;
 
+  // The HTML based username detector's cache which maps form elements to
+  // username predictions.
+  UsernameDetectorCache username_detector_cache_;
+
   AutofillAgent* autofill_agent_;  // Weak reference.
+  PasswordGenerationAgent* password_generation_agent_;  // Weak reference.
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
   PagePasswordsAnalyser page_passwords_analyser_;

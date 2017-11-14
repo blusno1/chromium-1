@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -31,6 +32,7 @@ namespace printing {
 class StickySettings;
 }
 
+class GURL;
 class Profile;
 
 class PdfPrinterHandler : public PrinterHandler,
@@ -66,12 +68,18 @@ class PdfPrinterHandler : public PrinterHandler,
   // Sets |pdf_file_saved_closure_| to |closure|.
   void SetPdfSavedClosureForTesting(const base::Closure& closure);
 
+  // Exposed for testing.
+  static base::FilePath GetFileNameForPrintJobTitle(
+      const base::string16& job_title);
+  static base::FilePath GetFileNameForURL(const GURL& url);
+
  protected:
   virtual void SelectFile(const base::FilePath& default_filename,
+                          content::WebContents* initiator,
                           bool prompt_user);
 
   // The print preview web contents. Protected so unit tests can access it.
-  content::WebContents* preview_web_contents_;
+  content::WebContents* const preview_web_contents_;
 
   // The underlying dialog object. Protected so unit tests can access it.
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
@@ -81,8 +89,8 @@ class PdfPrinterHandler : public PrinterHandler,
   void OnGotUniqueFileName(const base::FilePath& path);
   void OnDirectoryCreated(const base::FilePath& path);
 
-  Profile* profile_;
-  printing::StickySettings* sticky_settings_;
+  Profile* const profile_;
+  printing::StickySettings* const sticky_settings_;
 
   // Holds the path to the print to pdf request. It is empty if no such request
   // exists.

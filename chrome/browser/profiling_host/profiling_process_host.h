@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/process/process.h"
@@ -34,6 +35,9 @@ class RenderProcessHost;
 }  // namespace content
 
 namespace profiling {
+
+extern const base::Feature kOOPHeapProfilingFeature;
+extern const char kOOPHeapProfilingFeatureMode[];
 
 // Represents the browser side of the profiling process (//chrome/profiling).
 //
@@ -118,6 +122,7 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
  private:
   friend struct base::DefaultSingletonTraits<ProfilingProcessHost>;
   friend class BackgroundProfilingTriggersTest;
+  friend class MemlogBrowserTest;
 
   ProfilingProcessHost();
   ~ProfilingProcessHost() override;
@@ -188,6 +193,9 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
       base::ProcessId proc_id,
       profiling::mojom::ProcessType process_type);
 
+  // SetRenderer.
+  void SetRendererSamplingAlwaysProfileForTest();
+
   content::NotificationRegistrar registrar_;
   std::unique_ptr<service_manager::Connector> connector_;
   mojom::ProfilingServicePtr profiling_service_;
@@ -219,6 +227,10 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
   // pointer and the NOTIFICATION_RENDERER_PROCESS_CREATED notification can be
   // used to provide these semantics.
   void* profiled_renderer_;
+
+  // For Tests. In kRendererSampling mode, overrides sampling to always profile
+  // a renderer process if one is already not going.
+  bool always_sample_for_tests_;
 
   // For tests.
   base::OnceClosure dump_process_for_tracing_callback_;

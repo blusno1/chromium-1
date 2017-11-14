@@ -144,6 +144,7 @@
 #include "chromeos/system/devicemode.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/viz/host/host_frame_sink_manager.h"
 #include "services/preferences/public/cpp/pref_service_factory.h"
 #include "services/preferences/public/interfaces/preferences.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -485,8 +486,12 @@ void Shell::UpdateCursorCompositingEnabled() {
 void Shell::SetCursorCompositingEnabled(bool enabled) {
   if (GetAshConfig() != Config::MASH) {
     // TODO: needs to work in mash. http://crbug.com/705592.
-    window_tree_host_manager_->cursor_window_controller()
-        ->SetCursorCompositingEnabled(enabled);
+    CursorWindowController* cursor_window_controller =
+        window_tree_host_manager_->cursor_window_controller();
+
+    if (cursor_window_controller->is_cursor_compositing_enabled() == enabled)
+      return;
+    cursor_window_controller->SetCursorCompositingEnabled(enabled);
     native_cursor_manager_->SetNativeCursorEnabled(!enabled);
   }
 }
@@ -1064,7 +1069,11 @@ void Shell::Init(const ShellInitParams& init_params) {
   autoclick_controller_.reset(AutoclickController::CreateInstance());
 
   high_contrast_controller_.reset(new HighContrastController);
-  video_detector_.reset(new VideoDetector);
+
+  viz::mojom::VideoDetectorObserverPtr observer;
+  video_detector_ =
+      std::make_unique<VideoDetector>(mojo::MakeRequest(&observer));
+  shell_port_->AddVideoDetectorObserver(std::move(observer));
 
   tooltip_controller_.reset(new views::corewm::TooltipController(
       std::unique_ptr<views::corewm::Tooltip>(new views::corewm::TooltipAura)));
@@ -1233,13 +1242,13 @@ void Shell::OnSessionStateChanged(session_manager::SessionState state) {
   // |LOGGED_IN_NOT_ACTIVE| is needed so that the virtual keyboard works on
   // supervised user creation. crbug.com/712873
   // |ACTIVE| is also needed for guest user workflow.
+  // NOTE: keyboard::IsKeyboardEnabled() is false in mash, but may not be in
+  // unit tests. crbug.com/646565.
   if ((state == session_manager::SessionState::LOGGED_IN_NOT_ACTIVE ||
        state == session_manager::SessionState::ACTIVE) &&
       keyboard::IsKeyboardEnabled()) {
-    if (GetAshConfig() != Config::MASH) {
-      // Recreate the keyboard after initial login and after multiprofile login.
-      CreateKeyboard();
-    }
+    // Recreate the keyboard after initial login and after multiprofile login.
+    CreateKeyboard();
   }
 
   shell_port_->UpdateSystemModalAndBlockingContainers();

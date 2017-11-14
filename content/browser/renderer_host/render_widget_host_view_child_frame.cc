@@ -437,6 +437,15 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
   if (!frame_connector_)
     return;
   if (wheel_scroll_latching_enabled()) {
+    if ((event.GetType() == blink::WebInputEvent::kGestureScrollBegin) &&
+        should_bubble) {
+      DCHECK(!is_scroll_sequence_bubbling_);
+      is_scroll_sequence_bubbling_ = true;
+    } else if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+               event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
+      is_scroll_sequence_bubbling_ = false;
+    }
+
     // GestureScrollBegin is a blocking event; It is forwarded for bubbling if
     // its ack is not consumed. For the rest of the scroll events
     // (GestureScrollUpdate, GestureScrollEnd, GestureFlingStart) the
@@ -532,14 +541,13 @@ void RenderWidgetHostViewChildFrame::SetParentFrameSinkId(
 
 void RenderWidgetHostViewChildFrame::ProcessCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    viz::CompositorFrame frame) {
+    viz::CompositorFrame frame,
+    viz::mojom::HitTestRegionListPtr hit_test_region_list) {
   current_surface_size_ = frame.size_in_pixels();
   current_surface_scale_factor_ = frame.device_scale_factor();
 
-  // TODO(kenrb): Supply HitTestRegionList data here as described in
-  // crbug.com/750755.
-  bool result = support_->SubmitCompositorFrame(local_surface_id,
-                                                std::move(frame), nullptr);
+  bool result = support_->SubmitCompositorFrame(
+      local_surface_id, std::move(frame), std::move(hit_test_region_list));
   DCHECK(result);
   has_frame_ = true;
 
@@ -583,13 +591,15 @@ void RenderWidgetHostViewChildFrame::SendSurfaceInfoToEmbedderImpl(
 
 void RenderWidgetHostViewChildFrame::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    viz::CompositorFrame frame) {
+    viz::CompositorFrame frame,
+    viz::mojom::HitTestRegionListPtr hit_test_region_list) {
   TRACE_EVENT0("content",
                "RenderWidgetHostViewChildFrame::OnSwapCompositorFrame");
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
   if (!frame_connector_)
     return;
-  ProcessCompositorFrame(local_surface_id, std::move(frame));
+  ProcessCompositorFrame(local_surface_id, std::move(frame),
+                         std::move(hit_test_region_list));
 }
 
 void RenderWidgetHostViewChildFrame::OnDidNotProduceFrame(
@@ -699,6 +709,28 @@ void RenderWidgetHostViewChildFrame::ProcessTouchEvent(
 void RenderWidgetHostViewChildFrame::ProcessGestureEvent(
     const blink::WebGestureEvent& event,
     const ui::LatencyInfo& latency) {
+  if (wheel_scroll_latching_enabled() && is_scroll_sequence_bubbling_ &&
+      (event.GetType() == blink::WebInputEvent::kGestureFlingStart) &&
+      frame_connector_) {
+    // For GestureFlingStarts, we send a GestureScrollEnd to the child in order
+    // to conclude the scrolling sequence but without allowing the child to
+    // actually fling if the child attempts to consume scroll.
+    // We bubble the fling to the target intended to consume it.
+    frame_connector_->BubbleScrollEvent(event);
+
+    blink::WebGestureEvent scroll_end(event);
+    scroll_end.SetType(blink::WebInputEvent::kGestureScrollEnd);
+    scroll_end.data.scroll_end.inertial_phase =
+        blink::WebGestureEvent::kUnknownMomentumPhase;
+    scroll_end.data.scroll_end.delta_units =
+        blink::WebGestureEvent::kPrecisePixels;
+    // Since we've just bubbled the fling, the |frame_connector_| knows that
+    // the sequence has ended, so it will just drop this synthesised GSE when
+    // we get the ack.
+    host_->ForwardGestureEvent(scroll_end);
+    return;
+  }
+
   host_->ForwardGestureEventWithLatencyInfo(event, latency);
 }
 
@@ -886,6 +918,20 @@ InputEventAckState RenderWidgetHostViewChildFrame::FilterInputEvent(
       // TenderWidgetHostViewAura::FilterInputEvent().
       return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
     }
+  }
+
+  if (wheel_scroll_latching_enabled() && is_scroll_sequence_bubbling_ &&
+      (input_event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) &&
+      frame_connector_) {
+    // If we're bubbling, then to preserve latching behaviour, the child should
+    // not consume this event. If the child has added its viewport to the scroll
+    // chain, then any GSU events we send to the renderer could be consumed,
+    // even though we intend for them to be bubbled. So we immediately bubble
+    // any scroll updates without giving the child a chance to consume them.
+    // If the child has not added its viewport to the scroll chain, then we
+    // know that it will not attempt to consume the rest of the scroll
+    // sequence.
+    return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
   }
 
   // Allow the root RWHV a chance to consume the child's GestureScrollUpdates

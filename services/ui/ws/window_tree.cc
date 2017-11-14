@@ -736,7 +736,7 @@ bool WindowTree::IsWaitingForNewTopLevelWindow(uint32_t wm_change_id) {
          waiting_for_top_level_window_info_->wm_change_id == wm_change_id;
 }
 
-void WindowTree::OnWindowManagerCreatedTopLevelWindow(
+viz::FrameSinkId WindowTree::OnWindowManagerCreatedTopLevelWindow(
     uint32_t wm_change_id,
     uint32_t client_change_id,
     const ServerWindow* window) {
@@ -750,7 +750,7 @@ void WindowTree::OnWindowManagerCreatedTopLevelWindow(
       waiting_for_top_level_window_info->client_window_id));
   if (!window) {
     client()->OnChangeCompleted(client_change_id, false);
-    return;
+    return viz::FrameSinkId();
   }
   client_id_to_window_id_map_[waiting_for_top_level_window_info
                                   ->client_window_id] = window->id();
@@ -763,6 +763,7 @@ void WindowTree::OnWindowManagerCreatedTopLevelWindow(
   client()->OnTopLevelCreated(client_change_id, WindowToWindowData(window),
                               display_id, drawn,
                               window->current_local_surface_id());
+  return waiting_for_top_level_window_info->client_window_id;
 }
 
 void WindowTree::AddActivationParent(const ClientWindowId& window_id) {
@@ -1224,6 +1225,32 @@ bool WindowTree::CanReorderWindow(const ServerWindow* window,
   return true;
 }
 
+bool WindowTree::RemoveWindowFromParent(
+    const ClientWindowId& client_window_id) {
+  ServerWindow* window = GetWindowByClientId(client_window_id);
+  DVLOG(3) << "removing window from parent client=" << id_
+           << " client window_id= " << client_window_id
+           << " global window_id=" << DebugWindowId(window);
+  if (!window) {
+    DVLOG(1) << "RemoveWindowFromParent failed (invalid window id="
+             << client_window_id.ToString() << ")";
+    return false;
+  }
+  if (!window->parent()) {
+    DVLOG(1) << "RemoveWindowFromParent failed (no parent id="
+             << client_window_id.ToString() << ")";
+    return false;
+  }
+  if (!access_policy_->CanRemoveWindowFromParent(window)) {
+    DVLOG(1) << "RemoveWindowFromParent failed (access policy disallowed id="
+             << client_window_id.ToString() << ")";
+    return false;
+  }
+  Operation op(this, window_server_, OperationType::REMOVE_WINDOW_FROM_PARENT);
+  window->parent()->Remove(window);
+  return true;
+}
+
 bool WindowTree::DeleteWindowImpl(WindowTree* source, ServerWindow* window) {
   DCHECK(window);
   DCHECK_EQ(window->id().client_id, id_);
@@ -1572,8 +1599,8 @@ void WindowTree::NewTopLevelWindow(
 
   display_root->window_manager_state()
       ->window_tree()
-      ->window_manager_internal_->WmCreateTopLevelWindow(wm_change_id, id_,
-                                                         transport_properties);
+      ->window_manager_internal_->WmCreateTopLevelWindow(
+          wm_change_id, client_window_id, transport_properties);
 }
 
 void WindowTree::DeleteWindow(uint32_t change_id, Id transport_window_id) {
@@ -1588,27 +1615,8 @@ void WindowTree::AddWindow(uint32_t change_id, Id parent_id, Id child_id) {
 }
 
 void WindowTree::RemoveWindowFromParent(uint32_t change_id, Id window_id) {
-  bool success = false;
-  ServerWindow* window = GetWindowByClientId(MakeClientWindowId(window_id));
-  DVLOG(3) << "removing window from parent client=" << id_
-           << " client window_id= " << window_id
-           << " global window_id=" << DebugWindowId(window);
-  if (!window) {
-    DVLOG(1) << "RemoveWindowFromParent failed (invalid window id=" << change_id
-             << ")";
-  } else if (!window->parent()) {
-    DVLOG(1) << "RemoveWindowFromParent failed (no parent id=" << change_id
-             << ")";
-  } else if (!access_policy_->CanRemoveWindowFromParent(window)) {
-    DVLOG(1) << "RemoveWindowFromParent failed (access policy disallowed id="
-             << change_id << ")";
-  } else {
-    success = true;
-    Operation op(this, window_server_,
-                 OperationType::REMOVE_WINDOW_FROM_PARENT);
-    window->parent()->Remove(window);
-  }
-  client()->OnChangeCompleted(change_id, success);
+  client()->OnChangeCompleted(
+      change_id, RemoveWindowFromParent(MakeClientWindowId(window_id)));
 }
 
 void WindowTree::AddTransientWindow(uint32_t change_id,
@@ -2632,10 +2640,6 @@ void WindowTree::OnWmCreatedTopLevelWindow(uint32_t change_id,
     window_server_->WindowManagerSentBogusMessage();
     window = nullptr;
   }
-  if (window) {
-    client()->OnFrameSinkIdAllocated(transport_window_id,
-                                     window->frame_sink_id());
-  }
   window_server_->WindowManagerCreatedTopLevelWindow(this, change_id, window);
 }
 
@@ -2680,6 +2684,30 @@ bool WindowTree::IsWindowCreatedByWindowManager(
 
   return display_root->window_manager_state()->window_tree()->id() ==
          window->id().client_id;
+}
+
+bool WindowTree::ShouldInterceptEventsForAccessPolicy(
+    const ServerWindow* window) const {
+  // Indicates the tree was created as the result of an Embed().
+  if (user_id_.empty())
+    return false;
+
+  while (window) {
+    // Find the first window created by this client. If there is an embedding,
+    // it'll be here.
+    if (window->id().client_id == id_) {
+      // embedded_tree->embedder_intercepts_events() indicates Embed() was
+      // called with kEmbedFlagEmbedderInterceptsEvents. In this case the
+      // embedder needs to see the window so that it knows the event is
+      // targetted at it.
+      WindowTree* embedded_tree = window_server_->GetTreeWithRoot(window);
+      if (embedded_tree && embedded_tree->embedder_intercepts_events())
+        return true;
+      return false;
+    }
+    window = window->parent();
+  }
+  return false;
 }
 
 void WindowTree::OnDragMoved(const gfx::Point& location) {

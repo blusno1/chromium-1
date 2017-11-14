@@ -169,7 +169,6 @@ class FakeSensorProvider : public device::mojom::SensorProvider {
 
   // device::mojom::sensorProvider:
   void GetSensor(device::mojom::SensorType type,
-                 device::mojom::SensorRequest sensor_request,
                  GetSensorCallback callback) override {
     std::unique_ptr<FakeSensor> sensor;
     device::SensorReading reading;
@@ -228,17 +227,23 @@ class FakeSensorProvider : public device::mojom::SensorProvider {
 
     if (sensor) {
       sensor->set_reading(reading);
+
       auto init_params = device::mojom::SensorInitParams::New();
+      init_params->client_request = sensor->GetClient();
       init_params->memory = sensor->GetSharedBufferHandle();
       init_params->buffer_offset = sensor->GetBufferOffset();
       init_params->default_configuration = sensor->GetDefaultConfiguration();
       init_params->maximum_frequency = sensor->GetMaximumSupportedFrequency();
       init_params->minimum_frequency = sensor->GetMinimumSupportedFrequency();
 
-      std::move(callback).Run(std::move(init_params), sensor->GetClient());
-      mojo::MakeStrongBinding(std::move(sensor), std::move(sensor_request));
+      device::mojom::SensorPtr sensor_ptr;
+      mojo::MakeStrongBinding(std::move(sensor),
+                              mojo::MakeRequest(&sensor_ptr));
+      init_params->sensor = std::move(sensor_ptr);
+
+      std::move(callback).Run(std::move(init_params));
     } else {
-      std::move(callback).Run(nullptr, nullptr);
+      std::move(callback).Run(nullptr);
     }
   }
 
@@ -395,8 +400,9 @@ IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest, MotionNullTest) {
   EXPECT_EQ("pass", shell()->web_contents()->GetLastCommittedURL().ref());
 }
 
+// Disabled due to flakiness: https://crbug.com/783891
 IN_PROC_BROWSER_TEST_F(DeviceSensorBrowserTest,
-                       MotionOnlySomeSensorsAreAvailableTest) {
+                       DISABLED_MotionOnlySomeSensorsAreAvailableTest) {
   // The test page registers an event handler for motion events and
   // expects to get an event with only the gyroscope and linear acceleration
   // sensor values, because no accelerometer values can be provided.

@@ -289,7 +289,7 @@
     },
     {
       name: "CSSTransformBox",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CSSTypedOM",
@@ -402,7 +402,7 @@
     },
     {
       name: "FetchRequestCache",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "FetchRequestKeepalive",
@@ -410,6 +410,10 @@
     },
     {
       name: "FileSystem",
+      status: "stable",
+    },
+    {
+      name: "FocusOptions",
       status: "stable",
     },
     {
@@ -436,7 +440,7 @@
     },
     {
       name: "FractionalMouseTypePointerEvent",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "FractionalScrollOffsets",
@@ -639,6 +643,10 @@
       name: "ModernMediaControls",
     },
     {
+      name: "ModulePreload",
+      status: "experimental",
+    },
+    {
       name: "ModuleScriptsDynamicImport",
     },
     {
@@ -833,6 +841,9 @@
       status: "stable",
     },
     {
+      name: "PWAFullCodeCache"
+    },
+    {
       name: "ReducedReferrerGranularity",
     },
     {
@@ -864,7 +875,7 @@
     },
     {
       name: "ResizeObserver",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "ResourceLoadScheduler",
@@ -892,6 +903,10 @@
       name: "ScrollAnchoring",
       settable_from_internals: true,
       status: "experimental",
+    },
+    // Serialize and restore scroll anchors.
+    {
+      name: "ScrollAnchorSerialization",
     },
     {
       name: "ScrollCustomization",

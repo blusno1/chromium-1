@@ -71,8 +71,6 @@
          disable_framebuffer_cmaa)                           \
   GPU_OP(DISABLE_GL_RGB_FORMAT,                              \
          disable_gl_rgb_format)                              \
-  GPU_OP(DISABLE_GPU_MEMORY_BUFFERS_AS_RENDER_TARGETS,       \
-         disable_gpu_memory_buffers_as_render_targets)       \
   GPU_OP(DISABLE_LARGER_THAN_SCREEN_OVERLAYS,                \
          disable_larger_than_screen_overlays)                \
   GPU_OP(DISABLE_NON_EMPTY_POST_SUB_BUFFERS_FOR_ONSCREEN_SURFACES, \
@@ -117,6 +115,8 @@
          emulate_isnan_on_float)                             \
   GPU_OP(EXIT_ON_CONTEXT_LOST,                               \
          exit_on_context_lost)                               \
+  GPU_OP(FLUSH_ON_FRAMEBUFFER_CHANGE,                        \
+         flush_on_framebuffer_change)                        \
   GPU_OP(FORCE_CUBE_COMPLETE,                                \
          force_cube_complete)                                \
   GPU_OP(FORCE_CUBE_MAP_POSITIVE_X_ALLOCATION,               \

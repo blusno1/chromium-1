@@ -21,6 +21,7 @@
 #include "content/browser/devtools/protocol/page.h"
 #include "content/browser/devtools/protocol/security.h"
 #include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/common/navigation_params.h"
 #include "content/public/browser/browser_context.h"
@@ -40,7 +41,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/resource_devtools_info.h"
 #include "content/public/common/resource_request.h"
-#include "content/public/common/resource_request_completion_status.h"
 #include "content/public/common/resource_response.h"
 #include "net/base/net_errors.h"
 #include "net/base/upload_bytes_element_reader.h"
@@ -49,6 +49,7 @@
 #include "net/http/http_util.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/url_loader_status.h"
 
 namespace content {
 namespace protocol {
@@ -990,54 +991,53 @@ void NetworkHandler::NavigationPreloadResponseReceived(
 
 void NetworkHandler::NavigationPreloadCompleted(
     const std::string& request_id,
-    const ResourceRequestCompletionStatus& completion_status) {
+    const network::URLLoaderStatus& status) {
   if (!enabled_)
     return;
-  if (completion_status.error_code != net::OK) {
+  if (status.error_code != net::OK) {
     frontend_->LoadingFailed(
         request_id,
         base::TimeTicks::Now().ToInternalValue() /
             static_cast<double>(base::Time::kMicrosecondsPerSecond),
-        Page::ResourceTypeEnum::Other,
-        net::ErrorToString(completion_status.error_code),
-        completion_status.error_code == net::Error::ERR_ABORTED);
+        Page::ResourceTypeEnum::Other, net::ErrorToString(status.error_code),
+        status.error_code == net::Error::ERR_ABORTED);
   }
   frontend_->LoadingFinished(
       request_id,
-      completion_status.completion_time.ToInternalValue() /
+      status.completion_time.ToInternalValue() /
           static_cast<double>(base::Time::kMicrosecondsPerSecond),
-      completion_status.encoded_data_length);
+      status.encoded_data_length);
 }
 
-void NetworkHandler::NavigationFailed(
-    const CommonNavigationParams& common_params,
-    const BeginNavigationParams& begin_params,
-    net::Error error_code) {
+void NetworkHandler::NavigationFailed(NavigationRequest* navigation_request) {
   if (!enabled_)
     return;
 
   static int next_id = 0;
   std::string request_id = base::IntToString(base::GetCurrentProcId()) + "." +
                            base::IntToString(++next_id);
-  std::string error_string = net::ErrorToString(error_code);
-  bool cancelled = error_code == net::Error::ERR_ABORTED;
+  std::string error_string =
+      net::ErrorToString(navigation_request->net_error());
+  bool cancelled = navigation_request->net_error() == net::Error::ERR_ABORTED;
 
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
   net::HttpRequestHeaders headers;
-  headers.AddHeadersFromString(begin_params.headers);
+  headers.AddHeadersFromString(navigation_request->begin_params().headers);
   for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();)
     headers_dict->setString(it.name(), it.value());
   frontend_->RequestWillBeSent(
-      request_id, "" /* loader_id */, common_params.url.spec(),
+      request_id, "" /* loader_id */,
+      navigation_request->common_params().url.spec(),
       Network::Request::Create()
-          .SetUrl(common_params.url.spec())
-          .SetMethod(common_params.method)
+          .SetUrl(navigation_request->common_params().url.spec())
+          .SetMethod(navigation_request->common_params().method)
           .SetHeaders(Object::fromValue(headers_dict.get(), nullptr))
           // Note: the priority value is copied from
           // ResourceDispatcherHostImpl::BeginNavigationRequest but there isn't
           // a good way of sharing this.
           .SetInitialPriority(resourcePriority(net::HIGHEST))
-          .SetReferrerPolicy(referrerPolicy(common_params.referrer.policy))
+          .SetReferrerPolicy(referrerPolicy(
+              navigation_request->common_params().referrer.policy))
           .Build(),
       base::TimeTicks::Now().ToInternalValue() /
           static_cast<double>(base::Time::kMicrosecondsPerSecond),
@@ -1106,6 +1106,7 @@ bool GetPostData(const net::URLRequest* request, std::string* post_data) {
     return false;
 
   const auto* element_readers = stream->GetElementReaders();
+
   if (element_readers->empty())
     return false;
 
@@ -1113,6 +1114,11 @@ bool GetPostData(const net::URLRequest* request, std::string* post_data) {
   for (const auto& element_reader : *element_readers) {
     const net::UploadBytesElementReader* reader =
         element_reader->AsBytesReader();
+    // TODO(caseq): Also support blobs.
+    if (!reader) {
+      *post_data = "";
+      return false;
+    }
     // TODO(alexclarke): This should really be base64 encoded.
     *post_data += std::string(reader->bytes(), reader->length());
   }
@@ -1232,6 +1238,63 @@ void NetworkHandler::AppendDevToolsHeaders(net::HttpRequestHeaders* headers) {
 
 bool NetworkHandler::ShouldBypassServiceWorker() const {
   return bypass_service_worker_;
+}
+
+namespace {
+
+const char* ResourceTypeToString(ResourceType resource_type) {
+  switch (resource_type) {
+    case RESOURCE_TYPE_MAIN_FRAME:
+      return protocol::Page::ResourceTypeEnum::Document;
+    case RESOURCE_TYPE_SUB_FRAME:
+      return protocol::Page::ResourceTypeEnum::Document;
+    case RESOURCE_TYPE_STYLESHEET:
+      return protocol::Page::ResourceTypeEnum::Stylesheet;
+    case RESOURCE_TYPE_SCRIPT:
+      return protocol::Page::ResourceTypeEnum::Script;
+    case RESOURCE_TYPE_IMAGE:
+      return protocol::Page::ResourceTypeEnum::Image;
+    case RESOURCE_TYPE_FONT_RESOURCE:
+      return protocol::Page::ResourceTypeEnum::Font;
+    case RESOURCE_TYPE_SUB_RESOURCE:
+      return protocol::Page::ResourceTypeEnum::Other;
+    case RESOURCE_TYPE_OBJECT:
+      return protocol::Page::ResourceTypeEnum::Other;
+    case RESOURCE_TYPE_MEDIA:
+      return protocol::Page::ResourceTypeEnum::Media;
+    case RESOURCE_TYPE_WORKER:
+      return protocol::Page::ResourceTypeEnum::Other;
+    case RESOURCE_TYPE_SHARED_WORKER:
+      return protocol::Page::ResourceTypeEnum::Other;
+    case RESOURCE_TYPE_PREFETCH:
+      return protocol::Page::ResourceTypeEnum::Fetch;
+    case RESOURCE_TYPE_FAVICON:
+      return protocol::Page::ResourceTypeEnum::Other;
+    case RESOURCE_TYPE_XHR:
+      return protocol::Page::ResourceTypeEnum::XHR;
+    case RESOURCE_TYPE_PING:
+      return protocol::Page::ResourceTypeEnum::Other;
+    case RESOURCE_TYPE_SERVICE_WORKER:
+      return protocol::Page::ResourceTypeEnum::Other;
+    case RESOURCE_TYPE_CSP_REPORT:
+      return protocol::Page::ResourceTypeEnum::Other;
+    case RESOURCE_TYPE_PLUGIN_RESOURCE:
+      return protocol::Page::ResourceTypeEnum::Other;
+    default:
+      return protocol::Page::ResourceTypeEnum::Other;
+  }
+}
+
+}  // namespace
+
+void NetworkHandler::RequestIntercepted(
+    std::unique_ptr<InterceptedRequestInfo> info) {
+  frontend_->RequestIntercepted(
+      info->interception_id, std::move(info->network_request),
+      info->frame_id.ToString(), ResourceTypeToString(info->resource_type),
+      info->is_navigation, std::move(info->headers_object),
+      std::move(info->http_status_code), std::move(info->redirect_url),
+      std::move(info->auth_challenge));
 }
 
 void NetworkHandler::SetNetworkConditions(

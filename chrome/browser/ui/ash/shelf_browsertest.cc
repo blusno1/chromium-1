@@ -17,6 +17,7 @@
 #include "components/user_manager/user_names.h"
 #include "content/public/common/service_manager_connection.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "ui/aura/test/mus/change_completion_waiter.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
@@ -54,6 +55,7 @@ IN_PROC_BROWSER_TEST_F(ShelfBrowserTest, StatusBubble) {
   gfx::Rect bounds = browser()->window()->GetBounds();
   bounds.set_height(shelf_top - bounds.y());
   browser()->window()->SetBounds(bounds);
+  aura::test::WaitForAllChangesToComplete();
 
   // Browser does not overlap shelf.
   bool has_overlapping_window = false;
@@ -63,6 +65,7 @@ IN_PROC_BROWSER_TEST_F(ShelfBrowserTest, StatusBubble) {
   // Show status, which may overlap the shelf by a pixel.
   browser()->window()->GetStatusBubble()->SetStatus(
       base::UTF8ToUTF16("Dummy Status Text"));
+  aura::test::WaitForAllChangesToComplete();
   shelf.UpdateVisibility();
 
   // Ensure that status doesn't cause overlap.
@@ -72,6 +75,7 @@ IN_PROC_BROWSER_TEST_F(ShelfBrowserTest, StatusBubble) {
   // Ensure that moving the browser slightly down does cause overlap.
   bounds.Offset(0, 1);
   browser()->window()->SetBounds(bounds);
+  aura::test::WaitForAllChangesToComplete();
   shelf.HasOverlappingWindow(&has_overlapping_window);
   EXPECT_TRUE(has_overlapping_window);
 }

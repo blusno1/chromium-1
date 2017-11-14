@@ -15,6 +15,7 @@
 #include "ash/shell.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/chrome_browser_main.h"
+#include "chrome/browser/ui/ash/accessibility/accessibility_controller_client.h"
 #include "chrome/browser/ui/ash/ash_init.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/cast_config_client_media_router.h"
@@ -67,6 +68,10 @@ void ChromeBrowserMainExtraPartsAsh::ServiceManagerConnectionStarted(
     aura::PropertyConverter* converter = delegate->GetPropertyConverter();
 
     converter->RegisterPrimitiveProperty(
+        ash::kCanConsumeSystemKeysKey,
+        ash::mojom::kCanConsumeSystemKeys_Property,
+        aura::PropertyConverter::CreateAcceptAnyValueCallback());
+    converter->RegisterPrimitiveProperty(
         ash::kPanelAttachedKey,
         ui::mojom::WindowManager::kPanelAttached_Property,
         aura::PropertyConverter::CreateAcceptAnyValueCallback());
@@ -115,6 +120,9 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   session_controller_client_->Init();
 
   // Must be available at login screen, so initialize before profile.
+  accessibility_controller_client_ =
+      std::make_unique<AccessibilityControllerClient>();
+  accessibility_controller_client_->Init();
   system_tray_client_ = base::MakeUnique<SystemTrayClient>();
   ime_controller_client_ = base::MakeUnique<ImeControllerClient>(
       chromeos::input_method::InputMethodManager::Get());
@@ -169,6 +177,7 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   new_window_client_.reset();
   ime_controller_client_.reset();
   system_tray_client_.reset();
+  accessibility_controller_client_.reset();
   lock_screen_client_.reset();
   media_client_.reset();
   cast_config_client_media_router_.reset();

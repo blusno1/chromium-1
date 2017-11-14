@@ -42,7 +42,7 @@
 namespace blink {
 
 unsigned ShapeResult::RunInfo::NextSafeToBreakOffset(unsigned offset) const {
-  DCHECK_LT(offset, num_characters_);
+  DCHECK_LE(offset, num_characters_);
   for (unsigned i = 0; i < safe_break_offsets_.size(); i++) {
     if (safe_break_offsets_[i] >= offset)
       return safe_break_offsets_[i];
@@ -245,46 +245,52 @@ scoped_refptr<ShapeResult> ShapeResult::MutableUnique() const {
   return ShapeResult::Create(*this);
 }
 
-unsigned ShapeResult::NextSafeToBreakOffset(unsigned absolute_offset) const {
-  if (!absolute_offset)
-    return StartIndexForResult();
-
-  // The absolute_offset argument represents the offset for the entire
-  // ShapeResult while offset is continuously updated to be relative to the
-  // current run.
-  unsigned offset = absolute_offset;
-  unsigned run_offset = 0;
-  for (const auto& run : runs_) {
+unsigned ShapeResult::NextSafeToBreakOffset(unsigned index) const {
+  for (auto it = runs_.begin(); it != runs_.end(); ++it) {
+    const auto& run = *it;
     if (!run)
       continue;
 
-    unsigned num_characters = run->num_characters_;
-    if (offset < num_characters)
-      return run->NextSafeToBreakOffset(offset) + run_offset;
-
-    offset -= num_characters;
-    run_offset += num_characters;
+    unsigned run_start = run->start_index_;
+    if (index >= run_start) {
+      unsigned offset = index - run_start;
+      if (offset <= run->num_characters_) {
+        return run->NextSafeToBreakOffset(offset) + run_start;
+      }
+      if (Rtl()) {
+        if (it == runs_.begin())
+          return run_start + run->num_characters_;
+        const auto& previous_run = *--it;
+        return previous_run->start_index_;
+      }
+    } else if (!Rtl()) {
+      return run_start;
+    }
   }
 
   return EndIndexForResult();
 }
 
-unsigned ShapeResult::PreviousSafeToBreakOffset(
-    unsigned absolute_offset) const {
-  if (absolute_offset >= NumCharacters())
-    return NumCharacters();
-
-  for (unsigned i = runs_.size(); i > 0; i--) {
-    const auto& run = runs_[i - 1];
+unsigned ShapeResult::PreviousSafeToBreakOffset(unsigned index) const {
+  for (auto it = runs_.rbegin(); it != runs_.rend(); ++it) {
+    const auto& run = *it;
     if (!run)
       continue;
 
     unsigned run_start = run->start_index_;
-    unsigned run_end = run_start + run->num_characters_;
-    if (absolute_offset >= run_start && absolute_offset < run_end) {
-      unsigned start =
-          absolute_offset > run_start ? absolute_offset - run_start : 0;
-      return run->PreviousSafeToBreakOffset(start) + run_start;
+    if (index >= run_start) {
+      unsigned offset = index - run_start;
+      if (offset <= run->num_characters_) {
+        return run->PreviousSafeToBreakOffset(offset) + run_start;
+      }
+      if (!Rtl()) {
+        return run_start + run->num_characters_;
+      }
+    } else if (Rtl()) {
+      if (it == runs_.rbegin())
+        return run->start_index_;
+      const auto& previous_run = *--it;
+      return previous_run->start_index_ + previous_run->num_characters_;
     }
   }
 
@@ -639,6 +645,10 @@ void ShapeResult::InsertRun(std::unique_ptr<ShapeResult::RunInfo> run_to_insert,
   num_glyphs_ += num_glyphs;
   DCHECK_GE(num_glyphs_, num_glyphs);
 
+  InsertRun(std::move(run));
+}
+
+void ShapeResult::InsertRun(std::unique_ptr<ShapeResult::RunInfo> run) {
   // The runs are stored in result->m_runs in visual order. For LTR, we place
   // the run to be inserted before the next run with a bigger character
   // start index. For RTL, we place the run before the next run with a lower
@@ -661,6 +671,20 @@ void ShapeResult::InsertRun(std::unique_ptr<ShapeResult::RunInfo> run_to_insert,
   // If we didn't find an existing slot to place it, append.
   if (run)
     runs_.push_back(std::move(run));
+}
+
+ShapeResult::RunInfo* ShapeResult::InsertRunForTesting(
+    unsigned start_index,
+    unsigned num_characters,
+    TextDirection direction,
+    Vector<uint16_t> safe_break_offsets) {
+  std::unique_ptr<RunInfo> run = WTF::MakeUnique<ShapeResult::RunInfo>(
+      nullptr, IsLtr(direction) ? HB_DIRECTION_LTR : HB_DIRECTION_RTL,
+      HB_SCRIPT_COMMON, start_index, 0, num_characters);
+  run->safe_break_offsets_.AppendVector(safe_break_offsets);
+  RunInfo* run_ptr = run.get();
+  InsertRun(std::move(run));
+  return run_ptr;
 }
 
 // Moves runs at (run_size_before, end) to the front of |runs_|.
@@ -686,14 +710,6 @@ void ShapeResult::ReorderRtlRuns(unsigned run_size_before) {
   for (unsigned i = run_size_before; i < runs_.size(); i++)
     new_runs.push_back(std::move(runs_[i]));
 
-  // Recompute |start_index_| in the decreasing order.
-  unsigned index = num_characters_;
-  for (auto it = new_runs.rbegin(); it != new_runs.rend(); it++) {
-    auto& run = *it;
-    run->start_index_ = index;
-    index += run->num_characters_;
-  }
-
   // Then append existing runs.
   for (unsigned i = 0; i < run_size_before; i++)
     new_runs.push_back(std::move(runs_[i]));
@@ -706,7 +722,16 @@ void ShapeResult::CopyRange(unsigned start_offset,
   if (!runs_.size())
     return;
 
-  unsigned index = target->num_characters_;
+#if DCHECK_IS_ON()
+  unsigned target_num_characters_before = target->num_characters_;
+#endif
+
+  // When |target| is empty, its character indexes are the specified sub range
+  // of |this|. Otherwise the character indexes are renumbered to be continuous.
+  int index_diff = !target->num_characters_
+                       ? 0
+                       : target->EndIndexForResult() -
+                             std::max(start_offset, StartIndexForResult());
   unsigned target_run_size_before = target->runs_.size();
   float total_width = 0;
   for (const auto& run : runs_) {
@@ -719,9 +744,10 @@ void ShapeResult::CopyRange(unsigned start_offset,
       DCHECK(end > start);
 
       auto sub_run = run->CreateSubRun(start, end);
-      sub_run->start_index_ = index;
+      sub_run->start_index_ += index_diff;
       total_width += sub_run->width_;
-      index += sub_run->num_characters_;
+      target->num_characters_ += sub_run->num_characters_;
+      target->num_glyphs_ += sub_run->glyph_data_.size();
       target->runs_.push_back(std::move(sub_run));
     }
   }
@@ -752,13 +778,47 @@ void ShapeResult::CopyRange(unsigned start_offset,
                          glyph_bounding_box_.Height());
   target->glyph_bounding_box_.UniteIfNonZero(adjusted_box);
 
-  DCHECK_EQ(index - target->num_characters_,
+  target->has_vertical_offsets_ |= has_vertical_offsets_;
+
+#if DCHECK_IS_ON()
+  DCHECK_EQ(target->num_characters_ - target_num_characters_before,
             std::min(end_offset, EndIndexForResult()) -
                 std::max(start_offset, StartIndexForResult()));
-  target->num_characters_ = index;
 
-  target->has_vertical_offsets_ |= has_vertical_offsets_;
+  target->CheckConsistency();
+#endif
 }
+
+#if DCHECK_IS_ON()
+void ShapeResult::CheckConsistency() const {
+  if (runs_.IsEmpty()) {
+    DCHECK_EQ(0u, num_characters_);
+    DCHECK_EQ(0u, num_glyphs_);
+    return;
+  }
+
+  unsigned index = StartIndexForResult();
+  unsigned num_glyphs = 0;
+  if (!Rtl()) {
+    for (const auto& run : runs_) {
+      DCHECK_EQ(index, run->start_index_);
+      index += run->num_characters_;
+      num_glyphs += run->glyph_data_.size();
+    }
+  } else {
+    // RTL on Mac may not have runs for the all characters. crbug.com/774034
+    index = runs_.back()->start_index_;
+    for (auto it = runs_.rbegin(); it != runs_.rend(); ++it) {
+      const auto& run = *it;
+      DCHECK_EQ(index, run->start_index_);
+      index += run->num_characters_;
+      num_glyphs += run->glyph_data_.size();
+    }
+  }
+  DCHECK_EQ(index, EndIndexForResult());
+  DCHECK_EQ(num_glyphs, num_glyphs_);
+}
+#endif
 
 scoped_refptr<ShapeResult> ShapeResult::CreateForTabulationCharacters(
     const Font* font,

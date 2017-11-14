@@ -25,6 +25,10 @@
 
 #include "core/page/ValidationMessageClientImpl.h"
 
+#include <algorithm>
+#include <memory>
+#include <utility>
+
 #include "core/dom/Element.h"
 #include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
@@ -70,6 +74,7 @@ void ValidationMessageClientImpl::ShowValidationMessage(
     HideValidationMessageImmediately(*current_anchor_);
   current_anchor_ = &anchor;
   message_ = message;
+  web_view_.GetChromeClient().RegisterPopupOpeningObserver(this);
   const double kMinimumSecondToShowValidationMessage = 5.0;
   const double kSecondPerCharacter = 0.05;
   finish_time_ =
@@ -88,7 +93,6 @@ void ValidationMessageClientImpl::ShowValidationMessage(
   overlay_ = PageOverlay::Create(target_frame, std::move(delegate));
   target_frame->GetFrameView()
       ->UpdateLifecycleToCompositingCleanPlusScrolling();
-  web_view_.GetChromeClient().RegisterPopupOpeningObserver(this);
   LayoutOverlay();
 }
 
@@ -101,7 +105,7 @@ void ValidationMessageClientImpl::HideValidationMessage(const Element& anchor) {
     return;
   DCHECK(overlay_);
   overlay_delegate_->StartToHide();
-  timer_ = WTF::MakeUnique<TaskRunnerTimer<ValidationMessageClientImpl>>(
+  timer_ = std::make_unique<TaskRunnerTimer<ValidationMessageClientImpl>>(
       anchor.GetDocument().GetTaskRunner(TaskType::kUnspecedTimer), this,
       &ValidationMessageClientImpl::Reset);
   // This should be equal to or larger than transition duration of

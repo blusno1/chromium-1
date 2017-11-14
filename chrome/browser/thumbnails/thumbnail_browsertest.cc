@@ -23,9 +23,10 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/controllable_http_response.h"
-#include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -85,6 +86,13 @@ std::string MakeHtmlDocument(const std::string& background_color) {
       background_color.c_str());
 }
 
+void Sleep(base::TimeDelta delta) {
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(), delta);
+  run_loop.Run();
+}
+
 class MockThumbnailService : public ThumbnailService {
  public:
   MOCK_METHOD2(SetPageThumbnail,
@@ -106,6 +114,42 @@ class MockThumbnailService : public ThumbnailService {
 
  protected:
   ~MockThumbnailService() override = default;
+};
+
+// A helper class to wait until a navigation finishes and completes the first
+// paint (as per WebContentsObserver::DidFirstVisuallyNonEmptyPaint). Similar
+// to content::TestNavigationObserver, but waits for the paint in addition to
+// the navigation (and is otherwise simplified).
+// Note: This is a single-use class, supporting only a single navigation. Create
+// a new instance for each navigation.
+class NavigationAndFirstPaintWaiter : public content::WebContentsObserver {
+ public:
+  explicit NavigationAndFirstPaintWaiter(content::WebContents* web_contents)
+      : content::WebContentsObserver(web_contents) {}
+  ~NavigationAndFirstPaintWaiter() override {}
+
+  void Wait() { run_loop_.Run(); }
+
+ private:
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->HasCommitted() ||
+        !navigation_handle->IsInMainFrame() ||
+        navigation_handle->IsSameDocument()) {
+      return;
+    }
+    CHECK(!did_finish_navigation_) << "Only a single navigation is supported";
+    did_finish_navigation_ = true;
+  }
+
+  void DidFirstVisuallyNonEmptyPaint() override {
+    if (did_finish_navigation_) {
+      run_loop_.Quit();
+    }
+  }
+
+  bool did_finish_navigation_ = false;
+  base::RunLoop run_loop_;
 };
 
 class ThumbnailTest : public InProcessBrowserTest {
@@ -195,8 +239,8 @@ IN_PROC_BROWSER_TEST_F(ThumbnailTest,
       .Times(0);
 
   {
-    // Navigate to some page.
-    content::TestNavigationObserver nav_observer(active_tab);
+    // Navigate to the red page.
+    NavigationAndFirstPaintWaiter waiter(active_tab);
     browser()->OpenURL(content::OpenURLParams(
         red_url, content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
         ui::PAGE_TRANSITION_TYPED, false));
@@ -204,7 +248,7 @@ IN_PROC_BROWSER_TEST_F(ThumbnailTest,
     response_red.Send(kHttpResponseHeader);
     response_red.Send(MakeHtmlDocument("red"));
     response_red.Done();
-    nav_observer.Wait();
+    waiter.Wait();
   }
 
   {
@@ -215,7 +259,7 @@ IN_PROC_BROWSER_TEST_F(ThumbnailTest,
                                  ImageColorIs(SK_ColorRED)))
         .WillOnce(DoAll(RunClosure(run_loop.QuitClosure()), Return(true)));
 
-    content::TestNavigationObserver nav_observer(active_tab);
+    NavigationAndFirstPaintWaiter waiter(active_tab);
     browser()->OpenURL(content::OpenURLParams(
         yellow_url, content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
         ui::PAGE_TRANSITION_TYPED, false));
@@ -228,7 +272,7 @@ IN_PROC_BROWSER_TEST_F(ThumbnailTest,
     response_yellow.Send(kHttpResponseHeader);
     response_yellow.Send(MakeHtmlDocument("yellow"));
     response_yellow.Done();
-    nav_observer.Wait();
+    waiter.Wait();
   }
 
   {
@@ -239,7 +283,7 @@ IN_PROC_BROWSER_TEST_F(ThumbnailTest,
                                  ImageColorIs(SK_ColorYELLOW)))
         .WillOnce(DoAll(RunClosure(run_loop.QuitClosure()), Return(true)));
 
-    content::TestNavigationObserver nav_observer(active_tab);
+    NavigationAndFirstPaintWaiter waiter(active_tab);
     browser()->OpenURL(content::OpenURLParams(
         green_url, content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
         ui::PAGE_TRANSITION_TYPED, false));
@@ -251,7 +295,7 @@ IN_PROC_BROWSER_TEST_F(ThumbnailTest,
     run_loop.Run();
     response_green.Send(MakeHtmlDocument("green"));
     response_green.Done();
-    nav_observer.Wait();
+    waiter.Wait();
   }
 }
 
@@ -284,8 +328,13 @@ IN_PROC_BROWSER_TEST_F(ThumbnailTest,
       SetPageThumbnail(Field(&ThumbnailingContext::url, about_blank_url), _))
       .Times(0);
 
-  // Navigate to some page.
+  // Navigate to the red page.
   ui_test_utils::NavigateToURL(browser(), red_url);
+
+  // Give the renderer process some time to actually paint it. Without this,
+  // there's a chance we might attempt to take a screenshot before the first
+  // paint, which would fail.
+  Sleep(base::TimeDelta::FromMilliseconds(100));
 
   // Before navigating away from the red page, we should take a thumbnail.
   // Note that the page load is deliberately slowed down, so that the

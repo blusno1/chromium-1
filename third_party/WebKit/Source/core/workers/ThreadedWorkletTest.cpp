@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "bindings/core/v8/V8CacheOptions.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/testing/DummyPageHolder.h"
@@ -17,6 +16,7 @@
 #include "platform/CrossThreadFunctional.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/TaskType.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -137,7 +137,7 @@ class ThreadedWorkletMessagingProxyForTest
   ThreadedWorkletMessagingProxyForTest(ExecutionContext* execution_context,
                                        WorkerClients* worker_clients)
       : ThreadedWorkletMessagingProxy(execution_context, worker_clients) {
-    worklet_object_proxy_ = WTF::MakeUnique<ThreadedWorkletObjectProxyForTest>(
+    worklet_object_proxy_ = std::make_unique<ThreadedWorkletObjectProxyForTest>(
         this, GetParentFrameTaskRunners());
   }
 
@@ -164,7 +164,7 @@ class ThreadedWorkletMessagingProxyForTest
   friend class ThreadedWorkletTest;
 
   std::unique_ptr<WorkerThread> CreateWorkerThread() final {
-    return WTF::MakeUnique<ThreadedWorkletThreadForTest>(WorkletObjectProxy());
+    return std::make_unique<ThreadedWorkletThreadForTest>(WorkletObjectProxy());
   }
 };
 
@@ -207,7 +207,8 @@ class ThreadedWorkletTest : public ::testing::Test {
 TEST_F(ThreadedWorkletTest, SecurityOrigin) {
   MessagingProxy()->Start();
 
-  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+  GetWorkerThread()
+      ->GetTaskRunner(TaskType::kUnspecedTimer)
       ->PostTask(
           BLINK_FROM_HERE,
           CrossThreadBind(&ThreadedWorkletThreadForTest::TestSecurityOrigin,
@@ -224,7 +225,8 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
   // API use on the ThreadedWorkletGlobalScope should be recorded in UseCounter
   // on the Document.
   EXPECT_FALSE(UseCounter::IsCounted(GetDocument(), kFeature1));
-  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+  GetWorkerThread()
+      ->GetTaskRunner(TaskType::kUnspecedTimer)
       ->PostTask(
           BLINK_FROM_HERE,
           CrossThreadBind(&ThreadedWorkletThreadForTest::CountFeature,
@@ -234,7 +236,8 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
 
   // API use should be reported to the Document only one time. See comments in
   // ThreadedWorkletGlobalScopeForTest::CountFeature.
-  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+  GetWorkerThread()
+      ->GetTaskRunner(TaskType::kUnspecedTimer)
       ->PostTask(
           BLINK_FROM_HERE,
           CrossThreadBind(&ThreadedWorkletThreadForTest::CountFeature,
@@ -247,7 +250,8 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
   // Deprecated API use on the ThreadedWorkletGlobalScope should be recorded in
   // UseCounter on the Document.
   EXPECT_FALSE(UseCounter::IsCounted(GetDocument(), kFeature2));
-  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+  GetWorkerThread()
+      ->GetTaskRunner(TaskType::kUnspecedTimer)
       ->PostTask(
           BLINK_FROM_HERE,
           CrossThreadBind(&ThreadedWorkletThreadForTest::CountDeprecation,
@@ -257,7 +261,8 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
 
   // API use should be reported to the Document only one time. See comments in
   // ThreadedWorkletGlobalScopeForTest::CountDeprecation.
-  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+  GetWorkerThread()
+      ->GetTaskRunner(TaskType::kUnspecedTimer)
       ->PostTask(
           BLINK_FROM_HERE,
           CrossThreadBind(&ThreadedWorkletThreadForTest::CountDeprecation,
@@ -268,7 +273,8 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
 TEST_F(ThreadedWorkletTest, TaskRunner) {
   MessagingProxy()->Start();
 
-  TaskRunnerHelper::Get(TaskType::kUnspecedTimer, GetWorkerThread())
+  GetWorkerThread()
+      ->GetTaskRunner(TaskType::kUnspecedTimer)
       ->PostTask(BLINK_FROM_HERE,
                  CrossThreadBind(&ThreadedWorkletThreadForTest::TestTaskRunner,
                                  CrossThreadUnretained(GetWorkerThread())));

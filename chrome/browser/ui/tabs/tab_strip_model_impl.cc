@@ -247,6 +247,10 @@ TabStripModelImpl::~TabStripModelImpl() {
   order_controller_.reset();
 }
 
+TabStripModelExperimental* TabStripModelImpl::AsTabStripModelExperimental() {
+  return nullptr;
+}
+
 TabStripModelDelegate* TabStripModelImpl::delegate() const {
   return delegate_;
 }
@@ -856,9 +860,12 @@ bool TabStripModelImpl::IsContextMenuCommandEnabled(
 
     case CommandToggleTabAudioMuted:
     case CommandToggleSiteMuted: {
+      TabMutedReason reason = command_id == CommandToggleSiteMuted
+                                  ? TabMutedReason::CONTENT_SETTING
+                                  : TabMutedReason::CONTEXT_MENU;
       std::vector<int> indices = GetIndicesForCommand(context_index);
       for (size_t i = 0; i < indices.size(); ++i) {
-        if (!chrome::CanToggleAudioMute(GetWebContentsAt(indices[i])))
+        if (!chrome::CanToggleAudioMute(GetWebContentsAt(indices[i]), reason))
           return false;
       }
       return true;

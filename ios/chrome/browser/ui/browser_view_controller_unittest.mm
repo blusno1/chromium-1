@@ -21,10 +21,12 @@
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/toolbar/test_toolbar_model.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/tabs/tab.h"
@@ -135,6 +137,49 @@ using web::WebStateImpl;
 }
 @end
 
+// Fake WebToolbarController for testing.
+@interface TestWebToolbarController : UIViewController
+- (void)setTabCount:(NSInteger)tabCount;
+- (void)updateToolbarState;
+- (void)setShareButtonEnabled:(BOOL)enabled;
+- (id)toolsPopupController;
+- (BOOL)isOmniboxFirstResponder;
+- (BOOL)showingOmniboxPopup;
+- (void)selectedTabChanged;
+- (void)dismissToolsMenuPopup;
+- (void)cancelOmniboxEdit;
+@end
+
+@implementation TestWebToolbarController
+- (void)setTabCount:(NSInteger)tabCount {
+  return;
+}
+- (void)updateToolbarState {
+  return;
+}
+- (void)setShareButtonEnabled:(BOOL)enabled {
+  return;
+}
+- (id)toolsPopupController {
+  return nil;
+}
+- (BOOL)isOmniboxFirstResponder {
+  return NO;
+}
+- (BOOL)showingOmniboxPopup {
+  return NO;
+}
+- (void)selectedTabChanged {
+  return;
+}
+- (void)dismissToolsMenuPopup {
+  return;
+}
+- (void)cancelOmniboxEdit {
+  return;
+}
+@end
+
 #pragma mark -
 
 namespace {
@@ -160,6 +205,9 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     test_cbs_builder.AddTestingFactory(
         ios::TemplateURLServiceFactory::GetInstance(),
         ios::TemplateURLServiceFactory::GetDefaultFactory());
+    test_cbs_builder.AddTestingFactory(
+        IOSChromeLargeIconServiceFactory::GetInstance(),
+        IOSChromeLargeIconServiceFactory::GetDefaultFactory());
     chrome_browser_state_ = test_cbs_builder.Build();
     chrome_browser_state_->CreateBookmarkModel(false);
     bookmarks::BookmarkModel* bookmark_model =
@@ -207,13 +255,16 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     // It will be owned (and destroyed) by the BVC.
     toolbarModelIOS_ = new TestToolbarModelIOS();
 
+    // Create fake WTC.
+    TestWebToolbarController* testWTC = [[TestWebToolbarController alloc] init];
+
     // Set up a stub dependency factory.
     id factory = [OCMockObject
         mockForClass:[BrowserViewControllerDependencyFactory class]];
     [[[factory stub] andReturnValue:OCMOCK_VALUE(toolbarModelIOS_)]
         newToolbarModelIOSWithDelegate:static_cast<ToolbarModelDelegateIOS*>(
                                            [OCMArg anyPointer])];
-    [[[factory stub] andReturn:nil]
+    [[[factory stub] andReturn:testWTC]
         newWebToolbarControllerWithDelegate:[OCMArg any]
                                   urlLoader:[OCMArg any]
                                  dispatcher:[OCMArg any]];
@@ -330,11 +381,13 @@ TEST_F(BrowserViewControllerTest, TestNativeContentController) {
       [bvc_ controllerForURL:GURL(kChromeUIBookmarksURL)
                     webState:webStateImpl_.get()];
   EXPECT_TRUE(controller != nil);
-  if (IsIPadIdiom()) {
-    EXPECT_TRUE([controller isMemberOfClass:[NewTabPageController class]]);
-  } else {
+  // TODO(crbug.com/753599): When the old bookmark is gone, rewrite the
+  // following so that it will expect PageNotAvailable only.
+  if (base::FeatureList::IsEnabled(kBookmarkNewGeneration) || !IsIPadIdiom()) {
     EXPECT_TRUE(
         [controller isMemberOfClass:[PageNotAvailableController class]]);
+  } else {
+    EXPECT_TRUE([controller isMemberOfClass:[NewTabPageController class]]);
   }
 
   controller = [bvc_ controllerForURL:GURL(kChromeUINewTabURL)

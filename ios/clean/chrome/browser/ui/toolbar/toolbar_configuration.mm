@@ -4,14 +4,14 @@
 
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_configuration.h"
 
+#import "ios/chrome/browser/ui/toolbar/clean/toolbar_constants.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/clean/chrome/browser/ui/toolbar/toolbar_constants.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-@implementation ToolbarConfiguration
+@implementation CleanToolbarConfiguration
 
 @synthesize style = _style;
 

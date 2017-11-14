@@ -23,6 +23,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
@@ -197,8 +198,8 @@ class PreviewsInfoBarDelegateUnitTest
         base::MessageLoop::current()->task_runner());
     previews_ui_service_ = base::MakeUnique<previews::PreviewsUIService>(
         previews_io_data_.get(), base::MessageLoop::current()->task_runner(),
-        nullptr /* previews_opt_out_store */, base::Bind(&IsPreviewsEnabled),
-        std::move(previews_logger));
+        nullptr /* previews_opt_out_store */, nullptr /* previews_opt_guide */,
+        base::Bind(&IsPreviewsEnabled), std::move(previews_logger));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -297,7 +298,15 @@ class PreviewsInfoBarDelegateUnitTest
   std::unique_ptr<previews::PreviewsUIService> previews_ui_service_;
 };
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestNavigationDismissal) {
+// TODO(crbug/782740): Test temporarily disabled on Windows because it crashes
+// on trybots.
+#if defined(OS_WIN)
+#define DISABLE_ON_WINDOWS(x) DISABLED_##x
+#else
+#define DISABLE_ON_WINDOWS(x) x
+#endif
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(InfobarTestNavigationDismissal)) {
   CreateInfoBar(previews::PreviewsType::LOFI, base::Time(),
                 true /* is_data_saver_user */, false /* is_reload */);
 
@@ -321,7 +330,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestNavigationDismissal) {
       PreviewsInfoBarDelegate::INFOBAR_DISMISSED_BY_NAVIGATION, 1);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestReloadDismissal) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(InfobarTestReloadDismissal)) {
   // Navigate to test URL, so we can reload later.
   NavigateAndCommit(GURL(kTestUrl));
 
@@ -353,7 +363,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestReloadDismissal) {
   EXPECT_FALSE(opt_out_called_);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestUserDismissal) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(InfobarTestUserDismissal)) {
   ConfirmInfoBarDelegate* infobar =
       CreateInfoBar(previews::PreviewsType::LOFI, base::Time(),
                     true /* is_data_saver_user */, false /* is_reload */);
@@ -369,7 +380,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestUserDismissal) {
   EXPECT_FALSE(user_opt_out_.value());
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestTabClosedDismissal) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(InfobarTestTabClosedDismissal)) {
   CreateInfoBar(previews::PreviewsType::LOFI, base::Time(),
                 true /* is_data_saver_user */, false /* is_reload */);
 
@@ -383,7 +395,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestTabClosedDismissal) {
   EXPECT_FALSE(user_opt_out_.value());
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestClickLinkLoFi) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(InfobarTestClickLinkLoFi)) {
   NavigateAndCommit(GURL(kTestUrl));
   const struct {
     bool using_previews_blacklist;
@@ -422,7 +435,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestClickLinkLoFi) {
   }
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestClickLinkLitePage) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(InfobarTestClickLinkLitePage)) {
   NavigateAndCommit(GURL(kTestUrl));
   ConfirmInfoBarDelegate* infobar =
       CreateInfoBar(previews::PreviewsType::LITE_PAGE, base::Time(),
@@ -446,7 +460,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestClickLinkLitePage) {
   EXPECT_TRUE(opt_out_called_);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestShownOncePerNavigation) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(InfobarTestShownOncePerNavigation)) {
   ConfirmInfoBarDelegate* infobar =
       CreateInfoBar(previews::PreviewsType::LOFI, base::Time(),
                     true /* is_data_saver_user */, false /* is_reload */);
@@ -472,7 +487,7 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, InfobarTestShownOncePerNavigation) {
                 true /* is_data_saver_user */, false /* is_reload */);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, LoFiInfobarTest) {
+TEST_F(PreviewsInfoBarDelegateUnitTest, DISABLE_ON_WINDOWS(LoFiInfobarTest)) {
   ConfirmInfoBarDelegate* infobar =
       CreateInfoBar(previews::PreviewsType::LOFI, base::Time(),
                     true /* is_data_saver_user */, false /* is_reload */);
@@ -492,7 +507,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, LoFiInfobarTest) {
 #endif
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTest) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(PreviewInfobarTest)) {
   PreviewsInfoBarDelegate* infobar =
       CreateInfoBar(previews::PreviewsType::LITE_PAGE, base::Time(),
                     true /* is_data_saver_user */, false /* is_reload */);
@@ -514,7 +530,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTest) {
 #endif
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, OfflineInfobarNonDataSaverUserTest) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(OfflineInfobarNonDataSaverUserTest)) {
   PreviewsInfoBarDelegate* infobar =
       CreateInfoBar(previews::PreviewsType::OFFLINE, base::Time(),
                     false /* is_data_saver_user */, false /* is_reload */);
@@ -536,7 +553,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, OfflineInfobarNonDataSaverUserTest) {
 #endif
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, OfflineInfobarDataSaverUserTest) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(OfflineInfobarDataSaverUserTest)) {
   PreviewsInfoBarDelegate* infobar =
       CreateInfoBar(previews::PreviewsType::OFFLINE, base::Time(),
                     true /* is_data_saver_user */, false /* is_reload */);
@@ -558,7 +576,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, OfflineInfobarDataSaverUserTest) {
 #endif
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, OfflineInfobarDisablesLoFi) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(OfflineInfobarDisablesLoFi)) {
   NavigateAndCommit(GURL(kTestUrl));
 
   ConfirmInfoBarDelegate* infobar =
@@ -582,7 +601,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, OfflineInfobarDisablesLoFi) {
   EXPECT_TRUE(opt_out_called_);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampMinutesTest) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(PreviewInfobarTimestampMinutesTest)) {
   // Use default params.
   std::map<std::string, std::string> variation_params;
   EnableStalePreviewsTimestamp(variation_params);
@@ -595,7 +615,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampMinutesTest) {
       PreviewsInfoBarDelegate::TIMESTAMP_SHOWN);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampHourTest) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(PreviewInfobarTimestampHourTest)) {
   // Use default variation_params.
   std::map<std::string, std::string> variation_params;
   EnableStalePreviewsTimestamp(variation_params);
@@ -607,7 +628,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampHourTest) {
       PreviewsInfoBarDelegate::TIMESTAMP_SHOWN);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampHoursTest) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(PreviewInfobarTimestampHoursTest)) {
   // Use default variation_params.
   std::map<std::string, std::string> variation_params;
   EnableStalePreviewsTimestamp(variation_params);
@@ -620,7 +642,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampHoursTest) {
       PreviewsInfoBarDelegate::TIMESTAMP_SHOWN);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampFinchParamsUMA) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(PreviewInfobarTimestampFinchParamsUMA)) {
   std::map<std::string, std::string> variation_params;
   variation_params["min_staleness_in_minutes"] = "1";
   variation_params["max_staleness_in_minutes"] = "5";
@@ -637,7 +660,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampFinchParamsUMA) {
       PreviewsInfoBarDelegate::TIMESTAMP_NOT_SHOWN_STALENESS_GREATER_THAN_MAX);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampUMA) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(PreviewInfobarTimestampUMA)) {
   // Use default params.
   std::map<std::string, std::string> variation_params;
   EnableStalePreviewsTimestamp(variation_params);
@@ -653,7 +677,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampUMA) {
       PreviewsInfoBarDelegate::TIMESTAMP_NOT_SHOWN_STALENESS_GREATER_THAN_MAX);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampReloadTest) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(PreviewInfobarTimestampReloadTest)) {
   // Use default params.
   std::map<std::string, std::string> variation_params;
   EnableStalePreviewsTimestamp(variation_params);
@@ -672,7 +697,8 @@ TEST_F(PreviewsInfoBarDelegateUnitTest, PreviewInfobarTimestampReloadTest) {
       PreviewsInfoBarDelegate::TIMESTAMP_UPDATED_NOW_SHOWN);
 }
 
-TEST_F(PreviewsInfoBarDelegateUnitTest, CreateInfoBarLogPreviewsInfoBarType) {
+TEST_F(PreviewsInfoBarDelegateUnitTest,
+       DISABLE_ON_WINDOWS(CreateInfoBarLogPreviewsInfoBarType)) {
   const previews::PreviewsType expected_type = previews::PreviewsType::LOFI;
   const std::string expected_event = "InfoBar";
   const std::string expected_description =

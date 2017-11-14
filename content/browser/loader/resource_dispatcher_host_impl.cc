@@ -91,7 +91,6 @@
 #include "content/public/common/origin_util.h"
 #include "content/public/common/resource_request.h"
 #include "content/public/common/resource_request_body.h"
-#include "content/public/common/resource_request_completion_status.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_start.h"
 #include "net/base/auth.h"
@@ -115,6 +114,7 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory.h"
 #include "ppapi/features/features.h"
+#include "services/network/public/cpp/url_loader_status.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/blob/blob_url_request_job_factory.h"
@@ -132,36 +132,6 @@ using SyncLoadResultCallback =
     content::ResourceDispatcherHostImpl::SyncLoadResultCallback;
 
 // ----------------------------------------------------------------------------
-
-namespace {
-
-constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
-    net::DefineNetworkTrafficAnnotation("resource_dispatcher_host",
-                                        R"(
-        semantics {
-          sender: "Resource Dispatcher Host"
-          description:
-            "Navigation-initiated request or renderer process initiated "
-            "request, which includes all resources for normal page loads, "
-            "chrome URLs, resources for installed extensions, as well as "
-            "downloads."
-          trigger:
-            "Navigating to a URL or downloading a file. A webpage, "
-            "ServiceWorker, chrome:// page, or extension may also initiate "
-            "requests in the background."
-          data: "Anything the initiator wants to send."
-          destination: OTHER
-        }
-        policy {
-          cookies_allowed: YES
-          cookies_store: "user or per-app cookie store"
-          setting: "These requests cannot be disabled."
-          policy_exception_justification:
-            "Not implemented. Without these requests, Chrome will be unable to "
-            "load any webpage."
-        })");
-
-}  // namespace
 
 namespace content {
 
@@ -211,18 +181,17 @@ void AbortRequestBeforeItStarts(
     sync_result_handler.Run(&result);
   } else {
     // Tell the renderer that this request was disallowed.
-    ResourceRequestCompletionStatus request_complete_data;
-    request_complete_data.error_code = net::ERR_ABORTED;
-    request_complete_data.exists_in_cache = false;
+    network::URLLoaderStatus status;
+    status.error_code = net::ERR_ABORTED;
+    status.exists_in_cache = false;
     // No security info needed, connection not established.
-    request_complete_data.completion_time = base::TimeTicks();
-    request_complete_data.encoded_data_length = 0;
-    request_complete_data.encoded_body_length = 0;
+    status.completion_time = base::TimeTicks();
+    status.encoded_data_length = 0;
+    status.encoded_body_length = 0;
     if (url_loader_client) {
-      url_loader_client->OnComplete(request_complete_data);
+      url_loader_client->OnComplete(status);
     } else {
-      sender->Send(
-          new ResourceMsg_RequestComplete(request_id, request_complete_data));
+      sender->Send(new ResourceMsg_RequestComplete(request_id, status));
     }
   }
 }
@@ -245,7 +214,7 @@ bool IsValidatedSCT(
 // the main frame, it is a limitation on which previews to allow.
 PreviewsState DeterminePreviewsState(PreviewsState previews_to_allow,
                                      ResourceDispatcherHostDelegate* delegate,
-                                     const net::URLRequest& request,
+                                     net::URLRequest* request,
                                      ResourceContext* resource_context,
                                      bool is_main_frame) {
   // If previews have already been turned off, or we are inheriting values on a
@@ -873,7 +842,7 @@ void ResourceDispatcherHostImpl::OnSyncLoad(
                  base::Passed(WrapUnique(sync_result)));
   BeginRequest(requester_info, request_id, request_data,
                true /* is_sync_load */, callback, sync_result->routing_id(),
-               nullptr, nullptr, kTrafficAnnotation);
+               nullptr, nullptr, GetTrafficAnnotation());
 }
 
 bool ResourceDispatcherHostImpl::IsRequestIDInUse(
@@ -1347,7 +1316,8 @@ void ResourceDispatcherHostImpl::ContinuePendingBeginRequest(
   PreviewsState previews_state = request_data.previews_state;
   if (!IsBrowserSideNavigationEnabled()) {
     previews_state = DeterminePreviewsState(
-        request_data.previews_state, delegate_, *new_request, resource_context,
+        request_data.previews_state, delegate_, new_request.get(),
+        resource_context,
         request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME);
   }
 
@@ -2065,7 +2035,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
 
   std::unique_ptr<net::URLRequest> new_request;
   new_request = request_context->CreateRequest(
-      info.common_params.url, net::HIGHEST, nullptr, kTrafficAnnotation);
+      info.common_params.url, net::HIGHEST, nullptr, GetTrafficAnnotation());
 
   new_request->set_method(info.common_params.method);
   new_request->set_site_for_cookies(info.site_for_cookies);
@@ -2105,7 +2075,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
   }
 
   PreviewsState previews_state = DeterminePreviewsState(
-      info.common_params.previews_state, delegate_, *new_request,
+      info.common_params.previews_state, delegate_, new_request.get(),
       resource_context, info.is_main_frame);
 
   // Make extra info and read footer (contains request ID).
@@ -2759,6 +2729,37 @@ bool ResourceDispatcherHostImpl::HasRequestsFromMultipleActiveTabs() {
     }
   }
   return false;
+}
+
+// static
+// We have this function at the bottom of this file because it confuses
+// syntax highliting.
+net::NetworkTrafficAnnotationTag
+ResourceDispatcherHostImpl::GetTrafficAnnotation() {
+  return net::DefineNetworkTrafficAnnotation("resource_dispatcher_host",
+                                             R"(
+        semantics {
+          sender: "Resource Dispatcher Host"
+          description:
+            "Navigation-initiated request or renderer process initiated "
+            "request, which includes all resources for normal page loads, "
+            "chrome URLs, resources for installed extensions, as well as "
+            "downloads."
+          trigger:
+            "Navigating to a URL or downloading a file. A webpage, "
+            "ServiceWorker, chrome:// page, or extension may also initiate "
+            "requests in the background."
+          data: "Anything the initiator wants to send."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: YES
+          cookies_store: "user or per-app cookie store"
+          setting: "These requests cannot be disabled."
+          policy_exception_justification:
+            "Not implemented. Without these requests, Chrome will be unable to "
+            "load any webpage."
+        })");
 }
 
 }  // namespace content

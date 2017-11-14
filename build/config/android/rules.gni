@@ -6,6 +6,7 @@
 # Some projects (e.g. V8) do not have non-build directories DEPS'ed in.
 import("//build/config/android/config.gni")
 import("//build/config/android/internal_rules.gni")
+import("//build/config/clang/clang.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/dcheck_always_on.gni")
 import("//build/toolchain/toolchain.gni")
@@ -55,12 +56,19 @@ template("create_native_executable_dist") {
       _libraries_list,
     ]
     rebased_binaries = rebase_path([ invoker.binary ], root_build_dir)
+    _libraries_dir = rebase_path(root_shlib_dir, root_build_dir)
+    if (is_clang) {
+      _libraries_dir +=
+          "," +
+          rebase_path("$clang_base_path/lib/clang/$clang_version/lib/linux",
+                      root_build_dir)
+    }
     args = [
       "--depfile",
       rebase_path(depfile, root_build_dir),
       "--input-libraries=$rebased_binaries",
       "--libraries-dir",
-      rebase_path(root_shlib_dir, root_build_dir),
+      _libraries_dir,
       "--output",
       rebase_path(_libraries_list, root_build_dir),
       "--readelf",
@@ -281,11 +289,15 @@ if (enable_java_templates) {
     }
 
     jni_package = invoker.jni_package
-    base_output_dir = "${root_gen_dir}/${target_name}/${jni_package}"
+    base_output_dir = "${target_gen_dir}/${target_name}/${jni_package}"
     jni_output_dir = "${base_output_dir}/jni"
 
-    jni_generator_include =
-        "//base/android/jni_generator/jni_generator_helper.h"
+    if (defined(invoker.jni_generator_include)) {
+      jni_generator_include = invoker.jni_generator_include
+    } else {
+      jni_generator_include =
+          "//base/android/jni_generator/jni_generator_helper.h"
+    }
 
     # TODO(cjhopman): make jni_generator.py support generating jni for multiple
     # .class files from a .jar.
@@ -1692,8 +1704,6 @@ if (enable_java_templates) {
   #     linker does relocation unpacking, so we can enable it unconditionally.
   #   secondary_native_libs (deprecated): The path of native libraries for secondary
   #     app abi.
-  #   run_findbugs_override: Forces run_findbugs on or off. If undefined, the
-  #     default will use the build arg run_findbugs.
   #   proguard_jar_path: The path to proguard.jar you wish to use. If undefined,
   #     the proguard used will be the checked in one in //third_party/proguard.
   #   never_incremental: If true, |incremental_apk_by_default| will be ignored.
@@ -2058,6 +2068,7 @@ if (enable_java_templates) {
                                "app_as_shared_lib",
                                "include_all_resources",
                                "shared_resources",
+                               "support_zh_hk",
                              ])
       srcjar_path = "${target_gen_dir}/${target_name}.srcjar"
       r_text_out_path = "${target_gen_dir}/${target_name}_R.txt"
@@ -2091,6 +2102,7 @@ if (enable_java_templates) {
                                "exclude_xxxhdpi",
                                "png_to_webp",
                                "shared_resources",
+                               "support_zh_hk",
                                "xxxhdpi_whitelist",
                              ])
       deps = [
@@ -2206,7 +2218,6 @@ if (enable_java_templates) {
                              [
                                "chromium_code",
                                "java_files",
-                               "run_findbugs_override",
                                "no_build_hooks",
                                "javac_args",
                              ])
@@ -2449,6 +2460,11 @@ if (enable_java_templates) {
         }
       }
     }
+
+    if (use_cfi_diag || is_ubsan || is_ubsan_security || is_ubsan_vptr) {
+      _extra_native_libs += [ "$clang_base_path/lib/clang/$clang_version/lib/linux/libclang_rt.ubsan_standalone-arm-android.so" ]
+    }
+
     if (defined(invoker.loadable_modules) && invoker.loadable_modules != []) {
       _extra_native_libs_even_when_incremental += invoker.loadable_modules
     }
@@ -2473,6 +2489,9 @@ if (enable_java_templates) {
       base_path = _base_path
       dex_path = _final_dex_path
       load_library_from_apk = _load_library_from_apk
+
+      # This is used to generate *.apk.pak.info files.
+      apk_name = invoker.apk_name
 
       keystore_name = _keystore_name
       keystore_path = _keystore_path
@@ -2862,11 +2881,6 @@ if (enable_java_templates) {
       }
 
       dist_ijar_path = _dist_ijar_path
-      if (defined(invoker.run_findbugs_override)) {
-        # Only allow findbugs when there are java files.
-        run_findbugs_override =
-            invoker.run_findbugs_override && defined(invoker.java_files)
-      }
       create_apk_script = false
     }
 

@@ -15,7 +15,6 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
-#include "content/common/frame_policy.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/stream_handle.h"
 #include "content/public/common/browser_side_navigation_policy.h"
@@ -27,6 +26,7 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
+#include "third_party/WebKit/common/frame_policy.h"
 #include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
@@ -128,10 +128,11 @@ void TestRenderFrameHost::InitializeRenderFrameIfNeeded() {
 TestRenderFrameHost* TestRenderFrameHost::AppendChild(
     const std::string& frame_name) {
   std::string frame_unique_name = base::GenerateGUID();
-  OnCreateChildFrame(
-      GetProcess()->GetNextRoutingID(), CreateStubInterfaceProviderRequest(),
-      blink::WebTreeScopeType::kDocument, frame_name, frame_unique_name,
-      base::UnguessableToken::Create(), FramePolicy(), FrameOwnerProperties());
+  OnCreateChildFrame(GetProcess()->GetNextRoutingID(),
+                     CreateStubInterfaceProviderRequest(),
+                     blink::WebTreeScopeType::kDocument, frame_name,
+                     frame_unique_name, base::UnguessableToken::Create(),
+                     blink::FramePolicy(), FrameOwnerProperties());
   return static_cast<TestRenderFrameHost*>(
       child_creation_observer_.last_created_frame());
 }
@@ -486,11 +487,22 @@ void TestRenderFrameHost::DidEnforceInsecureRequestPolicy(
 }
 
 void TestRenderFrameHost::PrepareForCommit() {
-  PrepareForCommitWithServerRedirect(GURL());
+  PrepareForCommitInternal(GURL(), net::HostPortPair());
+}
+
+void TestRenderFrameHost::PrepareForCommitWithSocketAddress(
+    const net::HostPortPair& socket_address) {
+  PrepareForCommitInternal(GURL(), socket_address);
 }
 
 void TestRenderFrameHost::PrepareForCommitWithServerRedirect(
     const GURL& redirect_url) {
+  PrepareForCommitInternal(redirect_url, net::HostPortPair());
+}
+
+void TestRenderFrameHost::PrepareForCommitInternal(
+    const GURL& redirect_url,
+    const net::HostPortPair& socket_address) {
   if (!IsBrowserSideNavigationEnabled()) {
     // Non PlzNavigate
     if (is_waiting_for_beforeunload_ack())
@@ -535,6 +547,7 @@ void TestRenderFrameHost::PrepareForCommitWithServerRedirect(
 
   // Simulate the network stack commit.
   scoped_refptr<ResourceResponse> response(new ResourceResponse);
+  response->head.socket_address = socket_address;
   // TODO(carlosk): ideally with PlzNavigate it should be possible someday to
   // fully commit the navigation at this call to CallOnResponseStarted.
   url_loader->CallOnResponseStarted(response, MakeEmptyStream(), nullptr);

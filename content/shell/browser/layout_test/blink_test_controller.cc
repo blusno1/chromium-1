@@ -7,9 +7,11 @@
 #include <stddef.h>
 #include <string.h>
 
+#include <algorithm>
 #include <iostream>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/callback.h"
@@ -31,6 +33,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/common/page_state_serialization.h"
+#include "content/common/unique_name_helper.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/gpu_data_manager.h"
@@ -107,8 +110,9 @@ std::string DumpFrameState(const ExplodedFrameState& frame_state,
   result.append(url);
   DCHECK(frame_state.target);
   if (!frame_state.target->empty()) {
+    std::string unique_name = base::UTF16ToUTF8(*frame_state.target);
     result.append(" (in frame \"");
-    result.append(base::UTF16ToUTF8(*frame_state.target));
+    result.append(UniqueNameHelper::ExtractStableNameForTesting(unique_name));
     result.append("\")");
   }
   result.append("\n");
@@ -119,8 +123,17 @@ std::string DumpFrameState(const ExplodedFrameState& frame_state,
               // Child nodes should always have a target (aka unique name).
               DCHECK(lhs.target);
               DCHECK(rhs.target);
-              return base::CompareCaseInsensitiveASCII(*lhs.target,
-                                                       *rhs.target) < 0;
+              std::string lhs_name =
+                  UniqueNameHelper::ExtractStableNameForTesting(
+                      base::UTF16ToUTF8(*lhs.target));
+              std::string rhs_name =
+                  UniqueNameHelper::ExtractStableNameForTesting(
+                      base::UTF16ToUTF8(*rhs.target));
+              if (!base::EqualsCaseInsensitiveASCII(lhs_name, rhs_name))
+                return base::CompareCaseInsensitiveASCII(lhs_name, rhs_name) <
+                       0;
+
+              return lhs.item_sequence_number < rhs.item_sequence_number;
             });
   for (const auto& child : sorted_children)
     result += DumpFrameState(child, indent + 4, false);
@@ -456,11 +469,9 @@ Shell* BlinkTestController::SecondaryWindow() {
 void BlinkTestController::LoadDevToolsJSTest() {
   devtools_window_ = main_window_;
   Shell* secondary = SecondaryWindow();
-  devtools_bindings_.reset(LayoutTestDevToolsBindings::LoadDevTools(
+  devtools_bindings_ = base::MakeUnique<LayoutTestDevToolsBindings>(
       devtools_window_->web_contents(), secondary->web_contents(), "",
-      test_url_.spec()));
-  secondary->LoadURL(
-      LayoutTestDevToolsBindings::GetInspectedPageURL(test_url_));
+      test_url_, true);
 }
 
 bool BlinkTestController::ResetAfterLayoutTest() {
@@ -477,7 +488,6 @@ bool BlinkTestController::ResetAfterLayoutTest() {
   prefs_ = WebPreferences();
   should_override_prefs_ = false;
   LayoutTestContentBrowserClient::Get()->SetPopupBlockingEnabled(false);
-  devtools_bindings_.reset();
 
 #if defined(OS_ANDROID)
   // Re-using the shell's main window on Android causes issues with networking
@@ -763,6 +773,7 @@ void BlinkTestController::OnTestFinished() {
   if (!printer_->output_finished())
     printer_->PrintImageFooter();
   main_window_->web_contents()->ExitFullscreen(/*will_cause_resize=*/false);
+  devtools_bindings_.reset();
   devtools_protocol_test_bindings_.reset();
 
   ShellBrowserContext* browser_context =
@@ -957,9 +968,9 @@ void BlinkTestController::OnClearDevToolsLocalStorage() {
 void BlinkTestController::OnShowDevTools(const std::string& settings,
                                          const std::string& frontend_url) {
   devtools_window_ = SecondaryWindow();
-  devtools_bindings_.reset(LayoutTestDevToolsBindings::LoadDevTools(
+  devtools_bindings_ = base::MakeUnique<LayoutTestDevToolsBindings>(
       devtools_window_->web_contents(), main_window_->web_contents(), settings,
-      frontend_url));
+      GURL(frontend_url), false);
   devtools_window_->web_contents()->GetRenderViewHost()->GetWidget()->Focus();
   devtools_window_->web_contents()->Focus();
 }

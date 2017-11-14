@@ -41,6 +41,7 @@
 #import "ios/chrome/browser/passwords/js_password_manager.h"
 #import "ios/chrome/browser/passwords/notify_auto_signin_view_controller.h"
 #import "ios/chrome/browser/passwords/password_form_filler.h"
+#import "ios/chrome/browser/ssl/insecure_input_tab_helper.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #include "ios/chrome/browser/web/tab_id_tab_helper.h"
@@ -309,16 +310,13 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
 
 @synthesize notifyAutoSigninViewController = _notifyAutoSigninViewController;
 
-- (instancetype)initWithWebState:(web::WebState*)webState
-             passwordsUiDelegate:(id<PasswordsUiDelegate>)delegate {
+- (instancetype)initWithWebState:(web::WebState*)webState {
   self = [self initWithWebState:webState
-            passwordsUiDelegate:delegate
                          client:nullptr];
   return self;
 }
 
 - (instancetype)initWithWebState:(web::WebState*)webState
-             passwordsUiDelegate:(id<PasswordsUiDelegate>)delegate
                           client:(std::unique_ptr<PasswordManagerClient>)
                                      passwordManagerClient {
   DCHECK(webState);
@@ -632,7 +630,8 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
     if (webStateObserverBridge_) {
       web::WebState* web_state = webStateObserverBridge_->web_state();
       if (web_state && !web::IsOriginSecure(web_state->GetLastCommittedURL())) {
-        web_state->OnPasswordInputShownOnHttp();
+        InsecureInputTabHelper::GetOrCreateForWebState(web_state)
+            ->DidShowPasswordFieldInInsecureContext();
       }
     }
 
@@ -661,6 +660,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
 
 - (void)checkIfSuggestionsAvailableForForm:(NSString*)formName
                                      field:(NSString*)fieldName
+                                 fieldType:(NSString*)fieldType
                                       type:(NSString*)type
                                 typedValue:(NSString*)typedValue
                                   webState:(web::WebState*)webState
@@ -685,6 +685,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
 
 - (void)retrieveSuggestionsForForm:(NSString*)formName
                              field:(NSString*)fieldName
+                         fieldType:(NSString*)fieldType
                               type:(NSString*)type
                         typedValue:(NSString*)typedValue
                           webState:(web::WebState*)webState
@@ -889,27 +890,6 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
         }
         break;
     }
-  }
-
-  // Fill in as much data about the fields as is required for password
-  // generation.
-  const base::ListValue* fieldList = nullptr;
-  if (!dictionary->GetList("fields", &fieldList))
-    return NO;
-  for (size_t i = 0; i < fieldList->GetSize(); ++i) {
-    const base::DictionaryValue* fieldDictionary = nullptr;
-    if (!fieldList->GetDictionary(i, &fieldDictionary))
-      return NO;
-    base::string16 element;
-    base::string16 type;
-    if (!fieldDictionary->GetString("element", &element) ||
-        !fieldDictionary->GetString("type", &type)) {
-      return NO;
-    }
-    autofill::FormFieldData field;
-    field.name = std::move(element);
-    field.form_control_type = base::UTF16ToUTF8(type);
-    form->form_data.fields.push_back(field);
   }
 
   return YES;

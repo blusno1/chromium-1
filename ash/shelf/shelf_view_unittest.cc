@@ -12,9 +12,11 @@
 #include "ash/app_list/test_app_list_presenter_impl.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/shelf_prefs.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
+#include "ash/session/session_controller.h"
 #include "ash/shelf/app_list_button.h"
 #include "ash/shelf/overflow_bubble.h"
 #include "ash/shelf/overflow_bubble_view.h"
@@ -45,6 +47,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/icu_test_util.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/test/user_action_tester.h"
 #include "base/time/time.h"
@@ -663,37 +666,15 @@ const char*
         ShelfButtonPressedMetricTracker::
             kTimeBetweenWindowMinimizedAndActivatedActionsHistogramName;
 
-class ScopedTextDirectionChange {
- public:
-  explicit ScopedTextDirectionChange(bool is_rtl) : is_rtl_(is_rtl) {
-    original_locale_ = base::i18n::GetConfiguredLocale();
-    if (is_rtl_)
-      base::i18n::SetICUDefaultLocale("he");
-    CheckTextDirectionIsCorrect();
-  }
-
-  ~ScopedTextDirectionChange() {
-    if (is_rtl_)
-      base::i18n::SetICUDefaultLocale(original_locale_);
-  }
-
- private:
-  void CheckTextDirectionIsCorrect() {
-    ASSERT_EQ(is_rtl_, base::i18n::IsRTL());
-  }
-
-  bool is_rtl_;
-  std::string original_locale_;
-};
-
 class ShelfViewTextDirectionTest : public ShelfViewTest,
                                    public testing::WithParamInterface<bool> {
  public:
-  ShelfViewTextDirectionTest() : text_direction_change_(GetParam()) {}
+  ShelfViewTextDirectionTest() : scoped_locale_(GetParam() ? "he" : "") {}
   virtual ~ShelfViewTextDirectionTest() {}
 
  private:
-  ScopedTextDirectionChange text_direction_change_;
+  // Restores locale to the default when destructor is called.
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfViewTextDirectionTest);
 };
@@ -1984,7 +1965,13 @@ TEST_F(ShelfViewTest, TestShelfItemsAnimations) {
   test_api_->RunMessageLoopUntilAnimationsDone();
   EXPECT_EQ(1, observer.icon_positions_animation_duration());
 
-  // The shelf items should animate if we are entering or exiting tablet mode.
+  // The shelf items should animate if we are entering or exiting tablet mode,
+  // and the shelf alignment is bottom aligned.
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  const int64_t id = GetPrimaryDisplay().id();
+  shelf_view_->shelf()->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  SetShelfAlignmentPref(prefs, id, SHELF_ALIGNMENT_BOTTOM);
   observer.Reset();
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   test_api_->RunMessageLoopUntilAnimationsDone();
@@ -1994,6 +1981,20 @@ TEST_F(ShelfViewTest, TestShelfItemsAnimations) {
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
   test_api_->RunMessageLoopUntilAnimationsDone();
   EXPECT_EQ(animation_duration, observer.icon_positions_animation_duration());
+
+  // The shelf items should not animate if we are entering or exiting tablet
+  // mode, and the shelf alignment is not bottom aligned.
+  shelf_view_->shelf()->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  SetShelfAlignmentPref(prefs, id, SHELF_ALIGNMENT_LEFT);
+  observer.Reset();
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  test_api_->RunMessageLoopUntilAnimationsDone();
+  EXPECT_EQ(1, observer.icon_positions_animation_duration());
+
+  observer.Reset();
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  test_api_->RunMessageLoopUntilAnimationsDone();
+  EXPECT_EQ(1, observer.icon_positions_animation_duration());
 }
 
 // Tests that the blank shelf view area shows a context menu on right click.
@@ -2116,7 +2117,7 @@ TEST_F(ShelfViewTest, MouseWheelScrollOnAppIconTransitionsAppList) {
 class ShelfViewVisibleBoundsTest : public ShelfViewTest,
                                    public testing::WithParamInterface<bool> {
  public:
-  ShelfViewVisibleBoundsTest() : text_direction_change_(GetParam()) {}
+  ShelfViewVisibleBoundsTest() : scoped_locale_(GetParam() ? "he" : "") {}
 
   void CheckAllItemsAreInBounds() {
     gfx::Rect visible_bounds = shelf_view_->GetVisibleItemsBoundsInScreen();
@@ -2138,7 +2139,8 @@ class ShelfViewVisibleBoundsTest : public ShelfViewTest,
   }
 
  private:
-  ScopedTextDirectionChange text_direction_change_;
+  // Restores locale to the default when destructor is called.
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfViewVisibleBoundsTest);
 };
@@ -3098,7 +3100,7 @@ class OverflowButtonTextDirectionTest
     : public OverflowButtonInkDropTest,
       public testing::WithParamInterface<bool> {
  public:
-  OverflowButtonTextDirectionTest() : text_direction_change_(GetParam()) {}
+  OverflowButtonTextDirectionTest() : scoped_locale_(GetParam() ? "he" : "") {}
   ~OverflowButtonTextDirectionTest() override {}
 
   void SetUp() override {
@@ -3112,7 +3114,8 @@ class OverflowButtonTextDirectionTest
   std::unique_ptr<OverflowButtonTestApi> overflow_button_test_api_;
 
  private:
-  ScopedTextDirectionChange text_direction_change_;
+  // Restores locale to the default when destructor is called.
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale_;
 
   DISALLOW_COPY_AND_ASSIGN(OverflowButtonTextDirectionTest);
 };

@@ -61,6 +61,7 @@
 #include "gpu/ipc/common/gpu_messages.h"
 #include "media/base/video_frame.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/ui/common/switches.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebImeTextSpan.h"
@@ -361,7 +362,8 @@ class RenderWidgetHostViewAura::WindowAncestorObserver
 
   void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,
-                             const gfx::Rect& new_bounds) override {
+                             const gfx::Rect& new_bounds,
+                             ui::PropertyChangeReason reason) override {
     DCHECK(ancestors_.find(window) != ancestors_.end());
     if (new_bounds.origin() != old_bounds.origin())
       view_->HandleParentBoundsChanged();
@@ -866,6 +868,18 @@ void RenderWidgetHostViewAura::SetTooltipText(
   }
 }
 
+void RenderWidgetHostViewAura::UpdateScreenInfo(gfx::NativeView view) {
+  RenderWidgetHostViewBase::UpdateScreenInfo(view);
+  if (!host_->auto_resize_enabled())
+    return;
+
+  window_->AllocateLocalSurfaceId();
+  host_->DidAllocateLocalSurfaceIdForAutoResize(
+      host_->last_auto_resize_request_number());
+  if (delegated_frame_host_)
+    delegated_frame_host_->WasResized();
+}
+
 gfx::Size RenderWidgetHostViewAura::GetRequestedRendererSize() const {
   return delegated_frame_host_
              ? delegated_frame_host_->GetRequestedRendererSize()
@@ -938,7 +952,8 @@ void RenderWidgetHostViewAura::DidCreateNewRendererCompositorFrameSink(
 
 void RenderWidgetHostViewAura::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    viz::CompositorFrame frame) {
+    viz::CompositorFrame frame,
+    viz::mojom::HitTestRegionListPtr hit_test_region_list) {
   TRACE_EVENT0("content", "RenderWidgetHostViewAura::OnSwapCompositorFrame");
 
   // Override the background color to the current compositor background.
@@ -957,8 +972,10 @@ void RenderWidgetHostViewAura::SubmitCompositorFrame(
   }
 
   if (delegated_frame_host_) {
-    delegated_frame_host_->SubmitCompositorFrame(local_surface_id,
-                                                 std::move(frame));
+    delegated_frame_host_->SubmitCompositorFrame(
+        local_surface_id, std::move(frame), std::move(hit_test_region_list));
+    if (window_)
+      window_->set_embed_frame_sink_id(frame_sink_id_);
   }
   if (frame.metadata.selection.start != selection_start_ ||
       frame.metadata.selection.end != selection_end_) {
@@ -1659,7 +1676,7 @@ viz::FrameSinkId RenderWidgetHostViewAura::FrameSinkIdAtPoint(
       gfx::ConvertPointToDIP(device_scale_factor_, *transformed_point);
 
   // It is possible that the renderer has not yet produced a surface, in which
-  // case we return our current namespace.
+  // case we return our current FrameSinkId.
   if (!id.is_valid())
     return GetFrameSinkId();
   return id.frame_sink_id();

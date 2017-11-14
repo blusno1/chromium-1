@@ -1,3 +1,4 @@
+# TODO: further define failures, master issue http://crbug.com/760181
 -CaptureScreenshotTest.*
 -CompositedScrollingBrowserTest.*
 -ContentBrowserTestSanityTest.*

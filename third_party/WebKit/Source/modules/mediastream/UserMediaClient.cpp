@@ -46,10 +46,12 @@ UserMediaClient::UserMediaClient(WebUserMediaClient* client)
     : client_(client) {}
 
 void UserMediaClient::RequestUserMedia(UserMediaRequest* request) {
-  if (client_)
+  if (client_) {
     client_->RequestUserMedia(request);
-  else
-    request->FailUASpecific("NotSupportedError", String(), String());
+  } else {
+    request->Fail(WebUserMediaRequest::Error::kNotSupported,
+                  "User Media support is disabled");
+  }
 }
 
 void UserMediaClient::CancelUserMediaRequest(UserMediaRequest* request) {
@@ -72,6 +74,12 @@ void UserMediaClient::SetMediaDeviceChangeObserver(MediaDevices* observer) {
 void UserMediaClient::ApplyConstraints(ApplyConstraintsRequest* request) {
   if (client_) {
     client_->ApplyConstraints(WebApplyConstraintsRequest(request));
+  }
+}
+
+void UserMediaClient::StopTrack(MediaStreamComponent* track) {
+  if (client_) {
+    client_->StopTrack(WebMediaStreamTrack(track));
   }
 }
 

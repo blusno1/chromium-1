@@ -206,7 +206,7 @@ public class ContextualSearchTabHelper
      * @param cvc The content view core to attach the gesture state listener to.
      */
     private void addContextualSearchHooks(ContentViewCore cvc) {
-        assert mTab.getContentViewCore() == cvc;
+        assert mTab.getContentViewCore() == null || mTab.getContentViewCore() == cvc;
         ContextualSearchManager contextualSearchManager = getContextualSearchManager(mTab);
         if (mGestureStateListener == null && contextualSearchManager != null) {
             mGestureStateListener = contextualSearchManager.getGestureStateListener();
@@ -238,7 +238,7 @@ public class ContextualSearchTabHelper
 
     /** @return whether Contextual Search is enabled and active in this tab. */
     private boolean isContextualSearchActive(ContentViewCore cvc) {
-        assert mTab.getContentViewCore() == cvc;
+        assert mTab.getContentViewCore() == null || mTab.getContentViewCore() == cvc;
         ContextualSearchManager manager = getContextualSearchManager(mTab);
         if (manager == null) return false;
 

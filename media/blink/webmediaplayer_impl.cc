@@ -170,6 +170,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
     WebMediaPlayerDelegate* delegate,
     std::unique_ptr<RendererFactorySelector> renderer_factory_selector,
     UrlIndex* url_index,
+    std::unique_ptr<VideoFrameCompositor> compositor,
     std::unique_ptr<WebMediaPlayerParams> params)
     : frame_(frame),
       delegate_state_(DelegateState::GONE),
@@ -220,6 +221,8 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
           tick_clock_.get()),
       url_index_(url_index),
       context_provider_(params->context_provider()),
+      vfc_task_runner_(params->video_frame_compositor_task_runner()),
+      compositor_(std::move(compositor)),
 #if defined(OS_ANDROID)  // WMPI_CAST
       cast_impl_(this, client_, params->context_provider()),
 #endif
@@ -253,19 +256,8 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
   DCHECK(client_);
   DCHECK(delegate_);
 
-  if (surface_layer_for_video_enabled_) {
+  if (surface_layer_for_video_enabled_)
     bridge_ = params->create_bridge_callback().Run(this);
-    // TODO(lethalantidote): Use a seperate task_runner. https://crbug/753605.
-    vfc_task_runner_ = media_task_runner_;
-  } else {
-    // Threaded compositing isn't enabled universally yet.
-    vfc_task_runner_ = params->compositor_task_runner()
-                           ? params->compositor_task_runner()
-                           : base::ThreadTaskRunnerHandle::Get();
-  }
-
-  compositor_ = base::MakeUnique<VideoFrameCompositor>(
-      vfc_task_runner_, params->context_provider_callback());
 
   if (surface_layer_for_video_enabled_) {
     vfc_task_runner_->PostTask(
@@ -369,7 +361,7 @@ void WebMediaPlayerImpl::Load(LoadType load_type,
   DoLoad(load_type, url, cors_mode);
 }
 
-void WebMediaPlayerImpl::OnWebLayerReplaced() {
+void WebMediaPlayerImpl::OnWebLayerUpdated() {
   DCHECK(bridge_);
   bridge_->GetWebLayer()->CcLayer()->SetContentsOpaque(opaque_);
   bridge_->GetWebLayer()->SetContentsOpaqueIsFixed(true);
@@ -1775,9 +1767,6 @@ void WebMediaPlayerImpl::OnFrameHidden() {
   if (IsHidden())
     video_locked_when_paused_when_hidden_ = true;
 
-  overlay_info_.is_frame_hidden = true;
-  MaybeSendOverlayInfoToDecoder();
-
   if (watch_time_reporter_)
     watch_time_reporter_->OnHidden();
 
@@ -1795,10 +1784,6 @@ void WebMediaPlayerImpl::OnFrameHidden() {
 void WebMediaPlayerImpl::OnFrameClosed() {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
-  // Re-use |is_hidden| since nothing cares about the difference anyway.
-  overlay_info_.is_frame_hidden = true;
-  MaybeSendOverlayInfoToDecoder();
-
   UpdatePlayState();
 }
 
@@ -1808,9 +1793,6 @@ void WebMediaPlayerImpl::OnFrameShown() {
 
   // Foreground videos don't require user gesture to continue playback.
   video_locked_when_paused_when_hidden_ = false;
-
-  overlay_info_.is_frame_hidden = false;
-  MaybeSendOverlayInfoToDecoder();
 
   if (watch_time_reporter_)
     watch_time_reporter_->OnShown();
@@ -2233,48 +2215,23 @@ blink::WebAudioSourceProvider* WebMediaPlayerImpl::GetAudioSourceProvider() {
   return audio_source_provider_.get();
 }
 
-static void GetCurrentFrameAndSignal(VideoFrameCompositor* compositor,
-                                     scoped_refptr<VideoFrame>* video_frame_out,
-                                     base::WaitableEvent* event) {
-  TRACE_EVENT0("media", "GetCurrentFrameAndSignal");
-  *video_frame_out = compositor->GetCurrentFrameAndUpdateIfStale();
-  event->Signal();
-}
-
 scoped_refptr<VideoFrame> WebMediaPlayerImpl::GetCurrentFrameFromCompositor()
     const {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl::GetCurrentFrameFromCompositor");
 
-  // Needed when the |main_task_runner_| and |vfc_task_runner_| are the
-  // same to avoid deadlock in the Wait() below.
-  if (vfc_task_runner_->BelongsToCurrentThread()) {
-    scoped_refptr<VideoFrame> video_frame =
-        compositor_->GetCurrentFrameAndUpdateIfStale();
-    if (!video_frame) {
-      return nullptr;
-    }
-    last_uploaded_frame_size_ = video_frame->natural_size();
-    last_uploaded_frame_timestamp_ = video_frame->timestamp();
-    return video_frame;
-  }
+  // Can be null.
+  scoped_refptr<VideoFrame> video_frame =
+      compositor_->GetCurrentFrameOnAnyThread();
 
-  // Use a posted task and waitable event instead of a lock otherwise
-  // WebGL/Canvas can see different content than what the compositor is seeing.
-  scoped_refptr<VideoFrame> video_frame;
-  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
+  // base::Unretained is safe here because |compositor_| is destroyed on
+  // |vfc_task_runner_|. The destruction is queued from |this|' destructor,
+  // which also runs on |main_task_runner_|, which makes it impossible for
+  // UpdateCurrentFrameIfStale() to be queued after |compositor_|'s dtor.
   vfc_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&GetCurrentFrameAndSignal, base::Unretained(compositor_.get()),
-                 &video_frame, &event));
-  event.Wait();
+      FROM_HERE, base::Bind(&VideoFrameCompositor::UpdateCurrentFrameIfStale,
+                            base::Unretained(compositor_.get())));
 
-  if (!video_frame) {
-    return nullptr;
-  }
-  last_uploaded_frame_size_ = video_frame->natural_size();
-  last_uploaded_frame_timestamp_ = video_frame->timestamp();
   return video_frame;
 }
 

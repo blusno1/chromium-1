@@ -26,6 +26,8 @@ const int kWebrtcVideoEncoderGpuOutputBufferCount = 1;
 constexpr media::VideoCodecProfile kH264Profile =
     media::VideoCodecProfile::H264PROFILE_MAIN;
 
+constexpr int kH264MinimumTargetBitrateKbpsPerMegapixel = 1800;
+
 void ArgbToI420(const webrtc::DesktopFrame& frame,
                 scoped_refptr<media::VideoFrame> video_frame) {
   const uint8_t* rgb_data = frame.data();
@@ -57,6 +59,7 @@ WebrtcVideoEncoderGpu::WebrtcVideoEncoderGpu(
     media::VideoCodecProfile codec_profile)
     : state_(UNINITIALIZED),
       codec_profile_(codec_profile),
+      bitrate_filter_(kH264MinimumTargetBitrateKbpsPerMegapixel),
       weak_factory_(this) {}
 
 WebrtcVideoEncoderGpu::~WebrtcVideoEncoderGpu() {}
@@ -70,6 +73,8 @@ void WebrtcVideoEncoderGpu::Encode(std::unique_ptr<webrtc::DesktopFrame> frame,
   DCHECK(frame);
   DCHECK(done);
   DCHECK_GT(params.duration, base::TimeDelta::FromMilliseconds(0));
+
+  bitrate_filter_.SetFrameSize(frame->size().width(), frame->size().height());
 
   if (state_ == INITIALIZATION_ERROR) {
     // TODO(zijiehe): The screen resolution limitation of H264 encoder is much
@@ -124,10 +129,11 @@ void WebrtcVideoEncoderGpu::Encode(std::unique_ptr<webrtc::DesktopFrame> frame,
 
   callbacks_[video_frame->timestamp()] = std::move(done);
 
-  if (params.bitrate_kbps > 0) {
+  if (params.bitrate_kbps > 0 && params.fps > 0) {
     // TODO(zijiehe): Forward frame_rate from FrameParams.
+    bitrate_filter_.SetBandwidthEstimateKbps(params.bitrate_kbps);
     video_encode_accelerator_->RequestEncodingParametersChange(
-        params.bitrate_kbps * 1024, 30);
+        bitrate_filter_.GetTargetBitrateKbps() * 1000, params.fps);
   }
   video_encode_accelerator_->Encode(video_frame, params.key_frame);
 }
@@ -186,6 +192,7 @@ void WebrtcVideoEncoderGpu::BitstreamBufferReady(int32_t bitstream_buffer_id,
   encoded_frame->size = webrtc::DesktopSize(input_coded_size_.width(),
                                             input_coded_size_.height());
   encoded_frame->quantizer = 0;
+  encoded_frame->codec = webrtc::kVideoCodecH264;
 
   UseOutputBitstreamBufferId(bitstream_buffer_id);
 

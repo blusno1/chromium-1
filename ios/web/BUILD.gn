@@ -347,6 +347,7 @@ source_set("ios_web_public_unittests") {
     "public/origin_util_unittest.mm",
     "public/referrer_util_unittest.cc",
     "public/serializable_user_data_manager_unittest.mm",
+    "public/ssl_status_unittest.cc",
     "public/user_agent_unittest.mm",
     "public/web_state/page_viewport_state_unittest.mm",
   ]
@@ -477,7 +478,6 @@ source_set("ios_web_web_state_ui_unittests") {
 
   sources = [
     "web_state/ui/crw_web_controller_container_view_unittest.mm",
-    "web_state/ui/crw_web_controller_observer_unittest.mm",
     "web_state/ui/crw_web_controller_unittest.mm",
     "web_state/ui/crw_web_view_scroll_view_proxy_unittest.mm",
     "web_state/ui/crw_wk_navigation_states_unittest.mm",
@@ -586,6 +586,7 @@ js_compile_bundle("web_bundle") {
     "web_state/js/resources/form.js",
     "web_state/js/resources/legacy.js",
     "web_state/js/resources/message.js",
+    "web_state/js/resources/navigation.js",
     "web_state/js/resources/scroll_workaround.js",
     "web_state/js/resources/web_bundle.js",
   ]
@@ -593,10 +594,10 @@ js_compile_bundle("web_bundle") {
 
 js_compile_bundle("nav_bundle") {
   visibility = [ ":js_resources" ]
-  closure_entry_point = "__crWeb.navigation"
+  closure_entry_point = "__crWeb.legacynavigation"
 
   sources = [
-    "web_state/js/resources/navigation.js",
+    "web_state/js/resources/legacy_navigation.js",
   ]
 }
 

@@ -28,6 +28,7 @@
 #include "services/ui/ws/user_display_manager_delegate.h"
 #include "services/ui/ws/user_id_tracker.h"
 #include "services/ui/ws/user_id_tracker_observer.h"
+#include "services/ui/ws/video_detector_impl.h"
 #include "services/ui/ws/window_manager_window_tree_factory_set.h"
 
 namespace ui {
@@ -173,7 +174,7 @@ class WindowServer : public ServerWindowDelegate,
                                     bool success);
   void WindowManagerCreatedTopLevelWindow(WindowTree* wm_tree,
                                           uint32_t window_manager_change_id,
-                                          const ServerWindow* window);
+                                          ServerWindow* window);
 
   // Called when we get an unexpected message from the WindowManager.
   // TODO(sky): decide what we want to do here.
@@ -245,6 +246,8 @@ class WindowServer : public ServerWindowDelegate,
   void OnDisplayDestroyed(Display* display);
   void OnNoMoreDisplays();
   WindowManagerState* GetWindowManagerStateForUser(const UserId& user_id);
+
+  VideoDetectorImpl* video_detector() { return &video_detector_; }
 
   // ServerWindowDelegate:
   viz::HostFrameSinkManager* GetHostFrameSinkManager() override;
@@ -409,6 +412,8 @@ class WindowServer : public ServerWindowDelegate,
 
   // Provides interfaces to create and manage FrameSinks.
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
+
+  VideoDetectorImpl video_detector_;
 
   // System modal windows not attached to a display are added here. Once
   // attached to a display they are removed.

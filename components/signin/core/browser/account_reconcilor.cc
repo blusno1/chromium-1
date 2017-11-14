@@ -24,6 +24,7 @@
 #include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_client.h"
+#include "components/signin/core/browser/signin_features.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
@@ -34,10 +35,24 @@ namespace {
 // String used for source parameter in GAIA cookie manager calls.
 const char kSource[] = "ChromiumAccountReconcilor";
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 // Preference indicating that the Dice migration should happen at the next
 // Chrome startup.
 const char kDiceMigrationOnStartupPref[] =
     "signin.AccountReconcilor.kDiceMigrationOnStartup";
+
+const char kDiceMigrationStatusHistogram[] = "Signin.DiceMigrationStatus";
+
+// Used for UMA histogram kDiceMigrationStatusHistogram.
+// Do not remove or re-order values.
+enum class DiceMigrationStatus {
+  kEnabled,
+  kDisabledReadyForMigration,
+  kDisabledNotReadyForMigration,
+
+  kDiceMigrationStatusCount
+};
+#endif
 
 class AccountEqualToFunc {
  public:
@@ -96,16 +111,25 @@ AccountReconcilor::AccountReconcilor(
       account_reconcilor_lock_count_(0),
       reconcile_on_unblock_(false) {
   VLOG(1) << "AccountReconcilor::AccountReconcilor";
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   PrefService* prefs = client_->GetPrefs();
-  if (ShouldMigrateToDiceOnStartup(is_new_profile)) {
+  bool is_ready_for_dice = IsReadyForDiceMigration(is_new_profile);
+  if (is_ready_for_dice && signin::IsDiceMigrationEnabled()) {
     DCHECK(prefs);
     if (!signin::IsDiceEnabledForProfile(prefs))
       VLOG(1) << "Profile is migrating to Dice";
     signin::MigrateProfileToDice(prefs);
     DCHECK(signin::IsDiceEnabledForProfile(prefs));
   }
-  UMA_HISTOGRAM_BOOLEAN("Signin.DiceEnabledForProfile",
-                        signin::IsDiceEnabledForProfile(prefs));
+  UMA_HISTOGRAM_ENUMERATION(
+      kDiceMigrationStatusHistogram,
+      signin::IsDiceEnabledForProfile(prefs)
+          ? DiceMigrationStatus::kEnabled
+          : (is_ready_for_dice
+                 ? DiceMigrationStatus::kDisabledReadyForMigration
+                 : DiceMigrationStatus::kDisabledNotReadyForMigration),
+      DiceMigrationStatus::kDiceMigrationStatusCount);
+#endif
 }
 
 AccountReconcilor::~AccountReconcilor() {
@@ -118,7 +142,9 @@ AccountReconcilor::~AccountReconcilor() {
 // static
 void AccountReconcilor::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   registry->RegisterBooleanPref(kDiceMigrationOnStartupPref, false);
+#endif
 }
 
 void AccountReconcilor::Initialize(bool start_reconcile_if_tokens_available) {
@@ -145,7 +171,7 @@ void AccountReconcilor::Shutdown() {
 }
 
 void AccountReconcilor::RegisterWithSigninManager() {
-  if (signin::IsDiceMigrationEnabled()) {
+  if (signin::IsDicePrepareMigrationEnabled()) {
     // Reconcilor is always turned on when DICE is enabled. It does not need to
     // observe the SigninManager events.
     return;
@@ -156,7 +182,7 @@ void AccountReconcilor::RegisterWithSigninManager() {
 }
 
 void AccountReconcilor::UnregisterWithSigninManager() {
-  if (signin::IsDiceMigrationEnabled())
+  if (signin::IsDicePrepareMigrationEnabled())
     return;
 
   VLOG(1) << "AccountReconcilor::UnregisterWithSigninManager";
@@ -227,7 +253,8 @@ void AccountReconcilor::UnregisterWithCookieManagerService() {
 }
 
 bool AccountReconcilor::IsEnabled() {
-  return signin_manager_->IsAuthenticated() || signin::IsDiceMigrationEnabled();
+  return signin_manager_->IsAuthenticated() ||
+         signin::IsDicePrepareMigrationEnabled();
 }
 
 signin_metrics::AccountReconcilorState AccountReconcilor::GetState() {
@@ -283,7 +310,7 @@ void AccountReconcilor::OnRefreshTokensLoaded() {
 
 void AccountReconcilor::GoogleSigninSucceeded(const std::string& account_id,
                                               const std::string& username) {
-  DCHECK(!signin::IsDiceMigrationEnabled());
+  DCHECK(!signin::IsDicePrepareMigrationEnabled());
   VLOG(1) << "AccountReconcilor::GoogleSigninSucceeded: signed in";
   RegisterWithCookieManagerService();
   RegisterWithContentSettings();
@@ -292,7 +319,7 @@ void AccountReconcilor::GoogleSigninSucceeded(const std::string& account_id,
 
 void AccountReconcilor::GoogleSignedOut(const std::string& account_id,
                                         const std::string& username) {
-  DCHECK(!signin::IsDiceMigrationEnabled());
+  DCHECK(!signin::IsDicePrepareMigrationEnabled());
   VLOG(1) << "AccountReconcilor::GoogleSignedOut: signed out";
   AbortReconcile();
   UnregisterWithCookieManagerService();
@@ -362,7 +389,7 @@ void AccountReconcilor::StartReconcile() {
   add_to_cookie_.clear();
   ValidateAccountsFromTokenService();
 
-  if (primary_account_.empty() && !signin::IsDiceMigrationEnabled()) {
+  if (primary_account_.empty() && !signin::IsDicePrepareMigrationEnabled()) {
     VLOG(1) << "AccountReconcilor::StartReconcile: primary has error";
     return;
   }
@@ -406,7 +433,7 @@ void AccountReconcilor::OnGaiaAccountsInCookieUpdated(
 
 void AccountReconcilor::ValidateAccountsFromTokenService() {
   primary_account_ = signin_manager_->GetAuthenticatedAccountId();
-  DCHECK(signin::IsDiceMigrationEnabled() || !primary_account_.empty());
+  DCHECK(signin::IsDicePrepareMigrationEnabled() || !primary_account_.empty());
 
   chrome_accounts_ = token_service_->GetAccounts();
 
@@ -416,7 +443,8 @@ void AccountReconcilor::ValidateAccountsFromTokenService() {
   // accounts.
   for (auto i = chrome_accounts_.begin(); i != chrome_accounts_.end(); ++i) {
     if (token_service_->GetDelegate()->RefreshTokenHasError(*i)) {
-      if ((primary_account_ == *i) && !signin::IsDiceMigrationEnabled()) {
+      if ((primary_account_ == *i) &&
+          !signin::IsDicePrepareMigrationEnabled()) {
         primary_account_.clear();
         chrome_accounts_.clear();
         break;
@@ -472,14 +500,14 @@ void AccountReconcilor::OnReceivedManageAccountsResponse(
 //     3. The last known first Gaia account
 //     4. The first account in the token service
 std::string AccountReconcilor::GetFirstGaiaAccountForReconcile() const {
-  if (!signin::IsDiceMigrationEnabled()) {
+  if (!signin::IsDicePrepareMigrationEnabled()) {
     // Mirror only uses the primary account, and it is never empty.
     DCHECK(!primary_account_.empty());
     DCHECK(base::ContainsValue(chrome_accounts_, primary_account_));
     return primary_account_;
   }
 
-  DCHECK(signin::IsDiceMigrationEnabled());
+  DCHECK(signin::IsDicePrepareMigrationEnabled());
   if (chrome_accounts_.empty())
     return std::string();  // No Chrome account, log out.
 
@@ -573,7 +601,7 @@ void AccountReconcilor::FinishReconcile() {
   }
 
   if (first_account.empty()) {
-    DCHECK(signin::IsDiceMigrationEnabled());
+    DCHECK(signin::IsDicePrepareMigrationEnabled());
     // Gaia cookie has been cleared or was already empty.
     DCHECK((first_account_mismatch && rebuild_cookie) ||
            (number_gaia_accounts == 0));
@@ -620,7 +648,7 @@ void AccountReconcilor::FinishReconcile() {
     last_known_first_account_ = first_account;
 
     // Migration happens on startup if the last reconcile was a no-op.
-    if (signin::IsDiceMigrationEnabled())
+    if (signin::IsDicePrepareMigrationEnabled())
       SetDiceMigrationOnStartup(client_->GetPrefs(), reconcile_is_noop_);
   }
   ScheduleStartReconcileIfChromeAccountsChanged();
@@ -754,15 +782,20 @@ void AccountReconcilor::UnblockReconcile() {
   }
 }
 
-bool AccountReconcilor::ShouldMigrateToDiceOnStartup(bool is_new_profile) {
-  return signin::IsDiceMigrationEnabled() &&
-         (is_new_profile ||
-          client_->GetPrefs()->GetBoolean(kDiceMigrationOnStartupPref));
+bool AccountReconcilor::IsReadyForDiceMigration(bool is_new_profile) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  return is_new_profile ||
+         client_->GetPrefs()->GetBoolean(kDiceMigrationOnStartupPref);
+#else
+  return false;
+#endif
 }
 
 // static
 void AccountReconcilor::SetDiceMigrationOnStartup(PrefService* prefs,
                                                   bool migrate) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   VLOG(1) << "Dice migration on next startup: " << migrate;
   prefs->SetBoolean(kDiceMigrationOnStartupPref, migrate);
+#endif
 }

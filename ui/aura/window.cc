@@ -263,12 +263,10 @@ gfx::Rect Window::GetBoundsInScreen() const {
 
 void Window::SetTransform(const gfx::Transform& transform) {
   for (WindowObserver& observer : observers_)
-    observer.OnWindowTransforming(this);
+    observer.OnWindowTargetTransformChanging(this, transform);
   gfx::Transform old_transform = layer()->transform();
   layer()->SetTransform(transform);
   port_->OnDidChangeTransform(old_transform, transform);
-  for (WindowObserver& observer : observers_)
-    observer.OnWindowTransformed(this);
 }
 
 void Window::SetLayoutManager(LayoutManager* layout_manager) {
@@ -713,8 +711,10 @@ void Window::SetBoundsInternal(const gfx::Rect& new_bounds) {
   // If we are currently not the layer's delegate, we will not get bounds
   // changed notification from the layer (this typically happens after animating
   // hidden). We must notify ourselves.
-  if (layer()->delegate() != this)
-    OnLayerBoundsChanged(old_bounds);
+  if (layer()->delegate() != this) {
+    OnLayerBoundsChanged(old_bounds,
+                         ui::PropertyChangeReason::NOT_FROM_ANIMATION);
+  }
 }
 
 void Window::SetVisible(bool visible) {
@@ -1045,6 +1045,10 @@ viz::FrameSinkId Window::GetFrameSinkId() const {
   return port_->GetFrameSinkId();
 }
 
+bool Window::IsEmbeddingClient() const {
+  return embed_frame_sink_id_.is_valid();
+}
+
 void Window::OnPaintLayer(const ui::PaintContext& context) {
   Paint(context);
 }
@@ -1055,7 +1059,8 @@ void Window::OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) {
     observer.OnDelegatedFrameDamage(this, damage_rect_in_dip);
 }
 
-void Window::OnLayerBoundsChanged(const gfx::Rect& old_bounds) {
+void Window::OnLayerBoundsChanged(const gfx::Rect& old_bounds,
+                                  ui::PropertyChangeReason reason) {
   bounds_ = layer()->bounds();
 
   // Use |bounds_| as that is the bounds before any animations, which is what
@@ -1067,12 +1072,17 @@ void Window::OnLayerBoundsChanged(const gfx::Rect& old_bounds) {
   if (delegate_)
     delegate_->OnBoundsChanged(old_bounds, bounds_);
   for (auto& observer : observers_)
-    observer.OnWindowBoundsChanged(this, old_bounds, bounds_);
+    observer.OnWindowBoundsChanged(this, old_bounds, bounds_, reason);
 }
 
-void Window::OnLayerOpacityChanged(float old_opacity, float new_opacity) {
+void Window::OnLayerOpacityChanged(ui::PropertyChangeReason reason) {
   for (WindowObserver& observer : observers_)
-    observer.OnWindowOpacityChanged(this, old_opacity, new_opacity);
+    observer.OnWindowOpacityChanged(this, reason);
+}
+
+void Window::OnLayerTransformed(ui::PropertyChangeReason reason) {
+  for (WindowObserver& observer : observers_)
+    observer.OnWindowTransformed(this, reason);
 }
 
 bool Window::CanAcceptEvent(const ui::Event& event) {

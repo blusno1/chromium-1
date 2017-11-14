@@ -43,6 +43,7 @@
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/common/origin_trials/trial_token_validator.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h"
 #include "ui/base/mojo/window_open_disposition.mojom.h"
 #include "url/gurl.h"
@@ -70,8 +71,11 @@ struct ServiceWorkerVersionInfo;
 // more than one ServiceWorkerVersion "running" at a time, but only
 // one of them is activated. This class connects the actual script with a
 // running worker.
+//
+// Unless otherwise noted, all methods of this class run on the IO thread.
 class CONTENT_EXPORT ServiceWorkerVersion
-    : public base::RefCounted<ServiceWorkerVersion>,
+    : public blink::mojom::ServiceWorkerHost,
+      public base::RefCounted<ServiceWorkerVersion>,
       public EmbeddedWorkerInstance::Listener {
  public:
   // TODO(crbug.com/755477): LegacyStatusCallback which does not use
@@ -499,43 +503,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
                           std::vector<RequestInfo>,
                           std::greater<RequestInfo>>;
 
-  // EmbeddedWorkerInstance Listener implementation which calls a callback
-  // on receiving a particular IPC message. ResponseMessage is the type of
-  // the IPC message to listen for, while CallbackType should be a callback
-  // with same arguments as the IPC message.
-  // Additionally only calls the callback for messages with a specific request
-  // id, which must be the first argument of the IPC message.
-  template <typename ResponseMessage,
-            typename CallbackType,
-            typename Signature = typename CallbackType::RunType>
-  class EventResponseHandler;
-
-  template <typename ResponseMessage, typename CallbackType, typename... Args>
-  class EventResponseHandler<ResponseMessage, CallbackType, void(Args...)>
-      : public EmbeddedWorkerInstance::Listener {
-   public:
-    EventResponseHandler(const base::WeakPtr<EmbeddedWorkerInstance>& worker,
-                         int request_id,
-                         const CallbackType& callback)
-        : worker_(worker), request_id_(request_id), callback_(callback) {
-      worker_->AddListener(this);
-    }
-    ~EventResponseHandler() override {
-      if (worker_)
-        worker_->RemoveListener(this);
-    }
-    bool OnMessageReceived(const IPC::Message& message) override;
-
-   private:
-    void RunCallback(Args... args) {
-      callback_.Run(std::forward<Args>(args)...);
-    }
-
-    base::WeakPtr<EmbeddedWorkerInstance> const worker_;
-    const int request_id_;
-    const CallbackType callback_;
-  };
-
   // The timeout timer interval.
   static constexpr base::TimeDelta kTimeoutTimerDelay =
       base::TimeDelta::FromSeconds(30);
@@ -577,6 +544,14 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   void OnStartSentAndScriptEvaluated(ServiceWorkerStatusCode status);
 
+  // Implements blink::mojom::ServiceWorkerHost.
+  void SetCachedMetadata(const GURL& url,
+                         const std::vector<uint8_t>& data) override;
+  void ClearCachedMetadata(const GURL& url) override;
+
+  void OnSetCachedMetadataFinished(int64_t callback_id, int result);
+  void OnClearCachedMetadataFinished(int64_t callback_id, int result);
+
   // Message handlers.
 
   // This corresponds to the spec's get(id) steps.
@@ -598,11 +573,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void OnOpenWindowFinished(int request_id,
                             ServiceWorkerStatusCode status,
                             const ServiceWorkerClientInfo& client_info);
-
-  void OnSetCachedMetadata(const GURL& url, const std::vector<char>& data);
-  void OnSetCachedMetadataFinished(int64_t callback_id, int result);
-  void OnClearCachedMetadata(const GURL& url);
-  void OnClearCachedMetadataFinished(int64_t callback_id, int result);
 
   void OnPostMessageToClient(
       const std::string& client_uuid,
@@ -733,6 +703,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
   std::unique_ptr<ServiceWorkerInstalledScriptsSender>
       installed_scripts_sender_;
 
+  mojo::AssociatedBinding<blink::mojom::ServiceWorkerHost> binding_;
+
   // The number of fetch event responses that the service worker is streaming to
   // the browser process. We try to not stop the service worker while there is
   // an ongoing response.
@@ -826,31 +798,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerVersion);
 };
-
-template <typename ResponseMessage, typename CallbackType, typename... Args>
-bool ServiceWorkerVersion::EventResponseHandler<
-    ResponseMessage,
-    CallbackType,
-    void(Args...)>::OnMessageReceived(const IPC::Message& message) {
-  if (message.type() != ResponseMessage::ID)
-    return false;
-  int received_request_id;
-  bool result = base::PickleIterator(message).ReadInt(&received_request_id);
-  if (!result || received_request_id != request_id_)
-    return false;
-
-  CallbackType protect(callback_);
-  // Essentially same code as what IPC_MESSAGE_FORWARD expands to.
-  void* param = nullptr;
-  if (!ResponseMessage::Dispatch(&message, this, this, param,
-                                 &EventResponseHandler::RunCallback))
-    message.set_dispatch_error();
-
-  // At this point |this| can have been deleted, so don't do anything other
-  // than returning.
-
-  return true;
-}
 
 }  // namespace content
 

@@ -316,6 +316,10 @@
     "label": "//chrome/android:chrome_sync_shell_test_apk",
     "type": "console_test_launcher",
   },
+  "chromedriver": {
+    "label": "//chrome/test/chromedriver:chromedriver",
+    "type": "additional_compile_target",
+  },
   "chromedriver_unittests": {
     "label": "//chrome/test/chromedriver:chromedriver_unittests",
     "type": "windowed_test_launcher",
@@ -409,8 +413,8 @@
     "label": "//courgette:courgette_unittests",
     "type": "console_test_launcher",
   },
-  "crashpad_util_test": {
-    "label": "//third_party/crashpad/crashpad/util:crashpad_util_test",
+  "crashpad_tests": {
+    "label": "//third_party/crashpad/crashpad:crashpad_tests",
     "type": "console_test_launcher",
   },
   "cronet_package": {
@@ -582,6 +586,11 @@
     "args": [
       "--snapshot-output-dir=${ISOLATED_OUTDIR}",
     ],
+  },
+  "ios_chrome_bookmarks_egtests": {
+    "label": "//ios/chrome/test/earl_grey:ios_chrome_bookmarks_egtests",
+    "type": "raw",
+    "args": [],
   },
   "ios_chrome_integration_egtests": {
     "label": "//ios/chrome/test/earl_grey:ios_chrome_integration_egtests",
@@ -829,6 +838,10 @@
   "ozone_gl_unittests": {
     "label": "//ui/ozone/gl:ozone_gl_unittests",
     "type": "console_test_launcher",
+  },
+  "pdf_fuzzers": {
+    "label": "//pdf/pdfium/fuzzers:pdf_fuzzers",
+    "type": "additional_compile_target",
   },
   "pdf_unittests": {
     "label": "//pdf:pdf_unittests",

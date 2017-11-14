@@ -101,16 +101,20 @@ const char kSlimNavigationManagerDescription[] =
     "When enabled, uses the experimental slim navigation manager that provides "
     "better compatibility with HTML navigation spec.";
 
+const char kNewPassKitDownloadName[] = "Use PassKit with ios/web Download API";
+const char kNewPassKitDownloadDescription[] =
+    "When enabled, uses ios/web Download API as dowload backend for PassKit.";
+
+const char kNewFileDownloadName[] = "Use new Download Manager UI and backend";
+const char kNewFileDownloadDescription[] =
+    "When enabled, uses new Download Manager UI and ios/web Download API as "
+    "backend.";
+
 const char kTabSwitcherPresentsBVCName[] = "TabSwitcher Presents BVC";
 const char kTabSwitcherPresentsBVCDescription[] =
     "When enabled, the tab switcher will present the BVC, so that when the "
     "BVC is visible, the tab switcher will remain in the VC hierarchy "
     "underneath it.";
-
-const char kToolbarSnapshotAnimationName[] = "Animate a toolbar's snapshot";
-const char kToolbarSnapshotAnimationDescription[] =
-    "When entering/leaving the stack view, a snapshot of the toolbar is "
-    "animated instead of the real toolbar.";
 
 const char kUseDdljsonApiName[] = "Use new ddljson API for Doodles";
 const char kUseDdljsonApiDescription[] =

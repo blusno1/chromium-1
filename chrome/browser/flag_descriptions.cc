@@ -81,6 +81,12 @@ const char kBrowserSideNavigationName[] = "Enable browser side navigation";
 const char kBrowserSideNavigationDescription[] =
     "Enable browser side navigation (aka PlzNavigate).";
 
+const char kNavigationMojoResponseName[] = "Navigation response using Mojo";
+const char kNavigationMojoResponseDescription[] =
+    "Browser side navigation (aka PlzNavigate) is using blob URLs to deliver "
+    "the body of the main resource to the renderer process. This flag replaces "
+    "this mechanism by using a Mojo DataPipe.";
+
 const char kBrowserTaskSchedulerName[] = "Task Scheduler";
 const char kBrowserTaskSchedulerDescription[] =
     "Enables redirection of some task posting APIs to the task scheduler.";
@@ -116,6 +122,11 @@ const char kClickToOpenPDFName[] = "Click to open embedded PDFs";
 const char kClickToOpenPDFDescription[] =
     "When the PDF plugin is unavailable, show a click-to-open placeholder for "
     "embedded PDFs.";
+
+const char kClipboardContentSettingName[] = "Clipboard content setting";
+const char kClipboardContentSettingDescription[] =
+    "Enables a site-wide permission in the UI which controls access to the "
+    "asynchronous clipboard web API";
 
 const char kCloudImportName[] = "Cloud Import";
 const char kCloudImportDescription[] = "Allows the cloud-import feature.";
@@ -423,10 +434,15 @@ const char kEnablePolicyToolDescription[] =
     "If enabled, the chrome://policy-tool URL loads a page for managing "
     "policies.";
 
-const char kEnableMidiManagerDynamicInstantiationName[] =
-    "MIDIManager dynamic instantiation for Web MIDI.";
-const char kEnableMidiManagerDynamicInstantiationDescription[] =
-    "Enable MIDIManager dynamic instantiation for Web MIDI.";
+const char kEnablePWAFullCodeCacheName[] = "Enable PWA full code cache";
+const char kEnablePWAFullCodeCacheDescription[] =
+    "Generate V8 code cache in Cache Storage while installing Service Worker "
+    "for PWAs.";
+
+const char kEnableMultiMirroringName[] =
+    "Display mirroring across multiple displays.";
+const char kEnableMultiMirroringDescription[] =
+    "Enable Display mirroring across multiple displays.";
 
 const char kEnableNavigationTracingName[] = "Enable navigation tracing";
 const char kEnableNavigationTracingDescription[] =
@@ -1797,6 +1813,11 @@ const char kEnableFaviconsFromWebManifestName[] =
 const char kEnableFaviconsFromWebManifestDescription[] =
     "Fetch Web Manifests on page load to read favicons from them.";
 
+const char kEnableMidiManagerDynamicInstantiationName[] =
+    "MIDIManager dynamic instantiation for Web MIDI.";
+const char kEnableMidiManagerDynamicInstantiationDescription[] =
+    "Enable MIDIManager dynamic instantiation for Web MIDI.";
+
 const char kEnableNtpAssetDownloadSuggestionsName[] =
     "Show asset downloads on the New Tab page";
 const char kEnableNtpAssetDownloadSuggestionsDescription[] =
@@ -2020,6 +2041,10 @@ const char kPayWithGoogleV1Description[] =
     "Enable Pay with Google integration into Web Payments with API version "
     "'1'.";
 
+const char kProgressBarThrottleName[] = "Android progress update throttling.";
+const char kProgressBarThrottleDescription[] =
+    "Limit the maximum progress update to make progress appear smoother.";
+
 const char kProgressBarCompletionName[] =
     "Android phone page load progress bar completion time.";
 const char kProgressBarCompletionDescription[] =
@@ -2091,11 +2116,6 @@ const char kUpdateMenuItemName[] = "Force show update menu item";
 const char kUpdateMenuItemDescription[] =
     R"*(When enabled, an "Update Chrome" item will be shown in the app )*"
     R"*(menu.)*";
-
-const char kUseAndroidMidiApiName[] = "Use Android Midi API";
-const char kUseAndroidMidiApiDescription[] =
-    "Use Android Midi API for WebMIDI (effective only with Android M+ "
-    "devices).";
 
 const char kThirdPartyDoodlesName[] =
     "Enable Doodles for third-party search engines";
@@ -2213,10 +2233,6 @@ const char kEnableDesktopIosPromotionsDescription[] =
     "Enable Desktop to iOS promotions, and allow users to see them if they are "
     "eligible.";
 
-const char kExperimentalTabControllerName[] = "Experimental tab controller.";
-const char kExperimentalTabControllerDescription[] =
-    "Enable controller for highly experimental tab policies.";
-
 const char kGdiTextPrinting[] = "GDI Text Printing";
 const char kGdiTextPrintingDescription[] =
     "Use GDI to print text as simply text";
@@ -2314,6 +2330,11 @@ const char kMacV2SandboxDescription[] =
 const char kMacViewsNativeAppWindowsName[] = "Toolkit-Views App Windows.";
 const char kMacViewsNativeAppWindowsDescription[] =
     "Controls whether to use Toolkit-Views based Chrome App windows.";
+
+const char kMacViewsProfileChooserName[] =
+    "Profile chooser menu with toolkit-views on Mac";
+const char kMacViewsProfileChooserDescription[] =
+    "Enables profile chooser menu based on toolkit-views, on Mac";
 
 const char kMacViewsTaskManagerName[] = "Toolkit-Views Task Manager.";
 const char kMacViewsTaskManagerDescription[] =
@@ -2472,9 +2493,9 @@ const char kEnableZipArchiverPackerName[] = "ZIP archiver - Packer";
 const char kEnableZipArchiverPackerDescription[] =
     "Enable the ability to archive files on Drive in the Files app";
 
-const char kEnableZipArchiverUnpackerName[] = "ZIP archiver - Unpacker";
-const char kEnableZipArchiverUnpackerDescription[] =
-    "Enable the ability to unpack archives in incognito mode";
+const char kZipArchiverUnpackerName[] = "ZIP archiver - Unpacker";
+const char kZipArchiverUnpackerDescription[] =
+    "Enable or disable the ability to unpack archives in incognito mode";
 
 const char kEolNotificationName[] = "Disable Device End of Life notification.";
 const char kEolNotificationDescription[] =
@@ -2843,6 +2864,14 @@ const char kUiSlowAnimationsName[] = "Slow UI animations";
 const char kUiSlowAnimationsDescription[] = "Makes all UI animations slow.";
 
 #endif  // defined(OS_CHROMEOS)
+
+#if defined(TOOLKIT_VIEWS)
+
+const char kExperimentalTabControllerName[] = "Experimental tab controller.";
+const char kExperimentalTabControllerDescription[] =
+    "Enable controller for highly experimental tab policies.";
+
+#endif  // defined(TOOLKIT_VIEWS)
 
 #if defined(TOOLKIT_VIEWS) || defined(OS_ANDROID)
 

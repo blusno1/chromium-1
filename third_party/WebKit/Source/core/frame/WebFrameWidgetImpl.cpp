@@ -565,29 +565,6 @@ void WebFrameWidgetImpl::SetFocus(bool enable) {
   }
 }
 
-// TODO(ekaramad):This method is almost duplicated in WebViewImpl as well. This
-// code needs to be refactored  (http://crbug.com/629721).
-WebRange WebFrameWidgetImpl::CompositionRange() {
-  LocalFrame* focused = FocusedLocalFrameAvailableForIme();
-  if (!focused)
-    return WebRange();
-
-  const EphemeralRange range =
-      focused->GetInputMethodController().CompositionEphemeralRange();
-  if (range.IsNull())
-    return WebRange();
-
-  Element* editable =
-      focused->Selection().RootEditableElementOrDocumentElement();
-  DCHECK(editable);
-
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  editable->GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-
-  return PlainTextRange::Create(*editable, range);
-}
-
 WebColor WebFrameWidgetImpl::BackgroundColor() const {
   if (background_color_override_enabled_)
     return background_color_override_;
@@ -737,13 +714,15 @@ void WebFrameWidgetImpl::WillCloseLayerTreeView() {
 // code needs to be refactored  (http://crbug.com/629721).
 bool WebFrameWidgetImpl::GetCompositionCharacterBounds(
     WebVector<WebRect>& bounds) {
-  WebRange range = CompositionRange();
+  WebInputMethodController* controller = GetActiveWebInputMethodController();
+  if (!controller)
+    return false;
+
+  WebRange range = controller->CompositionRange();
   if (range.IsEmpty())
     return false;
 
   LocalFrame* frame = FocusedLocalFrameInWidget();
-  if (!frame)
-    return false;
 
   WebLocalFrameImpl* web_local_frame = WebLocalFrameImpl::FromFrame(frame);
   size_t character_count = range.length();
@@ -1078,7 +1057,7 @@ void WebFrameWidgetImpl::InitializeLayerTreeView() {
   DCHECK(!mutator_);
   layer_tree_view_ = client_->InitializeLayerTreeView();
   if (layer_tree_view_ && layer_tree_view_->CompositorAnimationHost()) {
-    animation_host_ = WTF::MakeUnique<CompositorAnimationHost>(
+    animation_host_ = std::make_unique<CompositorAnimationHost>(
         layer_tree_view_->CompositorAnimationHost());
   }
 

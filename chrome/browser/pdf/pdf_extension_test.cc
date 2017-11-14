@@ -121,20 +121,21 @@ class PDFExtensionTest : public ExtensionApiTest,
     ExtensionApiTest::TearDownOnMainThread();
   }
 
-  bool PdfIsExpectedToFailLoad(const std::string& pdf_file) {
+  bool PdfIsExpectedToLoad(const std::string& pdf_file) {
     const char* const kFailingPdfs[] = {
-        // TODO(thestig): Investigate why this file doesn't fail when served by
-        // EmbeddedTestServer or another webserver.
-        // "pdf_private/cfuzz5.pdf",
-        "pdf_private/cfuzz6.pdf", "pdf_private/crash-11-14-44.pdf",
-        "pdf_private/js.pdf",     "pdf_private/segv-ecx.pdf",
+        "pdf_private/accessibility_crash_1.pdf",
+        "pdf_private/cfuzz5.pdf",
+        "pdf_private/cfuzz6.pdf",
+        "pdf_private/crash-11-14-44.pdf",
+        "pdf_private/js.pdf",
+        "pdf_private/segv-ecx.pdf",
         "pdf_private/tests.pdf",
     };
-    for (size_t i = 0; i < arraysize(kFailingPdfs); ++i) {
-      if (kFailingPdfs[i] == pdf_file)
-        return true;
+    for (const char* failing_pdf : kFailingPdfs) {
+      if (failing_pdf == pdf_file)
+        return false;
     }
-    return false;
+    return true;
   }
 
   // Runs the extensions test at chrome/test/data/pdf/<filename> on the PDF file
@@ -148,7 +149,7 @@ class PDFExtensionTest : public ExtensionApiTest,
     // It should be good enough to just navigate to the URL. But loading up the
     // BrowserPluginGuest seems to happen asynchronously as there was flakiness
     // being seen due to the BrowserPluginGuest not being available yet (see
-    // crbug.com/498077). So instead use |LoadPdf| which ensures that the PDF is
+    // crbug.com/498077). So instead use LoadPdf() which ensures that the PDF is
     // loaded before continuing.
     WebContents* guest_contents = LoadPdfGetGuestContents(url);
     ASSERT_TRUE(guest_contents);
@@ -196,7 +197,7 @@ class PDFExtensionTest : public ExtensionApiTest,
     return pdf_extension_test_util::EnsurePDFHasLoaded(web_contents);
   }
 
-  // Same as |LoadPdf|, but also returns a pointer to the guest WebContents for
+  // Same as LoadPdf(), but also returns a pointer to the guest WebContents for
   // the loaded PDF. Returns nullptr if the load fails.
   WebContents* LoadPdfGetGuestContents(const GURL& url) {
     if (!LoadPdf(url))
@@ -230,7 +231,7 @@ class PDFExtensionTest : public ExtensionApiTest,
       if (static_cast<int>(base::Hash(filename) % kNumberLoadTestParts) == k) {
         LOG(INFO) << "Loading: " << pdf_file;
         bool success = LoadPdf(embedded_test_server()->GetURL("/" + pdf_file));
-        EXPECT_EQ(!PdfIsExpectedToFailLoad(pdf_file), success);
+        EXPECT_EQ(PdfIsExpectedToLoad(pdf_file), success) << pdf_file;
       }
       ++count;
     }
@@ -573,8 +574,6 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, TabTitleWithEmbeddedPdf) {
 }
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfZoomWithoutBubble) {
-  using namespace zoom;
-
   GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
   WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
   ASSERT_TRUE(guest_contents);
@@ -585,21 +584,20 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfZoomWithoutBubble) {
   // above 0. Ideally we should look at the zoom levels from the PDF viewer
   // javascript, but we assume they'll always match the browser presets, which
   // are easier to access.
-  std::vector<double> preset_zoom_levels = PageZoom::PresetZoomLevels(0.0);
-  std::vector<double>::iterator it =
-      std::find(preset_zoom_levels.begin(), preset_zoom_levels.end(), 0.0);
+  std::vector<double> preset_zoom_levels = zoom::PageZoom::PresetZoomLevels(0);
+  auto it = std::find(preset_zoom_levels.begin(), preset_zoom_levels.end(), 0);
   ASSERT_TRUE(it != preset_zoom_levels.end());
   it++;
   ASSERT_TRUE(it != preset_zoom_levels.end());
   double new_zoom_level = *it;
 
-  auto* zoom_controller = ZoomController::FromWebContents(web_contents);
+  auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents);
   // We expect a ZoomChangedEvent with can_show_bubble == false if the PDF
   // extension behaviour is properly picked up. The test times out otherwise.
-  ZoomChangedWatcher watcher(zoom_controller,
-                             ZoomController::ZoomChangedEventData(
-                                 web_contents, 0.f, new_zoom_level,
-                                 ZoomController::ZOOM_MODE_MANUAL, false));
+  zoom::ZoomChangedWatcher watcher(
+      zoom_controller, zoom::ZoomController::ZoomChangedEventData(
+                           web_contents, 0, new_zoom_level,
+                           zoom::ZoomController::ZOOM_MODE_MANUAL, false));
 
   // Zoom PDF via script.
 #if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
@@ -690,21 +688,6 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfAccessibility) {
 
   ASSERT_MULTILINE_STR_MATCHES(kExpectedPDFAXTreePattern, ax_tree_dump);
 }
-
-#if defined(GOOGLE_CHROME_BUILD)
-// Test a particular PDF encountered in the wild that triggered a crash
-// when accessibility is enabled.  (http://crbug.com/648981)
-IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfAccessibilityCharCountCrash) {
-  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
-  GURL test_pdf_url(embedded_test_server()->GetURL(
-      "/pdf_private/accessibility_crash_1.pdf"));
-
-  WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
-  ASSERT_TRUE(guest_contents);
-
-  WaitForAccessibilityTreeToContainNodeWithName(guest_contents, "Page 1");
-}
-#endif
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfAccessibilityEnableLater) {
   // In this test, load the PDF file first, with accessibility off.
@@ -1331,7 +1314,43 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PostMessageForZeroSizedEmbed) {
   EXPECT_EQ("\"POST_MESSAGE_OK\"", message);
 }
 
+// In response to the events sent in |send_events|, ensures the PDF viewer zooms
+// in and that the viewer's custom pinch zooming mechanism is used to do so.
+void EnsureCustomPinchZoomInvoked(WebContents* guest_contents,
+                                  WebContents* contents,
+                                  base::OnceClosure send_events) {
+  ASSERT_TRUE(content::ExecuteScript(
+      guest_contents,
+      "var gestureDetector = new GestureDetector(viewer.plugin_); "
+      "var updatePromise = new Promise(function(resolve) { "
+      "  gestureDetector.addEventListener('pinchupdate', resolve); "
+      "});"));
+
+  zoom::ZoomChangedWatcher zoom_watcher(
+      contents,
+      base::BindRepeating(
+          [](const zoom::ZoomController::ZoomChangedEventData& event) {
+            return event.new_zoom_level > event.old_zoom_level &&
+                   event.zoom_mode == zoom::ZoomController::ZOOM_MODE_MANUAL &&
+                   !event.can_show_bubble;
+          }));
+
+  std::move(send_events).Run();
+
+  bool got_update;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      guest_contents,
+      "updatePromise.then(function(update) { "
+      "  window.domAutomationController.send(!!update); "
+      "});",
+      &got_update));
+  EXPECT_TRUE(got_update);
+
+  zoom_watcher.Wait();
+}
+
 #if defined(OS_MACOSX)
+
 // Test that "smart zoom" (double-tap with two fingers on Mac trackpad)
 // is disabled for the PDF viewer. This prevents the viewer's controls from
 // being scaled off screen (see crbug.com/676668).
@@ -1349,6 +1368,51 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, SmartZoomDisabled) {
   EXPECT_TRUE(browser()->PreHandleGestureEvent(GetActiveWebContents(),
                                                smart_zoom_event));
 }
+
+// Ensure that Mac trackpad pinch events are handled by the PDF viewer.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, TrackpadPinchInvokesCustomZoom) {
+  GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
+  ASSERT_TRUE(guest_contents);
+
+  base::OnceClosure send_pinch = base::BindOnce(
+      [](WebContents* guest_contents) {
+        const gfx::Rect guest_rect = guest_contents->GetContainerBounds();
+        const gfx::Point mouse_position(guest_rect.width() / 2,
+                                        guest_rect.height() / 2);
+        content::SimulateGesturePinchSequence(guest_contents, mouse_position,
+                                              1.23,
+                                              blink::kWebGestureDeviceTouchpad);
+      },
+      guest_contents);
+
+  EnsureCustomPinchZoomInvoked(guest_contents, GetActiveWebContents(),
+                               std::move(send_pinch));
+}
+
+#else  // !defined(OS_MACOSX)
+
+// Ensure that ctrl-wheel events are handled by the PDF viewer.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, CtrlWheelInvokesCustomZoom) {
+  GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
+  ASSERT_TRUE(guest_contents);
+
+  base::OnceClosure send_ctrl_wheel = base::BindOnce(
+      [](WebContents* guest_contents) {
+        const gfx::Rect guest_rect = guest_contents->GetContainerBounds();
+        const gfx::Point mouse_position(guest_rect.width() / 2,
+                                        guest_rect.height() / 2);
+        content::SimulateMouseWheelCtrlZoomEvent(
+            guest_contents, mouse_position, true,
+            blink::WebMouseWheelEvent::kPhaseBegan);
+      },
+      guest_contents);
+
+  EnsureCustomPinchZoomInvoked(guest_contents, GetActiveWebContents(),
+                               std::move(send_ctrl_wheel));
+}
+
 #endif  // defined(OS_MACOSX)
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ContextMenuCoordinates) {

@@ -40,6 +40,11 @@ FakeRendererScheduler::IdleTaskRunner() {
   return nullptr;
 }
 
+scoped_refptr<base::SingleThreadTaskRunner>
+FakeRendererScheduler::IPCTaskRunner() {
+  return nullptr;
+}
+
 std::unique_ptr<RenderWidgetSchedulingState>
 FakeRendererScheduler::NewRenderWidgetSchedulingState() {
   return nullptr;
@@ -106,10 +111,6 @@ void FakeRendererScheduler::RemoveTaskObserver(
     base::MessageLoop::TaskObserver* task_observer) {}
 
 void FakeRendererScheduler::Shutdown() {}
-
-void FakeRendererScheduler::VirtualTimePaused() {}
-
-void FakeRendererScheduler::VirtualTimeResumed() {}
 
 void FakeRendererScheduler::SetStoppingWhenBackgroundedEnabled(bool enabled) {}
 

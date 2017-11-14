@@ -21,6 +21,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/focus/focus_manager.h"
 
 namespace app_list {
 
@@ -63,7 +64,7 @@ SearchResultTileItemView::SearchResultTileItemView(
   SetVisible(false);
 
   if (is_play_store_search_enabled) {
-    const gfx::FontList& font = FullscreenAppListAppTitleFont();
+    const gfx::FontList& font = AppListAppTitleFont();
     rating_ = new views::Label;
     rating_->SetEnabledColor(kSearchAppRatingColor);
     rating_->SetFontList(font);
@@ -120,13 +121,13 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
   SetPrice(item_->formatted_price());
 
   if (is_fullscreen_app_list_enabled_) {
-    const gfx::FontList& font = FullscreenAppListAppTitleFont();
+    const gfx::FontList& font = AppListAppTitleFont();
     if (item_->display_type() == SearchResult::DISPLAY_RECOMMENDATION) {
       set_is_recommendation(true);
 
       title()->SetFontList(font);
       title()->SetLineHeight(font.GetHeight());
-      title()->SetEnabledColor(kGridTitleColorFullscreen);
+      title()->SetEnabledColor(kGridTitleColor);
     } else if (item_->display_type() == SearchResult::DISPLAY_TILE) {
       // Set solid color background to avoid broken text. See crbug.com/746563.
       if (rating_) {
@@ -216,13 +217,17 @@ void SearchResultTileItemView::LogAppLaunch() const {
 
 void SearchResultTileItemView::ButtonPressed(views::Button* sender,
                                              const ui::Event& event) {
-  LogAppLaunch();
+  if (is_suggested_app_)
+    LogAppLaunch();
+
   view_delegate_->OpenSearchResult(item_, false, event.flags());
 }
 
 bool SearchResultTileItemView::OnKeyPressed(const ui::KeyEvent& event) {
   if (event.key_code() == ui::VKEY_RETURN) {
-    LogAppLaunch();
+    if (is_suggested_app_)
+      LogAppLaunch();
+
     view_delegate_->OpenSearchResult(item_, false, event.flags());
     return true;
   }

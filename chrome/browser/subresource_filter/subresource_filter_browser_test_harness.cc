@@ -18,6 +18,7 @@
 #include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
+#include "chrome/browser/ui/blocked_content/safe_browsing_triggered_popup_blocker.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
@@ -26,6 +27,7 @@
 #include "components/safe_browsing/features.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_paths.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
@@ -34,15 +36,10 @@
 
 namespace subresource_filter {
 
-namespace {
-
-}  // namespace
-
 SubresourceFilterBrowserTest::SubresourceFilterBrowserTest() {
   scoped_feature_list_.InitWithFeatures(
       {kSafeBrowsingSubresourceFilter,
-       kSafeBrowsingSubresourceFilterExperimentalUI,
-       safe_browsing::kV4OnlyEnabled},
+       kSafeBrowsingSubresourceFilterExperimentalUI, kAbusiveExperienceEnforce},
       {});
 }
 
@@ -62,7 +59,7 @@ void SubresourceFilterBrowserTest::TearDown() {
 
 void SubresourceFilterBrowserTest::SetUpOnMainThread() {
   base::FilePath test_data_dir;
-  PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
+  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
   embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
   host_resolver()->AddSimulatedFailure("host-with-dns-lookup-failure");
 
@@ -70,17 +67,15 @@ void SubresourceFilterBrowserTest::SetUpOnMainThread() {
   content::SetupCrossSiteRedirector(embedded_test_server());
 
   // Add content/test/data for cross_site_iframe_factory.html
-  embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
+  ASSERT_TRUE(PathService::Get(content::DIR_TEST_DATA, &test_data_dir));
+  embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
 
   ASSERT_TRUE(embedded_test_server()->Start());
   ResetConfigurationToEnableOnPhishingSites();
 
-  settings_manager_ = SubresourceFilterProfileContextFactory::GetForProfile(
-                          browser()->profile())
-                          ->settings_manager();
-#if defined(OS_ANDROID)
-  EXPECT_TRUE(settings_manager->should_use_smart_ui());
-#endif
+  auto* factory = SubresourceFilterProfileContextFactory::GetForProfile(
+      browser()->profile());
+  settings_manager_ = factory->settings_manager();
 }
 
 std::unique_ptr<TestSafeBrowsingDatabaseHelper>

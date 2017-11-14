@@ -51,6 +51,7 @@ namespace test {
 const ClientSpecificId kWindowManagerClientId = kWindowServerClientId + 1;
 const std::string kWindowManagerClientIdString =
     std::to_string(kWindowManagerClientId);
+const ClientSpecificId kEmbedTreeWindowId = 1;
 
 // Collection of utilities useful in creating mus tests.
 
@@ -411,7 +412,7 @@ class TestWindowManager : public mojom::WindowManager {
   void WmSetCanFocus(uint32_t window_id, bool can_focus) override {}
   void WmCreateTopLevelWindow(
       uint32_t change_id,
-      ClientSpecificId requesting_client_id,
+      const viz::FrameSinkId& frame_sink_id,
       const std::unordered_map<std::string, std::vector<uint8_t>>& properties)
       override;
   void WmClientJankinessChanged(ClientSpecificId client_id,
@@ -643,6 +644,12 @@ class TestWindowServerDelegate : public WindowServerDelegate {
 
   bool got_on_no_more_displays() const { return got_on_no_more_displays_; }
 
+  // Does an Embed() in |tree| at |window| returning the TestWindowTreeBinding
+  // that resulred (null on failure).
+  TestWindowTreeBinding* Embed(WindowTree* tree,
+                               ServerWindow* window,
+                               int flags = 0);
+
   // WindowServerDelegate:
   void StartDisplayInit() override;
   void OnNoMoreDisplays() override;
@@ -734,6 +741,10 @@ class WindowEventTargetingHelper {
   TestWindowTreeClient* wm_client() { return wm_client_; }
   WindowServer* window_server() { return ws_test_helper_.window_server(); }
 
+  TestWindowServerDelegate* test_window_server_delegate() {
+    return ws_test_helper_.window_server_delegate();
+  }
+
  private:
   WindowServerTestHelper ws_test_helper_;
   // TestWindowTreeClient that is used for the WM client. Owned by
@@ -743,7 +754,7 @@ class WindowEventTargetingHelper {
   TestDisplayBinding* display_binding_ = nullptr;
   // Owned by WindowServer's DisplayManager.
   Display* display_ = nullptr;
-  ClientSpecificId next_primary_tree_window_id_ = 1;
+  ClientSpecificId next_primary_tree_window_id_ = kEmbedTreeWindowId;
 
   DISALLOW_COPY_AND_ASSIGN(WindowEventTargetingHelper);
 };
@@ -872,7 +883,8 @@ ServerWindow* NewWindowInTree(WindowTree* tree,
                               ClientWindowId* client_id = nullptr);
 ServerWindow* NewWindowInTreeWithParent(WindowTree* tree,
                                         ServerWindow* parent,
-                                        ClientWindowId* client_id = nullptr);
+                                        ClientWindowId* client_id = nullptr,
+                                        const gfx::Rect& bounds = gfx::Rect());
 
 // Converts an atomic 32 to a point. The cursor location is represented as an
 // atomic 32.

@@ -112,7 +112,7 @@
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
-#import "ios/chrome/browser/ui/downloads/download_manager_controller.h"
+#import "ios/chrome/browser/ui/download/download_manager_controller.h"
 #import "ios/chrome/browser/ui/external_file_remover_factory.h"
 #import "ios/chrome/browser/ui/external_file_remover_impl.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
@@ -1420,19 +1420,6 @@ const int kExternalFilesCleanupDelaySeconds = 60;
                                  completion:nil];
 }
 
-- (void)showSavePasswordsSettings {
-  // Do not display password settings if settings screen is already displayed.
-  if (_settingsNavigationController)
-    return;
-  _settingsNavigationController =
-      [SettingsNavigationController newSavePasswordsController:_mainBrowserState
-                                                      delegate:self];
-  [[self topPresentedViewController]
-      presentViewController:_settingsNavigationController
-                   animated:YES
-                 completion:nil];
-}
-
 - (void)showReportAnIssueFromViewController:
     (UIViewController*)baseViewController {
   DCHECK(baseViewController);
@@ -2419,14 +2406,6 @@ const int kExternalFilesCleanupDelaySeconds = 60;
 
 - (void)closeSettings {
   [self closeSettingsUI];
-}
-
-- (void)closeSettingsAndOpenNewIncognitoTab {
-  [self closeSettingsAnimated:NO
-                   completion:^{
-                     [self switchModesAndOpenNewTab:[OpenNewTabCommand
-                                                        incognitoTabCommand]];
-                   }];
 }
 
 - (id<ApplicationCommands, BrowserCommands>)dispatcherForSettings {

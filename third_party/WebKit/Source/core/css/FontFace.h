@@ -31,13 +31,13 @@
 #ifndef FontFace_h
 #define FontFace_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSValue.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMException.h"
-#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/fonts/FontSelectionTypes.h"
 #include "platform/wtf/text/WTFString.h"
@@ -52,7 +52,7 @@ class Document;
 class ExceptionState;
 class FontFaceDescriptors;
 class StringOrArrayBufferOrArrayBufferView;
-class StylePropertySet;
+class CSSPropertyValueSet;
 class StyleRuleFontFace;
 
 class CORE_EXPORT FontFace : public ScriptWrappable,
@@ -151,7 +151,7 @@ class CORE_EXPORT FontFace : public ScriptWrappable,
                              const String&,
                              CSSPropertyID,
                              ExceptionState* = nullptr);
-  bool SetPropertyFromStyle(const StylePropertySet&, CSSPropertyID);
+  bool SetPropertyFromStyle(const CSSPropertyValueSet&, CSSPropertyID);
   bool SetPropertyValue(const CSSValue*, CSSPropertyID);
   bool SetFamilyValue(const CSSValue&);
   ScriptPromise FontStatusPromise(ScriptState*);

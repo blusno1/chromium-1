@@ -172,19 +172,27 @@ void PaymentRequest::Show() {
     return;
   }
 
-  if (!state_->AreRequestedMethodsSupported()) {
+  // TODO(crbug.com/783811): Display a spinner when checking whether
+  // the methods are supported asynchronously for better user experience.
+  state_->AreRequestedMethodsSupported(
+      base::BindOnce(&PaymentRequest::AreRequestedMethodsSupportedCallback,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void PaymentRequest::AreRequestedMethodsSupportedCallback(
+    bool methods_supported) {
+  if (methods_supported) {
+    journey_logger_.SetEventOccurred(JourneyLogger::EVENT_SHOWN);
+
+    delegate_->ShowDialog(this);
+  } else {
     journey_logger_.SetNotShown(
         JourneyLogger::NOT_SHOWN_REASON_NO_SUPPORTED_PAYMENT_METHOD);
     client_->OnError(mojom::PaymentErrorReason::NOT_SUPPORTED);
     if (observer_for_testing_)
       observer_for_testing_->OnNotSupportedError();
     OnConnectionTerminated();
-    return;
   }
-
-  journey_logger_.SetEventOccurred(JourneyLogger::EVENT_SHOWN);
-
-  delegate_->ShowDialog(this);
 }
 
 void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
@@ -261,6 +269,15 @@ void PaymentRequest::OnPaymentResponseAvailable(
     mojom::PaymentResponsePtr response) {
   journey_logger_.SetEventOccurred(
       JourneyLogger::EVENT_RECEIVED_INSTRUMENT_DETAILS);
+
+  // Do not send invalid response to client.
+  if (response->method_name.empty() || response->stringified_details.empty()) {
+    RecordFirstAbortReason(
+        JourneyLogger::ABORT_REASON_INSTRUMENT_DETAILS_ERROR);
+    delegate_->ShowErrorMessage();
+    return;
+  }
+
   client_->OnPaymentResponse(std::move(response));
 }
 

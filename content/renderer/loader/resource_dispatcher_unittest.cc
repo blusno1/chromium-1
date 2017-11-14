@@ -26,7 +26,6 @@
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/resource_request.h"
 #include "content/public/common/resource_request_body.h"
-#include "content/public/common/resource_request_completion_status.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/service_worker_modes.h"
 #include "content/public/renderer/fixed_received_data.h"
@@ -38,6 +37,7 @@
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/public/cpp/url_loader_status.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "url/gurl.h"
@@ -193,12 +193,12 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
   }
 
   void NotifyRequestComplete(int request_id, size_t total_size) {
-    ResourceRequestCompletionStatus request_complete_data;
-    request_complete_data.error_code = net::OK;
-    request_complete_data.exists_in_cache = false;
-    request_complete_data.encoded_data_length = total_size;
+    network::URLLoaderStatus status;
+    status.error_code = net::OK;
+    status.exists_in_cache = false;
+    status.encoded_data_length = total_size;
     EXPECT_TRUE(dispatcher_->OnMessageReceived(
-        ResourceMsg_RequestComplete(request_id, request_complete_data)));
+        ResourceMsg_RequestComplete(request_id, status)));
   }
 
   std::unique_ptr<ResourceRequest> CreateResourceRequest(
@@ -426,20 +426,13 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
     }
     void OnTransferSizeUpdated(int transfer_size_diff) override {}
 
-    void OnCompletedRequest(int error_code,
-                            bool stale_copy_in_cache,
-                            const base::TimeTicks& completion_time,
-                            int64_t total_transfer_size,
-                            int64_t encoded_body_size,
-                            int64_t decoded_body_size) override {
+    void OnCompletedRequest(const network::URLLoaderStatus& status) override {
       original_peer_->OnReceivedResponse(response_info_);
       if (!data_.empty()) {
         original_peer_->OnReceivedData(
             std::make_unique<FixedReceivedData>(data_.data(), data_.size()));
       }
-      original_peer_->OnCompletedRequest(error_code, stale_copy_in_cache,
-                                         completion_time, total_transfer_size,
-                                         encoded_body_size, decoded_body_size);
+      original_peer_->OnCompletedRequest(status);
     }
 
    private:

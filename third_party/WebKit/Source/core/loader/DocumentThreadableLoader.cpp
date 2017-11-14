@@ -103,7 +103,7 @@ class EmptyDataHandle final : public WebDataConsumerHandle {
   };
 
   std::unique_ptr<Reader> ObtainReader(Client* client) override {
-    return WTF::MakeUnique<EmptyDataReader>(client);
+    return std::make_unique<EmptyDataReader>(client);
   }
   const char* DebugName() const override { return "EmptyDataHandle"; }
 };
@@ -637,7 +637,7 @@ bool DocumentThreadableLoader::RedirectReceivedBlinkCORS(
     // have to read the body. And also HTTPCache changes will be needed because
     // it doesn't store the body of redirect responses.
     ResponseReceived(resource, redirect_response,
-                     WTF::MakeUnique<EmptyDataHandle>());
+                     std::make_unique<EmptyDataHandle>());
 
     if (client_) {
       DCHECK(actual_request_.IsNull());
@@ -1214,16 +1214,13 @@ void DocumentThreadableLoader::LoadRequestSync(
   unsigned long identifier = resource
                                  ? resource->Identifier()
                                  : std::numeric_limits<unsigned long>::max();
-  ResourceError error =
-      resource ? resource->GetResourceError() : ResourceError();
-
   probe::documentThreadableLoaderStartedLoadingForClient(GetExecutionContext(),
                                                          identifier, client_);
   ThreadableLoaderClient* client = client_;
 
   if (!resource) {
     client_ = nullptr;
-    client->DidFail(error);
+    client->DidFail(ResourceError::Failure(request.Url()));
     return;
   }
 
@@ -1231,10 +1228,10 @@ void DocumentThreadableLoader::LoadRequestSync(
 
   // No exception for file:/// resources, see <rdar://problem/4962298>. Also, if
   // we have an HTTP response, then it wasn't a network error in fact.
-  if (!error.IsNull() && !request_url.IsLocalFile() &&
+  if (resource->LoadFailedOrCanceled() && !request_url.IsLocalFile() &&
       response.HttpStatusCode() <= 0) {
     client_ = nullptr;
-    client->DidFail(error);
+    client->DidFail(resource->GetResourceError());
     return;
   }
 

@@ -189,7 +189,7 @@ class MojoChannelPerfTest : public IPCChannelMojoTestBase {
     PerformanceChannelListener listener("ChannelProxy");
     auto channel_proxy = IPC::ChannelProxy::Create(
         TakeHandle().release(), IPC::Channel::MODE_SERVER, &listener,
-        GetIOThreadTaskRunner());
+        GetIOThreadTaskRunner(), base::ThreadTaskRunnerHandle::Get());
     listener.Init(channel_proxy.get());
 
     LockThreadAffinity thread_locker(kSharedCore);
@@ -222,7 +222,8 @@ class MojoChannelPerfTest : public IPCChannelMojoTestBase {
         base::WaitableEvent::InitialState::NOT_SIGNALED);
     auto channel_proxy = IPC::SyncChannel::Create(
         TakeHandle().release(), IPC::Channel::MODE_SERVER, &listener,
-        GetIOThreadTaskRunner(), false, &shutdown_event);
+        GetIOThreadTaskRunner(), base::ThreadTaskRunnerHandle::Get(), false,
+        &shutdown_event);
     listener.Init(channel_proxy.get());
 
     LockThreadAffinity thread_locker(kSharedCore);
@@ -337,14 +338,11 @@ class MojoInterfacePerfTest : public mojo::edk::test::MojoTestBase {
     mojo::MessagePipeHandle mp_handle(mp);
     mojo::ScopedMessagePipeHandle scoped_mp(mp_handle);
 
+    LockThreadAffinity thread_locker(kSharedCore);
     // In single process mode, this is running in a task and by default other
     // tasks (in particular, the binding) won't run. To keep the single process
     // and multi-process code paths the same, enable nestable tasks.
-    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
-        base::MessageLoop::current());
-
-    LockThreadAffinity thread_locker(kSharedCore);
-    base::RunLoop run_loop;
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     ReflectorImpl impl(std::move(scoped_mp), run_loop.QuitWhenIdleClosure());
     run_loop.Run();
     return 0;
@@ -508,14 +506,11 @@ class MojoInterfacePassingPerfTest : public mojo::edk::test::MojoTestBase {
     mojo::MessagePipeHandle mp_handle(mp);
     mojo::ScopedMessagePipeHandle scoped_mp(mp_handle);
 
+    LockThreadAffinity thread_locker(kSharedCore);
     // In single process mode, this is running in a task and by default other
     // tasks (in particular, the binding) won't run. To keep the single process
     // and multi-process code paths the same, enable nestable tasks.
-    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
-        base::MessageLoop::current());
-
-    LockThreadAffinity thread_locker(kSharedCore);
-    base::RunLoop run_loop;
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     InterfacePassingTestDriverImpl impl(std::move(scoped_mp),
                                         run_loop.QuitWhenIdleClosure());
     run_loop.Run();

@@ -33,6 +33,7 @@ class WindowState;
 class WindowStateDelegate;
 class WindowStateObserver;
 class WMEvent;
+class ClientControlledState;
 
 // Returns the WindowState for the active window, null if there is no active
 // window.
@@ -273,10 +274,8 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // True if the window should be offered a chance to consume special system
   // keys such as brightness, volume, etc. that are usually handled by the
   // shell.
-  bool can_consume_system_keys() const { return can_consume_system_keys_; }
-  void set_can_consume_system_keys(bool can_consume_system_keys) {
-    can_consume_system_keys_ = can_consume_system_keys;
-  }
+  bool CanConsumeSystemKeys() const;
+  void SetCanConsumeSystemKeys(bool can_consume_system_keys);
 
   // True if the window is in "immersive full screen mode" which is slightly
   // different from the normal fullscreen mode by allowing the user to reveal
@@ -323,6 +322,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
 
  private:
   friend class DefaultState;
+  friend class ash::wm::ClientControlledState;
   friend class ash::LockWindowState;
   friend class ash::TabletModeWindowState;
   friend WindowState* GetWindowState(aura::Window*);

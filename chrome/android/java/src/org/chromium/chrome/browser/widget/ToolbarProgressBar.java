@@ -22,6 +22,7 @@ import android.widget.ProgressBar;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.ui.UiUtils;
@@ -160,9 +161,10 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
                     mAnimatingView.update(progress * width);
                 }
 
-                if (getProgress() == mTargetProgress) {
+                if (MathUtils.areFloatsEqual(getProgress(), mTargetProgress)) {
                     if (!mIsStarted) postOnAnimationDelayed(mHideRunnable, mHidingDelayMs);
                     mProgressAnimator.end();
+                    if (MathUtils.areFloatsEqual(getProgress(), 1.f)) finish(false);
                     return;
                 }
             }
@@ -239,11 +241,6 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
         mMarginTop = topMargin;
         mUseStatusBarColorAsBackground = useStatusBarColorAsBackground;
         mAnimationLogic = new ProgressAnimationSmooth();
-
-        mProgressThrottle = new TimeAnimator();
-        mProgressThrottleListener = new ThrottleTimeListener();
-        mProgressThrottle.addListener(mProgressThrottleListener);
-        mProgressThrottle.setTimeListener(mProgressThrottleListener);
 
         // This tells accessibility services that progress bar changes are important enough to
         // announce to the user even when not focused.
@@ -331,7 +328,6 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
         mIsStarted = true;
         mProgressStartCount++;
 
-        mProgressThrottle.end();
         removeCallbacks(mStartSmoothIndeterminate);
         postDelayed(mStartSmoothIndeterminate, ANIMATION_START_THRESHOLD);
         mStartSmoothAnimation = false;
@@ -354,9 +350,10 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
      * @param delayed Whether a delayed fading out animation should be posted.
      */
     public void finish(boolean delayed) {
-        // If progress is canceled, hide the progress bar immediately. If progress was set to 100%,
-        // allow the animator to finish running.
-        if (mProgressThrottle.isRunning() && mTargetProgress < 1.f) return;
+        if (mProgressThrottle != null && mProgressThrottle.isRunning()
+                || mAnimatingView != null && mAnimatingView.isRunning()) {
+            return;
+        }
 
         mIsStarted = false;
 
@@ -430,10 +427,10 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
     }
 
     private void updateVisibleProgress() {
-        if (mStartSmoothAnimation) {
+        if (mStartSmoothAnimation || (mAnimatingView != null && mAnimatingView.isRunning())) {
             // The progress animator will stop if the animation reaches the target progress. If the
             // animation was running for the current page load, keep running it.
-            if (!mProgressAnimator.isRunning()) mProgressAnimator.start();
+            mProgressAnimator.start();
         } else {
             super.setProgress(mTargetProgress);
             if (!mIsStarted) postOnAnimationDelayed(mHideRunnable, mHidingDelayMs);
@@ -445,13 +442,21 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
 
     @Override
     public void setProgress(float progress) {
-        float progressDiff = progress - getProgress();
+        // TODO(mdjones): Maybe subclass this to be ThrottledToolbarProgressBar.
+        if (mProgressThrottle == null && ChromeFeatureList.isInitialized()
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.PROGRESS_BAR_THROTTLE)) {
+            mProgressThrottle = new TimeAnimator();
+            mProgressThrottleListener = new ThrottleTimeListener();
+            mProgressThrottle.addListener(mProgressThrottleListener);
+            mProgressThrottle.setTimeListener(mProgressThrottleListener);
+        }
 
-        // Throttle progress if the increment was greater than the max update amount.
-        if (progressDiff > PROGRESS_THROTTLE_MAX_UPDATE_AMOUNT || mProgressThrottle.isRunning()) {
+        // Throttle progress if the increment was greater than 5%.
+        if (mProgressThrottle != null
+                && (progress - getProgress() > PROGRESS_THROTTLE_MAX_UPDATE_AMOUNT
+                           || mProgressThrottle.isRunning())) {
             mProgressThrottleListener.mThrottledProgressTarget = progress;
 
-            // Restart the animation so it progress ends at the correct position.
             mProgressThrottle.cancel();
             mProgressThrottle.start();
         } else {
@@ -546,16 +551,5 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
         super.onInitializeAccessibilityEvent(event);
         event.setCurrentItemIndex((int) (mTargetProgress * 100));
         event.setItemCount(100);
-    }
-
-    @VisibleForTesting
-    public boolean isThrottledProgressAnimatorRunning() {
-        return mProgressThrottle.isRunning();
-    }
-
-    @VisibleForTesting
-    public void endProgressForTesting() {
-        mProgressThrottle.end();
-        finish(false);
     }
 }

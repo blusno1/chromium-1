@@ -6,14 +6,14 @@
 
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/vr/elements/ui_element.h"
+#include "chrome/browser/vr/ui_element_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
-#include "chrome/browser/vr/vr_shell_renderer.h"
 #include "ui/gl/gl_bindings.h"
 
 namespace vr {
 
-UiRenderer::UiRenderer(UiScene* scene, VrShellRenderer* vr_shell_renderer)
-    : scene_(scene), vr_shell_renderer_(vr_shell_renderer) {}
+UiRenderer::UiRenderer(UiScene* scene, UiElementRenderer* ui_element_renderer)
+    : scene_(scene), ui_element_renderer_(ui_element_renderer) {}
 
 UiRenderer::~UiRenderer() = default;
 
@@ -33,13 +33,9 @@ void UiRenderer::Draw2dBrowsing(const RenderInfo& render_info) {
     return;
 
   if (!elements.empty()) {
-    // Enable depth testing. Note that we do not clear the color buffer. The
-    // scene's background elements are responsible for drawing a complete
-    // background.
+    // Note that we do not clear the color buffer. The scene's background
+    // elements are responsible for drawing a complete background.
     glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glClear(GL_DEPTH_BUFFER_BIT);
     DrawUiView(render_info, elements);
   }
 
@@ -48,8 +44,6 @@ void UiRenderer::Draw2dBrowsing(const RenderInfo& render_info) {
 
   // The overlays do not make use of depth testing.
   glDisable(GL_CULL_FACE);
-  glDisable(GL_DEPTH_TEST);
-  glDepthMask(GL_FALSE);
   DrawUiView(render_info, elements_overlay);
 
   // We do want to cull backfaces on the controller, however.
@@ -70,8 +64,6 @@ void UiRenderer::DrawSplashScreen(const RenderInfo& render_info) {
   // mode, this will need further testing if those get added
   // later.
   glDisable(GL_CULL_FACE);
-  glDisable(GL_DEPTH_TEST);
-  glDepthMask(GL_FALSE);
 
   DrawUiView(render_info, elements);
 
@@ -83,17 +75,15 @@ void UiRenderer::DrawWebVrOverlayForeground(const RenderInfo& render_info) {
   // The WebVR overlay foreground is drawn as a separate pass, so we need to set
   // up our gl state before drawing.
   glEnable(GL_CULL_FACE);
-  glEnable(GL_DEPTH_TEST);
-  glDepthMask(GL_TRUE);
 
   glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glClear(GL_COLOR_BUFFER_BIT);
   DrawUiView(render_info, scene_->GetVisibleWebVrOverlayForegroundElements());
 }
 
 void UiRenderer::DrawUiView(const RenderInfo& render_info,
                             const std::vector<const UiElement*>& elements) {
-  TRACE_EVENT0("gpu", "VrShellGl::DrawUiView");
+  TRACE_EVENT0("gpu", "UiRenderer::DrawUiView");
 
   auto sorted_elements = GetElementsInDrawOrder(elements);
 
@@ -115,13 +105,13 @@ void UiRenderer::DrawElements(const gfx::Transform& view_proj_matrix,
   for (const auto* element : elements) {
     DrawElement(view_proj_matrix, *element);
   }
-  vr_shell_renderer_->Flush();
+  ui_element_renderer_->Flush();
 }
 
 void UiRenderer::DrawElement(const gfx::Transform& view_proj_matrix,
                              const UiElement& element) {
   DCHECK_GE(element.draw_phase(), 0);
-  element.Render(vr_shell_renderer_,
+  element.Render(ui_element_renderer_,
                  view_proj_matrix * element.world_space_transform());
 }
 

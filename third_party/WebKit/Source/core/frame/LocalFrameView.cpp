@@ -1024,7 +1024,7 @@ void LocalFrameView::PrepareLayoutAnalyzer() {
     return;
   }
   if (!analyzer_)
-    analyzer_ = WTF::MakeUnique<LayoutAnalyzer>();
+    analyzer_ = std::make_unique<LayoutAnalyzer>();
   analyzer_->Reset();
 }
 
@@ -1337,7 +1337,7 @@ void LocalFrameView::UpdateLayout() {
 
   layout_count_++;
 
-  if (AXObjectCache* cache = document->AxObjectCache()) {
+  if (AXObjectCache* cache = document->GetOrCreateAXObjectCache()) {
     const KURL& url = document->Url();
     if (url.IsValid() && !url.IsAboutBlankURL())
       cache->HandleLayoutComplete(document);
@@ -1890,6 +1890,13 @@ void LocalFrameView::RestoreScrollbar() {
   SetScrollbarsSuppressed(false);
 }
 
+bool LocalFrameView::RestoreScrollAnchor(
+    const ScrollAnchor::SerializedAnchor& serialized_anchor) {
+  if (!RuntimeEnabledFeatures::ScrollAnchorSerializationEnabled())
+    return false;
+  return scroll_anchor_.RestoreAnchor(frame_->GetDocument(), serialized_anchor);
+}
+
 void LocalFrameView::ProcessUrlFragment(const KURL& url,
                                         UrlFragmentBehavior behavior) {
   // If our URL has no ref, then we have no place we need to jump to.
@@ -2048,6 +2055,8 @@ void LocalFrameView::DidScrollTimerFired(TimerBase*) {
   if (frame_->GetDocument() &&
       !frame_->GetDocument()->GetLayoutViewItem().IsNull())
     frame_->GetDocument()->Fetcher()->UpdateAllImageResourcePriorities();
+
+  GetFrame().Loader().SaveScrollAnchor();
 }
 
 void LocalFrameView::UpdateLayersAndCompositingAfterScrollIfNeeded() {
@@ -3367,25 +3376,21 @@ void LocalFrameView::PaintTree() {
     // frame view of a page overlay. The page overlay is in the layer tree of
     // the host page and will be painted during painting of the host page.
     if (GraphicsLayer* root_graphics_layer =
-            view.Compositor()->RootGraphicsLayer()) {
-      PaintGraphicsLayerRecursively(root_graphics_layer);
-    }
+            view.Compositor()->RootGraphicsLayer())
+      root_graphics_layer->PaintRecursively();
 
     // TODO(sataya.m):Main frame doesn't create RootFrameViewport in some
     // webkit_unit_tests (http://crbug.com/644788).
     if (viewport_scrollable_area_) {
       if (GraphicsLayer* layer_for_horizontal_scrollbar =
-              viewport_scrollable_area_->LayerForHorizontalScrollbar()) {
-        PaintGraphicsLayerRecursively(layer_for_horizontal_scrollbar);
-      }
+              viewport_scrollable_area_->LayerForHorizontalScrollbar())
+        layer_for_horizontal_scrollbar->PaintRecursively();
       if (GraphicsLayer* layer_for_vertical_scrollbar =
-              viewport_scrollable_area_->LayerForVerticalScrollbar()) {
-        PaintGraphicsLayerRecursively(layer_for_vertical_scrollbar);
-      }
+              viewport_scrollable_area_->LayerForVerticalScrollbar())
+        layer_for_vertical_scrollbar->PaintRecursively();
       if (GraphicsLayer* layer_for_scroll_corner =
-              viewport_scrollable_area_->LayerForScrollCorner()) {
-        PaintGraphicsLayerRecursively(layer_for_scroll_corner);
-      }
+              viewport_scrollable_area_->LayerForScrollCorner())
+        layer_for_scroll_corner->PaintRecursively();
     }
   }
 
@@ -3395,23 +3400,6 @@ void LocalFrameView::PaintTree() {
     if (!layout_view_item.IsNull())
       layout_view_item.Layer()->ClearNeedsRepaintRecursively();
   });
-}
-
-void LocalFrameView::PaintGraphicsLayerRecursively(
-    GraphicsLayer* graphics_layer) {
-  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
-  if (graphics_layer->DrawsContent()) {
-    graphics_layer->Paint(nullptr);
-  }
-
-  if (GraphicsLayer* mask_layer = graphics_layer->MaskLayer())
-    PaintGraphicsLayerRecursively(mask_layer);
-  if (GraphicsLayer* contents_clipping_mask_layer =
-          graphics_layer->ContentsClippingMaskLayer())
-    PaintGraphicsLayerRecursively(contents_clipping_mask_layer);
-
-  for (auto& child : graphics_layer->Children())
-    PaintGraphicsLayerRecursively(child);
 }
 
 void LocalFrameView::PushPaintArtifactToCompositor(
@@ -4003,7 +3991,7 @@ bool LocalFrameView::VisualViewportSuppliesScrollbars() {
              controller.GlobalRootScroller()) == LayoutViewportScrollableArea();
 }
 
-AXObjectCache* LocalFrameView::AxObjectCache() const {
+AXObjectCache* LocalFrameView::ExistingAXObjectCache() const {
   if (GetFrame().GetDocument())
     return GetFrame().GetDocument()->ExistingAXObjectCache();
   return nullptr;
@@ -4402,30 +4390,41 @@ bool LocalFrameView::AdjustScrollbarExistence(
 }
 
 bool LocalFrameView::NeedsScrollbarReconstruction() const {
-  Scrollbar* scrollbar = HorizontalScrollbar();
-  if (!scrollbar)
-    scrollbar = VerticalScrollbar();
-  if (!scrollbar) {
-    // We have no scrollbar to reconstruct.
+  // We have no scrollbar to reconstruct.
+  if (!HorizontalScrollbar() && !VerticalScrollbar())
     return false;
-  }
+
   Element* style_source = nullptr;
   bool needs_custom = ShouldUseCustomScrollbars(style_source);
-  bool is_custom = scrollbar->IsCustomScrollbar();
-  if (needs_custom != is_custom) {
+
+  Scrollbar* scrollbars[] = {HorizontalScrollbar(), VerticalScrollbar()};
+
+  for (Scrollbar* scrollbar : scrollbars) {
+    if (!scrollbar)
+      continue;
+
     // We have a native scrollbar that should be custom, or vice versa.
-    return true;
-  }
-  if (!needs_custom) {
-    // We have a native scrollbar that should remain native.
-    return false;
-  }
-  DCHECK(needs_custom && is_custom);
-  DCHECK(style_source);
-  if (ToLayoutScrollbar(scrollbar)->StyleSource() !=
-      style_source->GetLayoutObject()) {
-    // We have a custom scrollbar with a stale m_owner.
-    return true;
+    if (scrollbar->IsCustomScrollbar() != needs_custom)
+      return true;
+
+    if (needs_custom) {
+      DCHECK(scrollbar->IsCustomScrollbar());
+      // We have a custom scrollbar with a stale m_owner.
+      if (ToLayoutScrollbar(scrollbar)->StyleSource() !=
+          style_source->GetLayoutObject())
+        return true;
+
+      // Should use custom scrollbar and nothing should change.
+      continue;
+    }
+
+    // Check if native scrollbar should change.
+    Page* page = frame_->GetPage();
+    DCHECK(page);
+    ScrollbarTheme* current_theme = &page->GetScrollbarTheme();
+
+    if (current_theme != &scrollbar->GetTheme())
+      return true;
   }
   return false;
 }

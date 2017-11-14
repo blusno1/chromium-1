@@ -19,7 +19,7 @@ StringKeyframe::StringKeyframe(const StringKeyframe& copy_from)
           copy_from.presentation_attribute_map_->MutableCopy()),
       svg_attribute_map_(copy_from.svg_attribute_map_) {}
 
-MutableStylePropertySet::SetResult StringKeyframe::SetCSSPropertyValue(
+MutableCSSPropertyValueSet::SetResult StringKeyframe::SetCSSPropertyValue(
     const AtomicString& property_name,
     const PropertyRegistry* registry,
     const String& value,
@@ -30,7 +30,7 @@ MutableStylePropertySet::SetResult StringKeyframe::SetCSSPropertyValue(
                                         is_animation_tainted);
 }
 
-MutableStylePropertySet::SetResult StringKeyframe::SetCSSPropertyValue(
+MutableCSSPropertyValueSet::SetResult StringKeyframe::SetCSSPropertyValue(
     CSSPropertyID property,
     const String& value,
     StyleSheetContents* style_sheet_contents) {
@@ -38,7 +38,7 @@ MutableStylePropertySet::SetResult StringKeyframe::SetCSSPropertyValue(
   if (CSSAnimations::IsAnimationAffectingProperty(property)) {
     bool did_parse = true;
     bool did_change = false;
-    return MutableStylePropertySet::SetResult{did_parse, did_change};
+    return MutableCSSPropertyValueSet::SetResult{did_parse, did_change};
   }
   return css_property_map_->SetProperty(property, value, false,
                                         style_sheet_contents);
@@ -71,9 +71,9 @@ PropertyHandleSet StringKeyframe::Properties() const {
   // worry about caching this result.
   PropertyHandleSet properties;
   for (unsigned i = 0; i < css_property_map_->PropertyCount(); ++i) {
-    StylePropertySet::PropertyReference property_reference =
+    CSSPropertyValueSet::PropertyReference property_reference =
         css_property_map_->PropertyAt(i);
-    DCHECK(!isShorthandProperty(property_reference.Id()))
+    DCHECK(!CSSProperty::Get(property_reference.Id()).IsShorthand())
         << "Web Animations: Encountered unexpanded shorthand CSS property ("
         << property_reference.Id() << ").";
     if (property_reference.Id() == CSSPropertyVariable)
@@ -95,7 +95,7 @@ PropertyHandleSet StringKeyframe::Properties() const {
 }
 
 scoped_refptr<Keyframe> StringKeyframe::Clone() const {
-  return WTF::AdoptRef(new StringKeyframe(*this));
+  return base::AdoptRef(new StringKeyframe(*this));
 }
 
 scoped_refptr<Keyframe::PropertySpecificKeyframe>

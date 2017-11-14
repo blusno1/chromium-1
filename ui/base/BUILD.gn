@@ -654,7 +654,6 @@ static_library("test_support") {
     "test/ui_controls_internal_win.h",
     "test/ui_controls_mac.mm",
     "test/ui_controls_win.cc",
-    "test/user_interactive_test_case.h",
   ]
 
   if (!is_ios) {
@@ -685,12 +684,6 @@ static_library("test_support") {
     ]
   }
 
-  if (is_mac) {
-    sources += [ "test/user_interactive_test_case_mac.mm" ]
-  } else {
-    sources += [ "test/user_interactive_test_case.cc" ]
-  }
-
   public_deps = [
     ":base",
   ]
@@ -700,6 +693,7 @@ static_library("test_support") {
     "//skia",
     "//testing/gtest",
     "//ui/base:ui_data_pack",
+    "//ui/display:test_support",
     "//ui/events:events_base",
     "//ui/events:test_support",
     "//ui/gfx",

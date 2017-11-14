@@ -52,7 +52,7 @@
 #include "core/css/PropertyRegistry.h"
 #include "core/css/StyleEngine.h"
 #include "core/css/parser/CSSVariableParser.h"
-#include "core/css/properties/CSSPropertyAPI.h"
+#include "core/css/properties/CSSProperty.h"
 #include "core/css/resolver/CSSToStyleMap.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Element.h"
@@ -103,7 +103,7 @@ StringKeyframeEffectModel* CreateKeyframeEffectModel(
     DCHECK(!offsets.IsEmpty());
     keyframe->SetOffset(offsets[0]);
     keyframe->SetEasing(default_timing_function);
-    const StylePropertySet& properties = style_keyframe->Properties();
+    const CSSPropertyValueSet& properties = style_keyframe->Properties();
     for (unsigned j = 0; j < properties.PropertyCount(); j++) {
       CSSPropertyID property = properties.PropertyAt(j).Id();
       specified_properties_for_use_counter.insert(property);
@@ -864,7 +864,7 @@ void CSSAnimations::CalculateTransitionUpdateForStandardProperty(
     PropertyHandle property = PropertyHandle(longhand_id);
     DCHECK_GE(longhand_id, firstCSSProperty);
 
-    if (!animate_all && !CSSPropertyAPI::Get(longhand_id).IsInterpolable()) {
+    if (!animate_all && !CSSProperty::Get(longhand_id).IsInterpolable()) {
       continue;
     }
 
@@ -1209,7 +1209,7 @@ const StylePropertyShorthand& CSSAnimations::PropertiesForTransitionAll() {
           id == CSSPropertyWebkitTransformOriginY ||
           id == CSSPropertyWebkitTransformOriginZ)
         continue;
-      if (CSSPropertyAPI::Get(id).IsInterpolable())
+      if (CSSProperty::Get(id).IsInterpolable())
         properties.push_back(id);
     }
     property_shorthand = StylePropertyShorthand(

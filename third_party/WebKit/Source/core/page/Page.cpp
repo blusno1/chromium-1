@@ -63,6 +63,7 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/plugins/PluginData.h"
 #include "platform/scroll/ScrollbarTheme.h"
+#include "platform/scroll/ScrollbarThemeOverlay.h"
 #include "platform/scroll/SmoothScrollSequencer.h"
 #include "public/platform/Platform.h"
 #include "public/web/WebKit.h"
@@ -129,7 +130,6 @@ Page::Page(PageClients& page_clients)
       main_frame_(nullptr),
       plugin_data_(nullptr),
       editor_client_(page_clients.editor_client),
-      spell_checker_client_(page_clients.spell_checker_client),
       use_counter_(page_clients.chrome_client &&
                            page_clients.chrome_client->IsSVGImageChromeClient()
                        ? UseCounter::kSVGImageContext
@@ -545,7 +545,7 @@ void Page::SettingsChanged(SettingsDelegate::ChangeType change_type) {
         break;
       DeprecatedLocalMainFrame()
           ->GetDocument()
-          ->AxObjectCacheOwner()
+          ->AXObjectCacheOwner()
           .ClearAXObjectCache();
       break;
     case SettingsDelegate::kViewportRuleChange: {
@@ -721,14 +721,15 @@ void Page::RegisterPluginsChangedObserver(PluginsChangedObserver* observer) {
 }
 
 ScrollbarTheme& Page::GetScrollbarTheme() const {
+  if (settings_->GetForceAndroidOverlayScrollbar())
+    return ScrollbarThemeOverlay::MobileTheme();
   return ScrollbarTheme::DeprecatedStaticGetTheme();
 }
 
 Page::PageClients::PageClients()
     : chrome_client(nullptr),
       context_menu_client(nullptr),
-      editor_client(nullptr),
-      spell_checker_client(nullptr) {}
+      editor_client(nullptr) {}
 
 Page::PageClients::~PageClients() {}
 

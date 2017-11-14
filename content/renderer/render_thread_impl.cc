@@ -627,11 +627,13 @@ RenderThreadImpl::RenderThreadImpl(
     const InProcessChildThreadParams& params,
     std::unique_ptr<blink::scheduler::RendererScheduler> scheduler,
     const scoped_refptr<base::SingleThreadTaskRunner>& resource_task_queue)
-    : ChildThreadImpl(Options::Builder()
-                          .InBrowserProcess(params)
-                          .AutoStartServiceManagerConnection(false)
-                          .ConnectToBrowser(true)
-                          .Build()),
+    : ChildThreadImpl(
+          Options::Builder()
+              .InBrowserProcess(params)
+              .AutoStartServiceManagerConnection(false)
+              .ConnectToBrowser(true)
+              .IPCTaskRunner(scheduler ? scheduler->IPCTaskRunner() : nullptr)
+              .Build()),
       renderer_scheduler_(std::move(scheduler)),
       categorized_worker_pool_(new CategorizedWorkerPool()),
       renderer_binding_(this),
@@ -718,7 +720,8 @@ void RenderThreadImpl::Init(
   AddFilter(quota_message_filter_->GetFilter());
 
   auto registry = std::make_unique<service_manager::BinderRegistry>();
-  BlinkInterfaceRegistryImpl interface_registry(registry->GetWeakPtr());
+  BlinkInterfaceRegistryImpl interface_registry(
+      registry->GetWeakPtr(), associated_interfaces_.GetWeakPtr());
 
   InitializeWebKit(resource_task_queue, &interface_registry);
   blink_initialized_time_ = base::TimeTicks::Now();
@@ -1983,13 +1986,7 @@ void RenderThreadImpl::RecordPurgeAndSuspendMemoryGrowthMetrics(
 }
 
 void RenderThreadImpl::CompositingModeFallbackToSoftware() {
-  if (gpu_channel_) {
-    // TODO(danakj): Tell all clients of the compositor. We should send a more
-    // scoped message than this.
-    gpu_channel_->DestroyChannel();
-    gpu_channel_ = nullptr;
-  }
-
+  gpu_->LoseChannel();
   is_gpu_compositing_disabled_ = true;
 }
 
@@ -1997,21 +1994,11 @@ scoped_refptr<gpu::GpuChannelHost> RenderThreadImpl::EstablishGpuChannelSync(
     bool* connection_error) {
   TRACE_EVENT0("gpu", "RenderThreadImpl::EstablishGpuChannelSync");
 
-  if (gpu_channel_) {
-    // Do nothing if we already have a GPU channel or are already
-    // establishing one.
-    if (!gpu_channel_->IsLost())
-      return gpu_channel_;
-
-    // Recreate the channel if it has been lost.
-    gpu_channel_->DestroyChannel();
-    gpu_channel_ = nullptr;
-  }
-
-  gpu_channel_ = gpu_->EstablishGpuChannelSync(connection_error);
-  if (gpu_channel_)
-    GetContentClient()->SetGpuInfo(gpu_channel_->gpu_info());
-  return gpu_channel_;
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel =
+      gpu_->EstablishGpuChannelSync(connection_error);
+  if (gpu_channel)
+    GetContentClient()->SetGpuInfo(gpu_channel->gpu_info());
+  return gpu_channel;
 }
 
 void RenderThreadImpl::RequestNewLayerTreeFrameSink(
@@ -2203,13 +2190,8 @@ RenderThreadImpl::CreateMediaStreamCenter(
   std::unique_ptr<blink::WebMediaStreamCenter> media_stream_center;
 #if BUILDFLAG(ENABLE_WEBRTC)
   if (!media_stream_center) {
-    media_stream_center =
-        GetContentClient()->renderer()->OverrideCreateWebMediaStreamCenter(
-            client);
-    if (!media_stream_center) {
-      media_stream_center = std::make_unique<MediaStreamCenter>(
-          client, GetPeerConnectionDependencyFactory());
-    }
+    media_stream_center = std::make_unique<MediaStreamCenter>(
+        client, GetPeerConnectionDependencyFactory());
   }
 #endif
   return media_stream_center;
@@ -2236,11 +2218,7 @@ mojom::RenderMessageFilter* RenderThreadImpl::render_message_filter() {
 }
 
 gpu::GpuChannelHost* RenderThreadImpl::GetGpuChannel() {
-  if (!gpu_channel_)
-    return nullptr;
-  if (gpu_channel_->IsLost())
-    return nullptr;
-  return gpu_channel_.get();
+  return gpu_->GetGpuChannel().get();
 }
 
 void RenderThreadImpl::CreateView(mojom::CreateViewParamsPtr params) {

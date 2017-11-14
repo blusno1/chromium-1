@@ -30,6 +30,7 @@
 #include "components/update_client/test_configurator.h"
 #include "components/update_client/update_client.h"
 #include "components/update_client/update_client_errors.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -133,6 +134,8 @@ class FakeInstallerPolicy : public ComponentInstallerPolicy {
       const base::FilePath& install_dir) override {
     return update_client::CrxInstaller::Result(0);
   }
+
+  void OnCustomUninstall() override {}
 
   void ComponentReady(
       const base::Version& version,

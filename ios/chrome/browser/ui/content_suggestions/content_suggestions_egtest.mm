@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #include "base/test/scoped_command_line.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 #include "components/ntp_snippets/content_suggestion.h"
@@ -28,6 +29,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_provider_test_singleton.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_test_utils.h"
+#import "ios/chrome/browser/ui/ntp/modal_ntp.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -129,8 +131,10 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
 + (void)setUp {
   [super setUp];
-  if (IsIPadIdiom()) {
-    // Make sure we are on the Home panel on iPad.
+  // TODO(crbug.com/753599): When old bookmark is removed, NTP panel will always
+  // be shown modally.  Clean up the non-modal code below.
+  if (!PresentNTPPanelModally()) {
+    // Make sure we are on the Home panel on iPad when NTP is shown modally.
     chrome_test_util::OpenNewTab();
     [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
         performAction:grey_typeText(@"chrome://newtab/#most_visited\n")];
@@ -180,7 +184,9 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
       ReadingListModelFactory::GetForBrowserState(self.browserState);
   readingListModel->DeleteAllEntries();
   [super setUp];
-  if (IsIPadIdiom()) {
+  // TODO(crbug.com/753599): When old bookmark is removed, NTP panel will always
+  // be shown modally.  Clean up the non-modal code below.
+  if (!PresentNTPPanelModally()) {
     [[EarlGrey selectElementWithMatcher:
                    chrome_test_util::ButtonWithAccessibilityLabelId(
                        IDS_IOS_NEW_TAB_HOME)] performAction:grey_tap()];
@@ -559,6 +565,11 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
   [ChromeEarlGrey waitForMainTabCount:2];
   [ChromeEarlGrey waitForIncognitoTabCount:0];
 
+  // Wait for the end of the new tab opening in background. This is needed as
+  // the iOS 11 devices cannot complete this animations while checking if the
+  // collection is present.
+  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(1));
+
   // Check that the tab has been opened in background.
   ConditionBlock condition = ^{
     NSError* error = nil;
@@ -802,8 +813,11 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
   [ChromeEarlGrey goBack];
 
   [[self class] closeAllTabs];
-
   chrome_test_util::OpenNewTab();
+  // TODO(crbug.com/783192): ChromeEarlGrey should have a method to open a new
+  // tab and synchronize with the UI.
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+
   [[EarlGrey selectElementWithMatcher:
                  chrome_test_util::StaticTextWithAccessibilityLabel(pageTitle)]
       performAction:grey_longPress()];

@@ -42,7 +42,6 @@ APP_LIST_EXPORT extern const SkColor kResultDimmedTextColor;
 APP_LIST_EXPORT extern const SkColor kResultURLTextColor;
 
 APP_LIST_EXPORT extern const SkColor kGridTitleColor;
-APP_LIST_EXPORT extern const SkColor kGridTitleColorFullscreen;
 
 APP_LIST_EXPORT extern const int kGridTileWidth;
 APP_LIST_EXPORT extern const int kGridTileHeight;
@@ -56,11 +55,12 @@ APP_LIST_EXPORT extern const int kGridSelectedCornerRadius;
 APP_LIST_EXPORT extern const SkColor kFolderTitleColor;
 APP_LIST_EXPORT extern const SkColor kFolderTitleHintTextColor;
 APP_LIST_EXPORT extern const SkColor kFolderBubbleColor;
-APP_LIST_EXPORT extern const SkColor kFolderBubbleColorFullScreen;
 APP_LIST_EXPORT extern const SkColor kFolderShadowColor;
 APP_LIST_EXPORT extern const float kFolderBubbleOpacity;
 APP_LIST_EXPORT extern const float kFolderBubbleRadius;
 APP_LIST_EXPORT extern const float kFolderBubbleOffsetY;
+
+APP_LIST_EXPORT extern const int kFolderBackgroundBubbleRadius;
 
 APP_LIST_EXPORT extern const SkColor kCardBackgroundColor;
 APP_LIST_EXPORT extern const SkColor kCardBackgroundColorFullscreen;
@@ -96,8 +96,7 @@ APP_LIST_EXPORT extern const SkColor kIconColor;
 APP_LIST_EXPORT extern const float kDragDropAppIconScale;
 APP_LIST_EXPORT extern const int kDragDropAppIconScaleTransitionInMs;
 
-APP_LIST_EXPORT extern const size_t kNumStartPageTiles;
-APP_LIST_EXPORT extern const size_t kNumStartPageTilesFullscreen;
+APP_LIST_EXPORT extern const int kNumStartPageTiles;
 APP_LIST_EXPORT extern const size_t kMaxSearchResults;
 
 APP_LIST_EXPORT extern const size_t kExpandArrowTopPadding;
@@ -191,12 +190,15 @@ enum AppListPageSwitcherSource {
 
 APP_LIST_EXPORT extern const char kAppListAppLaunched[];
 APP_LIST_EXPORT extern const char kAppListAppLaunchedFullscreen[];
+APP_LIST_EXPORT extern const char kAppListCreationTimeHistogram[];
 APP_LIST_EXPORT extern const char kAppListStateTransitionSourceHistogram[];
 APP_LIST_EXPORT extern const char kAppListPageSwitcherSourceHistogram[];
 APP_LIST_EXPORT extern const char kAppListFolderOpenedHistogram[];
 APP_LIST_EXPORT extern const char kAppListPeekingToFullscreenHistogram[];
 APP_LIST_EXPORT extern const char kAppListToggleMethodHistogram[];
 APP_LIST_EXPORT extern const char kPageOpenedHistogram[];
+APP_LIST_EXPORT extern const char kNumberOfAppsInFoldersHistogram[];
+APP_LIST_EXPORT extern const char kNumberOfFoldersHistogram[];
 
 APP_LIST_EXPORT extern const char kSearchResultOpenDisplayTypeHistogram[];
 APP_LIST_EXPORT extern const char kSearchQueryLength[];
@@ -213,7 +215,7 @@ APP_LIST_EXPORT gfx::ShadowValue GetShadowForZHeight(int z_height);
 APP_LIST_EXPORT const gfx::ShadowValues& IconStartShadows();
 APP_LIST_EXPORT const gfx::ShadowValues& IconEndShadows();
 
-APP_LIST_EXPORT const gfx::FontList& FullscreenAppListAppTitleFont();
+APP_LIST_EXPORT const gfx::FontList& AppListAppTitleFont();
 
 }  // namespace app_list
 

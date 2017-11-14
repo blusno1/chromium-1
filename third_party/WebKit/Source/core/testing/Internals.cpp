@@ -1379,6 +1379,35 @@ void Internals::setSuggestedValue(Element* element,
     select->SetSuggestedValue(value);
 }
 
+void Internals::setAutofilledValue(Element* element,
+                                   const String& value,
+                                   ExceptionState& exception_state) {
+  DCHECK(element);
+  if (!element->IsFormControlElement()) {
+    exception_state.ThrowDOMException(
+        kInvalidNodeTypeError,
+        "The element provided is not a form control element.");
+    return;
+  }
+
+  if (auto* input = ToHTMLInputElementOrNull(*element)) {
+    input->DispatchScopedEvent(Event::CreateBubble(EventTypeNames::keydown));
+    input->setValue(value, kDispatchInputAndChangeEvent);
+    input->DispatchScopedEvent(Event::CreateBubble(EventTypeNames::keyup));
+  }
+
+  if (auto* textarea = ToHTMLTextAreaElementOrNull(*element)) {
+    textarea->DispatchScopedEvent(Event::CreateBubble(EventTypeNames::keydown));
+    textarea->setValue(value, kDispatchInputAndChangeEvent);
+    textarea->DispatchScopedEvent(Event::CreateBubble(EventTypeNames::keyup));
+  }
+
+  if (auto* select = ToHTMLSelectElementOrNull(*element))
+    select->setValue(value, kDispatchInputAndChangeEvent);
+
+  ToHTMLFormControlElement(element)->SetAutofilled(true);
+}
+
 void Internals::setEditingValue(Element* element,
                                 const String& value,
                                 ExceptionState& exception_state) {
@@ -1731,7 +1760,7 @@ unsigned Internals::mediaKeySessionCount() {
       InstanceCounters::kMediaKeySessionCounter);
 }
 
-unsigned Internals::suspendableObjectCount(Document* document) {
+unsigned Internals::pausableObjectCount(Document* document) {
   DCHECK(document);
   return document->PausableObjectCount();
 }
@@ -2149,7 +2178,7 @@ bool Internals::canHyphenate(const AtomicString& locale) {
 
 void Internals::setMockHyphenation(const AtomicString& locale) {
   LayoutLocale::SetHyphenationForTesting(locale,
-                                         WTF::AdoptRef(new MockHyphenation));
+                                         base::AdoptRef(new MockHyphenation));
 }
 
 bool Internals::isOverwriteModeEnabled(Document* document) {
@@ -3399,7 +3428,7 @@ Vector<String> Internals::getCSSPropertyLonghands() const {
   Vector<String> result;
   for (int id = firstCSSProperty; id <= lastCSSProperty; ++id) {
     CSSPropertyID property = static_cast<CSSPropertyID>(id);
-    if (!isShorthandProperty(property)) {
+    if (CSSProperty::Get(property).IsLonghand()) {
       result.push_back(getPropertyNameString(property));
     }
   }
@@ -3410,7 +3439,7 @@ Vector<String> Internals::getCSSPropertyShorthands() const {
   Vector<String> result;
   for (int id = firstCSSProperty; id <= lastCSSProperty; ++id) {
     CSSPropertyID property = static_cast<CSSPropertyID>(id);
-    if (isShorthandProperty(property)) {
+    if (CSSProperty::Get(property).IsShorthand()) {
       result.push_back(getPropertyNameString(property));
     }
   }

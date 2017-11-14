@@ -1249,7 +1249,9 @@ static LayoutRect BoundingBoxInPaginationContainer(
         paint_layer->PhysicalBoundingBox(&enclosing_pagination_layer);
   } else {
     // Compute the bounding box without transforms.
-    object_bounding_box_in_flow_thread = object.LocalVisualRect();
+    // The object is guaranteed to be a box due to the logic above.
+    DCHECK(object.IsBox());
+    object_bounding_box_in_flow_thread = ToLayoutBox(object).BorderBoxRect();
     TransformState transform_state(
         TransformState::kApplyTransformDirection,
         FloatPoint(object_bounding_box_in_flow_thread.Location()));
@@ -1610,12 +1612,15 @@ void PaintPropertyTreeBuilder::UpdateFragments(
     // SVG resources are painted within one or more other locations in the
     // SVG during paint, and hence have their own independent paint property
     // trees, paint offset, etc.
-    PaintPropertyTreeBuilderFragmentContext context;
-    context.current.paint_offset_root =
-        context.absolute_position.paint_offset_root =
-            context.fixed_position.paint_offset_root = &object;
+    full_context.fragments.clear();
+    full_context.fragments.Grow(1);
+    PaintPropertyTreeBuilderFragmentContext& fragment_context =
+        full_context.fragments[0];
 
-    full_context.fragments.Fill(context, 1);
+    fragment_context.current.paint_offset_root =
+        fragment_context.absolute_position.paint_offset_root =
+            fragment_context.fixed_position.paint_offset_root = &object;
+
     object.GetMutableForPainting().FirstFragment().ClearNextFragment();
   }
 }

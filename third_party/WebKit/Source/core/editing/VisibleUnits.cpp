@@ -360,30 +360,27 @@ static PositionTemplate<Strategy> PreviousBoundaryAlgorithm(
   BackwardsTextBuffer string;
   string.PushRange(suffix_string.Data(), suffix_string.Size());
 
+  // Treat bullets used in the text security mode as regular characters when
+  // looking for boundaries.
   SimplifiedBackwardsTextIteratorAlgorithm<Strategy> it(
-      EphemeralRangeTemplate<Strategy>(start, end));
+      EphemeralRangeTemplate<Strategy>(start, end),
+      TextIteratorBehavior::Builder()
+          .SetEmitsSmallXForTextSecurity(true)
+          .Build());
   unsigned next = 0;
   bool need_more_context = false;
   while (!it.AtEnd()) {
-    bool in_text_security_mode = it.IsInTextSecurityMode();
     // iterate to get chunks until the searchFunction returns a non-zero
     // value.
-    if (!in_text_security_mode) {
-      int run_offset = 0;
-      do {
-        run_offset += it.CopyTextTo(&string, run_offset, string.Capacity());
-        next = search_function(string.Data(), string.Size(),
-                               string.Size() - suffix_length,
-                               kMayHaveMoreContext, need_more_context);
-      } while (!next && run_offset < it.length());
-      if (next)
-        break;
-    } else {
-      // Treat bullets used in the text security mode as regular
-      // characters when looking for boundaries
-      string.PushCharacters('x', it.length());
-      next = 0;
-    }
+    int run_offset = 0;
+    do {
+      run_offset += it.CopyTextTo(&string, run_offset, string.Capacity());
+      next = search_function(string.Data(), string.Size(),
+                             string.Size() - suffix_length, kMayHaveMoreContext,
+                             need_more_context);
+    } while (!next && run_offset < it.length());
+    if (next)
+      break;
     it.Advance();
   }
   if (need_more_context) {
@@ -447,10 +444,13 @@ static PositionTemplate<Strategy> NextBoundaryAlgorithm(
           start.AnchorNode(), start.OffsetInContainerNode());
   const PositionTemplate<Strategy> search_end =
       PositionTemplate<Strategy>::LastPositionInNode(*boundary);
+  // Treat bullets used in the text security mode as regular characters when
+  // looking for boundaries
   TextIteratorAlgorithm<Strategy> it(
       search_start, search_end,
       TextIteratorBehavior::Builder()
           .SetEmitsCharactersBetweenAllVisiblePositions(true)
+          .SetEmitsSmallXForTextSecurity(true)
           .Build());
   const unsigned kInvalidOffset = static_cast<unsigned>(-1);
   unsigned next = kInvalidOffset;
@@ -460,28 +460,20 @@ static PositionTemplate<Strategy> NextBoundaryAlgorithm(
     // Keep asking the iterator for chunks until the search function
     // returns an end value not equal to the length of the string passed to
     // it.
-    bool in_text_security_mode = it.IsInTextSecurityMode();
-    if (!in_text_security_mode) {
-      int run_offset = 0;
-      do {
-        run_offset += it.CopyTextTo(&string, run_offset, string.Capacity());
-        next = search_function(string.Data(), string.Size(), offset,
-                               kMayHaveMoreContext, need_more_context);
-        if (!need_more_context) {
-          // When the search does not need more context, skip all examined
-          // characters except the last one, in case it is a boundary.
-          offset = string.Size();
-          U16_BACK_1(string.Data(), 0, offset);
-        }
-      } while (next == string.Size() && run_offset < it.length());
-      if (next != string.Size())
-        break;
-    } else {
-      // Treat bullets used in the text security mode as regular
-      // characters when looking for boundaries
-      string.PushCharacters('x', it.length());
-      next = string.Size();
-    }
+    int run_offset = 0;
+    do {
+      run_offset += it.CopyTextTo(&string, run_offset, string.Capacity());
+      next = search_function(string.Data(), string.Size(), offset,
+                             kMayHaveMoreContext, need_more_context);
+      if (!need_more_context) {
+        // When the search does not need more context, skip all examined
+        // characters except the last one, in case it is a boundary.
+        offset = string.Size();
+        U16_BACK_1(string.Data(), 0, offset);
+      }
+    } while (next == string.Size() && run_offset < it.length());
+    if (next != string.Size())
+      break;
     it.Advance();
   }
   if (need_more_context) {

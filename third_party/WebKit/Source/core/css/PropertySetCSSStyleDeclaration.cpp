@@ -26,10 +26,10 @@
 #include "core/StylePropertyShorthand.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSKeyframesRule.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/StyleChangeReason.h"
 #include "core/css/StyleEngine.h"
-#include "core/css/StylePropertySet.h"
 #include "core/dom/Element.h"
 #include "core/dom/MutationObserverInterestGroup.h"
 #include "core/dom/MutationRecord.h"
@@ -161,7 +161,7 @@ unsigned AbstractPropertySetCSSStyleDeclaration::length() const {
 String AbstractPropertySetCSSStyleDeclaration::item(unsigned i) const {
   if (i >= PropertySet().PropertyCount())
     return "";
-  StylePropertySet::PropertyReference property = PropertySet().PropertyAt(i);
+  CSSPropertyValueSet::PropertyReference property = PropertySet().PropertyAt(i);
   if (property.Id() == CSSPropertyVariable)
     return ToCSSCustomPropertyDeclaration(property.Value()).GetName();
   if (property.Id() == CSSPropertyApplyAtRule)
@@ -214,9 +214,7 @@ String AbstractPropertySetCSSStyleDeclaration::GetPropertyShorthand(
   CSSPropertyID property_id = cssPropertyID(property_name);
 
   // Custom properties don't have shorthands, so we can ignore them here.
-  if (!property_id || property_id == CSSPropertyVariable)
-    return String();
-  if (isShorthandProperty(property_id))
+  if (!property_id || !CSSProperty::Get(property_id).IsLonghand())
     return String();
   CSSPropertyID shorthand_id = PropertySet().GetPropertyShorthand(property_id);
   if (!shorthand_id)
@@ -350,7 +348,7 @@ void AbstractPropertySetCSSStyleDeclaration::Trace(blink::Visitor* visitor) {
 }
 
 StyleRuleCSSStyleDeclaration::StyleRuleCSSStyleDeclaration(
-    MutableStylePropertySet& property_set_arg,
+    MutableCSSPropertyValueSet& property_set_arg,
     CSSRule* parent_rule)
     : PropertySetCSSStyleDeclaration(property_set_arg),
       parent_rule_(parent_rule) {}
@@ -374,7 +372,7 @@ CSSStyleSheet* StyleRuleCSSStyleDeclaration::ParentStyleSheet() const {
 }
 
 void StyleRuleCSSStyleDeclaration::Reattach(
-    MutableStylePropertySet& property_set) {
+    MutableCSSPropertyValueSet& property_set) {
   property_set_ = &property_set;
 }
 
@@ -399,7 +397,7 @@ void StyleRuleCSSStyleDeclaration::TraceWrappers(
   PropertySetCSSStyleDeclaration::TraceWrappers(visitor);
 }
 
-MutableStylePropertySet& InlineCSSStyleDeclaration::PropertySet() const {
+MutableCSSPropertyValueSet& InlineCSSStyleDeclaration::PropertySet() const {
   return parent_element_->EnsureMutableInlineStyle();
 }
 

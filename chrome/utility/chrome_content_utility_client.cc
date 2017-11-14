@@ -16,17 +16,16 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/common/features.h"
-#include "chrome/common/file_patcher.mojom.h"
 #include "chrome/common/profiling/constants.mojom.h"
 #include "chrome/profiling/profiling_service.h"
 #include "chrome/utility/printing/pdf_to_pwg_raster_converter_impl.h"
 #include "chrome/utility/utility_message_handler.h"
+#include "components/patch_service/patch_service.h"
+#include "components/patch_service/public/interfaces/constants.mojom.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/simple_connection_filter.h"
 #include "content/public/utility/utility_thread.h"
-#include "courgette/courgette.h"
-#include "courgette/third_party/bsdiff/bsdiff.h"
 #include "extensions/features/features.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "printing/features/features.h"
@@ -46,17 +45,14 @@
 #include "services/proxy_resolver/public/interfaces/proxy_resolver.mojom.h"  // nogncheck
 #endif  // !defined(OS_ANDROID)
 
-#if defined(OS_CHROMEOS)
-#include "chrome/services/file_util/file_util_service.h"
-#include "chrome/services/file_util/public/interfaces/constants.mojom.h"
-#endif
-
 #if defined(OS_WIN)
 #include "chrome/services/util_win/public/interfaces/constants.mojom.h"
 #include "chrome/services/util_win/util_win_service.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/services/media_gallery_util/media_gallery_util_service.h"
+#include "chrome/services/media_gallery_util/public/interfaces/constants.mojom.h"
 #include "chrome/utility/extensions/extensions_handler.h"
 #endif
 
@@ -74,104 +70,18 @@
 #include "chrome/utility/printing_handler.h"
 #endif
 
+#if defined(FULL_SAFE_BROWSING) || defined(OS_CHROMEOS)
+#include "chrome/services/file_util/file_util_service.h"  // nogncheck
+#include "chrome/services/file_util/public/interfaces/constants.mojom.h"  // nogncheck
+#endif
+
 #if BUILDFLAG(ENABLE_PRINTING)
 #include "chrome/common/chrome_content_client.h"
 #include "components/printing/service/public/cpp/pdf_compositor_service_factory.h"  // nogncheck
 #include "components/printing/service/public/interfaces/pdf_compositor.mojom.h"  // nogncheck
 #endif
 
-#if defined(FULL_SAFE_BROWSING)
-#include "chrome/common/safe_browsing/archive_analyzer_results.h"
-#include "chrome/common/safe_browsing/safe_archive_analyzer.mojom.h"
-#include "chrome/common/safe_browsing/zip_analyzer.h"
-#if defined(OS_MACOSX)
-#include "chrome/utility/safe_browsing/mac/dmg_analyzer.h"
-#endif
-#endif
-
 namespace {
-
-class FilePatcherImpl : public chrome::mojom::FilePatcher {
- public:
-  FilePatcherImpl() = default;
-  ~FilePatcherImpl() override = default;
-
-  static void Create(chrome::mojom::FilePatcherRequest request) {
-    mojo::MakeStrongBinding(base::MakeUnique<FilePatcherImpl>(),
-                            std::move(request));
-  }
-
- private:
-  // chrome::mojom::FilePatcher:
-  void PatchFileBsdiff(base::File input_file,
-                       base::File patch_file,
-                       base::File output_file,
-                       const PatchFileBsdiffCallback& callback) override {
-    DCHECK(input_file.IsValid());
-    DCHECK(patch_file.IsValid());
-    DCHECK(output_file.IsValid());
-
-    const int patch_result_status = bsdiff::ApplyBinaryPatch(
-        std::move(input_file), std::move(patch_file), std::move(output_file));
-    callback.Run(patch_result_status);
-  }
-
-  void PatchFileCourgette(base::File input_file,
-                          base::File patch_file,
-                          base::File output_file,
-                          const PatchFileCourgetteCallback& callback) override {
-    DCHECK(input_file.IsValid());
-    DCHECK(patch_file.IsValid());
-    DCHECK(output_file.IsValid());
-
-    const int patch_result_status = courgette::ApplyEnsemblePatch(
-        std::move(input_file), std::move(patch_file), std::move(output_file));
-    callback.Run(patch_result_status);
-  }
-
-  DISALLOW_COPY_AND_ASSIGN(FilePatcherImpl);
-};
-
-#if defined(FULL_SAFE_BROWSING)
-class SafeArchiveAnalyzerImpl : public chrome::mojom::SafeArchiveAnalyzer {
- public:
-  SafeArchiveAnalyzerImpl() = default;
-  ~SafeArchiveAnalyzerImpl() override = default;
-
-  static void Create(chrome::mojom::SafeArchiveAnalyzerRequest request) {
-    mojo::MakeStrongBinding(base::MakeUnique<SafeArchiveAnalyzerImpl>(),
-                            std::move(request));
-  }
-
- private:
-  // chrome::mojom::SafeArchiveAnalyzer:
-  void AnalyzeZipFile(base::File zip_file,
-                      base::File temporary_file,
-                      const AnalyzeZipFileCallback& callback) override {
-    DCHECK(temporary_file.IsValid());
-    DCHECK(zip_file.IsValid());
-
-    safe_browsing::ArchiveAnalyzerResults results;
-    safe_browsing::zip_analyzer::AnalyzeZipFile(
-        std::move(zip_file), std::move(temporary_file), &results);
-    callback.Run(results);
-  }
-
-  void AnalyzeDmgFile(base::File dmg_file,
-                      const AnalyzeDmgFileCallback& callback) override {
-#if defined(OS_MACOSX)
-    DCHECK(dmg_file.IsValid());
-    safe_browsing::ArchiveAnalyzerResults results;
-    safe_browsing::dmg::AnalyzeDMGFile(std::move(dmg_file), &results);
-    callback.Run(results);
-#else
-    NOTREACHED();
-#endif
-  }
-
-  DISALLOW_COPY_AND_ASSIGN(SafeArchiveAnalyzerImpl);
-};
-#endif  // defined(FULL_SAFE_BROWSING)
 
 #if !defined(OS_ANDROID)
 class ResourceUsageReporterImpl : public chrome::mojom::ResourceUsageReporter {
@@ -250,9 +160,6 @@ void ChromeContentUtilityClient::UtilityThreadStarted() {
   // If our process runs with elevated privileges, only add elevated Mojo
   // interfaces to the interface registry.
   if (!utility_process_running_elevated_) {
-    registry->AddInterface(base::Bind(&FilePatcherImpl::Create),
-                           base::ThreadTaskRunnerHandle::Get());
-
 #if !defined(OS_ANDROID)
     registry->AddInterface(base::Bind(CreateResourceUsageReporter),
                            base::ThreadTaskRunnerHandle::Get());
@@ -260,11 +167,6 @@ void ChromeContentUtilityClient::UtilityThreadStarted() {
         base::Bind(&media_router::DialDeviceDescriptionParserImpl::Create),
         base::ThreadTaskRunnerHandle::Get());
 #endif  // !defined(OS_ANDROID)
-
-#if defined(FULL_SAFE_BROWSING)
-    registry->AddInterface(base::Bind(&SafeArchiveAnalyzerImpl::Create),
-                           base::ThreadTaskRunnerHandle::Get());
-#endif
   }
 
   connection->AddConnectionFilter(
@@ -331,11 +233,27 @@ void ChromeContentUtilityClient::RegisterServices(
   }
 #endif
 
-#if defined(OS_CHROMEOS)
+#if defined(FULL_SAFE_BROWSING) || defined(OS_CHROMEOS)
   {
     service_manager::EmbeddedServiceInfo service_info;
     service_info.factory = base::Bind(&chrome::FileUtilService::CreateService);
     services->emplace(chrome::mojom::kFileUtilServiceName, service_info);
+  }
+#endif
+
+  if (!utility_process_running_elevated_) {
+    service_manager::EmbeddedServiceInfo service_info;
+    service_info.factory = base::Bind(&patch::PatchService::CreateService);
+    services->emplace(patch::mojom::kServiceName, service_info);
+  }
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  {
+    service_manager::EmbeddedServiceInfo service_info;
+    service_info.factory =
+        base::Bind(&chrome::MediaGalleryUtilService::CreateService);
+    services->emplace(chrome::mojom::kMediaGalleryUtilServiceName,
+                      service_info);
   }
 #endif
 

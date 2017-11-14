@@ -33,12 +33,12 @@
 #include "core/css/CSSKeyframeRule.h"
 #include "core/css/CSSKeyframesRule.h"
 #include "core/css/CSSMediaRule.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSRuleList.h"
 #include "core/css/CSSStyleRule.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/CSSSupportsRule.h"
 #include "core/css/StyleEngine.h"
-#include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParser.h"
@@ -903,10 +903,10 @@ void InspectorStyle::Trace(blink::Visitor* visitor) {
 InspectorStyleSheetBase::InspectorStyleSheetBase(Listener* listener)
     : id_(IdentifiersFactory::CreateIdentifier()),
       listener_(listener),
-      line_endings_(WTF::MakeUnique<LineEndings>()) {}
+      line_endings_(std::make_unique<LineEndings>()) {}
 
 void InspectorStyleSheetBase::OnStyleSheetTextChanged() {
-  line_endings_ = WTF::MakeUnique<LineEndings>();
+  line_endings_ = std::make_unique<LineEndings>();
   if (GetListener())
     GetListener()->StyleSheetChanged(this);
 }

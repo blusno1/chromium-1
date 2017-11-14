@@ -24,12 +24,12 @@ class ReadingListModel;
 // buttons (forwarding to the delegate). This is not intended to be used
 // on its own, but to be subclassed by more specific toolbars that provide
 // more buttons in the empty space.
-@interface ToolbarController : NSObject<ActivityServicePositioner,
-                                        PopupMenuDelegate,
-                                        BubbleViewAnchorPointProvider>
+@interface ToolbarController : UIViewController<ActivityServicePositioner,
+                                                PopupMenuDelegate,
+                                                BubbleViewAnchorPointProvider>
 
 // The top-level toolbar view.
-@property(nonatomic, readonly, strong) ToolbarView* view;
+@property(nonatomic, strong) ToolbarView* view;
 // The view containing all the content of the toolbar. It respects the trailing
 // and leading anchors of the safe area.
 @property(nonatomic, readonly, strong) UIView* contentView;
@@ -70,6 +70,9 @@ class ReadingListModel;
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
+- (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
+- (instancetype)initWithNibName:(NSString*)nibNameOrNil
+                         bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 
 // Height and Y offset to account for the status bar. Overridden by subclasses
 // if the toolbar shouldn't extend through the status bar.
@@ -119,30 +122,18 @@ class ReadingListModel;
 // Shows/hides iPhone toolbar views for when the new tab page is displayed.
 - (void)hideViewsForNewTabPage:(BOOL)hide;
 
-// Performs the transition animation specified by |style|, animating the
-// toolbar view from |beginFrame| to |endFrame|. Animations are added to
-// subview depending on |style|:
-//   - ToolbarTransitionStyleToStackView: faded out immediately
-//   - ToolbarTransitionStyleToBVC: fade in from a vertical offset after a
-//   delay
-- (void)animateTransitionWithBeginFrame:(CGRect)beginFrame
-                               endFrame:(CGRect)endFrame
-                        transitionStyle:(ToolbarTransitionStyle)style;
-
-// Reverses transition animations that are cancelled before they can finish.
-- (void)reverseTransitionAnimations;
-
-// Called when transition animations can be removed.
-- (void)cleanUpTransitionAnimations;
-
 // Triggers an animation on the tools menu button to draw the user's
 // attention.
 - (void)triggerToolsMenuButtonAnimation;
 
-// TODO(crbug.com/778236): Remove this declaration once it is a
-// UIViewController.
-// Update the view's layout to take into account the new safe area insets.
-- (void)viewSafeAreaInsetsDidChange;
+// Activates constraints to simulate a safe area with |fakeSafeAreaInsets|
+// insets. The insets will be used as leading/trailing wrt RTL. Those
+// constraints have a higher priority than the one used to respect the safe
+// area. They need to be deactivated for the toolbar to respect the safe area
+// again. The fake safe area can be bigger or smaller than the real safe area.
+- (void)activateFakeSafeAreaInsets:(UIEdgeInsets)fakeSafeAreaInsets;
+// Deactivates the constraints used to create a fake safe area.
+- (void)deactivateFakeSafeAreaInsets;
 
 @end
 

@@ -56,31 +56,6 @@ void WorkletGlobalScope::EvaluateClassicScript(
   NOTREACHED();
 }
 
-v8::Local<v8::Object> WorkletGlobalScope::Wrap(
-    v8::Isolate*,
-    v8::Local<v8::Object> creation_context) {
-  LOG(FATAL) << "WorkletGlobalScope must never be wrapped with wrap method. "
-                "The global object of ECMAScript environment is used as the "
-                "wrapper.";
-  return v8::Local<v8::Object>();
-}
-
-v8::Local<v8::Object> WorkletGlobalScope::AssociateWithWrapper(
-    v8::Isolate*,
-    const WrapperTypeInfo*,
-    v8::Local<v8::Object> wrapper) {
-  LOG(FATAL) << "WorkletGlobalScope must never be wrapped with wrap method. "
-                "The global object of ECMAScript environment is used as the "
-                "wrapper.";
-  return v8::Local<v8::Object>();
-}
-
-bool WorkletGlobalScope::HasPendingActivity() const {
-  // The worklet global scope wrapper is kept alive as longs as its execution
-  // context is active.
-  return !ExecutionContext::IsContextDestroyed();
-}
-
 ExecutionContext* WorkletGlobalScope::GetExecutionContext() const {
   return const_cast<WorkletGlobalScope*>(this);
 }
@@ -135,7 +110,8 @@ void WorkletGlobalScope::FetchAndInvokeScript(
   Modulator* modulator = Modulator::From(ScriptController()->GetScriptState());
   // [FMWST] Step 3. "Perform the internal module script graph fetching
   // procedure ..."
-  ModuleScriptFetchRequest module_request(module_url_record, options);
+  ModuleScriptFetchRequest module_request(
+      module_url_record, modulator->GetReferrerPolicy(), options);
 
   // Step 3 to 5 are implemented in
   // WorkletModuleTreeClient::NotifyModuleTreeLoadFinished.
@@ -174,7 +150,6 @@ KURL WorkletGlobalScope::CompleteURL(const String& url) const {
 void WorkletGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(module_responses_map_proxy_);
   visitor->Trace(modulator_);
-  ScriptWrappable::Trace(visitor);
   SecurityContext::Trace(visitor);
   WorkerOrWorkletGlobalScope::Trace(visitor);
 }
@@ -182,6 +157,7 @@ void WorkletGlobalScope::Trace(blink::Visitor* visitor) {
 void WorkletGlobalScope::TraceWrappers(
     const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(modulator_);
+  WorkerOrWorkletGlobalScope::TraceWrappers(visitor);
 }
 
 }  // namespace blink

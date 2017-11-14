@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/time/time.h"
+#include "third_party/webrtc/common_types.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 
 namespace webrtc {
@@ -40,6 +41,9 @@ class WebrtcVideoEncoder {
     // Indicates that the encoder should encode this frame as a key frame.
     bool key_frame = false;
 
+    // Target FPS. < 0 means unset.
+    int fps = -1;
+
     // Quantization parameters for the encoder.
     int vpx_min_quantizer = -1;
     int vpx_max_quantizer = -1;
@@ -50,6 +54,7 @@ class WebrtcVideoEncoder {
     std::string data;
     bool key_frame;
     int quantizer;
+    webrtc::VideoCodecType codec;
   };
 
   enum class EncodeResult {

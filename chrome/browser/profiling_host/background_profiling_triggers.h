@@ -48,6 +48,7 @@ class BackgroundProfilingTriggers {
 
   // Virtual for testing. Called when a memory report needs to be send.
   virtual void TriggerMemoryReportForProcess(base::ProcessId pid);
+  void TriggerMemoryReportForProcessOnUIThread(base::ProcessId pid);
 
   // Timer to periodically check memory consumption and upload a slow-report.
   base::RepeatingTimer timer_;

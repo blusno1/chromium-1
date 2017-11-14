@@ -864,16 +864,16 @@ void PaintLayer::UpdateLayerPosition() {
 }
 
 bool PaintLayer::UpdateSize() {
-  IntSize old_size = size_;
+  LayoutSize old_size = size_;
   if (IsRootLayer() && RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-    size_ = GetLayoutObject().GetDocument().View()->Size();
+    size_ = LayoutSize(GetLayoutObject().GetDocument().View()->Size());
   } else if (GetLayoutObject().IsInline() &&
              GetLayoutObject().IsLayoutInline()) {
     LayoutInline& inline_flow = ToLayoutInline(GetLayoutObject());
     IntRect line_box = EnclosingIntRect(inline_flow.LinesBoundingBox());
-    size_ = line_box.Size();
+    size_ = LayoutSize(line_box.Size());
   } else if (LayoutBox* box = GetLayoutBox()) {
-    size_ = PixelSnappedIntSize(box->Size(), box->Location());
+    size_ = box->Size();
   }
   return old_size != size_;
 }
@@ -1079,7 +1079,7 @@ void PaintLayer::UpdateAncestorDependentCompositingInputs(
     const AncestorDependentCompositingInputs& compositing_inputs,
     bool has_ancestor_with_clip_path) {
   ancestor_dependent_compositing_inputs_ =
-      WTF::MakeUnique<AncestorDependentCompositingInputs>(compositing_inputs);
+      std::make_unique<AncestorDependentCompositingInputs>(compositing_inputs);
   has_ancestor_with_clip_path_ = has_ancestor_with_clip_path;
   needs_ancestor_dependent_compositing_inputs_update_ = false;
 }
@@ -1454,7 +1454,7 @@ void PaintLayer::InsertOnlyThisLayerAfterStyleChange() {
   // this object is stacked content, creating this layer may cause this object
   // and its descendants to change paint invalidation container.
   bool did_set_paint_invalidation = false;
-  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
       !GetLayoutObject().IsLayoutView() && GetLayoutObject().IsRooted() &&
       GetLayoutObject().StyleRef().IsStacked()) {
     const LayoutBoxModelObject& previous_paint_invalidation_container =
@@ -1577,7 +1577,7 @@ void PaintLayer::DidUpdateScrollsOverflow() {
 void PaintLayer::UpdateStackingNode() {
   DCHECK(!stacking_node_);
   if (RequiresStackingNode())
-    stacking_node_ = WTF::MakeUnique<PaintLayerStackingNode>(this);
+    stacking_node_ = std::make_unique<PaintLayerStackingNode>(this);
   else
     stacking_node_ = nullptr;
 }
@@ -3430,12 +3430,11 @@ DisableCompositingQueryAsserts::DisableCompositingQueryAsserts()
 
 }  // namespace blink
 
-#ifndef NDEBUG
-// FIXME: Rename?
+#if DCHECK_IS_ON()
 void showLayerTree(const blink::PaintLayer* layer) {
   blink::DisableCompositingQueryAsserts disabler;
   if (!layer) {
-    LOG(INFO) << "Cannot showLayerTree. Root is (nil)";
+    LOG(ERROR) << "Cannot showLayerTree. Root is (nil)";
     return;
   }
 
@@ -3450,13 +3449,13 @@ void showLayerTree(const blink::PaintLayer* layer) {
                                    blink::kLayoutAsTextDontUpdateLayout |
                                    blink::kLayoutAsTextShowLayoutState,
                                layer);
-    LOG(INFO) << output.Utf8().data();
+    LOG(ERROR) << output.Utf8().data();
   }
 }
 
 void showLayerTree(const blink::LayoutObject* layoutObject) {
   if (!layoutObject) {
-    LOG(INFO) << "Cannot showLayerTree. Root is (nil)";
+    LOG(ERROR) << "Cannot showLayerTree. Root is (nil)";
     return;
   }
   showLayerTree(layoutObject->EnclosingLayer());

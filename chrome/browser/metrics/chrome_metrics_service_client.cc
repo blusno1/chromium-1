@@ -147,7 +147,7 @@
 
 namespace {
 
-#if defined(OS_ANDROID) || defined(OS_IOS) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
 const int kMaxHistogramStorageKiB = 100 << 10;  // 100 MiB
 #else
 const int kMaxHistogramStorageKiB = 500 << 10;  // 500 MiB
@@ -400,9 +400,13 @@ ChromeMetricsServiceClient::ChromeMetricsServiceClient(
 
 ChromeMetricsServiceClient::~ChromeMetricsServiceClient() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  static const base::Feature kDeleteMetricsFile{
+      "DeleteMetricsFile", base::FEATURE_ENABLED_BY_DEFAULT};
+
   base::GlobalHistogramAllocator* allocator =
       base::GlobalHistogramAllocator::Get();
-  if (allocator) {
+  if (allocator && base::FeatureList::IsEnabled(kDeleteMetricsFile)) {
     // A normal shutdown is almost complete so there is no benefit in keeping a
     // file with no new data to be processed during the next startup sequence.
     // Deleting the file during shutdown adds an extra disk-access or two to

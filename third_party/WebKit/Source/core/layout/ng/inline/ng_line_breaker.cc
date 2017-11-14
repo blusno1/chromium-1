@@ -35,7 +35,8 @@ NGLineBreaker::NGLineBreaker(
       shaper_(node.Text().Characters16(), node.Text().length()),
       spacing_(node.Text()),
       handled_floats_end_item_index_(handled_float_index),
-      base_direction_(node_.BaseDirection()) {
+      base_direction_(node_.BaseDirection()),
+      in_line_height_quirks_mode_(node.InLineHeightQuirksMode()) {
   if (break_token) {
     item_index_ = break_token->ItemIndex();
     offset_ = break_token->TextOffset();
@@ -158,6 +159,9 @@ void NGLineBreaker::BreakLine(NGLineInfo* line_info) {
     NGInlineItemResult* item_result = &item_results->back();
     if (item.Type() == NGInlineItem::kText) {
       state = HandleText(line_info, item, item_result);
+#if DCHECK_IS_ON()
+      item_result->CheckConsistency();
+#endif
     } else if (item.Type() == NGInlineItem::kAtomicInline) {
       state = HandleAtomicInline(item, item_result, *line_info);
     } else if (item.Type() == NGInlineItem::kControl) {
@@ -191,6 +195,16 @@ void NGLineBreaker::BreakLine(NGLineInfo* line_info) {
   if (!line_.CanFit())
     return HandleOverflow(line_info);
   line_info->SetIsLastLine(true);
+}
+
+// Re-compute the current position from NGInlineItemResults.
+// The current position is usually updated as NGLineBreaker builds
+// NGInlineItemResults. This function re-computes it when it was lost.
+void NGLineBreaker::UpdatePosition(const NGInlineItemResults& results) {
+  LayoutUnit position;
+  for (const NGInlineItemResult& item_result : results)
+    position += item_result.inline_size;
+  line_.position = position;
 }
 
 void NGLineBreaker::ComputeLineLocation(NGLineInfo* line_info) const {
@@ -236,13 +250,15 @@ NGLineBreaker::LineBreakState NGLineBreaker::HandleText(
     const NGInlineItem& item,
     NGInlineItemResult* item_result) {
   DCHECK_EQ(item.Type(), NGInlineItem::kText);
+  DCHECK(item.TextShapeResult());
   line_.should_create_line_box = true;
 
   LayoutUnit available_width = line_.AvailableWidth();
 
   // If the start offset is at the item boundary, try to add the entire item.
   if (offset_ == item.StartOffset()) {
-    item_result->inline_size = item.InlineSize().ClampNegativeToZero();
+    item_result->inline_size =
+        item.TextShapeResult()->SnappedWidth().ClampNegativeToZero();
     LayoutUnit next_position = line_.position + item_result->inline_size;
     if (!auto_wrap_ || next_position <= available_width) {
       item_result->shape_result = item.TextShapeResult();
@@ -317,6 +333,7 @@ void NGLineBreaker::BreakText(NGInlineItemResult* item_result,
   ShapingLineBreaker::Result result;
   scoped_refptr<ShapeResult> shape_result =
       breaker.ShapeLine(item_result->start_offset, available_width, &result);
+  DCHECK_GT(shape_result->NumCharacters(), 0u);
   if (result.has_hanging_spaces) {
     item_result->has_hanging_spaces = true;
     // Hanging spaces do not expand min-content. Handle them simliar to visual
@@ -563,7 +580,8 @@ void NGLineBreaker::HandleOpenTag(const NGInlineItem& item,
       // of them do so. See should_create_line_box_.
       // Force to create a box, because such inline boxes affect line heights.
       item_result->needs_box_when_empty =
-          item_result->inline_size || item_result->margins.inline_start;
+          item_result->inline_size ||
+          (item_result->margins.inline_start && !in_line_height_quirks_mode_);
       line_.should_create_line_box |= item_result->needs_box_when_empty;
     }
   }
@@ -590,7 +608,8 @@ NGLineBreaker::LineBreakState NGLineBreaker::HandleCloseTag(
     line_.position += item_result->inline_size;
 
     item_result->needs_box_when_empty =
-        item_result->inline_size || item_result->margins.inline_end;
+        item_result->inline_size ||
+        (item_result->margins.inline_end && !in_line_height_quirks_mode_);
     line_.should_create_line_box |= item_result->needs_box_when_empty;
   }
   DCHECK(item.GetLayoutObject() && item.GetLayoutObject()->Parent());
@@ -661,16 +680,21 @@ void NGLineBreaker::HandleOverflow(NGLineInfo* line_info,
       if (force_break_anywhere)
         break_iterator_.SetBreakType(LineBreakType::kBreakCharacter);
       BreakText(item_result, item, item_available_width, line_info);
+#if DCHECK_IS_ON()
+      item_result->CheckConsistency();
+#endif
       if (item_result->inline_size <= item_available_width) {
         DCHECK(item_result->end_offset < item.EndOffset() ||
                (item_result->end_offset == item.EndOffset() &&
                 item_result->has_hanging_spaces));
         DCHECK(!item_result->prohibit_break_after);
-        line_.position =
-            available_width + next_width_to_rewind + item_result->inline_size;
         DCHECK_LE(i + 1, item_results->size());
-        if (i + 1 < item_results->size())
+        if (i + 1 == item_results->size()) {
+          line_.position =
+              available_width + next_width_to_rewind + item_result->inline_size;
+        } else {
           Rewind(line_info, i + 1);
+        }
         return;
       }
     }
@@ -710,6 +734,7 @@ void NGLineBreaker::Rewind(NGLineInfo* line_info, unsigned new_end) {
   item_results->Shrink(new_end);
 
   line_info->SetIsLastLine(false);
+  UpdatePosition(line_info->Results());
 }
 
 // Truncate overflowing text and append ellipsis.

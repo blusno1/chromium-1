@@ -23,7 +23,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/threading/thread.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -62,9 +61,6 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_thread.h"
-#include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -84,7 +80,6 @@
 #include "chromeos/printing/printer_configuration.h"
 #endif
 
-using content::BrowserThread;
 using content::RenderFrameHost;
 using content::WebContents;
 using printing::PrintViewManager;
@@ -395,7 +390,6 @@ class PrintPreviewHandler::AccessTokenService
 PrintPreviewHandler::PrintPreviewHandler()
     : regenerate_preview_request_count_(0),
       manage_printers_dialog_request_count_(0),
-      manage_cloud_printers_dialog_request_count_(0),
       reported_failed_preview_(false),
       has_logged_printers_count_(false),
       gaia_cookie_manager_service_(nullptr),
@@ -578,7 +572,7 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
   ++regenerate_preview_request_count_;
 
   WebContents* initiator = GetInitiator();
-  content::RenderFrameHost* rfh =
+  RenderFrameHost* rfh =
       initiator
           ? PrintViewManager::FromWebContents(initiator)->print_preview_rfh()
           : nullptr;
@@ -597,17 +591,13 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
   if (display_header_footer) {
     settings->SetString(printing::kSettingHeaderFooterTitle,
                         initiator->GetTitle());
-    std::string url;
-    content::NavigationEntry* entry =
-        initiator->GetController().GetLastCommittedEntry();
-    if (entry) {
-      url::Replacements<char> url_sanitizer;
-      url_sanitizer.ClearUsername();
-      url_sanitizer.ClearPassword();
 
-      url = entry->GetVirtualURL().ReplaceComponents(url_sanitizer).spec();
-    }
-    settings->SetString(printing::kSettingHeaderFooterURL, url);
+    url::Replacements<char> url_sanitizer;
+    url_sanitizer.ClearUsername();
+    url_sanitizer.ClearPassword();
+    const GURL& initiator_url = initiator->GetLastCommittedURL();
+    settings->SetString(printing::kSettingHeaderFooterURL,
+                        initiator_url.ReplaceComponents(url_sanitizer).spec());
   }
 
   bool generate_draft_data = false;
@@ -702,14 +692,17 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
   }
 
   scoped_refptr<base::RefCountedBytes> data;
-  base::string16 title;
-  if (!GetPreviewDataAndTitle(&data, &title)) {
+  print_preview_ui()->GetPrintPreviewDataForIndex(
+      printing::COMPLETE_PREVIEW_DOCUMENT_INDEX, &data);
+  if (!data) {
     // Nothing to print, no preview available.
     RejectJavascriptCallback(
         base::Value(callback_id),
         print_with_privet ? base::Value(-1) : base::Value("NO_DATA"));
     return;
   }
+  DCHECK(data->size());
+  DCHECK(data->front());
 
   if (print_with_privet || print_with_extension || print_to_pdf) {
     std::string destination_id;
@@ -738,8 +731,8 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
       type = PrinterType::kPrivetPrinter;
     PrinterHandler* handler = GetPrinterHandler(type);
     handler->StartPrint(
-        destination_id, capabilities, title, print_ticket,
-        gfx::Size(width, height), data,
+        destination_id, capabilities, print_preview_ui()->initiator_title(),
+        print_ticket, gfx::Size(width, height), data,
         base::BindOnce(&PrintPreviewHandler::OnPrintResult,
                        weak_factory_.GetWeakPtr(), callback_id));
     return;
@@ -749,6 +742,8 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
     UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintToCloudPrint",
                          page_count);
     ReportUserActionHistogram(PRINT_WITH_CLOUD_PRINT);
+    // Does not send the title like the printer handler types above, because JS
+    // already has the document title from the initial settings.
     SendCloudPrintJob(callback_id, data.get());
     return;
   }
@@ -888,7 +883,6 @@ void PrintPreviewHandler::HandleGetAccessToken(const base::ListValue* args) {
 
 void PrintPreviewHandler::HandleManageCloudPrint(
     const base::ListValue* args) {
-  ++manage_cloud_printers_dialog_request_count_;
   GURL manage_url(cloud_devices::GetCloudPrintRelativeURL("manage.html"));
   std::string user;
   if (!args->GetString(0, &user))
@@ -949,8 +943,6 @@ void PrintPreviewHandler::HandleClosePreviewDialog(
 void PrintPreviewHandler::ReportStats() {
   UMA_HISTOGRAM_COUNTS("PrintPreview.ManagePrinters",
                        manage_printers_dialog_request_count_);
-  UMA_HISTOGRAM_COUNTS("PrintPreview.ManageCloudPrinters",
-                       manage_cloud_printers_dialog_request_count_);
 }
 
 void PrintPreviewHandler::GetNumberFormatAndMeasurementSystem(
@@ -1248,25 +1240,6 @@ void PrintPreviewHandler::ClearInitiatorDetails() {
       printing::PrintPreviewDialogController::GetInstance();
   if (dialog_controller)
     dialog_controller->EraseInitiatorInfo(preview_web_contents());
-}
-
-bool PrintPreviewHandler::GetPreviewDataAndTitle(
-    scoped_refptr<base::RefCountedBytes>* data,
-    base::string16* title) const {
-  scoped_refptr<base::RefCountedBytes> tmp_data;
-  print_preview_ui()->GetPrintPreviewDataForIndex(
-      printing::COMPLETE_PREVIEW_DOCUMENT_INDEX, &tmp_data);
-
-  if (!tmp_data.get()) {
-    // Nothing to print, no preview available.
-    return false;
-  }
-  DCHECK(tmp_data->size());
-  DCHECK(tmp_data->front());
-
-  *data = tmp_data;
-  *title = print_preview_ui()->initiator_title();
-  return true;
 }
 
 PrinterHandler* PrintPreviewHandler::GetPrinterHandler(

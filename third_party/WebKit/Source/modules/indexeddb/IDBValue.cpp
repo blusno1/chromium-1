@@ -32,7 +32,7 @@ IDBValue::IDBValue(scoped_refptr<SharedBuffer> data,
                    IDBKey* primary_key,
                    const IDBKeyPath& key_path)
     : data_(std::move(data)),
-      blob_data_(WTF::MakeUnique<Vector<scoped_refptr<BlobDataHandle>>>()),
+      blob_data_(std::make_unique<Vector<scoped_refptr<BlobDataHandle>>>()),
       blob_info_(
           WTF::WrapUnique(new Vector<WebBlobInfo>(web_blob_info.size()))),
       primary_key_(primary_key && primary_key->IsValid() ? primary_key
@@ -49,7 +49,7 @@ IDBValue::IDBValue(const IDBValue* value,
                    IDBKey* primary_key,
                    const IDBKeyPath& key_path)
     : data_(value->data_),
-      blob_data_(WTF::MakeUnique<Vector<scoped_refptr<BlobDataHandle>>>()),
+      blob_data_(std::make_unique<Vector<scoped_refptr<BlobDataHandle>>>()),
       blob_info_(
           WTF::WrapUnique(new Vector<WebBlobInfo>(value->blob_info_->size()))),
       primary_key_(primary_key),
@@ -79,18 +79,18 @@ IDBValue::~IDBValue() {
 }
 
 scoped_refptr<IDBValue> IDBValue::Create() {
-  return WTF::AdoptRef(new IDBValue());
+  return base::AdoptRef(new IDBValue());
 }
 
 scoped_refptr<IDBValue> IDBValue::Create(const WebIDBValue& value,
                                          v8::Isolate* isolate) {
-  return WTF::AdoptRef(new IDBValue(value, isolate));
+  return base::AdoptRef(new IDBValue(value, isolate));
 }
 
 scoped_refptr<IDBValue> IDBValue::Create(const IDBValue* value,
                                          IDBKey* primary_key,
                                          const IDBKeyPath& key_path) {
-  return WTF::AdoptRef(new IDBValue(value, primary_key, key_path));
+  return base::AdoptRef(new IDBValue(value, primary_key, key_path));
 }
 
 scoped_refptr<IDBValue> IDBValue::Create(
@@ -99,9 +99,9 @@ scoped_refptr<IDBValue> IDBValue::Create(
     std::unique_ptr<Vector<WebBlobInfo>> blob_info,
     const IDBKey* primary_key,
     const IDBKeyPath& key_path) {
-  return WTF::AdoptRef(new IDBValue(std::move(unwrapped_data),
-                                    std::move(blob_data), std::move(blob_info),
-                                    primary_key, key_path));
+  return base::AdoptRef(new IDBValue(std::move(unwrapped_data),
+                                     std::move(blob_data), std::move(blob_info),
+                                     primary_key, key_path));
 }
 
 Vector<String> IDBValue::GetUUIDs() const {

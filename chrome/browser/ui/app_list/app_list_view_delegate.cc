@@ -47,6 +47,7 @@
 #include "ui/app_list/app_list_model.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_view_delegate_observer.h"
+#include "ui/app_list/app_list_view_state.h"
 #include "ui/app_list/search_box_model.h"
 #include "ui/app_list/search_controller.h"
 #include "ui/app_list/speech_ui_model.h"
@@ -72,15 +73,14 @@ enum ApplistSearchResultOpenedSource {
   kMaxApplistSearchResultOpenedSource = 3,
 };
 
-void RecordHistogram(bool is_tablet_mode,
-                     app_list::AppListView::AppListState state) {
+void RecordHistogram(bool is_tablet_mode, app_list::AppListViewState state) {
   ApplistSearchResultOpenedSource source;
 
   if (is_tablet_mode) {
     source = kFullscreenTablet;
   } else {
-    source = state == app_list::AppListView::HALF ? kHalfClamshell
-                                                  : kFullscreenClamshell;
+    source = state == app_list::AppListViewState::HALF ? kHalfClamshell
+                                                       : kFullscreenClamshell;
   }
   UMA_HISTOGRAM_ENUMERATION(kAppListSearchResultOpenSourceHistogram, source,
                             kMaxApplistSearchResultOpenedSource);
@@ -128,6 +128,11 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
     return;
 
   if (profile_) {
+    DCHECK(model_);
+    // |search_controller_| will be destroyed on profile switch. Before that,
+    // delete |model_|'s search results to clear any dangling pointers.
+    model_->results()->DeleteAll();
+
     // Note: |search_resource_manager_| has a reference to |speech_ui_| so must
     // be destroyed first.
     search_resource_manager_.reset();
@@ -233,7 +238,9 @@ void AppListViewDelegate::OpenSearchResult(app_list::SearchResult* result,
   if (auto_launch)
     base::RecordAction(base::UserMetricsAction("AppList_AutoLaunched"));
 
-  RecordHistogram(model_->tablet_mode(), model_->state_fullscreen());
+  // Record the search metric if the SearchResult is not a suggested app.
+  if (result->display_type() != app_list::SearchResult::DISPLAY_RECOMMENDATION)
+    RecordHistogram(model_->tablet_mode(), model_->state_fullscreen());
 
   search_controller_->OpenResult(result, event_flags);
 }

@@ -9,7 +9,6 @@
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -25,8 +24,6 @@
 #include "chrome/common/pref_names.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/public/rappor_utils.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/origin_util.h"
@@ -128,87 +125,6 @@ void RecordEngagementMetric(const std::vector<PermissionRequest*>& requests,
   base::UmaHistogramPercentage(name, engagement_score);
 }
 
-const std::string GetRapporMetric(ContentSettingsType permission,
-                                  PermissionAction action) {
-  std::string action_str;
-  switch (action) {
-    case PermissionAction::GRANTED:
-      action_str = "Granted";
-      break;
-    case PermissionAction::DENIED:
-      action_str = "Denied";
-      break;
-    case PermissionAction::DISMISSED:
-      action_str = "Dismissed";
-      break;
-    case PermissionAction::IGNORED:
-      action_str = "Ignored";
-      break;
-    case PermissionAction::REVOKED:
-      action_str = "Revoked";
-      break;
-    default:
-      NOTREACHED();
-      break;
-  }
-
-  std::string permission_str = PermissionUtil::GetPermissionString(permission);
-  if (permission_str.empty())
-    return "";
-  return base::StringPrintf("ContentSettings.PermissionActions_%s.%s.Url2",
-                            permission_str.c_str(), action_str.c_str());
-}
-
-void RecordPermissionRequest(ContentSettingsType content_type,
-                             const GURL& requesting_origin,
-                             const GURL& embedding_origin,
-                             Profile* profile) {
-  rappor::RapporServiceImpl* rappor_service =
-      g_browser_process->rappor_service();
-  if (rappor_service) {
-    if (content_type == CONTENT_SETTINGS_TYPE_GEOLOCATION) {
-      rappor_service->RecordSampleString(
-          "ContentSettings.PermissionRequested.Geolocation.Url2",
-          rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
-          rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-    } else if (content_type == CONTENT_SETTINGS_TYPE_NOTIFICATIONS) {
-      rappor_service->RecordSampleString(
-          "ContentSettings.PermissionRequested.Notifications.Url2",
-          rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
-          rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-    } else if (content_type == CONTENT_SETTINGS_TYPE_MIDI ||
-               content_type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX) {
-      rappor_service->RecordSampleString(
-          "ContentSettings.PermissionRequested.Midi.Url2",
-          rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
-          rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-    } else if (content_type ==
-               CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER) {
-      rappor_service->RecordSampleString(
-          "ContentSettings.PermissionRequested.ProtectedMedia.Url2",
-          rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
-          rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-    }
-  }
-
-  PermissionType permission;
-  bool success = PermissionUtil::GetPermissionType(content_type, &permission);
-  DCHECK(success);
-
-  bool secure_origin = content::IsOriginSecure(requesting_origin);
-  UMA_HISTOGRAM_ENUMERATION("ContentSettings.PermissionRequested", permission,
-                            PermissionType::NUM);
-  if (secure_origin) {
-    UMA_HISTOGRAM_ENUMERATION(
-        "ContentSettings.PermissionRequested_SecureOrigin", permission,
-        PermissionType::NUM);
-  } else {
-    UMA_HISTOGRAM_ENUMERATION(
-        "ContentSettings.PermissionRequested_InsecureOrigin", permission,
-        PermissionType::NUM);
-  }
-}
-
 }  // anonymous namespace
 
 // PermissionReportInfo -------------------------------------------------------
@@ -250,14 +166,6 @@ const char PermissionUmaUtil::kPermissionsPromptDeniedGesture[] =
     "Permissions.Prompt.Denied.Gesture";
 const char PermissionUmaUtil::kPermissionsPromptDeniedNoGesture[] =
     "Permissions.Prompt.Denied.NoGesture";
-const char PermissionUmaUtil::kPermissionsPromptRequestsPerPrompt[] =
-    "Permissions.Prompt.RequestsPerPrompt";
-const char PermissionUmaUtil::kPermissionsPromptMergedBubbleTypes[] =
-    "Permissions.Prompt.MergedBubbleTypes";
-const char PermissionUmaUtil::kPermissionsPromptMergedBubbleAccepted[] =
-    "Permissions.Prompt.MergedBubbleAccepted";
-const char PermissionUmaUtil::kPermissionsPromptMergedBubbleDenied[] =
-    "Permissions.Prompt.MergedBubbleDenied";
 const char
     PermissionUmaUtil::kPermissionsPromptAcceptedPriorDismissCountPrefix[] =
         "Permissions.Prompt.Accepted.PriorDismissCount.";
@@ -286,11 +194,23 @@ const char
 // Make sure you update histograms.xml permission histogram_suffix if you
 // add new permission
 void PermissionUmaUtil::PermissionRequested(ContentSettingsType content_type,
-                                            const GURL& requesting_origin,
-                                            const GURL& embedding_origin,
-                                            Profile* profile) {
-  RecordPermissionRequest(content_type, requesting_origin, embedding_origin,
-                          profile);
+                                            const GURL& requesting_origin) {
+  PermissionType permission;
+  bool success = PermissionUtil::GetPermissionType(content_type, &permission);
+  DCHECK(success);
+
+  bool secure_origin = content::IsOriginSecure(requesting_origin);
+  UMA_HISTOGRAM_ENUMERATION("ContentSettings.PermissionRequested", permission,
+                            PermissionType::NUM);
+  if (secure_origin) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "ContentSettings.PermissionRequested_SecureOrigin", permission,
+        PermissionType::NUM);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION(
+        "ContentSettings.PermissionRequested_InsecureOrigin", permission,
+        PermissionType::NUM);
+  }
 }
 
 void PermissionUmaUtil::PermissionGranted(
@@ -439,16 +359,6 @@ void PermissionUmaUtil::PermissionPromptShown(
   }
 
   RecordPermissionPromptShown(permission_prompt_type, permission_gesture_type);
-
-  UMA_HISTOGRAM_ENUMERATION(kPermissionsPromptRequestsPerPrompt,
-                            requests.size(), 10);
-
-  if (requests.size() > 1) {
-    for (const auto* request : requests) {
-      PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptMergedBubbleTypes,
-                                 request->GetPermissionRequestType());
-    }
-  }
 }
 
 void PermissionUmaUtil::PermissionPromptResolved(
@@ -547,11 +457,6 @@ void PermissionUmaUtil::PermissionPromptAcceptedWithPersistenceToggle(
           "Permissions.Prompt.Accepted.Persisted.ProtectedMedia",
           toggle_enabled);
       break;
-    case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
-      UMA_HISTOGRAM_BOOLEAN(
-          "Permissions.Prompt.Accepted.Persisted.DurableStorage",
-          toggle_enabled);
-      break;
     case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Accepted.Persisted.AudioCapture", toggle_enabled);
@@ -596,10 +501,6 @@ void PermissionUmaUtil::PermissionPromptDeniedWithPersistenceToggle(
     case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Denied.Persisted.ProtectedMedia", toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
-      UMA_HISTOGRAM_BOOLEAN(
-          "Permissions.Prompt.Denied.Persisted.DurableStorage", toggle_enabled);
       break;
     case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.AudioCapture",
@@ -704,9 +605,9 @@ void PermissionUmaUtil::RecordPermissionAction(
   bool secure_origin = content::IsOriginSecure(requesting_origin);
 
   switch (permission) {
-    // Geolocation, MidiSysEx, Push, Durable Storage, and Media permissions are
-    // disabled on insecure origins, so there's no need to record metrics for
-    // secure/insecue.
+    // Geolocation, MidiSysEx, Push, and Media permissions are disabled on
+    // insecure origins, so there's no need to record separate metrics for
+    // secure/insecure.
     case CONTENT_SETTINGS_TYPE_GEOLOCATION:
       UMA_HISTOGRAM_ENUMERATION("Permissions.Action.Geolocation", action,
                                 PermissionAction::NUM);
@@ -731,10 +632,6 @@ void PermissionUmaUtil::RecordPermissionAction(
                             "Permissions.Action.InsecureOrigin.ProtectedMedia",
                             action);
       break;
-    case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
-      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.DurableStorage", action,
-                                PermissionAction::NUM);
-      break;
     case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
       UMA_HISTOGRAM_ENUMERATION("Permissions.Action.AudioCapture", action,
                                 PermissionAction::NUM);
@@ -755,15 +652,6 @@ void PermissionUmaUtil::RecordPermissionAction(
                    << PermissionUtil::GetPermissionString(permission)
                    << " not accounted for";
   }
-
-  const std::string rappor_metric = GetRapporMetric(permission, action);
-  rappor::RapporServiceImpl* rappor_service =
-      g_browser_process->rappor_service();
-  if (!rappor_metric.empty() && rappor_service) {
-    rappor_service->RecordSampleString(
-        rappor_metric, rappor::LOW_FREQUENCY_ETLD_PLUS_ONE_RAPPOR_TYPE,
-        rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-  }
 }
 
 // static
@@ -779,16 +667,6 @@ void PermissionUmaUtil::RecordPromptDecided(
   if (requests.size() > 1) {
     permission_prompt_type = PermissionRequestType::MULTIPLE;
     permission_gesture_type = PermissionRequestGestureType::UNKNOWN;
-    for (size_t i = 0; i < requests.size(); ++i) {
-      const auto* request = requests[i];
-      if (accepted) {
-        PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptMergedBubbleAccepted,
-                                   request->GetPermissionRequestType());
-      } else {
-        PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptMergedBubbleDenied,
-                                   request->GetPermissionRequestType());
-      }
-    }
   }
 
   if (accepted) {

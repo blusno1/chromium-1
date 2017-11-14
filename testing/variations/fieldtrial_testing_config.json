@@ -877,8 +877,13 @@
                 {
                     "name": "Expected",
                     "params": {
+                        "contextual-search-ranker-model-url": "https://www.gstatic.com/chrome/intelligence/assist/ranker/models/contextual_search/test_ranker_model_20171109_short_words.pb.bin",
                         "enable_ranker_integration": "true"
-                    }
+                    },
+                    "enable_features": [
+                        "ContextualSearchMlTapSuppression",
+                        "ContextualSearchRankerQuery"
+                    ]
                 }
             ]
         }
@@ -1405,7 +1410,7 @@
                     "name": "SofterWarning",
                     "params": {
                         "softer_warning": "true",
-                        "warn_on_low_reputation": "true"
+                        "warn_on_low_reputation": "false"
                     },
                     "enable_features": [
                         "PasswordProtectionGoogleBrandedPhishingWarning"
@@ -1793,21 +1798,6 @@
             ]
         }
     ],
-    "MidiManagerAndroid": [
-        {
-            "platforms": [
-                "android"
-            ],
-            "experiments": [
-                {
-                    "name": "EnabledOnM+",
-                    "enable_features": [
-                        "MidiManagerAndroid"
-                    ]
-                }
-            ]
-        }
-    ],
     "MidiManagerDynamicInstantiation": [
         {
             "platforms": [
@@ -1939,6 +1929,7 @@
                         "NTPCondensedTileLayout"
                     ],
                     "disable_features": [
+                        "ContentSuggestionsShowSummary",
                         "NTPShowGoogleGInOmnibox"
                     ]
                 }
@@ -2983,9 +2974,9 @@
                 {
                     "name": "NewCleaner_Launch",
                     "params": {
-                        "download_group": "canary/eset",
+                        "download_group": "stable/eset",
                         "experiment_group_for_reporting": "Experiment2",
-                        "tag": "canary_eset"
+                        "tag": "stable_eset"
                     },
                     "enable_features": [
                         "DownloadCleanupToolByBitness",
@@ -3092,7 +3083,7 @@
             ],
             "experiments": [
                 {
-                    "name": "Enabled",
+                    "name": "Enabled_Launch",
                     "enable_features": [
                         "SyncPasswordReuseEvent"
                     ]
@@ -3437,6 +3428,27 @@
                 },
                 {
                     "name": "Disabled"
+                }
+            ]
+        }
+    ],
+    "SpeculativePreconnectValidation": [
+        {
+            "platforms": [
+                "win",
+                "mac",
+                "linux",
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "Preconnect2",
+                    "params": {
+                        "mode": "preconnect"
+                    },
+                    "enable_features": [
+                        "SpeculativePreconnect"
+                    ]
                 }
             ]
         }
@@ -3846,6 +3858,26 @@
             ]
         }
     ],
+    "UseHeuristicLanguageModel": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "ios",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "Experiment",
+                    "enable_features": [
+                        "UseHeuristicLanguageModel"
+                    ]
+                }
+            ]
+        }
+    ],
     "UseMojoAudioOutputStreamFactory": [
         {
             "platforms": [
@@ -4124,6 +4156,39 @@
             "experiments": [
                 {
                     "name": "Enabled"
+                }
+            ]
+        }
+    ],
+    "WebRTC-ProbingScreenshareBwe": [
+        {
+            "platforms": [
+                "win",
+                "mac",
+                "chromeos",
+                "linux"
+            ],
+            "experiments": [
+                {
+                    "name": "1.0,2875,80,40,-60,3"
+                }
+            ]
+        }
+    ],
+    "WebRtcUseEchoCanceller3": [
+        {
+            "platforms": [
+                "chromeos",
+                "linux",
+                "mac",
+                "win"
+            ],
+            "experiments": [
+                {
+                    "name": "WebRtcUseEchoCanceller3",
+                    "enable_features": [
+                        "WebRtcUseEchoCanceller3"
+                    ]
                 }
             ]
         }

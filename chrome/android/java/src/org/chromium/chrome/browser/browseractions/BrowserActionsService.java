@@ -16,6 +16,8 @@ import android.text.TextUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
@@ -55,8 +57,8 @@ public class BrowserActionsService extends Service {
     public static final String PREF_HAS_BROWSER_ACTIONS_NOTIFICATION =
             "org.chromium.chrome.browser.browseractions.HAS_BROWSER_ACTIONS_NOTIFICATION";
 
-    public static final String PREF_IS_BROWSER_ACTIONS_SERVICE_ALIVE =
-            "org.chromium.chrome.browser.browseractions.PREF_IS_BROWSER_ACTIONS_SERVICE_ALIVE";
+    public static final String PREF_NUM_TAB_CREATED_IN_BACKGROUND =
+            "org.chromium.chrome.browser.browseractions.NUM_TAB_CREATED_IN_BACKGROUND";
 
     /**
      * Extra that indicates whether to show a Tab for single url or the tab switcher for
@@ -107,6 +109,7 @@ public class BrowserActionsService extends Service {
             Toast.makeText(context, R.string.browser_actions_open_in_background_toast_message,
                          Toast.LENGTH_SHORT)
                     .show();
+            updateNumTabCreatedInBackground();
             NotificationUmaTracker.getInstance().onNotificationShown(
                     NotificationUmaTracker.BROWSER_ACTIONS, ChannelDefinitions.CHANNEL_ID_BROWSER);
         } else if (TextUtils.equals(intent.getAction(), ACTION_TAB_CREATION_CHROME_DISPLAYED)) {
@@ -219,9 +222,12 @@ public class BrowserActionsService extends Service {
                         .setLocalOnly(true)
                         .setAutoCancel(true)
                         .setContentText(this.getString(R.string.browser_actions_notification_text));
-        sTitleResId = hasBrowserActionsNotification()
-                ? R.string.browser_actions_multi_links_open_notification_title
-                : R.string.browser_actions_single_link_open_notification_title;
+        if (hasBrowserActionsNotification()) {
+            sTitleResId = R.string.browser_actions_multi_links_open_notification_title;
+        } else {
+            sTitleResId = R.string.browser_actions_single_link_open_notification_title;
+            RecordUserAction.record("BrowserActions.TabOpenedNotificationCreated");
+        }
         builder.setContentTitle(this.getString(sTitleResId));
         sNotificationIntent = buildNotificationIntent(tabId);
         PendingIntent notifyPendingIntent = PendingIntent.getActivity(
@@ -249,10 +255,20 @@ public class BrowserActionsService extends Service {
                 PREF_HAS_BROWSER_ACTIONS_NOTIFICATION, false);
     }
 
+    private static void updateNumTabCreatedInBackground() {
+        int tabNum =
+                ContextUtils.getAppSharedPreferences().getInt(PREF_NUM_TAB_CREATED_IN_BACKGROUND, 0)
+                + 1;
+        ContextUtils.getAppSharedPreferences()
+                .edit()
+                .putInt(PREF_NUM_TAB_CREATED_IN_BACKGROUND, tabNum)
+                .apply();
+    }
+
     /**
-     * Cancel Browser Actions notification.
+     * Called when Chrome tabbed mode come to the foreground.
      */
-    public static void cancelBrowserActionsNotification() {
+    public static void onTabbedModeForegrounded() {
         // If Chrome is shown, force the foreground service to be killed so notification bound to it
         // will be dismissed.
         if (sLoadingUrlNum != 0) {
@@ -266,10 +282,21 @@ public class BrowserActionsService extends Service {
                             Context.NOTIFICATION_SERVICE);
             notificationManager.cancel(NotificationConstants.NOTIFICATION_ID_BROWSER_ACTIONS);
         }
+
         ContextUtils.getAppSharedPreferences()
                 .edit()
                 .putBoolean(PREF_HAS_BROWSER_ACTIONS_NOTIFICATION, false)
                 .apply();
+        int tabNum = ContextUtils.getAppSharedPreferences().getInt(
+                PREF_NUM_TAB_CREATED_IN_BACKGROUND, 0);
+        if (tabNum != 0) {
+            RecordHistogram.recordCountHistogram(
+                    "BrowserActions.NumTabCreatedInBackground", tabNum);
+            ContextUtils.getAppSharedPreferences()
+                    .edit()
+                    .remove(PREF_NUM_TAB_CREATED_IN_BACKGROUND)
+                    .apply();
+        }
     }
 
     /**
@@ -282,6 +309,17 @@ public class BrowserActionsService extends Service {
         if (!IntentUtils.safeHasExtra(intent, EXTRA_IS_SINGLE_URL)) return false;
         boolean isSingleUrl = IntentUtils.safeGetBooleanExtra(intent, EXTRA_IS_SINGLE_URL, false);
         return isSingleUrl == isOverviewVisible;
+    }
+
+    /**
+     * Checks whether an Intent is sent from the notification of opening tabs in background. If
+     * so record user action of clicking the notification.
+     * @param intent The {@link Intent} to check.
+     */
+    public static void recordTabOpenedNotificationClicked(Intent intent) {
+        if (IntentUtils.safeHasExtra(intent, EXTRA_IS_SINGLE_URL)) {
+            RecordUserAction.record("BrowserActions.TabOpenedNotificationClicked");
+        }
     }
 
     /**

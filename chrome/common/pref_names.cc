@@ -503,8 +503,21 @@ const char kUserTimezone[] = "settings.timezone";
 
 // This setting disables manual timezone selection and starts periodic timezone
 // refresh.
+// Deprecated. Replaced with kResolveTimezoneByGeolocationMethod.
+// TODO(alemate): https://crbug.com/783367 Remove outdated prefs.
 const char kResolveTimezoneByGeolocation[] =
     "settings.resolve_timezone_by_geolocation";
+
+// This setting controls what information is sent to the server to get
+// device location to resolve time zone in user session. Values must
+// match TimeZoneResolverManager::TimeZoneResolveMethod enum.
+const char kResolveTimezoneByGeolocationMethod[] =
+    "settings.resolve_timezone_by_geolocation_method";
+
+// This setting is true when kResolveTimezoneByGeolocation value
+// has been migrated to kResolveTimezoneByGeolocationMethod.
+const char kResolveTimezoneByGeolocationMigratedToMethod[] =
+    "settings.resolve_timezone_by_geolocation_migrated_to_method";
 
 // A string pref set to the current input method.
 const char kLanguageCurrentInputMethod[] =
@@ -894,6 +907,11 @@ const char kInstantTetheringBleAdvertisingSupported[] =
 
 // Boolean pref indicating whether someone can cast to the device.
 const char kCastReceiverEnabled[] = "cast_receiver.enabled";
+
+// String pref indicating what is the minimum version of Chrome required to
+// allow user sign in. If the string is empty or blank no restrictions will
+// be applied. See base::Version for exact string format.
+const char kMinimumAllowedChromeVersion[] = "minimum_req.version";
 
 #endif  // defined(OS_CHROMEOS)
 
@@ -1913,9 +1931,18 @@ const char kSigninScreenTimezone[] = "settings.signin_screen_timezone";
 
 // This setting starts periodic timezone refresh when not in user session.
 // (user session is controlled by user profile preference
-// kResolveTimezoneByGeolocation
+// kResolveTimezoneByGeolocation)
+//
+// Deprecated. Superseeded by kResolveDeviceTimezoneByGeolocationMethod.
+// TODO(alemate): https://crbug.com/783367 Remove outdated prefs.
 const char kResolveDeviceTimezoneByGeolocation[] =
     "settings.resolve_device_timezone_by_geolocation";
+
+// This setting controls what information is sent to the server to get
+// device location to resolve time zone outside of user session. Values must
+// match TimeZoneResolverManager::TimeZoneResolveMethod enum.
+const char kResolveDeviceTimezoneByGeolocationMethod[] =
+    "settings.resolve_device_timezone_by_geolocation_method";
 
 // This is policy-controlled preference.
 // It has values defined in policy enum
@@ -2101,9 +2128,6 @@ const char kAppListEnableTime[] = "app_list.when_enabled";
 
 // Keeps local state of app list while sync service is not available.
 const char kAppListLocalState[] = "app_list.local_state";
-
-// A boolean identifying if we should show the app launcher promo or not.
-const char kShowAppLauncherPromo[] = "app_launcher.show_promo";
 
 // A dictionary that tracks the Drive app to Chrome app mapping. The key is
 // a Drive app id and the value is the corresponding Chrome app id. The pref
@@ -2487,5 +2511,20 @@ const char kPrefetchUsageMixedCount[] = "offline_pages.prefetch_mixed_count";
 // is lower than the value in MediaEngagementService then the MEI data
 // will be wiped.
 const char kMediaEngagementSchemaVersion[] = "media.engagement.schema_version";
+
+// Maximum number of tabs that has been opened since the last time it has been
+// reported.
+const char kTabStatsTotalTabCountMax[] = "tab_stats.total_tab_count_max";
+
+// Maximum number of tabs that has been opened in a single window since the last
+// time it has been reported.
+const char kTabStatsMaxTabsPerWindow[] = "tab_stats.max_tabs_per_window";
+
+// Maximum number of windows that has been opened since the last time it has
+// been reported.
+const char kTabStatsWindowCountMax[] = "tab_stats.window_count_max";
+
+//  Timestamp of the last time the tab stats daily metrics have been reported.
+const char kTabStatsDailySample[] = "tab_stats.last_daily_sample";
 
 }  // namespace prefs

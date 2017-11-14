@@ -29,7 +29,6 @@
       'filepath': 'chrome/android/java/src/org/chromium/chrome/browser/webapps/|'\
                   'chrome/android/javatests/src/org/chromium/chrome/browser/webapps/|'\
                   'chrome/android/junit/src/org/chromium/chrome/browser/webapps/|'\
-                  'chrome/android/javatests/src/org/chromium/chrome/browser/banners/|'\
                   'chrome/browser/android/shortcut_.*|'\
                   'chrome/browser/android/webapps/',
     },
@@ -166,7 +165,6 @@
     'banners': {
       'filepath': 'chrome/android/java/src/org/chromium/chrome/browser/banners/|'\
                   'chrome/android/javatests/src/org/chromium/chrome/browser/banners/|'\
-                  'chrome/browser/android/banners/|'\
                   'chrome/browser/banners/|'\
                   'chrome/browser/ui/android/infobars/app_banner_.*|'\
                   'third_party/WebKit/public/platform/modules/app_banner/|'\
@@ -498,9 +496,6 @@
                   '|third_party/WebKit/Source/core/html/shadow/MediaControl' \
                   '|third_party/WebKit/Source/core/css/mediaControl' \
                   '|third_party/WebKit/LayoutTests/media/track/'
-    },
-    'blink_url_api': {
-      'filepath': 'third_party/WebKit/Source/core/url/'
     },
     'blink_vibration': {
       'filepath': 'third_party/WebKit/LayoutTests/vibration/' \
@@ -859,9 +854,6 @@
     },
     'filesapp_ui': {
       'filepath': 'ui/file_manager'
-    },
-    'ftp': {
-      'filepath': 'ftp',
     },
     'fuchsia': {
       'filepath': 'fuchsia',
@@ -1728,7 +1720,7 @@
                   'dglazkov+blink@chromium.org',
                   'rob.buis@samsung.com'],
     'blink_css_flexbox': ['cbiesinger@chromium.org'],
-    'blink_css_fragmentation_tests': [''],
+    'blink_css_fragmentation_tests': ['mstensho@chromium.org'],
     'blink_css_grid_layout': ['jfernandez@igalia.com',
                               'rego@igalia.com',
                               'svillar@igalia.com'],
@@ -1790,8 +1782,7 @@
                         'xiaochengh+watch@chromium.org'],
     'blink_loader': ['gavinp+loader@chromium.org',
                      'japhet@chromium.org',
-                     'loading-reviews@chromium.org',
-                     'tyoshino+watch@chromium.org'],
+                     'loading-reviews@chromium.org'],
     'blink_media': ['feature-media-reviews@chromium.org',
                     'eric.carlson@apple.com',
                     'mlamouri+watch-blink@chromium.org',
@@ -1858,8 +1849,8 @@
     'blink_track': ['eric.carlson@apple.com',
                     'fs@opera.com',
                     'glenn@chromium.org',
-                    'silviapf@chromium.org'],
-    'blink_url_api': ['tyoshino+watch@chromium.org'],
+                    'silviapf@chromium.org',
+                    'srirama.m@samsung.com'],
     'blink_vibration': ['mlamouri+watch-blink@chromium.org'],
     'blink_viewport_interaction': ['kenneth.christiansen@gmail.com'],
     'blink_w3ctests': ['blink-reviews-w3ctests@chromium.org'],
@@ -1876,7 +1867,7 @@
                       'shimazu+worker@chromium.org'],
     'blink_wtf': ['blink-reviews-wtf@chromium.org',
                   'mikhail.pozdnyakov@intel.com'],
-    'blink_xml': ['dominicc+watchlist@chromium.org'],
+    'blink_xml': ['dominicc+watchlist@chromium.org', 'joelhockey@chromium.org'],
     'bookmarks': ['tfarina@chromium.org'],
     'bottombar': ['donnd+watch@chromium.org',
                   'mdjones+watch@chromium.org'],
@@ -2019,7 +2010,6 @@
                  'oka+watch@chromium.org',
                  'yamaguchi+watch@chromium.org'],
     'filesapp_ui': ['mtomasz+watch@chromium.org'],
-    'ftp': ['phajdan.jr@chromium.org'],
     'fuchsia': ['sergeyu@chromium.org', 'wez@chromium.org'],
     'fuzzing': ['fuzzing@chromium.org'],
     'gamepad': ['cco3+watch@chromium.org',
@@ -2057,7 +2047,8 @@
     'input': ['dtapuska+chromiumwatch@chromium.org'],
     'installable': ['dominickn+watch@chromium.org',
                     'piotrs+watch@chromium.org'],
-    'installer_linux': [ 'mmoss@chromium.org'],
+    'installer_linux': ['mmoss@chromium.org',
+                        'raphael.kubo.da.costa@intel.com'],
     'installer_win': ['grt+watch@chromium.org',
                       'pennymac+watch@chromium.org',
                       'wfh+watch@chromium.org'],
@@ -2165,7 +2156,7 @@
     'omnibox': ['jdonnelly+watch@chromium.org'],
     'optimization_guide': ['dougarnett+watch-optguide@chromium.org',
                            'sophiechang+watch-optguide@chromium.org',
-			   'maniscalco+watch-optguide@chromium.org'],
+                           'maniscalco+watch-optguide@chromium.org'],
     'origin_trials': ['chasej+watch@chromium.org',
                       'iclelland+watch@chromium.org'],
     'ozone': ['kalyan.kondapally@intel.com',
@@ -2296,7 +2287,8 @@
                  'glider+watch@chromium.org'],
     'version_assembly': ['caitkp+watch@chromium.org',
                          'gab+watch@chromium.org'],
-    'video': ['posciak+watch@chromium.org'],
+    'video': ['posciak+watch@chromium.org',
+              'acourbot+watch@chromium.org'],
     'video_capture': ['chfremer+watch@chromium.org'],
     'views': ['tfarina@chromium.org'],
     'virtual_keyboard': ['blakeo+virtualkb@chromium.org',

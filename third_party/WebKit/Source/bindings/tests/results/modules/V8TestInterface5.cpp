@@ -491,7 +491,7 @@ static void voidMethodVoidCallbackFunctionModulesArgMethod(const v8::FunctionCal
   }
 
   V8VoidCallbackFunctionModules* arg;
-  if (0 < info.Length() && info[0]->IsFunction()) {
+  if (info[0]->IsFunction()) {
     arg = V8VoidCallbackFunctionModules::Create(ScriptState::Current(info.GetIsolate()), info[0]);
   } else {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("voidMethodVoidCallbackFunctionModulesArg", "TestInterface5", "The callback provided as parameter 1 is not a function."));
@@ -1078,13 +1078,19 @@ void V8TestInterface5::preparePrototypeAndInterfaceObject(v8::Local<v8::Context>
     static const V8DOMConfiguration::AccessorConfiguration accessor_configurations[] = {
         { "windowExposedAttribute", V8TestInterface5::windowExposedAttributeAttributeGetterCallback, V8TestInterface5::windowExposedAttributeAttributeSetterCallback, V8PrivateProperty::kNoCachedAccessor, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
     };
-    V8DOMConfiguration::InstallAccessors(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessor_configurations, WTF_ARRAY_LENGTH(accessor_configurations));
+    V8DOMConfiguration::InstallAccessors(
+        isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject,
+        signature, accessor_configurations,
+        WTF_ARRAY_LENGTH(accessor_configurations));
   }
   if (executionContext && (executionContext->IsWorkerGlobalScope())) {
     static const V8DOMConfiguration::AccessorConfiguration accessor_configurations[] = {
         { "workerExposedAttribute", V8TestInterface5::workerExposedAttributeAttributeGetterCallback, V8TestInterface5::workerExposedAttributeAttributeSetterCallback, V8PrivateProperty::kNoCachedAccessor, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
     };
-    V8DOMConfiguration::InstallAccessors(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessor_configurations, WTF_ARRAY_LENGTH(accessor_configurations));
+    V8DOMConfiguration::InstallAccessors(
+        isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject,
+        signature, accessor_configurations,
+        WTF_ARRAY_LENGTH(accessor_configurations));
   }
   if (executionContext && (executionContext->IsWorkerGlobalScope())) {
     const V8DOMConfiguration::MethodConfiguration workerExposedMethodMethodConfiguration[] = {

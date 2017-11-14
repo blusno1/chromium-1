@@ -8,11 +8,11 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "platform/Histogram.h"
 #include "platform/scheduler/base/task_queue.h"
-#include "platform/scheduler/base/time_converter.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate.h"
 #include "platform/scheduler/child/worker_scheduler_helper.h"
 
@@ -31,6 +31,14 @@ void ReportWorkerTaskLoad(base::TimeTicks time, double load) {
   // TODO(kinuko): Maybe we also want to separately log when the associated
   // tab is in foreground and when not.
   UMA_HISTOGRAM_PERCENTAGE("WorkerScheduler.WorkerThreadLoad", load_percentage);
+}
+
+// TODO(scheduler-dev): Remove conversions when Blink starts using
+// base::TimeTicks instead of doubles for time.
+base::TimeTicks MonotonicTimeInSecondsToTimeTicks(
+    double monotonic_time_in_seconds) {
+  return base::TimeTicks() +
+         base::TimeDelta::FromSecondsD(monotonic_time_in_seconds);
 }
 
 }  // namespace
@@ -83,6 +91,11 @@ scoped_refptr<SingleThreadIdleTaskRunner>
 WorkerSchedulerImpl::IdleTaskRunner() {
   DCHECK(initialized_);
   return idle_helper_.IdleTaskRunner();
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+WorkerSchedulerImpl::IPCTaskRunner() {
+  return base::ThreadTaskRunnerHandle::Get();
 }
 
 bool WorkerSchedulerImpl::CanExceedIdleDeadlineIfRequired() const {

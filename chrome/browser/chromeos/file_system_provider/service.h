@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -80,9 +81,15 @@ class Service : public KeyedService,
   Service(Profile* profile, extensions::ExtensionRegistry* extension_registry);
   ~Service() override;
 
+  // Gets the singleton instance for the |context|.
+  static Service* Get(content::BrowserContext* context);
+
+  // KeyedService:
+  void Shutdown() override;
+
   // Sets a custom ProvidedFileSystemInterface factory. Used by unit tests,
   // where an event router is not available.
-  void SetFileSystemFactoryForTesting(
+  void SetDefaultFileSystemFactoryForTesting(
       const FileSystemFactoryCallback& factory_callback);
 
   // Sets a custom Registry implementation. Used by unit tests.
@@ -143,9 +150,6 @@ class Service : public KeyedService,
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  // Gets the singleton instance for the |context|.
-  static Service* Get(content::BrowserContext* context);
-
   // extensions::ExtensionRegistryObserver overrides.
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
                            const extensions::Extension* extension,
@@ -163,6 +167,10 @@ class Service : public KeyedService,
                            const Watcher& watcher) override;
   void OnWatcherListChanged(const ProvidedFileSystemInfo& file_system_info,
                             const Watchers& watchers) override;
+
+  // Registers a FileSystemFactory for the passed |provider_id|.
+  void RegisterFileSystemFactory(const std::string& provider_id,
+                                 FileSystemFactoryCallback file_system_factory);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(FileSystemProviderServiceTest, RememberFileSystem);
@@ -196,15 +204,21 @@ class Service : public KeyedService,
   // |provider_id| provided file system.
   void RestoreFileSystems(const std::string& provider_id);
 
+  // Returns a file system factory for the passed |provider_id|.
+  FileSystemFactoryCallback GetFileSystemFactory(
+      const std::string& provider_id);
+
   Profile* profile_;
   extensions::ExtensionRegistry* extension_registry_;  // Not owned.
-  FileSystemFactoryCallback file_system_factory_;
+  FileSystemFactoryCallback default_file_system_factory_;
   base::ObserverList<Observer> observers_;
   std::map<FileSystemKey, std::unique_ptr<ProvidedFileSystemInterface>>
       file_system_map_;
   std::map<std::string, FileSystemKey> mount_point_name_to_key_map_;
   std::unique_ptr<RegistryInterface> registry_;
   base::ThreadChecker thread_checker_;
+  std::unordered_map<std::string, FileSystemFactoryCallback>
+      file_system_factory_map_;
 
   base::WeakPtrFactory<Service> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(Service);

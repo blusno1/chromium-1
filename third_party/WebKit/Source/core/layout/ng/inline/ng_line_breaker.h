@@ -87,6 +87,7 @@ class CORE_EXPORT NGLineBreaker {
 
   void PrepareNextLine(const NGLayoutOpportunity&, NGLineInfo*);
 
+  void UpdatePosition(const NGInlineItemResults&);
   void ComputeLineLocation(NGLineInfo*) const;
 
   enum class LineBreakState {
@@ -170,6 +171,11 @@ class CORE_EXPORT NGLineBreaker {
 
   // True when breaking at soft hyphens (U+00AD) is allowed.
   bool enable_soft_hyphen_ = true;
+
+  // True in quirks mode or limited-quirks mode, which require line-height
+  // quirks.
+  // https://quirks.spec.whatwg.org/#the-line-height-calculation-quirk
+  bool in_line_height_quirks_mode_ = false;
 };
 
 }  // namespace blink

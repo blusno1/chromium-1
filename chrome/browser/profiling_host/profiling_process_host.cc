@@ -13,6 +13,7 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_iterator.h"
 #include "base/rand_util.h"
@@ -90,6 +91,10 @@ base::trace_event::TraceConfig GetBackgroundTracingConfig() {
 
 namespace profiling {
 
+const base::Feature kOOPHeapProfilingFeature{"OOPHeapProfiling",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+const char kOOPHeapProfilingFeatureMode[] = "mode";
+
 bool ProfilingProcessHost::has_started_ = false;
 
 namespace {
@@ -133,7 +138,15 @@ class ProfilingClientBinder {
 
 void OnTraceUploadComplete(TraceCrashServiceUploader* uploader,
                            bool success,
-                           const std::string& feedback);
+                           const std::string& feedback) {
+  if (!success) {
+    LOG(ERROR) << "Cannot upload trace file: " << feedback;
+    return;
+  }
+
+  // The reports is successfully sent. Reports the crash-id to ease debugging.
+  LOG(WARNING) << "slow-reports sent: '" << feedback << '"';
+}
 
 void UploadTraceToCrashServer(std::string file_contents,
                               std::string trigger_name) {
@@ -162,25 +175,14 @@ void UploadTraceToCrashServer(std::string file_contents,
                      base::Bind(&OnTraceUploadComplete, base::Owned(uploader)));
 }
 
-void OnTraceUploadComplete(TraceCrashServiceUploader* uploader,
-                           bool success,
-                           const std::string& feedback) {
-  if (!success) {
-    LOG(ERROR) << "Cannot upload trace file: " << feedback;
-    return;
-  }
-
-  // The reports is successfully sent. Reports the crash-id to ease debugging.
-  LOG(WARNING) << "slow-reports sent: '" << feedback << '"';
-}
-
 }  // namespace
 
 ProfilingProcessHost::ProfilingProcessHost()
     : is_registered_(false),
       background_triggers_(this),
       mode_(Mode::kNone),
-      profiled_renderer_(nullptr) {}
+      profiled_renderer_(nullptr),
+      always_sample_for_tests_(false) {}
 
 ProfilingProcessHost::~ProfilingProcessHost() {
   if (is_registered_)
@@ -345,7 +347,8 @@ void ProfilingProcessHost::AddClientToProfilingService(
 ProfilingProcessHost::Mode ProfilingProcessHost::GetCurrentMode() {
   const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
 #if BUILDFLAG(USE_ALLOCATOR_SHIM)
-  if (cmdline->HasSwitch(switches::kMemlog)) {
+  if (cmdline->HasSwitch(switches::kMemlog) ||
+      base::FeatureList::IsEnabled(kOOPHeapProfilingFeature)) {
     if (cmdline->HasSwitch(switches::kEnableHeapProfiling)) {
       // PartitionAlloc doesn't support chained allocation hooks so we can't
       // run both heap profilers at the same time.
@@ -355,7 +358,15 @@ ProfilingProcessHost::Mode ProfilingProcessHost::GetCurrentMode() {
       return Mode::kNone;
     }
 
-    std::string mode = cmdline->GetSwitchValueASCII(switches::kMemlog);
+    std::string mode;
+    // Respect the commandline switch above the field trial.
+    if (cmdline->HasSwitch(switches::kMemlog)) {
+      mode = cmdline->GetSwitchValueASCII(switches::kMemlog);
+    } else {
+      mode = base::GetFieldTrialParamValueByFeature(
+          kOOPHeapProfilingFeature, kOOPHeapProfilingFeatureMode);
+    }
+
     if (mode == switches::kMemlogModeAll)
       return Mode::kAll;
     if (mode == switches::kMemlogModeMinimal)
@@ -396,6 +407,7 @@ ProfilingProcessHost* ProfilingProcessHost::Start(
   host->metrics_timer_.Start(
       FROM_HERE, base::TimeDelta::FromHours(24),
       base::Bind(&ProfilingProcessHost::ReportMetrics, base::Unretained(host)));
+
   return host;
 }
 
@@ -428,6 +440,8 @@ void ProfilingProcessHost::RequestProcessDump(base::ProcessId pid,
 
 void ProfilingProcessHost::RequestProcessReport(base::ProcessId pid,
                                                 std::string trigger_name) {
+  // https://crbug.com/753218: Add e2e tests for this code path.
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   if (!connector_) {
     DLOG(ERROR)
         << "Requesting process dump when profiling process hasn't started.";
@@ -620,10 +634,13 @@ bool ProfilingProcessHost::ShouldProfileNewRenderer(
     content::RenderProcessHost* renderer) const {
   if (mode() == Mode::kAll) {
     return true;
-  } else if (mode() == Mode::kRendererSampling && !profiled_renderer_ &&
-             (base::RandUint64() % 100000) < 33333) {
+  } else if (mode() == Mode::kRendererSampling && !profiled_renderer_) {
+    if (always_sample_for_tests_) {
+      return true;
+    }
+
     // Sample renderers with a 1/3 probability.
-    return true;
+    return (base::RandUint64() % 100000) < 33333;
   }
 
   return false;
@@ -643,6 +660,10 @@ void ProfilingProcessHost::StartProfilingNonRendererChild(
   // Tell the child process to start profiling.
   ProfilingClientBinder client(host);
   AddClientToProfilingService(client.take(), proc_id, process_type);
+}
+
+void ProfilingProcessHost::SetRendererSamplingAlwaysProfileForTest() {
+  always_sample_for_tests_ = true;
 }
 
 }  // namespace profiling

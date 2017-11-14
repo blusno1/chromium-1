@@ -33,11 +33,15 @@ void NotifyAccessibilityStatusChanged() {
       A11Y_NOTIFICATION_NONE);
 }
 
+PrefService* GetActivePrefService() {
+  return Shell::Get()->session_controller()->GetActivePrefService();
+}
+
 }  // namespace
 
 AccessibilityController::AccessibilityController(
     service_manager::Connector* connector)
-    : connector_(connector) {
+    : connector_(connector), binding_(this) {
   Shell::Get()->session_controller()->AddObserver(this);
 }
 
@@ -69,6 +73,11 @@ void AccessibilityController::RegisterProfilePrefs(PrefRegistrySimple* registry,
   registry->RegisterForeignPref(prefs::kAccessibilityScreenMagnifierEnabled);
 }
 
+void AccessibilityController::BindRequest(
+    mojom::AccessibilityControllerRequest request) {
+  binding_.Bind(std::move(request));
+}
+
 void AccessibilityController::SetLargeCursorEnabled(bool enabled) {
   PrefService* prefs = GetActivePrefService();
   if (!prefs)
@@ -93,6 +102,17 @@ bool AccessibilityController::IsHighContrastEnabled() const {
   return high_contrast_enabled_;
 }
 
+void AccessibilityController::TriggerAccessibilityAlert(
+    mojom::AccessibilityAlert alert) {
+  if (client_)
+    client_->TriggerAccessibilityAlert(alert);
+}
+
+void AccessibilityController::SetClient(
+    mojom::AccessibilityControllerClientPtr client) {
+  client_ = std::move(client);
+}
+
 void AccessibilityController::OnSigninScreenPrefServiceInitialized(
     PrefService* prefs) {
   ObservePrefs(prefs);
@@ -103,9 +123,8 @@ void AccessibilityController::OnActiveUserPrefServiceChanged(
   ObservePrefs(prefs);
 }
 
-void AccessibilityController::SetPrefServiceForTest(PrefService* prefs) {
-  pref_service_for_test_ = prefs;
-  ObservePrefs(prefs);
+void AccessibilityController::FlushMojoForTest() {
+  client_.FlushForTesting();
 }
 
 void AccessibilityController::ObservePrefs(PrefService* prefs) {
@@ -128,12 +147,6 @@ void AccessibilityController::ObservePrefs(PrefService* prefs) {
   // Load current state.
   UpdateLargeCursorFromPref();
   UpdateHighContrastFromPref();
-}
-
-PrefService* AccessibilityController::GetActivePrefService() const {
-  if (pref_service_for_test_)
-    return pref_service_for_test_;
-  return Shell::Get()->session_controller()->GetActivePrefService();
 }
 
 void AccessibilityController::UpdateLargeCursorFromPref() {

@@ -18,15 +18,11 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "net/url_request/url_request.h"
 
 namespace content {
 
 namespace {
-
-// Max number of http redirects to follow. The Fetch spec says: "If request's
-// redirect count is twenty, return a network error."
-// https://fetch.spec.whatwg.org/#http-redirect-fetch
-const int kMaxRedirects = 20;
 
 // URLLoader implementation that utilizes either a network loader
 // or an appcache loader depending on where the resources should
@@ -75,8 +71,7 @@ class SubresourceLoader : public mojom::URLLoader,
 
   void Start() {
     if (!host_) {
-      remote_client_->OnComplete(
-          ResourceRequestCompletionStatus(net::ERR_FAILED));
+      remote_client_->OnComplete(network::URLLoaderStatus(net::ERR_FAILED));
       return;
     }
     handler_ = host_->CreateRequestHandler(
@@ -205,7 +200,7 @@ class SubresourceLoader : public mojom::URLLoader,
                          const ResourceResponseHead& response_head) override {
     DCHECK(network_loader_) << "appcache loader does not produce redirects";
     if (!redirect_limit_--) {
-      OnComplete(ResourceRequestCompletionStatus(net::ERR_TOO_MANY_REDIRECTS));
+      OnComplete(network::URLLoaderStatus(net::ERR_TOO_MANY_REDIRECTS));
       return;
     }
     if (!handler_) {
@@ -251,7 +246,7 @@ class SubresourceLoader : public mojom::URLLoader,
     remote_client_->OnStartLoadingResponseBody(std::move(body));
   }
 
-  void OnComplete(const ResourceRequestCompletionStatus& status) override {
+  void OnComplete(const network::URLLoaderStatus& status) override {
     if (!network_loader_ || !handler_ || did_receive_network_response_ ||
         status.error_code == net::OK) {
       remote_client_->OnComplete(status);
@@ -263,7 +258,7 @@ class SubresourceLoader : public mojom::URLLoader,
                        weak_factory_.GetWeakPtr(), status));
   }
 
-  void ContinueOnComplete(const ResourceRequestCompletionStatus& status,
+  void ContinueOnComplete(const network::URLLoaderStatus& status,
                           StartLoaderCallback start_function) {
     if (start_function)
       CreateAndStartAppCacheLoader(std::move(start_function));
@@ -282,7 +277,7 @@ class SubresourceLoader : public mojom::URLLoader,
   net::MutableNetworkTrafficAnnotationTag traffic_annotation_;
   scoped_refptr<URLLoaderFactoryGetter> network_loader_factory_;
   net::RedirectInfo redirect_info_;
-  int redirect_limit_ = kMaxRedirects;
+  int redirect_limit_ = net::URLRequest::kMaxRedirects;
   bool did_receive_network_response_ = false;
   bool has_paused_reading_ = false;
   bool has_set_priority_ = false;

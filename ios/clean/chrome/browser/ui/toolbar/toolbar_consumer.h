@@ -7,8 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
-// ToolbarConsumer sets the current appearance of the Toolbar.
-@protocol ToolbarConsumer
+// CleanToolbarConsumer sets the current appearance of the Toolbar.
+@protocol CleanToolbarConsumer
 // Updates the toolbar with the current forward navigation state.
 - (void)setCanGoForward:(BOOL)canGoForward;
 // Updates the toolbar with the current back navigation state.

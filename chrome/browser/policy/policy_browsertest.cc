@@ -86,6 +86,9 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
+#include "chrome/browser/ui/toolbar/media_router_action_controller.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -203,7 +206,7 @@
 #include "url/origin.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/accessibility_types.h"
+#include "ash/public/cpp/accessibility_types.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
@@ -236,12 +239,6 @@
 #include "extensions/browser/app_window/native_app_window.h"
 #include "ui/base/window_open_disposition.h"
 #endif
-
-#if !defined(OS_ANDROID)
-#include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
-#include "chrome/browser/ui/toolbar/media_router_action_controller.h"
-#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
-#endif  // !defined(OS_ANDROID)
 
 using content::BrowserThread;
 using net::URLRequestMockHTTPJob;
@@ -298,13 +295,17 @@ const base::FilePath::CharType kUnpackedFullscreenAppName[] =
 const char kTestWebRtcUdpPortRange[] = "10000-10100";
 #endif
 
+void GetTestDataDirectory(base::FilePath* test_data_directory) {
+  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, test_data_directory));
+}
+
 // Filters requests to the hosts in |urls| and redirects them to the test data
 // dir through URLRequestMockHTTPJobs.
 void RedirectHostsToTestData(const char* const urls[], size_t size) {
   // Map the given hosts to the test data dir.
   net::URLRequestFilter* filter = net::URLRequestFilter::GetInstance();
   base::FilePath base_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &base_path);
+  GetTestDataDirectory(&base_path);
   for (size_t i = 0; i < size; ++i) {
     const GURL url(urls[i]);
     EXPECT_TRUE(url.is_valid());
@@ -422,12 +423,17 @@ void CheckURLIsBlocked(Browser* browser, const std::string& spec) {
 // must be empty.
 void DownloadAndVerifyFile(
     Browser* browser, const base::FilePath& dir, const base::FilePath& file) {
+  net::EmbeddedTestServer embedded_test_server;
+  base::FilePath test_data_directory;
+  GetTestDataDirectory(&test_data_directory);
+  embedded_test_server.ServeFilesFromDirectory(test_data_directory);
+  ASSERT_TRUE(embedded_test_server.Start());
   content::DownloadManager* download_manager =
       content::BrowserContext::GetDownloadManager(browser->profile());
   content::DownloadTestObserverTerminal observer(
       download_manager, 1,
       content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
-  GURL url(URLRequestMockHTTPJob::GetMockUrl(file.MaybeAsASCII()));
+  GURL url(embedded_test_server.GetURL("/" + file.MaybeAsASCII()));
   base::FilePath downloaded = dir.Append(file);
   EXPECT_FALSE(base::PathExists(downloaded));
   ui_test_utils::NavigateToURL(browser, url);
@@ -1656,7 +1662,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallForcelist) {
       service->GetExtensionById(kGoodCrxId, true)->version()->GetString();
 
   base::FilePath test_path;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_path));
+  GetTestDataDirectory(&test_path);
 
   TestRequestInterceptor interceptor(
       "update.extension",
@@ -1868,7 +1874,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequired) {
 
   // Setup interceptor for extension updates.
   base::FilePath test_path;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_path));
+  GetTestDataDirectory(&test_path);
   TestRequestInterceptor interceptor(
       "update.extension",
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
@@ -1938,7 +1944,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequiredAlt) {
 
   // Setup interceptor for extension updates.
   base::FilePath test_path;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_path));
+  GetTestDataDirectory(&test_path);
   TestRequestInterceptor interceptor(
       "update.extension",
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
@@ -2434,7 +2440,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_FileURLBlacklist) {
   // with URLblacklisting and URLwhitelisting.
 
   base::FilePath test_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &test_path);
+  GetTestDataDirectory(&test_path);
   const std::string base_path = "file://" + test_path.AsUTF8Unsafe() +"/";
   const std::string folder_path = base_path + "apptest/";
   const std::string file_path1 = base_path + "title1.html";
@@ -3643,7 +3649,6 @@ IN_PROC_BROWSER_TEST_F(MediaRouterDisabledPolicyTest, MediaRouterDisabled) {
   EXPECT_FALSE(media_router::MediaRouterEnabled(browser()->profile()));
 }
 
-#if !defined(OS_ANDROID)
 template <bool enable>
 class MediaRouterActionPolicyTest : public PolicyTest {
  public:
@@ -3684,7 +3689,6 @@ IN_PROC_BROWSER_TEST_F(MediaRouterActionDisabledPolicyTest,
       MediaRouterActionController::IsActionShownByPolicy(browser()->profile()));
   EXPECT_FALSE(HasMediaRouterActionAtInit());
 }
-#endif  // !defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_WEBRTC)
 // Sets the proper policy before the browser is started.
@@ -4104,8 +4108,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingWhitelist) {
 
 #endif  // !defined(CHROME_OS)
 
-
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#if !defined(OS_CHROMEOS)
 // Sets the hardware acceleration mode policy before the browser is started.
 class HardwareAccelerationModePolicyTest : public PolicyTest {
  public:
@@ -4127,7 +4130,7 @@ IN_PROC_BROWSER_TEST_F(HardwareAccelerationModePolicyTest,
   EXPECT_FALSE(
       content::GpuDataManager::GetInstance()->HardwareAccelerationEnabled());
 }
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#endif  // !defined(OS_CHROMEOS)
 
 #if defined(OS_CHROMEOS)
 // Policy is only available in ChromeOS

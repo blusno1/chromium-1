@@ -59,7 +59,7 @@ class WebGraphicsContext3DProviderWrapper;
 //   2) use Canvas() to get a drawing interface
 //   3) Call Snapshot() to acquire a bitmap with the rendered image in it.
 
-class CanvasResourceProvider {
+class PLATFORM_EXPORT CanvasResourceProvider {
   WTF_MAKE_NONCOPYABLE(CanvasResourceProvider);
 
  public:

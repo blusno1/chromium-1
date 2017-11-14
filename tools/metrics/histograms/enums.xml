@@ -2619,40 +2619,40 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="3" label="RFH_SANDBOX_FLAGS"/>
   <int value="4" label="RFH_NO_PROXY_TO_PARENT"/>
   <int value="5" label="RPH_DESERIALIZATION_FAILED"/>
-  <int value="6" label="RVH_CAN_ACCESS_FILES_OF_PAGE_STATE"/>
+  <int value="6" label="OBSOLETE_RVH_CAN_ACCESS_FILES_OF_PAGE_STATE"/>
   <int value="7" label="RFH_FILE_CHOOSER_PATH"/>
-  <int value="8" label="RWH_SYNTHETIC_GESTURE"/>
-  <int value="9" label="RWH_FOCUS"/>
-  <int value="10" label="RWH_BLUR"/>
+  <int value="8" label="OBSOLETE_RWH_SYNTHETIC_GESTURE"/>
+  <int value="9" label="OBSOLETE_RWH_FOCUS"/>
+  <int value="10" label="OBSOLETE_RWH_BLUR"/>
   <int value="11" label="RWH_SHARED_BITMAP"/>
   <int value="12" label="RWH_BAD_ACK_MESSAGE"/>
-  <int value="13" label="RWHVA_SHARED_MEMORY"/>
+  <int value="13" label="OBSOLETE_RWHVA_SHARED_MEMORY"/>
   <int value="14" label="SERVICE_WORKER_BAD_URL"/>
-  <int value="15" label="WC_INVALID_FRAME_SOURCE"/>
-  <int value="16" label="RWHVM_UNEXPECTED_FRAME_TYPE"/>
+  <int value="15" label="OBSOLETE_WC_INVALID_FRAME_SOURCE"/>
+  <int value="16" label="OBSOLETE_RWHVM_UNEXPECTED_FRAME_TYPE"/>
   <int value="17" label="RFPH_DETACH"/>
   <int value="18" label="DFH_BAD_EMBEDDER_MESSAGE"/>
   <int value="19" label="NC_AUTO_SUBFRAME"/>
   <int value="20" label="CSDH_NOT_RECOGNIZED"/>
-  <int value="21" label="DSMF_OPEN_STORAGE"/>
+  <int value="21" label="OBSOLETE_DSMF_OPEN_STORAGE"/>
   <int value="22" label="DSMF_LOAD_STORAGE"/>
-  <int value="23" label="DBMF_INVALID_ORIGIN_ON_OPEN"/>
-  <int value="24" label="DBMF_DB_NOT_OPEN_ON_MODIFY"/>
-  <int value="25" label="DBMF_DB_NOT_OPEN_ON_CLOSE"/>
-  <int value="26" label="DBMF_INVALID_ORIGIN_ON_SQLITE_ERROR"/>
+  <int value="23" label="OBSOLETE_DBMF_INVALID_ORIGIN_ON_OPEN"/>
+  <int value="24" label="OBSOLETE_DBMF_DB_NOT_OPEN_ON_MODIFY"/>
+  <int value="25" label="OBSOLETE_DBMF_DB_NOT_OPEN_ON_CLOSE"/>
+  <int value="26" label="OBSOLETE_DBMF_INVALID_ORIGIN_ON_SQLITE_ERROR"/>
   <int value="27" label="RDH_INVALID_PRIORITY"/>
   <int value="28" label="RDH_REQUEST_NOT_TRANSFERRING"/>
   <int value="29" label="RDH_BAD_DOWNLOAD"/>
-  <int value="30" label="NMF_NO_PERMISSION_SHOW"/>
-  <int value="31" label="NMF_NO_PERMISSION_CLOSE"/>
-  <int value="32" label="NMF_NO_PERMISSION_VERIFY"/>
+  <int value="30" label="OBSOLETE_NMF_NO_PERMISSION_SHOW"/>
+  <int value="31" label="OBSOLETE_NMF_NO_PERMISSION_CLOSE"/>
+  <int value="32" label="OBSOLETE_NMF_NO_PERMISSION_VERIFY"/>
   <int value="33" label="MH_INVALID_MIDI_PORT"/>
   <int value="34" label="MH_SYS_EX_PERMISSION"/>
   <int value="35" label="ACDH_REGISTER"/>
   <int value="36" label="ACDH_UNREGISTER"/>
   <int value="37" label="ACDH_SET_SPAWNING"/>
   <int value="38" label="ACDH_SELECT_CACHE"/>
-  <int value="39" label="ACDH_SELECT_CACHE_FOR_WORKER"/>
+  <int value="39" label="OBSOLETE_ACDH_SELECT_CACHE_FOR_WORKER"/>
   <int value="40" label="ACDH_SELECT_CACHE_FOR_SHARED_WORKER"/>
   <int value="41" label="ACDH_MARK_AS_FOREIGN_ENTRY"/>
   <int value="42" label="ACDH_PENDING_REPLY_IN_GET_STATUS"/>
@@ -2662,59 +2662,61 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="46" label="ACDH_PENDING_REPLY_IN_SWAP_CACHE"/>
   <int value="47" label="ACDH_SWAP_CACHE"/>
   <int value="48" label="SWDH_NOT_HANDLED"/>
-  <int value="49" label="SWDH_REGISTER_BAD_URL"/>
-  <int value="50" label="SWDH_REGISTER_NO_HOST"/>
-  <int value="51" label="SWDH_REGISTER_CANNOT"/>
-  <int value="52" label="SWDH_UNREGISTER_BAD_URL"/>
-  <int value="53" label="SWDH_UNREGISTER_NO_HOST"/>
-  <int value="54" label="SWDH_UNREGISTER_CANNOT"/>
-  <int value="55" label="SWDH_GET_REGISTRATION_BAD_URL"/>
-  <int value="56" label="SWDH_GET_REGISTRATION_NO_HOST"/>
-  <int value="57" label="SWDH_GET_REGISTRATION_CANNOT"/>
-  <int value="58" label="SWDH_GET_REGISTRATION_FOR_READY_NO_HOST"/>
-  <int value="59" label="SWDH_GET_REGISTRATION_FOR_READY_ALREADY_IN_PROGRESS"/>
+  <int value="49" label="OBSOLETE_SWDH_REGISTER_BAD_URL"/>
+  <int value="50" label="OBSOLETE_SWDH_REGISTER_NO_HOST"/>
+  <int value="51" label="OBSOLETE_SWDH_REGISTER_CANNOT"/>
+  <int value="52" label="OBSOLETE_SWDH_UNREGISTER_BAD_URL"/>
+  <int value="53" label="OBSOLETE_SWDH_UNREGISTER_NO_HOST"/>
+  <int value="54" label="OBSOLETE_SWDH_UNREGISTER_CANNOT"/>
+  <int value="55" label="OBSOLETE_SWDH_GET_REGISTRATION_BAD_URL"/>
+  <int value="56" label="OBSOLETE_SWDH_GET_REGISTRATION_NO_HOST"/>
+  <int value="57" label="OBSOLETE_SWDH_GET_REGISTRATION_CANNOT"/>
+  <int value="58" label="OBSOLETE_SWDH_GET_REGISTRATION_FOR_READY_NO_HOST"/>
+  <int value="59"
+      label="OBSOLETE_SWDH_GET_REGISTRATION_FOR_READY_ALREADY_IN_PROGRESS"/>
   <int value="60" label="SWDH_POST_MESSAGE"/>
-  <int value="61" label="SWDH_PROVIDER_CREATED_NO_HOST"/>
-  <int value="62" label="SWDH_PROVIDER_DESTROYED_NO_HOST"/>
-  <int value="63" label="SWDH_SET_HOSTED_VERSION_NO_HOST"/>
+  <int value="61" label="OBSOLETE_SWDH_PROVIDER_CREATED_NO_HOST"/>
+  <int value="62" label="OBSOLETE_SWDH_PROVIDER_DESTROYED_NO_HOST"/>
+  <int value="63" label="OBSOLETE_SWDH_SET_HOSTED_VERSION_NO_HOST"/>
   <int value="64" label="OBSOLETE_SWDH_SET_HOSTED_VERSION"/>
-  <int value="65" label="SWDH_WORKER_SCRIPT_LOAD_NO_HOST"/>
+  <int value="65" label="OBSOLETE_SWDH_WORKER_SCRIPT_LOAD_NO_HOST"/>
   <int value="66" label="SWDH_INCREMENT_WORKER_BAD_HANDLE"/>
   <int value="67" label="SWDH_DECREMENT_WORKER_BAD_HANDLE"/>
-  <int value="68" label="SWDH_INCREMENT_REGISTRATION_BAD_HANDLE"/>
-  <int value="69" label="SWDH_DECREMENT_REGISTRATION_BAD_HANDLE"/>
+  <int value="68" label="OBSOLETE_SWDH_INCREMENT_REGISTRATION_BAD_HANDLE"/>
+  <int value="69" label="OBSOLETE_SWDH_DECREMENT_REGISTRATION_BAD_HANDLE"/>
   <int value="70" label="SWDH_TERMINATE_BAD_HANDLE"/>
-  <int value="71" label="FAMF_APPEND_ITEM_TO_BLOB"/>
-  <int value="72" label="FAMF_APPEND_SHARED_MEMORY_TO_BLOB"/>
-  <int value="73" label="FAMF_MALFORMED_STREAM_URL"/>
-  <int value="74" label="FAMF_APPEND_ITEM_TO_STREAM"/>
-  <int value="75" label="FAMF_APPEND_SHARED_MEMORY_TO_STREAM"/>
-  <int value="76" label="IDBDH_CAN_READ_FILE"/>
-  <int value="77" label="IDBDH_GET_OR_TERMINATE"/>
+  <int value="71" label="OBSOLETE_FAMF_APPEND_ITEM_TO_BLOB"/>
+  <int value="72" label="OBSOLETE_FAMF_APPEND_SHARED_MEMORY_TO_BLOB"/>
+  <int value="73" label="OBSOLETE_FAMF_MALFORMED_STREAM_URL"/>
+  <int value="74" label="OBSOLETE_FAMF_APPEND_ITEM_TO_STREAM"/>
+  <int value="75" label="OBSOLETE_FAMF_APPEND_SHARED_MEMORY_TO_STREAM"/>
+  <int value="76" label="OBSOLETE_IDBDH_CAN_READ_FILE"/>
+  <int value="77" label="OBSOLETE_IDBDH_GET_OR_TERMINATE"/>
   <int value="78" label="RFMF_SET_COOKIE_BAD_ORIGIN"/>
   <int value="79" label="RFMF_GET_COOKIES_BAD_ORIGIN"/>
-  <int value="80" label="SWDH_GET_REGISTRATIONS_NO_HOST"/>
-  <int value="81" label="SWDH_GET_REGISTRATIONS_INVALID_ORIGIN"/>
-  <int value="82" label="AOAH_UNAUTHORIZED_URL"/>
+  <int value="80" label="OBSOLETE_SWDH_GET_REGISTRATIONS_NO_HOST"/>
+  <int value="81" label="OBSOLETE_SWDH_GET_REGISTRATIONS_INVALID_ORIGIN"/>
+  <int value="82" label="OBSOLETE_AOAH_UNAUTHORIZED_URL"/>
   <int value="83" label="BDH_INVALID_SERVICE_ID"/>
-  <int value="84" label="RFH_COMMIT_DESERIALIZATION_FAILED"/>
+  <int value="84" label="OBSOLETE_RFH_COMMIT_DESERIALIZATION_FAILED"/>
   <int value="85" label="BDH_INVALID_CHARACTERISTIC_ID"/>
-  <int value="86" label="SWDH_UPDATE_NO_HOST"/>
-  <int value="87" label="SWDH_UPDATE_BAD_REGISTRATION_ID"/>
-  <int value="88" label="SWDH_UPDATE_CANNOT"/>
-  <int value="89" label="SWDH_UNREGISTER_BAD_REGISTRATION_ID"/>
+  <int value="86" label="OBSOLETE_SWDH_UPDATE_NO_HOST"/>
+  <int value="87" label="OBSOLETE_SWDH_UPDATE_BAD_REGISTRATION_ID"/>
+  <int value="88" label="OBSOLETE_SWDH_UPDATE_CANNOT"/>
+  <int value="89" label="OBSOLETE_SWDH_UNREGISTER_BAD_REGISTRATION_ID"/>
   <int value="90" label="BDH_INVALID_WRITE_VALUE_LENGTH"/>
-  <int value="91" label="WC_MEMORY_CACHE_RESOURCE_BAD_SECURITY_INFO"/>
-  <int value="92" label="WC_RENDERER_DID_NAVIGATE_BAD_SECURITY_INFO"/>
+  <int value="91" label="OBSOLETE_WC_MEMORY_CACHE_RESOURCE_BAD_SECURITY_INFO"/>
+  <int value="92" label="OBSOLETE_WC_RENDERER_DID_NAVIGATE_BAD_SECURITY_INFO"/>
   <int value="93" label="OBSOLETE_BDH_DUPLICATE_REQUEST_DEVICE_ID"/>
   <int value="94" label="CSDH_INVALID_ORIGIN"/>
   <int value="95" label="RDH_ILLEGAL_ORIGIN"/>
-  <int value="96" label="RDH_UNAUTHORIZED_HEADER_REQUEST"/>
+  <int value="96" label="OBSOLETE_RDH_UNAUTHORIZED_HEADER_REQUEST"/>
   <int value="97" label="RDH_INVALID_URL"/>
-  <int value="98" label="BDH_CHARACTERISTIC_ALREADY_SUBSCRIBED"/>
+  <int value="98" label="OBSOLETE_BDH_CHARACTERISTIC_ALREADY_SUBSCRIBED"/>
   <int value="99" label="RFH_OWNER_PROPERTY"/>
-  <int value="100" label="BDH_EMPTY_OR_INVALID_FILTERS"/>
-  <int value="101" label="WC_CONTENT_WITH_CERT_ERRORS_BAD_SECURITY_INFO"/>
+  <int value="100" label="OBSOLETE_BDH_EMPTY_OR_INVALID_FILTERS"/>
+  <int value="101"
+      label="OBSOLETE_WC_CONTENT_WITH_CERT_ERRORS_BAD_SECURITY_INFO"/>
   <int value="102" label="RFMF_RENDERER_FAKED_ITS_OWN_DEATH"/>
   <int value="103" label="DWNLD_INVALID_SAVABLE_RESOURCE_LINKS_RESPONSE"/>
   <int value="104" label="DWNLD_INVALID_SERIALIZE_AS_MHTML_RESPONSE"/>
@@ -2732,18 +2734,18 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="116" label="BDH_CONSTRUCTION_FAILED"/>
   <int value="117" label="BDH_INVALID_REFCOUNT_OPERATION"/>
   <int value="118" label="BDH_INVALID_URL_OPERATION"/>
-  <int value="119" label="IDBDH_INVALID_ORIGIN"/>
+  <int value="119" label="OBSOLETE_IDBDH_INVALID_ORIGIN"/>
   <int value="120" label="RFH_FAIL_PROVISIONAL_LOAD_NO_HANDLE"/>
-  <int value="121" label="RFH_FAIL_PROVISIONAL_LOAD_NO_ERROR"/>
+  <int value="121" label="OBSOLETE_RFH_FAIL_PROVISIONAL_LOAD_NO_ERROR"/>
   <int value="122" label="NI_IN_PAGE_NAVIGATION"/>
   <int value="123" label="RPH_MOJO_PROCESS_ERROR"/>
-  <int value="124" label="DBMF_INVALID_ORIGIN_ON_GET_SPACE"/>
-  <int value="125" label="DBMF_INVALID_ORIGIN_ON_MODIFIED"/>
-  <int value="126" label="DBMF_INVALID_ORIGIN_ON_CLOSED"/>
+  <int value="124" label="OBSOLETE_DBMF_INVALID_ORIGIN_ON_GET_SPACE"/>
+  <int value="125" label="OBSOLETE_DBMF_INVALID_ORIGIN_ON_MODIFIED"/>
+  <int value="126" label="OBSOLETE_DBMF_INVALID_ORIGIN_ON_CLOSED"/>
   <int value="127" label="WSI_INVALID_HEADER_VALUE"/>
-  <int value="128" label="SWDH_SET_HOSTED_VERSION_INVALID_HOST"/>
-  <int value="129" label="SWDH_SET_HOSTED_VERSION_PROCESS_MISMATCH"/>
-  <int value="130" label="MSDH_INVALID_FRAME_ID"/>
+  <int value="128" label="OBSOLETE_SWDH_SET_HOSTED_VERSION_INVALID_HOST"/>
+  <int value="129" label="OBSOLETE_SWDH_SET_HOSTED_VERSION_PROCESS_MISMATCH"/>
+  <int value="130" label="OBSOLETE_MSDH_INVALID_FRAME_ID"/>
   <int value="131" label="SDH_INVALID_PORT_RANGE"/>
   <int value="132" label="SCO_INVALID_ARGUMENT"/>
   <int value="133" label="RFH_INCONSISTENT_DEVTOOLS_MESSAGE"/>
@@ -2755,30 +2757,36 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="139" label="BDH_DISALLOWED_ORIGIN"/>
   <int value="140" label="ARH_CREATED_STREAM_WITHOUT_AUTHORIZATION"/>
   <int value="141" label="MDDH_INVALID_DEVICE_TYPE_REQUEST"/>
-  <int value="142" label="MDDH_UNAUTHORIZED_ORIGIN"/>
-  <int value="143" label="SWDH_ENABLE_NAVIGATION_PRELOAD_NO_HOST"/>
-  <int value="144" label="SWDH_ENABLE_NAVIGATION_PRELOAD_INVALID_ORIGIN"/>
-  <int value="145" label="SWDH_ENABLE_NAVIGATION_PRELOAD_BAD_REGISTRATION_ID"/>
+  <int value="142" label="OBSOLETE_MDDH_UNAUTHORIZED_ORIGIN"/>
+  <int value="143" label="OBSOLETE_SWDH_ENABLE_NAVIGATION_PRELOAD_NO_HOST"/>
+  <int value="144"
+      label="OBSOLETE_SWDH_ENABLE_NAVIGATION_PRELOAD_INVALID_ORIGIN"/>
+  <int value="145"
+      label="OBSOLETE_SWDH_ENABLE_NAVIGATION_PRELOAD_BAD_REGISTRATION_ID"/>
   <int value="146" label="RDH_TRANSFERRING_REQUEST_NOT_FOUND"/>
   <int value="147" label="RDH_TRANSFERRING_NONNAVIGATIONAL_REQUEST"/>
-  <int value="148" label="SWDH_GET_NAVIGATION_PRELOAD_STATE_NO_HOST"/>
-  <int value="149" label="SWDH_GET_NAVIGATION_PRELOAD_STATE_INVALID_ORIGIN"/>
+  <int value="148" label="OBSOLETE_SWDH_GET_NAVIGATION_PRELOAD_STATE_NO_HOST"/>
+  <int value="149"
+      label="OBSOLETE_SWDH_GET_NAVIGATION_PRELOAD_STATE_INVALID_ORIGIN"/>
   <int value="150"
-      label="SWDH_GET_NAVIGATION_PRELOAD_STATE_BAD_REGISTRATION_ID"/>
-  <int value="151" label="SWDH_SET_NAVIGATION_PRELOAD_HEADER_NO_HOST"/>
-  <int value="152" label="SWDH_SET_NAVIGATION_PRELOAD_HEADER_INVALID_ORIGIN"/>
+      label="OBSOLETE_SWDH_GET_NAVIGATION_PRELOAD_STATE_BAD_REGISTRATION_ID"/>
+  <int value="151" label="OBSOLETE_SWDH_SET_NAVIGATION_PRELOAD_HEADER_NO_HOST"/>
+  <int value="152"
+      label="OBSOLETE_SWDH_SET_NAVIGATION_PRELOAD_HEADER_INVALID_ORIGIN"/>
   <int value="153"
-      label="SWDH_SET_NAVIGATION_PRELOAD_HEADER_BAD_REGISTRATION_ID"/>
-  <int value="154" label="SWDH_SET_NAVIGATION_PRELOAD_HEADER_BAD_VALUE"/>
+      label="OBSOLETE_SWDH_SET_NAVIGATION_PRELOAD_HEADER_BAD_REGISTRATION_ID"/>
+  <int value="154"
+      label="OBSOLETE_SWDH_SET_NAVIGATION_PRELOAD_HEADER_BAD_VALUE"/>
   <int value="155" label="MDDH_INVALID_SUBSCRIPTION_REQUEST"/>
-  <int value="156" label="MDDH_INVALID_UNSUBSCRIPTION_REQUEST"/>
-  <int value="157" label="AOAH_NONSENSE_DEVICE_ID"/>
+  <int value="156" label="OBSOLETE_MDDH_INVALID_UNSUBSCRIPTION_REQUEST"/>
+  <int value="157" label="OBSOLETE_AOAH_NONSENSE_DEVICE_ID"/>
   <int value="158" label="BDH_INVALID_OPTIONS"/>
   <int value="159" label="RFH_DID_ADD_CONSOLE_MESSAGE_BAD_SEVERITY"/>
   <int value="160" label="AIRH_VOLUME_OUT_OF_RANGE"/>
   <int value="161" label="BDH_INVALID_DESCRIPTOR_ID"/>
-  <int value="162" label="RWH_INVALID_BEGIN_FRAME_ACK_DID_NOT_SWAP"/>
-  <int value="163" label="RWH_INVALID_BEGIN_FRAME_ACK_COMPOSITOR_FRAME"/>
+  <int value="162" label="OBSOLETE_RWH_INVALID_BEGIN_FRAME_ACK_DID_NOT_SWAP"/>
+  <int value="163"
+      label="OBSOLETE_RWH_INVALID_BEGIN_FRAME_ACK_COMPOSITOR_FRAME"/>
   <int value="164" label="BFSI_INVALID_DEVELOPER_ID"/>
   <int value="165" label="BFSI_INVALID_REQUESTS"/>
   <int value="166" label="BFSI_INVALID_TITLE"/>
@@ -2788,7 +2796,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="170" label="RFH_ILLEGAL_UPLOAD_PARAMS"/>
   <int value="171" label="RFH_BASE_URL_FOR_DATA_URL_SPECIFIED"/>
   <int value="172" label="RFPH_ILLEGAL_UPLOAD_PARAMS"/>
-  <int value="173" label="SWDH_PROVIDER_CREATED_ILLEGAL_TYPE"/>
+  <int value="173" label="OBSOLETE_SWDH_PROVIDER_CREATED_ILLEGAL_TYPE"/>
   <int value="174" label="SWDH_PROVIDER_CREATED_ILLEGAL_TYPE_NOT_WINDOW"/>
   <int value="175" label="SWDH_PROVIDER_CREATED_ILLEGAL_TYPE_CONTROLLER"/>
   <int value="176" label="SWDH_PROVIDER_CREATED_DUPLICATE_ID"/>
@@ -2802,6 +2810,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="183"
       label="BPG_RESIZE_PARAMS_CHANGED_LOCAL_SURFACE_ID_UNCHANGED"/>
   <int value="184" label="RFH_NEGATIVE_SELECTION_START_OFFSET"/>
+  <int value="185" label="WEBUI_BAD_SCHEME_ACCESS"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions">
@@ -4094,6 +4103,17 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="4" label="CACHE_MISS"/>
 </enum>
 
+<enum name="CacheStorageErrorType">
+  <int value="0" label="OK"/>
+  <int value="1" label="Exists Error"/>
+  <int value="2" label="Storage Error"/>
+  <int value="3" label="Not Found Error"/>
+  <int value="4" label="Quota Exceeded Error"/>
+  <int value="5" label="Cache Name Not Found Error"/>
+  <int value="6" label="Query Too Large Error"/>
+  <int value="7" label="Not Implemented Error"/>
+</enum>
+
 <enum name="CALayerResult">
   <int value="0" label="Success"/>
   <int value="1" label="Unknown failure"/>
@@ -4126,6 +4146,19 @@ uploading your change for review.  These are checked by presubmit scripts.
 <enum name="CanMakePaymentUsage">
   <int value="0" label="Used"/>
   <int value="1" label="Not Used"/>
+</enum>
+
+<enum name="CanonicalURLResult">
+  <int value="0" label="Canonical URL not retrieved: Visible URL not HTTPS"/>
+  <int value="1"
+      label="Canonical URL not retrieved: Canonical URL not HTTPS (but
+             visible URL is)"/>
+  <int value="2"
+      label="Canonical URL not retrieved: Page had no canonical URL defined"/>
+  <int value="3"
+      label="Canonical URL not retrieved: Page's canonical URL was invalid"/>
+  <int value="4" label="Canonical URL retrieved: Differed from visible URL"/>
+  <int value="5" label="Canonical URL retrieved: Same as visible URL"/>
 </enum>
 
 <enum name="CanvasContextType">
@@ -4720,6 +4753,9 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="CLD2LanguageCode">
+  <obsolete>
+    Deprecated as of 11/2017, since cld2 is deprecated.
+  </obsolete>
   <summary>
     See Language in third_party/cld_2/src/internal/generated_language.h.
   </summary>
@@ -5617,7 +5653,8 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="CombinedHttpResponseAndNetErrorCode">
-<!-- Generated from net/base/net_error_list.h -->
+<!-- Generated from net/base/net_error_list.h.
+Called by update_net_error_codes.py.-->
 
   <int value="-806" label="DNS_SORT_ERROR"/>
   <int value="-805" label="DNS_SEARCH_EMPTY"/>
@@ -5717,6 +5754,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-312" label="UNSAFE_PORT"/>
   <int value="-311" label="UNSAFE_REDIRECT"/>
   <int value="-310" label="TOO_MANY_REDIRECTS"/>
+  <int value="-303" label="INVALID_REDIRECT"/>
   <int value="-302" label="UNKNOWN_URL_SCHEME"/>
   <int value="-301" label="DISALLOWED_URL_SCHEME"/>
   <int value="-300" label="INVALID_URL"/>
@@ -5735,6 +5773,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="-202" label="CERT_AUTHORITY_INVALID"/>
   <int value="-201" label="CERT_DATE_INVALID"/>
   <int value="-200" label="CERT_COMMON_NAME_INVALID"/>
+  <int value="-176" label="NO_BUFFER_SPACE"/>
   <int value="-175" label="SSL_VERSION_INTERFERENCE"/>
   <int value="-174" label="READ_IF_READY_NOT_IMPLEMENTED"/>
   <int value="-173" label="WS_UPGRADE"/>
@@ -6616,6 +6655,9 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="ContextualSearchPeekPromoOutcome">
+  <obsolete>
+    Removed because the feature no longer exists.
+  </obsolete>
   <summary>The outcome of the Contextual Search Peek Promo.</summary>
   <int value="0" label="Peek Promo was seen, Panel was opened"/>
   <int value="1" label="Peek Promo was seen, Panel was not opened"/>
@@ -9043,6 +9085,20 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2" label="FAILURE_REASON_DRIVER"/>
   <int value="3" label="FAILURE_REASON_MODEL"/>
   <int value="4" label="FAILURE_REASON_FILE_MONITOR"/>
+</enum>
+
+<enum name="DownloadableStrings.InstallStatus">
+  <int value="0" label="NONE"/>
+  <int value="1" label="UPDATE_IN_PROGRESS"/>
+  <int value="2" label="UPDATE_CANCELED"/>
+  <int value="3" label="RETRY_LATER"/>
+  <int value="4" label="SERVICE_ERROR"/>
+  <int value="5" label="UPDATE_CHECK_ERROR"/>
+  <int value="15" label="UNKNOWN"/>
+</enum>
+
+<enum name="DownloadableStrings.MobileCountryCode">
+  <int value="0" label="UNDETERMINED"/>
 </enum>
 
 <enum name="DownloadAudioType">
@@ -13951,6 +14007,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1198"
       label="LANGUAGESETTINGSPRIVATE_SETENABLETRANSLATIONFORLANGUAGE"/>
   <int value="1199" label="LANGUAGESETTINGSPRIVATE_MOVELANGUAGE"/>
+  <int value="1200" label="MEDIAPERCEPTIONPRIVATE_SETANALYTICSCOMPONENT"/>
 </enum>
 
 <enum name="ExtensionIconState">
@@ -14172,7 +14229,7 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="ExtensionPermission3">
-<!-- Generated from extensions/common/permissions/api_permission.h -->
+<!-- Generated from extensions/common/permissions/api_permission.h.-->
 
   <int value="0" label="kInvalid"/>
   <int value="1" label="kUnknown"/>
@@ -14381,6 +14438,8 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="204" label="kMediaPerceptionPrivate"/>
   <int value="205" label="kLockScreen"/>
   <int value="206" label="kNewTabPageOverride"/>
+  <int value="207" label="kDeclarativeNetRequest"/>
+  <int value="208" label="kLockWindowFullscreenPrivate"/>
 </enum>
 
 <enum name="ExtensionServiceVerifyAllSuccess">
@@ -15940,8 +15999,6 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1292" label="FormValidationStarted"/>
   <int value="1293" label="FormValidationAbortedSubmission"/>
   <int value="1294" label="FormValidationShowedMessage"/>
-  <int value="1295" label="WebAnimationsEasingAsFunctionLinear"/>
-  <int value="1296" label="WebAnimationsEasingAsFunctionOther"/>
   <int value="1297" label="V8Document_Images_AttributeGetter"/>
   <int value="1298" label="V8Document_Embeds_AttributeGetter"/>
   <int value="1299" label="V8Document_Plugins_AttributeGetter"/>
@@ -16895,6 +16952,12 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="2222" label="V8ErrorCaptureStackTrace"/>
   <int value="2223" label="V8ErrorPrepareStackTrace"/>
   <int value="2224" label="V8ErrorStackTraceLimit"/>
+  <int value="2225" label="PaintWorklet"/>
+  <int value="2226" label="DocumentPageHideRegistered"/>
+  <int value="2227" label="DocumentPageHideFired"/>
+  <int value="2228" label="DocumentPageShowRegistered"/>
+  <int value="2229" label="DocumentPageShowFired"/>
+  <int value="2230" label="ReplaceCharsetInXHR"/>
 </enum>
 
 <enum name="FeedbackSource">
@@ -19774,7 +19837,8 @@ uploading your change for review.  These are checked by presubmit scripts.
 </enum>
 
 <enum name="GpuDriverBugWorkaroundEntry">
-<!-- Generated from gpu/config/gpu_driver_bug_list.json -->
+<!-- Generated from gpu/config/gpu_driver_bug_list.json.
+Called by update_gpu_driver_bug_workaround_entries.py.-->
 
   <int value="0"
       label="0: Recorded once every time this histogram is updated."/>
@@ -20068,8 +20132,7 @@ uploading your change for review.  These are checked by presubmit scripts.
              overflow"/>
   <int value="170"
       label="170: Zero copy DXGI video hangs on shutdown on Win &lt; 8.1"/>
-  <int value="172"
-      label="172: Limited enabling of Chromium GL_INTEL_framebuffer_CMAA"/>
+  <int value="172" label="172: Use GL_INTEL_framebuffer_CMAA on ChromeOS"/>
   <int value="174"
       label="174: Adreno 4xx support for EXT_multisampled_render_to_texture
              is buggy on Android 7.0"/>
@@ -20182,6 +20245,9 @@ uploading your change for review.  These are checked by presubmit scripts.
       label="216: Pack parameters work incorrectly with pack buffer bound"/>
   <int value="217"
       label="217: Alignment works incorrectly with unpack buffer bound"/>
+  <int value="218"
+      label="218: Certain Adreno 4xx and 5xx drivers often crash in
+             glProgramBinary."/>
   <int value="219"
       label="219: Zero-copy DXGI video hangs or displays incorrect colors on
              AMD drivers"/>
@@ -20196,6 +20262,55 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="223"
       label="223: Force integer or srgb cube map texture complete on Linux
              AMD"/>
+  <int value="224"
+      label="224: VPx decoding isn't supported well before Windows 10
+             creators update."/>
+  <int value="225"
+      label="225: VPx decoding is too slow on Intel Broadwell, Skylake, and
+             CherryView"/>
+  <int value="226"
+      label="226: Accelerated VPx decoding is hanging on some videos."/>
+  <int value="227" label="227: Certain Apple devices leak stencil buffers"/>
+  <int value="228" label="228: Intel HD 3000 driver crashes frequently on Mac"/>
+  <int value="229"
+      label="229: Overlay sizes bigger than screen aren't accelerated on some
+             Intel drivers"/>
+  <int value="231"
+      label="231: Multisampled color renderbuffers can't be resized on
+             Qualcomm 4xx/5xx"/>
+  <int value="232"
+      label="232: Delayed copy NV12 crashes on Intel on Windows &lt;= 8.1."/>
+  <int value="233"
+      label="233: Delayed copy NV12 displays incorrect colors on NVIDIA
+             drivers."/>
+  <int value="234"
+      label="234: Avoid using EGL_IMAGE_EXTERNAL_FLUSH_EXT with
+             eglCreateImageKHR on NVIDIA"/>
+  <int value="235"
+      label="235: Avoid waiting on a egl fence before pageflipping and rely
+             on implicit sync."/>
+  <int value="236"
+      label="236: glClearColor does not always work on Intel 6xxx Mac drivers"/>
+  <int value="237"
+      label="237: eglSwapBuffers intermittently fails on Android when app
+             goes to background"/>
+  <int value="239"
+      label="239: Reset TexImage2D base level to 0 on Intel Mac 10.12.4"/>
+  <int value="240"
+      label="240: glGetQueryObject(GL_QUERY_RESULT_AVAILABLE) blocks
+             unexpectedly on Adreno"/>
+  <int value="241"
+      label="241: On Intel GPUs MSAA performance is not acceptable for GPU
+             rasterization. Duplicate of 132 for Android"/>
+  <int value="242"
+      label="242: Code produced by local variable initialization often
+             triggers crashes in Marshmallow Adreno driver"/>
+  <int value="243"
+      label="243: Program binaries don't contain transform feedback varyings
+             on Mali GPUs"/>
+  <int value="244"
+      label="244: Rendering to IOSurfaces via OpenGL is broken on NVIDIA GPUs
+             on High Sierra"/>
 </enum>
 
 <enum name="GpuImageUsageState">
@@ -21467,6 +21582,7 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="76" label="VR_FEEDBACK_INFOBAR_ANDROID"/>
   <int value="77" label="FRAMEBUST_BLOCK_INFOBAR_ANDROID"/>
   <int value="78" label="SURVEY_INFOBAR_ANDROID"/>
+  <int value="79" label="NEAR_OOM_INFOBAR_ANDROID"/>
 </enum>
 
 <enum name="InfoBarResponse">
@@ -24169,6 +24285,7 @@ from previous Chrome versions.
   <int value="-1811394154" label="disable-webrtc-hw-vp8-encoding"/>
   <int value="-1810294310" label="AndroidPaymentApps:enabled"/>
   <int value="-1808477331" label="MidiManagerCros:disabled"/>
+  <int value="-1807797669" label="google-doodle-url"/>
   <int value="-1804485171" label="disable-fullscreen-tab-detaching"/>
   <int value="-1802502753" label="enable-manual-password-generation:enabled"/>
   <int value="-1798337879" label="enable-md-downloads"/>
@@ -24260,6 +24377,7 @@ from previous Chrome versions.
   <int value="-1536293422" label="SharedArrayBuffer:enabled"/>
   <int value="-1536242739" label="security-chip"/>
   <int value="-1532014193" label="disable-encryption-migration"/>
+  <int value="-1520855274" label="PWAFullCodeCache:disabled"/>
   <int value="-1515415104" label="top-document-isolation:disabled"/>
   <int value="-1514943439" label="ash-enable-swipe-to-close-in-overview-mode"/>
   <int value="-1514611301" label="enable-data-reduction-proxy-bypass-warnings"/>
@@ -24493,6 +24611,7 @@ from previous Chrome versions.
   <int value="-881854123" label="enable-heap-profiling"/>
   <int value="-881447505" label="ash-disable-shelf-model-synchronization"/>
   <int value="-881054479" label="WebAssemblyStreaming:disabled"/>
+  <int value="-879055117" label="ClipboardContentSetting:enabled"/>
   <int value="-879031960" label="FetchKeepaliveTimeoutSetting:disabled"/>
   <int value="-876773752" label="enable-tablet-splitview"/>
   <int value="-876148583" label="ArcBootCompletedBroadcast:disabled"/>
@@ -24635,12 +24754,14 @@ from previous Chrome versions.
   <int value="-474806100" label="DataReductionProxyMainMenu:enabled"/>
   <int value="-474322576" label="disable-quick-unlock-pin"/>
   <int value="-472013317" label="WebRTC-H264WithOpenH264FFmpeg:disabled"/>
+  <int value="-471405972" label="ViewsProfileChooser:disabled"/>
   <int value="-462205750" label="enable-service-worker-sync"/>
   <int value="-461292699" label="ContentSuggestionsCategoryOrder:enabled"/>
   <int value="-460313418" label="ProgressBarThrottle:enabled"/>
   <int value="-460081932" label="CustomFeedbackUi:disabled"/>
   <int value="-455203267" label="use_new_features_summary"/>
   <int value="-449465495" label="disable-browser-task-scheduler"/>
+  <int value="-435914745" label="ClipboardContentSetting:disabled"/>
   <int value="-430360431" label="disable-password-generation"/>
   <int value="-428599163" label="NTPDownloadSuggestions:enabled"/>
   <int value="-418868128" label="enable-experimental-web-platform-features"/>
@@ -24683,6 +24804,7 @@ from previous Chrome versions.
   <int value="-340622848" label="disable-javascript-harmony-shipping"/>
   <int value="-340255045" label="allow-nacl-socket-api"/>
   <int value="-340023285" label="WebNFC:enabled"/>
+  <int value="-338978205" label="NavigationMojoResponse:enabled"/>
   <int value="-329727402" label="disable-files-quick-view"/>
   <int value="-328361990" label="enable-experimental-extension-apis"/>
   <int value="-326083626" label="AppBanners:disabled"/>
@@ -24751,6 +24873,7 @@ from previous Chrome versions.
   <int value="-141516902" label="UseModernMediaControls:enabled"/>
   <int value="-138983372" label="DesktopPWAWindowing:disabled"/>
   <int value="-138773929" label="PassiveDocumentEventListeners:enabled"/>
+  <int value="-135223364" label="AutofillShowTypePredictions:disabled"/>
   <int value="-122492389" label="enable-browser-task-scheduler"/>
   <int value="-120521482" label="DirectManipulationStylus:enabled"/>
   <int value="-119055644" label="GenericSensor:enabled"/>
@@ -24962,6 +25085,7 @@ from previous Chrome versions.
   <int value="506680761" label="WebNFC:disabled"/>
   <int value="510814146" label="OfflineBookmarks:enabled"/>
   <int value="513356954" label="InstantTethering:disabled"/>
+  <int value="513372959" label="ViewsProfileChooser:enabled"/>
   <int value="517568645" label="AnimatedAppMenuIcon:disabled"/>
   <int value="535131384" label="OmniboxTailSuggestions:enabled"/>
   <int value="535976218" label="enable-plugin-power-saver"/>
@@ -25054,6 +25178,7 @@ from previous Chrome versions.
   <int value="752939691" label="disable-tab-for-desktop-share"/>
   <int value="762700519" label="enable-checker-imaging"/>
   <int value="765306424" label="ModuleScriptsDynamicImport:disabled"/>
+  <int value="765803208" label="AutofillShowTypePredictions:enabled"/>
   <int value="773919225" label="disable-office-editing-component-extension"/>
   <int value="779086132" label="enable-data-reduction-proxy-alt"/>
   <int value="782167080" label="enable-new-qp-input-view"/>
@@ -25319,6 +25444,7 @@ from previous Chrome versions.
   <int value="1466502102" label="DelayNavigation:disabled"/>
   <int value="1469407485" label="disable-accelerated-2d-canvas"/>
   <int value="1479248574" label="disable-voice-input"/>
+  <int value="1480998407" label="enable-multi-mirroring"/>
   <int value="1481562816" label="disable-password-link"/>
   <int value="1486171015" label="disable-fill-on-account-select"/>
   <int value="1489915799" label="disable-permissions-blacklist"/>
@@ -25342,6 +25468,7 @@ from previous Chrome versions.
   <int value="1517863401" label="history-entry-requires-user-gesture"/>
   <int value="1529979182" label="EnablePasswordSelection:enabled"/>
   <int value="1533111748" label="Multidevice:enabled"/>
+  <int value="1536921097" label="NavigationMojoResponse:disabled"/>
   <int value="1538690515" label="OneGoogleBarOnLocalNtp:enabled"/>
   <int value="1541723759" label="ServiceWorkerNavigationPreload:disabled"/>
   <int value="1548776701" label="AllBookmarks:disabled"/>
@@ -25401,6 +25528,7 @@ from previous Chrome versions.
   <int value="1731522433" label="enable-offer-store-unmasked-wallet-cards"/>
   <int value="1733390925" label="force-enable-stylus-tools"/>
   <int value="1735934914" label="OverlayScrollbarFlashWhenMouseEnter:disabled"/>
+  <int value="1739456903" label="PWAFullCodeCache:enabled"/>
   <int value="1747279677" label="disable-delegated-renderer"/>
   <int value="1752168018" label="enable-stale-while-revalidate"/>
   <int value="1762320532" label="AutofillKeyboardAccessory:enabled"/>
@@ -25477,6 +25605,7 @@ from previous Chrome versions.
   <int value="1942911276" label="enable-grouped-history"/>
   <int value="1944156526" label="sync-url"/>
   <int value="1947350992" label="drop-sync-credential:disabled"/>
+  <int value="1949908940" label="disable-zip-archiver-unpacker"/>
   <int value="1951466218" label="enable-data-reduction-proxy-lite-page"/>
   <int value="1955677113" label="trace-export-events-to-etw"/>
   <int value="1958387645" label="ScanCardsInWebPayments:enabled"/>
@@ -27925,7 +28054,8 @@ Called by update_use_counter_css.py.-->
 </enum>
 
 <enum name="NetErrorCodes">
-<!-- Generated from net/base/net_error_list.h -->
+<!-- Generated from net/base/net_error_list.h.
+Called by update_net_error_codes.py.-->
 
   <int value="0" label="OK"/>
   <int value="1" label="IO_PENDING"/>
@@ -28033,6 +28163,7 @@ Called by update_use_counter_css.py.-->
   <int value="173" label="WS_UPGRADE"/>
   <int value="174" label="READ_IF_READY_NOT_IMPLEMENTED"/>
   <int value="175" label="SSL_VERSION_INTERFERENCE"/>
+  <int value="176" label="NO_BUFFER_SPACE"/>
   <int value="200" label="CERT_COMMON_NAME_INVALID"/>
   <int value="201" label="CERT_DATE_INVALID"/>
   <int value="202" label="CERT_AUTHORITY_INVALID"/>
@@ -29593,6 +29724,10 @@ Called by update_use_counter_css.py.-->
   </int>
   <int value="1500" label="MAXIMUM_CLOCK_BACKWARD_SKEW_EXCEEDED">
     The clock was set backwards too far in time.
+  </int>
+  <int value="1600" label="IMPORT_LOST">
+    The importing was not completed probably due to that Chrome was killed
+    before it was done.
   </int>
 </enum>
 
@@ -33683,6 +33818,21 @@ Called by update_use_counter_css.py.-->
   <int value="7" label="Service Worker timeout while processing event"/>
 </enum>
 
+<enum name="PushedStreamVaryResponseHeaderValues">
+  <int value="0" label="There is no Vary header."/>
+  <int value="1" label="The value of Vary is empty."/>
+  <int value="2" label="The value of Vary is &quot;*&quot;."/>
+  <int value="3"
+      label="The value of Vary is &quot;accept-encoding&quot; (case
+             insensitive)."/>
+  <int value="4"
+      label="The value of Vary contains &quot;accept-encoding&quot; (case
+             insensitive) and some other field names as well."/>
+  <int value="5"
+      label="The value of Vary does not contain &quot;accept-encoding&quot;,
+             is not empty, and is not &quot;*&quot;."/>
+</enum>
+
 <enum name="PushGetRegistrationStatus">
   <int value="0" label="Successful"/>
   <int value="1" label="No push service"/>
@@ -35917,14 +36067,6 @@ Called by update_use_counter_css.py.-->
   <int value="11" label="SERVICE_UTILITY_FAILED_TO_START"/>
 </enum>
 
-<enum name="ServiceWorkerCacheErrorType">
-  <int value="0" label="OK"/>
-  <int value="1" label="Exists Error"/>
-  <int value="2" label="Storage Error"/>
-  <int value="3" label="Not Found Error"/>
-  <int value="4" label="Quota Exceeded Error"/>
-</enum>
-
 <enum name="ServiceWorkerContextRequestHandlerStatus">
   <summary>
     The result of ServiceWorkerContextHandler handling a request for a service
@@ -36624,6 +36766,12 @@ Called by update_use_counter_css.py.-->
   <int value="2" label="New Profile"/>
 </enum>
 
+<enum name="SigninDiceMigrationStatus">
+  <int value="0" label="Enabled"/>
+  <int value="1" label="Disabled, ready for migration"/>
+  <int value="2" label="Disabled, not ready for migration"/>
+</enum>
+
 <enum name="SigninDiceResponseHeader">
   <int value="0" label="Signin"/>
   <int value="1" label="SignoutPrimary">
@@ -37121,8 +37269,9 @@ Called by update_use_counter_css.py.-->
 </enum>
 
 <enum name="SoftwareReporterExperimentError">
-  <int value="1" label="Bad tag"/>
-  <int value="2" label="Bad parameters"/>
+  <int value="0" label="Bad tag"/>
+  <int value="1" label="Bad parameters"/>
+  <int value="2" label="Missing parameters"/>
 </enum>
 
 <enum name="SoftwareReporterIPCDisconnected">
@@ -40811,8 +40960,9 @@ Called by update_traffic_annotation_histograms.py.-->
   <int value="0" label="kProduceCodeCache">
     The compilation produced a code cache
   </int>
-  <int value="1" label="kHitIsolateCache">
-    The compilation hit V8's isolate's compilation cache
+  <int value="1" label="kHitIsolateCacheWhenNoCache">
+    The compilation hit V8's isolate's compilation cache when Blink did not
+    request a code cache
   </int>
   <int value="2" label="kConsumeCodeCache">
     The compilation consumed a code cache
@@ -40851,6 +41001,14 @@ Called by update_traffic_annotation_histograms.py.-->
   </int>
   <int value="13" label="kNoCacheBecauseExtension">
     Blink did not request a code cache because it is compiling an extension
+  </int>
+  <int value="14" label="kHitIsolateCacheWhenProduceCodeCache">
+    The compilation hit V8's isolate's compilation cache and produced a code
+    cache
+  </int>
+  <int value="15" label="kHitIsolateCacheWhenConsumeCodeCache">
+    The compilation hit V8's isolate's compilation cache instead of consuming a
+    code cache
   </int>
 </enum>
 
@@ -41598,6 +41756,7 @@ Called by update_traffic_annotation_histograms.py.-->
   <int value="1" label="Could not elide URL"/>
   <int value="2" label="Unhandled PageInfo"/>
   <int value="3" label="URL contained strong RTL chars"/>
+  <int value="4" label="Chrome needs audio permission for voice input"/>
 </enum>
 
 <enum name="VRViewerType">
@@ -41822,6 +41981,14 @@ Called by update_traffic_annotation_histograms.py.-->
   <int value="0" label="Open an installed WebAPK successfully"/>
   <int value="1" label="(Obsolete) Launch intent for WebAPK is null"/>
   <int value="2" label="Activity for WebAPK not found."/>
+</enum>
+
+<enum name="WebApkPermissionType">
+  <int value="0" label="Other"/>
+  <int value="1" label="LOCATION"/>
+  <int value="2" label="MICROPHONE"/>
+  <int value="3" label="CAMERA"/>
+  <int value="4" label="STORAGE"/>
 </enum>
 
 <enum name="WebApkUpdateRequestQueued">

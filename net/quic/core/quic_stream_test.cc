@@ -27,13 +27,10 @@
 using std::string;
 using testing::AnyNumber;
 using testing::AtLeast;
-using testing::CreateFunctor;
-using testing::DoAll;
 using testing::InSequence;
 using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
-using testing::WithArgs;
 using testing::_;
 
 namespace net {
@@ -449,6 +446,20 @@ TEST_F(QuicStreamTest, FinalByteOffsetFromRst) {
   QuicRstStreamFrame rst_frame(stream_->id(), QUIC_STREAM_CANCELLED, 1234);
   stream_->OnStreamReset(rst_frame);
   EXPECT_TRUE(stream_->HasFinalReceivedByteOffset());
+}
+
+TEST_F(QuicStreamTest, InvalidFinalByteOffsetFromRst) {
+  Initialize(kShouldProcessData);
+
+  EXPECT_FALSE(stream_->HasFinalReceivedByteOffset());
+  QuicRstStreamFrame rst_frame(stream_->id(), QUIC_STREAM_CANCELLED,
+                               0xFFFFFFFFFFFF);
+  // Stream should not accept the frame, and the connection should be closed.
+  EXPECT_CALL(*connection_,
+              CloseConnection(QUIC_FLOW_CONTROL_RECEIVED_TOO_MUCH_DATA, _, _));
+  stream_->OnStreamReset(rst_frame);
+  EXPECT_TRUE(stream_->HasFinalReceivedByteOffset());
+  stream_->OnClose();
 }
 
 TEST_F(QuicStreamTest, FinalByteOffsetFromZeroLengthStreamFrame) {

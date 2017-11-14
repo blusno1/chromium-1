@@ -677,6 +677,34 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Accel_Move_Window_To_Above_Display">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User presses accelerator trying to move active window to above display.
+  </description>
+</action>
+
+<action name="Accel_Move_Window_To_Below_Display">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User presses accelerator trying to move active window to below display.
+  </description>
+</action>
+
+<action name="Accel_Move_Window_To_Left_Display">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User presses accelerator trying to move active window to left display.
+  </description>
+</action>
+
+<action name="Accel_Move_Window_To_Right_Display">
+  <owner>warx@chromium.org</owner>
+  <description>
+    User presses accelerator trying to move active window to right display.
+  </description>
+</action>
+
 <action name="Accel_NewTab_T">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -1732,7 +1760,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Arc.Launcher.Search.OpenPlayStore.InstantApps">
-  <owner>hejq@chromium.com</owner>
+  <owner>hejq@chromium.org</owner>
   <description>
     Recorded when the user opens the an instant app from a Play Store app search
     query.
@@ -1740,7 +1768,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Arc.Launcher.Search.OpenPlayStore.UninstalledApps">
-  <owner>hejq@chromium.com</owner>
+  <owner>hejq@chromium.org</owner>
   <description>
     Recorded when the user opens the installing page of a Play Store app search
     result.
@@ -2975,6 +3003,20 @@ should be able to be added at any place in this file.
   <description>
     A Browser Actions menu is opened in Chrome. A Browser Actions menu is a
     Chrome style context menu opened by 3rd party apps.
+  </description>
+</action>
+
+<action name="BrowserActions.TabOpenedNotificationClicked">
+  <owner>ltian@chromium.org</owner>
+  <description>
+    Users click the notification of opening tab in background.
+  </description>
+</action>
+
+<action name="BrowserActions.TabOpenedNotificationCreated">
+  <owner>ltian@chromium.org</owner>
+  <description>
+    Browser Actions creates a notifcation of opening tab in background.
   </description>
 </action>
 
@@ -12057,7 +12099,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileTabClosedUndoShortCut">
-  <owner>xingliu@chromium.com</owner>
+  <owner>xingliu@chromium.org</owner>
   <description>
     Undo tab closure by keyboard shortcut ctrl+shift+T, for Android only.
   </description>

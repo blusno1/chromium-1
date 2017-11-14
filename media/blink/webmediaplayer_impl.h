@@ -105,11 +105,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
       WebMediaPlayerDelegate* delegate,
       std::unique_ptr<RendererFactorySelector> renderer_factory_selector,
       UrlIndex* url_index,
+      std::unique_ptr<VideoFrameCompositor> compositor,
       std::unique_ptr<WebMediaPlayerParams> params);
   ~WebMediaPlayerImpl() override;
 
   // WebSurfaceLayerBridgeObserver implementation.
-  void OnWebLayerReplaced() override;
+  void OnWebLayerUpdated() override;
 
   void Load(LoadType load_type,
             const blink::WebMediaPlayerSource& source,
@@ -352,8 +353,9 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void SetNetworkState(blink::WebMediaPlayer::NetworkState state);
   void SetReadyState(blink::WebMediaPlayer::ReadyState state);
 
-  // Returns the current video frame from |compositor_|. Blocks until the
-  // compositor can return the frame.
+  // Returns the current video frame from |compositor_|, and asks the compositor
+  // to update its frame if it is stale.
+  // Can return a nullptr.
   scoped_refptr<VideoFrame> GetCurrentFrameFromCompositor() const;
 
   // Called when the demuxer encounters encrypted streams.
@@ -618,7 +620,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // WebMediaPlayer may also receive directives (play, pause) from the delegate
   // via the WebMediaPlayerDelegate::Observer interface after registration.
   //
-  // NOTE: HTMLMediaElement is a Blink::SuspendableObject, and will receive a
+  // NOTE: HTMLMediaElement is a Blink::PausableObject, and will receive a
   // call to contextDestroyed() when Blink::Document::shutdown() is called.
   // Document::shutdown() is called before the frame detaches (and before the
   // frame is destroyed). RenderFrameImpl owns |delegate_| and is guaranteed
@@ -804,9 +806,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Whether the use of a surface layer instead of a video layer is enabled.
   bool surface_layer_for_video_enabled_ = false;
-
-  mutable gfx::Size last_uploaded_frame_size_;
-  mutable base::TimeDelta last_uploaded_frame_timestamp_;
 
   base::CancelableCallback<void(base::TimeTicks)> frame_time_report_cb_;
 

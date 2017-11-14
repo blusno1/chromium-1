@@ -6,12 +6,10 @@
 
 #include <algorithm>
 
-#include "base/containers/adapters.h"
 #include "base/macros.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/model/controller_model.h"
 #include "chrome/browser/vr/model/reticle_model.h"
-#include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 // TODO(tiborg): Remove include once we use a generic type to pass scroll/fling
 // gestures.
@@ -29,12 +27,6 @@ static constexpr gfx::Point3F kOrigin = {0.0f, 0.0f, 0.0f};
 static constexpr float kControllerQuiescenceAngularThresholdDegrees = 3.5f;
 static constexpr float kControllerQuiescenceTemporalThresholdSeconds = 1.2f;
 
-gfx::Point3F GetRayPoint(const gfx::Point3F& rayOrigin,
-                         const gfx::Vector3dF& rayVector,
-                         float scale) {
-  return rayOrigin + gfx::ScaleVector3d(rayVector, scale);
-}
-
 bool IsScrollEvent(const GestureList& list) {
   if (list.empty()) {
     return false;
@@ -51,27 +43,27 @@ bool IsScrollEvent(const GestureList& list) {
   return false;
 }
 
-bool GetTargetLocalPoint(const gfx::Vector3dF& eye_to_target,
-                         const UiElement& element,
-                         gfx::PointF* out_target_local_point,
-                         gfx::Point3F* out_target_point,
-                         float* out_distance_to_plane) {
-  if (!element.GetRayDistance(kOrigin, eye_to_target, out_distance_to_plane)) {
-    return false;
+void HitTestElements(UiElement* element,
+                     ReticleModel* reticle_model,
+                     HitTestRequest* request) {
+  for (auto& child : element->children()) {
+    HitTestElements(child.get(), reticle_model, request);
   }
 
-  if (*out_distance_to_plane < 0) {
-    return false;
+  if (!element->IsHitTestable()) {
+    return;
   }
 
-  *out_target_point =
-      GetRayPoint(kOrigin, eye_to_target, *out_distance_to_plane);
-  gfx::PointF unit_xy_point =
-      element.GetUnitRectangleCoordinates(*out_target_point);
+  HitTestResult result;
+  element->HitTest(*request, &result);
+  if (result.type != HitTestResult::Type::kHits) {
+    return;
+  }
 
-  out_target_local_point->set_x(0.5f + unit_xy_point.x());
-  out_target_local_point->set_y(0.5f - unit_xy_point.y());
-  return true;
+  reticle_model->target_element_id = element->id();
+  reticle_model->target_local_point = result.local_hit_point;
+  reticle_model->target_point = result.hit_point;
+  request->max_distance_to_plane = result.distance_to_plane;
 }
 
 }  // namespace
@@ -85,10 +77,9 @@ void UiInputManager::HandleInput(base::TimeTicks current_time,
                                  ReticleModel* reticle_model,
                                  GestureList* gesture_list) {
   UpdateQuiescenceState(current_time, controller_model);
-  gfx::Vector3dF eye_to_target;
   reticle_model->target_element_id = 0;
   reticle_model->target_local_point = kInvalidTargetPoint;
-  GetVisualTargetElement(controller_model, reticle_model, &eye_to_target);
+  GetVisualTargetElement(controller_model, reticle_model);
 
   UiElement* target_element = nullptr;
   // TODO(vollick): this should be replaced with a formal notion of input
@@ -96,11 +87,14 @@ void UiInputManager::HandleInput(base::TimeTicks current_time,
   if (input_locked_element_id_) {
     target_element = scene_->GetUiElementById(input_locked_element_id_);
     if (target_element) {
-      gfx::Point3F plane_intersection_point;
-      float distance_to_plane;
-      if (!GetTargetLocalPoint(eye_to_target, *target_element,
-                               &reticle_model->target_local_point,
-                               &plane_intersection_point, &distance_to_plane)) {
+      HitTestRequest request;
+      request.ray_origin = kOrigin;
+      request.ray_target = reticle_model->target_point;
+      request.max_distance_to_plane = 2 * scene_->background_distance();
+      HitTestResult result;
+      target_element->HitTest(request, &result);
+      reticle_model->target_local_point = result.local_hit_point;
+      if (result.type == HitTestResult::Type::kNone) {
         reticle_model->target_local_point = kInvalidTargetPoint;
       }
     }
@@ -348,8 +342,7 @@ bool UiInputManager::SendButtonUp(UiElement* target,
 
 void UiInputManager::GetVisualTargetElement(
     const ControllerModel& controller_model,
-    ReticleModel* reticle_model,
-    gfx::Vector3dF* out_eye_to_target) const {
+    ReticleModel* reticle_model) const {
   // If we place the reticle based on elements intersecting the controller beam,
   // we can end up with the reticle hiding behind elements, or jumping laterally
   // in the field of view. This is physically correct, but hard to use. For
@@ -366,42 +359,19 @@ void UiInputManager::GetVisualTargetElement(
   // simplicity.
   float distance = scene_->background_distance();
   reticle_model->target_point =
-      GetRayPoint(controller_model.laser_origin,
-                  controller_model.laser_direction, distance);
-  *out_eye_to_target = reticle_model->target_point - kOrigin;
-  out_eye_to_target->GetNormalized(out_eye_to_target);
+      controller_model.laser_origin +
+      gfx::ScaleVector3d(controller_model.laser_direction, distance);
 
-  std::vector<const UiElement*> elements;
-  for (auto& element : scene_->root_element()) {
-    if (element.IsVisible()) {
-      elements.push_back(&element);
-    }
-  }
+  // Determine which UI element (if any) intersects the line between the eyes
+  // and the controller target position.
+  float closest_element_distance =
+      (reticle_model->target_point - kOrigin).Length();
 
-  std::vector<const UiElement*> sorted =
-      UiRenderer::GetElementsInDrawOrder(elements);
-
-  for (const auto* element : base::Reversed(sorted)) {
-    if (!element->IsHitTestable()) {
-      continue;
-    }
-
-    gfx::PointF local_point;
-    gfx::Point3F plane_intersection_point;
-    float distance_to_plane;
-    if (!GetTargetLocalPoint(*out_eye_to_target, *element, &local_point,
-                             &plane_intersection_point, &distance_to_plane)) {
-      continue;
-    }
-    if (!element->HitTest(local_point)) {
-      continue;
-    }
-
-    reticle_model->target_point = plane_intersection_point;
-    reticle_model->target_element_id = element->id();
-    reticle_model->target_local_point = local_point;
-    break;
-  }
+  HitTestRequest request;
+  request.ray_origin = kOrigin;
+  request.ray_target = reticle_model->target_point;
+  request.max_distance_to_plane = closest_element_distance;
+  HitTestElements(&scene_->root_element(), reticle_model, &request);
 }
 
 void UiInputManager::UpdateQuiescenceState(

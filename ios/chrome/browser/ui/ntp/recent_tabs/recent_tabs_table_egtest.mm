@@ -8,7 +8,9 @@
 #import <map>
 #import <string>
 
+#include "base/test/scoped_feature_list.h"
 #include "components/strings/grit/components_strings.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -104,6 +106,10 @@ id<GREYMatcher> RecentlyClosedLabelMatcher() {
 // Tests that a closed tab appears in the Recent Tabs panel, and that tapping
 // the entry in the Recent Tabs panel re-opens the closed tab.
 - (void)testClosedTabAppearsInRecentTabsPanel {
+  // TODO(crbug.com/782551): Rewrite this egtest for the new bookmark.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   const GURL testPageURL = web::test::HttpServer::MakeUrl(kURLOfTestPage);
 
   // Open the test page in a new tab.
@@ -131,8 +137,12 @@ id<GREYMatcher> RecentlyClosedLabelMatcher() {
     [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   }
 
-  // Close the tab containing the test page.
+  // Close the tab containing the test page and wait for the stack view to
+  // appear.
   chrome_test_util::CloseCurrentTab();
+  // TODO(crbug.com/783192): ChromeEarlGrey should have a method to close the
+  // current tab and synchronize with the UI.
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 
   // Open the Recent Tabs panel and check that the test page is present.
   OpenRecentTabsPanel();
@@ -150,6 +160,10 @@ id<GREYMatcher> RecentlyClosedLabelMatcher() {
 
 // Tests that tapping "Show Full History" open the history.
 - (void)testOpenHistory {
+  // TODO(crbug.com/782551): Rewrite this egtest for the new bookmark.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
+
   OpenRecentTabsPanel();
 
   // Tap "Show Full History"

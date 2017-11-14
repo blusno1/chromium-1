@@ -13,6 +13,7 @@
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/transport_security_state.h"
 #include "net/quic/chromium/mock_crypto_client_stream_factory.h"
+#include "net/quic/chromium/quic_http_stream.h"
 #include "net/quic/chromium/test_task_runner.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/mock_random.h"
@@ -20,6 +21,9 @@
 #include "net/socket/fuzzed_socket_factory.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
+#include "net/test/cert_test_util.h"
+#include "net/test/gtest_util.h"
+#include "net/test/test_data_directory.h"
 
 namespace net {
 
@@ -61,10 +65,14 @@ struct Env {
     channel_id_service =
         std::make_unique<ChannelIDService>(new DefaultChannelIDStore(nullptr));
     cert_transparency_verifier = std::make_unique<MultiLogCTVerifier>();
+    verify_details.cert_verify_result.verified_cert =
+        ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+    verify_details.cert_verify_result.is_issued_by_known_root = true;
   }
 
   MockClock clock;
   scoped_refptr<SSLConfigService> ssl_config_service;
+  ProofVerifyDetailsChromium verify_details;
   MockCryptoClientStreamFactory crypto_client_stream_factory;
   HostPortPair host_port_pair;
   MockRandom random_generator;
@@ -90,6 +98,21 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Initialize this on each loop since some options mutate this.
   HttpServerPropertiesImpl http_server_properties;
 
+  bool store_server_configs_in_properties = data_provider.ConsumeBool();
+  bool mark_quic_broken_when_network_blackholes = data_provider.ConsumeBool();
+  bool connect_using_default_network = data_provider.ConsumeBool();
+  bool migrate_sessions_on_network_change = data_provider.ConsumeBool();
+  bool migrate_sessions_early = data_provider.ConsumeBool();
+  bool allow_server_migration = data_provider.ConsumeBool();
+  bool race_cert_verification = data_provider.ConsumeBool();
+  bool estimate_initial_rtt = data_provider.ConsumeBool();
+  bool enable_token_binding = data_provider.ConsumeBool();
+
+  env->crypto_client_stream_factory.AddProofVerifyDetails(&env->verify_details);
+
+  if (migrate_sessions_early)
+    migrate_sessions_on_network_change = true;
+
   std::unique_ptr<QuicStreamFactory> factory =
       std::make_unique<QuicStreamFactory>(
           env->net_log.net_log(), &host_resolver, env->ssl_config_service.get(),
@@ -98,26 +121,28 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
           &env->transport_security_state, env->cert_transparency_verifier.get(),
           nullptr, &env->crypto_client_stream_factory, &env->random_generator,
           &env->clock, kDefaultMaxPacketSize, std::string(),
-          data_provider.ConsumeBool(), data_provider.ConsumeBool(),
+          store_server_configs_in_properties,
+          mark_quic_broken_when_network_blackholes,
           kIdleConnectionTimeoutSeconds, kPingTimeoutSecs,
-          data_provider.ConsumeBool(), data_provider.ConsumeBool(),
-          data_provider.ConsumeBool(), data_provider.ConsumeBool(),
-          data_provider.ConsumeBool(), data_provider.ConsumeBool(),
-          env->connection_options, env->client_connection_options,
-          data_provider.ConsumeBool());
+          connect_using_default_network, migrate_sessions_on_network_change,
+          migrate_sessions_early, allow_server_migration,
+          race_cert_verification, estimate_initial_rtt, env->connection_options,
+          env->client_connection_options, enable_token_binding);
 
   QuicStreamRequest request(factory.get());
   TestCompletionCallback callback;
   NetErrorDetails net_error_details;
   request.Request(env->host_port_pair,
                   data_provider.PickValueInArray(kSupportedTransportVersions),
-                  PRIVACY_MODE_DISABLED, kCertVerifyFlags, GURL(kUrl), kMethod,
+                  PRIVACY_MODE_DISABLED, kCertVerifyFlags, GURL(kUrl),
                   env->net_log, &net_error_details, callback.callback());
 
   callback.WaitForResult();
-  std::unique_ptr<HttpStream> stream = request.CreateStream();
-  if (!stream.get())
+  std::unique_ptr<QuicChromiumClientSession::Handle> session =
+      request.ReleaseSessionHandle();
+  if (!session)
     return 0;
+  std::unique_ptr<HttpStream> stream(new QuicHttpStream(std::move(session)));
 
   HttpRequestInfo request_info;
   request_info.method = kMethod;

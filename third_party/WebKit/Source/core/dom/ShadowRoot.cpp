@@ -151,12 +151,6 @@ void ShadowRoot::setInnerHTML(const StringOrTrustedHTML& stringOrHtml,
                     ? stringOrHtml.GetAsString()
                     : stringOrHtml.GetAsTrustedHTML()->toString();
 
-  // TODO(mkwst): This is an ugly hack that will be resolved once `TreatNullAs`
-  // is treated as an extended attribute on the `DOMString` type rather than
-  // as an extended attribute on the attribute. https://crbug.com/714866
-  if (html == "null")
-    html = "";
-
   SetInnerHTMLFromString(html, exception_state);
 }
 
@@ -236,6 +230,14 @@ void ShadowRoot::RemovedFrom(ContainerNode* insertion_point) {
   }
 
   DocumentFragment::RemovedFrom(insertion_point);
+}
+
+void ShadowRoot::SetNeedsAssignmentRecalc() {
+  DCHECK(RuntimeEnabledFeatures::IncrementalShadowDOMEnabled());
+  DCHECK(IsV1());
+  if (!slot_assignment_)
+    return;
+  return slot_assignment_->SetNeedsAssignmentRecalc();
 }
 
 void ShadowRoot::ChildrenChanged(const ChildrenChange& change) {

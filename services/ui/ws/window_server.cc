@@ -68,6 +68,7 @@ WindowServer::WindowServer(WindowServerDelegate* delegate)
       next_wm_change_id_(0),
       window_manager_window_tree_factory_set_(this, &user_id_tracker_),
       host_frame_sink_manager_(base::MakeUnique<viz::HostFrameSinkManager>()),
+      video_detector_(host_frame_sink_manager_.get()),
       display_creation_config_(DisplayCreationConfig::UNKNOWN) {
   user_id_tracker_.AddObserver(this);
   OnUserIdAdded(user_id_tracker_.active_id());
@@ -154,6 +155,7 @@ WindowTree* WindowServer::EmbedAtWindow(
 
   AddTree(std::move(tree_ptr), std::move(binding), std::move(window_tree_ptr));
   OnTreeMessagedClient(tree->id());
+  root->UpdateFrameSinkId(ClientWindowId(tree->id(), 0));
   return tree;
 }
 
@@ -351,7 +353,7 @@ void WindowServer::WindowManagerChangeCompleted(
 void WindowServer::WindowManagerCreatedTopLevelWindow(
     WindowTree* wm_tree,
     uint32_t window_manager_change_id,
-    const ServerWindow* window) {
+    ServerWindow* window) {
   InFlightWindowManagerChange change;
   if (!GetAndClearInFlightWindowManagerChange(window_manager_change_id,
                                               &change)) {
@@ -382,8 +384,11 @@ void WindowServer::WindowManagerCreatedTopLevelWindow(
     return;
   }
 
-  tree->OnWindowManagerCreatedTopLevelWindow(window_manager_change_id,
-                                             change.client_change_id, window);
+  viz::FrameSinkId updated_frame_sink_id =
+      tree->OnWindowManagerCreatedTopLevelWindow(
+          window_manager_change_id, change.client_change_id, window);
+  if (window)
+    window->UpdateFrameSinkId(updated_frame_sink_id);
 }
 
 void WindowServer::ProcessWindowBoundsChanged(

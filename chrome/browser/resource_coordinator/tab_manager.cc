@@ -43,6 +43,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
+#include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/common/chrome_constants.h"
@@ -88,13 +89,6 @@ const size_t kNumOfLoadingSlots = 1;
 // The default interval in seconds after which to adjust the oom_score_adj
 // value.
 const int kAdjustmentIntervalSeconds = 10;
-
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-// For each period of this length record a statistic to indicate whether or not
-// the user experienced a low memory event. If this interval is changed,
-// Tabs.Discard.DiscardInLastMinute must be replaced with a new statistic.
-const int kRecentTabDiscardIntervalSeconds = 60;
-#endif
 
 // The time during which a tab is protected from discarding after it stops being
 // audible.
@@ -225,7 +219,6 @@ constexpr base::TimeDelta TabManager::kDefaultMinTimeToPurge;
 
 TabManager::TabManager()
     : discard_count_(0),
-      recent_tab_discard_(false),
       discard_once_(false),
 #if !defined(OS_CHROMEOS)
       minimum_protection_time_(base::TimeDelta::FromMinutes(10)),
@@ -292,11 +285,6 @@ void TabManager::Start() {
 // MemoryPressureMonitor is not implemented on Linux so far and tabs are never
 // discarded.
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-  if (!recent_tab_discard_timer_.IsRunning()) {
-    recent_tab_discard_timer_.Start(
-        FROM_HERE, TimeDelta::FromSeconds(kRecentTabDiscardIntervalSeconds),
-        this, &TabManager::RecordRecentTabDiscard);
-  }
   start_time_ = NowTicks();
   // Create a |MemoryPressureListener| to listen for memory events when
   // MemoryCoordinator is disabled. When MemoryCoordinator is enabled
@@ -341,7 +329,6 @@ void TabManager::Start() {
 
 void TabManager::Stop() {
   update_timer_.Stop();
-  recent_tab_discard_timer_.Stop();
   force_load_timer_->Stop();
   memory_pressure_listener_.reset();
 }
@@ -715,19 +702,6 @@ void TabManager::RecordDiscardStatistics() {
   last_discard_time_ = NowTicks();
 }
 
-void TabManager::RecordRecentTabDiscard() {
-  // If Chrome is shutting down, do not do anything.
-  if (g_browser_process->IsShuttingDown())
-    return;
-
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  // If the interval is changed, so should the histogram name.
-  UMA_HISTOGRAM_BOOLEAN("Tabs.Discard.DiscardInLastMinute",
-                        recent_tab_discard_);
-  // Reset for the next interval.
-  recent_tab_discard_ = false;
-}
-
 void TabManager::PurgeBrowserMemory() {
   // Based on experimental evidence, attempts to free memory from renderers
   // have been too slow to use in OOM situations (V8 garbage collection) or
@@ -926,7 +900,6 @@ WebContents* TabManager::DiscardWebContentsAt(int index,
   // Find a different approach that doesn't do that, perhaps based on
   // RenderFrameProxyHosts.
   delete old_contents;
-  recent_tab_discard_ = true;
 
   return null_contents;
 }
@@ -1168,8 +1141,10 @@ TabManager::MaybeThrottleNavigation(BackgroundTabNavigationThrottle* throttle) {
     return content::NavigationThrottle::PROCEED;
   }
 
-  // TODO(zhenw): Try to set the favicon and title from history service if this
-  // navigation will be delayed.
+  // Notify TabUIHelper that the navigation is delayed, so that the tab UI such
+  // as favicon and title can be updated accordingly.
+  TabUIHelper::FromWebContents(contents)->NotifyInitialNavigationDelayed(true);
+
   GetWebContentsData(contents)->SetTabLoadingState(TAB_IS_NOT_LOADING);
   pending_navigations_.push_back(throttle);
   std::stable_sort(pending_navigations_.begin(), pending_navigations_.end(),
@@ -1205,11 +1180,17 @@ bool TabManager::CanLoadNextTab() const {
   return false;
 }
 
-void TabManager::OnWillRestoreTab(WebContents* web_contents) {
-  WebContentsData* data = GetWebContentsData(web_contents);
+void TabManager::OnWillRestoreTab(WebContents* contents) {
+  WebContentsData* data = GetWebContentsData(contents);
   DCHECK(!data->is_in_session_restore());
   data->SetIsInSessionRestore(true);
-  data->SetIsRestoredInForeground(web_contents->IsVisible());
+  data->SetIsRestoredInForeground(contents->IsVisible());
+
+  // TabUIHelper is initialized in TabHelpers::AttachTabHelpers. But this place
+  // gets called earlier than that. So for restored tabs, also initialize their
+  // TabUIHelper here.
+  TabUIHelper::CreateForWebContents(contents);
+  TabUIHelper::FromWebContents(contents)->set_created_by_session_restore(true);
 }
 
 void TabManager::OnDidFinishNavigation(
@@ -1228,13 +1209,13 @@ void TabManager::OnDidFinishNavigation(
   }
 }
 
-void TabManager::OnDidStopLoading(content::WebContents* contents) {
+void TabManager::OnTabIsLoaded(content::WebContents* contents) {
   DCHECK_EQ(TAB_IS_LOADED, GetWebContentsData(contents)->tab_loading_state());
   bool was_in_background_tab_opening_session =
       IsInBackgroundTabOpeningSession();
 
   loading_contents_.erase(contents);
-  stats_collector_->OnDidStopLoading(contents);
+  stats_collector_->OnTabIsLoaded(contents);
   LoadNextBackgroundTabIfNeeded();
 
   if (was_in_background_tab_opening_session &&
@@ -1308,10 +1289,11 @@ void TabManager::ResumeTabNavigationIfNeeded(content::WebContents* contents) {
 }
 
 void TabManager::ResumeNavigation(BackgroundTabNavigationThrottle* throttle) {
-  content::NavigationHandle* navigation_handle = throttle->navigation_handle();
-  GetWebContentsData(navigation_handle->GetWebContents())
-      ->SetTabLoadingState(TAB_IS_LOADING);
-  loading_contents_.insert(navigation_handle->GetWebContents());
+  content::WebContents* contents =
+      throttle->navigation_handle()->GetWebContents();
+  GetWebContentsData(contents)->SetTabLoadingState(TAB_IS_LOADING);
+  loading_contents_.insert(contents);
+  TabUIHelper::FromWebContents(contents)->NotifyInitialNavigationDelayed(false);
 
   throttle->ResumeNavigation();
 }

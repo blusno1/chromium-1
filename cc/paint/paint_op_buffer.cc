@@ -25,71 +25,6 @@ SkIRect RoundOutRect(const SkRect& rect) {
   return result;
 }
 
-bool QuickRejectDraw(const PaintOp* op, const SkCanvas* canvas) {
-  DCHECK(op->IsDrawOp());
-
-  SkRect rect;
-  if (!PaintOp::GetBounds(op, &rect))
-    return false;
-
-  if (op->IsPaintOpWithFlags()) {
-    SkPaint paint = static_cast<const PaintOpWithFlags*>(op)->flags.ToSkPaint();
-    if (!paint.canComputeFastBounds())
-      return false;
-    paint.computeFastBounds(rect, &rect);
-  }
-
-  return canvas->quickReject(rect);
-}
-
-void RasterWithAlpha(const PaintOpWithFlags* op,
-                     SkCanvas* canvas,
-                     const PlaybackParams& params,
-                     uint8_t alpha) {
-  DCHECK(op->IsDrawOp());
-  DCHECK(op->IsPaintOpWithFlags());
-  DCHECK_NE(op->GetType(), PaintOpType::DrawRecord);
-  DCHECK_NE(alpha, 255u);
-
-  // This is an optimization to replicate the behaviour in SkCanvas
-  // which rejects ops that draw outside the current clip. In the
-  // general case we defer this to the SkCanvas but if we will be
-  // using an ImageProvider for pre-decoding images, we can save
-  // performing an expensive decode that will never be rasterized.
-  const bool skip_op = params.image_provider &&
-                       PaintOp::OpHasDiscardableImages(op) &&
-                       QuickRejectDraw(op, canvas);
-  if (skip_op)
-    return;
-
-  // Replace the PaintFlags with a copy that holds the decoded image from the
-  // ImageProvider if it consists of an image shader.
-  base::Optional<ScopedImageFlags> scoped_flags;
-  const PaintFlags* decoded_flags = &op->flags;
-  if (params.image_provider && op->HasDiscardableImagesFromFlags()) {
-    scoped_flags.emplace(params.image_provider, op->flags,
-                         canvas->getTotalMatrix());
-    decoded_flags = scoped_flags.value().decoded_flags();
-
-    // If we failed to decode the flags, skip the op.
-    if (!decoded_flags)
-      return;
-  }
-  DCHECK(decoded_flags->SupportsFoldingAlpha());
-
-  if (scoped_flags.has_value()) {
-    // If we already made a copy, just use that to override the alpha
-    // instead of making another copy.
-    PaintFlags* decoded_flags = scoped_flags.value().decoded_flags();
-    decoded_flags->setAlpha(SkMulDiv255Round(decoded_flags->getAlpha(), alpha));
-    op->RasterWithFlags(canvas, decoded_flags, params);
-  } else {
-    PaintFlags alpha_flags = op->flags;
-    alpha_flags.setAlpha(SkMulDiv255Round(alpha_flags.getAlpha(), alpha));
-    op->RasterWithFlags(canvas, &alpha_flags, params);
-  }
-}
-
 }  // namespace
 
 #define TYPES(M)      \
@@ -126,6 +61,10 @@ static constexpr size_t kNumOpTypes =
 // Verify that every op is in the TYPES macro.
 #define M(T) +1
 static_assert(kNumOpTypes == TYPES(M), "Missing op in list");
+#undef M
+
+#define M(T) sizeof(T),
+static const size_t g_type_to_size[kNumOpTypes] = {TYPES(M)};
 #undef M
 
 template <typename T, bool HasFlags>
@@ -324,6 +263,15 @@ PlaybackParams::PlaybackParams(ImageProvider* image_provider,
                                const SkMatrix& original_ctm)
     : image_provider(image_provider), original_ctm(original_ctm) {}
 
+PaintOp::SerializeOptions::SerializeOptions() = default;
+
+PaintOp::SerializeOptions::SerializeOptions(ImageProvider* image_provider,
+                                            SkCanvas* canvas,
+                                            const SkMatrix& original_ctm)
+    : image_provider(image_provider),
+      canvas(canvas),
+      original_ctm(original_ctm) {}
+
 size_t AnnotateOp::Serialize(const PaintOp* base_op,
                              void* memory,
                              size_t size,
@@ -395,7 +343,7 @@ size_t DrawImageOp::Serialize(const PaintOp* base_op,
   auto* op = static_cast<const DrawImageOp*>(base_op);
   PaintOpWriter helper(memory, size);
   helper.Write(op->flags);
-  helper.Write(op->image, options.decode_cache);
+  helper.Write(op->image, options.image_provider);
   helper.Write(op->left);
   helper.Write(op->top);
   return helper.size();
@@ -408,7 +356,7 @@ size_t DrawImageRectOp::Serialize(const PaintOp* base_op,
   auto* op = static_cast<const DrawImageRectOp*>(base_op);
   PaintOpWriter helper(memory, size);
   helper.Write(op->flags);
-  helper.Write(op->image, options.decode_cache);
+  helper.Write(op->image, options.image_provider);
   helper.Write(op->src);
   helper.Write(op->dst);
   helper.Write(op->constraint);
@@ -564,7 +512,12 @@ size_t SetMatrixOp::Serialize(const PaintOp* op,
                               void* memory,
                               size_t size,
                               const SerializeOptions& options) {
-  return SimpleSerialize<SetMatrixOp>(op, memory, size);
+  if (options.original_ctm.isIdentity())
+    return SimpleSerialize<SetMatrixOp>(op, memory, size);
+
+  SetMatrixOp transformed(*static_cast<const SetMatrixOp*>(op));
+  transformed.matrix.postConcat(options.original_ctm);
+  return SimpleSerialize<SetMatrixOp>(&transformed, memory, size);
 }
 
 size_t TranslateOp::Serialize(const PaintOp* op,
@@ -577,7 +530,7 @@ size_t TranslateOp::Serialize(const PaintOp* op,
 template <typename T>
 void UpdateTypeAndSkip(T* op) {
   op->type = static_cast<uint8_t>(T::kType);
-  op->skip = MathUtil::UncheckedRoundUp(sizeof(T), PaintOpBuffer::PaintOpAlign);
+  op->skip = PaintOpBuffer::ComputeOpSkip(sizeof(T));
 }
 
 template <typename T>
@@ -1188,7 +1141,7 @@ void DrawTextBlobOp::RasterWithFlags(const DrawTextBlobOp* op,
                                      SkCanvas* canvas,
                                      const PlaybackParams& params) {
   SkPaint paint = flags->ToSkPaint();
-  canvas->drawTextBlob(op->blob.get(), op->x, op->y, paint);
+  canvas->drawTextBlob(op->blob->ToSkTextBlob().get(), op->x, op->y, paint);
 }
 
 void RestoreOp::Raster(const RestoreOp* op,
@@ -1300,16 +1253,11 @@ PaintOp* PaintOp::Deserialize(const volatile void* input,
                               const DeserializeOptions& options) {
   DCHECK_GE(output_size, sizeof(LargestPaintOp));
 
-  uint32_t first_word = reinterpret_cast<const volatile uint32_t*>(input)[0];
-  uint8_t type = static_cast<uint8_t>(first_word & 0xFF);
-  uint32_t skip = first_word >> 8;
+  uint8_t type;
+  uint32_t skip;
+  if (!PaintOpReader::ReadAndValidateOpHeader(input, input_size, &type, &skip))
+    return nullptr;
 
-  if (input_size < skip)
-    return nullptr;
-  if (skip % PaintOpBuffer::PaintOpAlign != 0)
-    return nullptr;
-  if (type > static_cast<uint8_t>(PaintOpType::LastPaintOpType))
-    return nullptr;
   *read_bytes = skip;
   return g_deserialize_functions[type](input, skip, output, output_size,
                                        options);
@@ -1382,7 +1330,8 @@ bool PaintOp::GetBounds(const PaintOp* op, SkRect* rect) {
       return false;
     case PaintOpType::DrawTextBlob: {
       auto* text_op = static_cast<const DrawTextBlobOp*>(op);
-      *rect = text_op->blob->bounds().makeOffset(text_op->x, text_op->y);
+      *rect = text_op->blob->ToSkTextBlob()->bounds().makeOffset(text_op->x,
+                                                                 text_op->y);
       rect->sort();
       return true;
     }
@@ -1390,6 +1339,24 @@ bool PaintOp::GetBounds(const PaintOp* op, SkRect* rect) {
       NOTREACHED();
   }
   return false;
+}
+
+// static
+bool PaintOp::QuickRejectDraw(const PaintOp* op, const SkCanvas* canvas) {
+  DCHECK(op->IsDrawOp());
+
+  SkRect rect;
+  if (!PaintOp::GetBounds(op, &rect))
+    return false;
+
+  if (op->IsPaintOpWithFlags()) {
+    SkPaint paint = static_cast<const PaintOpWithFlags*>(op)->flags.ToSkPaint();
+    if (!paint.canComputeFastBounds())
+      return false;
+    paint.computeFastBounds(rect, &rect);
+  }
+
+  return canvas->quickReject(rect);
 }
 
 // static
@@ -1420,17 +1387,7 @@ void PaintOp::DestroyThis() {
 }
 
 bool PaintOpWithFlags::HasDiscardableImagesFromFlags() const {
-  if (!IsDrawOp())
-    return false;
-
-  if (!flags.HasShader())
-    return false;
-  else if (flags.getShader()->shader_type() == PaintShader::Type::kImage)
-    return flags.getShader()->paint_image().IsLazyGenerated();
-  else if (flags.getShader()->shader_type() == PaintShader::Type::kPaintRecord)
-    return flags.getShader()->paint_record()->HasDiscardableImages();
-
-  return false;
+  return IsDrawOp() && flags.HasDiscardableImages();
 }
 
 void PaintOpWithFlags::RasterWithFlags(SkCanvas* canvas,
@@ -1548,11 +1505,11 @@ bool DrawRecordOp::HasDiscardableImages() const {
 
 DrawTextBlobOp::DrawTextBlobOp() = default;
 
-DrawTextBlobOp::DrawTextBlobOp(sk_sp<SkTextBlob> blob,
+DrawTextBlobOp::DrawTextBlobOp(scoped_refptr<PaintTextBlob> paint_blob,
                                SkScalar x,
                                SkScalar y,
                                const PaintFlags& flags)
-    : PaintOpWithFlags(flags), blob(std::move(blob)), x(x), y(y) {}
+    : PaintOpWithFlags(flags), blob(std::move(paint_blob)), x(x), y(y) {}
 
 DrawTextBlobOp::~DrawTextBlobOp() = default;
 
@@ -1750,39 +1707,74 @@ void PaintOpBuffer::Playback(SkCanvas* canvas,
       return;
 
     const PaintOp* op = *iter;
-    if (iter.alpha() != 255) {
-      DCHECK(op->IsPaintOpWithFlags());
-      RasterWithAlpha(static_cast<const PaintOpWithFlags*>(op), canvas, params,
-                      iter.alpha());
+
+    // This is an optimization to replicate the behaviour in SkCanvas
+    // which rejects ops that draw outside the current clip. In the
+    // general case we defer this to the SkCanvas but if we will be
+    // using an ImageProvider for pre-decoding images, we can save
+    // performing an expensive decode that will never be rasterized.
+    const bool skip_op = params.image_provider &&
+                         PaintOp::OpHasDiscardableImages(op) &&
+                         PaintOp::QuickRejectDraw(op, canvas);
+    if (skip_op)
       continue;
-    }
 
-    if (params.image_provider && PaintOp::OpHasDiscardableImages(op)) {
-      if (QuickRejectDraw(op, canvas))
-        continue;
-
-      auto* flags_op = op->IsPaintOpWithFlags()
-                           ? static_cast<const PaintOpWithFlags*>(op)
-                           : nullptr;
-      if (flags_op && flags_op->HasDiscardableImagesFromFlags()) {
-        ScopedImageFlags scoped_flags(params.image_provider, flags_op->flags,
-                                      canvas->getTotalMatrix());
-
-        // Only rasterize the op if we successfully decoded the image.
-        if (scoped_flags.decoded_flags()) {
-          flags_op->RasterWithFlags(canvas, scoped_flags.decoded_flags(),
-                                    params);
-        }
-        continue;
-      }
+    if (op->IsPaintOpWithFlags()) {
+      const auto* flags_op = static_cast<const PaintOpWithFlags*>(op);
+      ScopedImageFlags scoped_flags(params.image_provider, &flags_op->flags,
+                                    canvas->getTotalMatrix(), iter.alpha());
+      if (scoped_flags.flags())
+        flags_op->RasterWithFlags(canvas, scoped_flags.flags(), params);
+      continue;
     }
 
     // TODO(enne): skip SaveLayer followed by restore with nothing in
     // between, however SaveLayer with image filters on it (or maybe
     // other PaintFlags options) are not a noop.  Figure out what these
     // are so we can skip them correctly.
+    DCHECK_EQ(iter.alpha(), 255);
     op->Raster(canvas, params);
   }
+}
+
+sk_sp<PaintOpBuffer> PaintOpBuffer::MakeFromMemory(
+    const volatile void* input,
+    size_t input_size,
+    const PaintOp::DeserializeOptions& options) {
+  if (input_size == 0)
+    return nullptr;
+
+  auto buffer = sk_make_sp<PaintOpBuffer>();
+  size_t total_bytes_read = 0u;
+  while (total_bytes_read < input_size) {
+    const volatile void* next_op =
+        static_cast<const volatile char*>(input) + total_bytes_read;
+
+    uint8_t type;
+    uint32_t skip;
+    if (!PaintOpReader::ReadAndValidateOpHeader(
+            next_op, input_size - total_bytes_read, &type, &skip)) {
+      return nullptr;
+    }
+
+    size_t op_skip = ComputeOpSkip(g_type_to_size[type]);
+    const auto* op = g_deserialize_functions[type](
+        next_op, skip, buffer->AllocatePaintOp(op_skip), op_skip, options);
+    if (!op) {
+      // The last allocated op has already been destroyed if it failed to
+      // deserialize. Update the buffer's op tracking to exclude it to avoid
+      // access during cleanup at destruction.
+      buffer->used_ -= op_skip;
+      buffer->op_count_--;
+      return nullptr;
+    }
+
+    buffer->AnalyzeAddedOp(op);
+    total_bytes_read += skip;
+  }
+
+  DCHECK_GT(buffer->size(), 0u);
+  return buffer;
 }
 
 void PaintOpBuffer::ReallocBuffer(size_t new_size) {
@@ -1795,10 +1787,7 @@ void PaintOpBuffer::ReallocBuffer(size_t new_size) {
   reserved_ = new_size;
 }
 
-std::pair<void*, size_t> PaintOpBuffer::AllocatePaintOp(size_t sizeof_op) {
-  // Compute a skip such that all ops in the buffer are aligned to the
-  // maximum required alignment of all ops.
-  size_t skip = MathUtil::UncheckedRoundUp(sizeof_op, PaintOpAlign);
+void* PaintOpBuffer::AllocatePaintOp(size_t skip) {
   DCHECK_LT(skip, PaintOp::kMaxSkip);
   if (used_ + skip > reserved_) {
     // Start reserved_ at kInitialBufferSize and then double.
@@ -1813,7 +1802,7 @@ std::pair<void*, size_t> PaintOpBuffer::AllocatePaintOp(size_t sizeof_op) {
   void* op = data_.get() + used_;
   used_ += skip;
   op_count_++;
-  return std::make_pair(op, skip);
+  return op;
 }
 
 void PaintOpBuffer::ShrinkToFit() {

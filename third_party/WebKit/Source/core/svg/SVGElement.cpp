@@ -167,9 +167,9 @@ void SVGElement::ReportAttributeParsingError(SVGParsingError error,
 
 String SVGElement::title() const {
   // According to spec, we should not return titles when hovering over root
-  // <svg> elements (those <title> elements are the title of the document, not a
-  // tooltip) so we instantly return.
-  if (IsOutermostSVGSVGElement())
+  // <svg> elements imported as a standalone document(those <title> elements
+  // are the title of the document, not a tooltip) so we instantly return.
+  if (IsSVGSVGElement(*this) && this == GetDocument().documentElement())
     return String();
 
   if (InUseShadowTree()) {
@@ -858,7 +858,7 @@ bool SVGElement::IsPresentationAttributeWithSVGDOM(
 void SVGElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   CSSPropertyID property_id = CssPropertyIdForSVGAttributeName(name);
   if (property_id > 0)
     AddPropertyToPresentationAttributeStyle(style, property_id, value);
@@ -1092,13 +1092,13 @@ bool SVGElement::HasSVGParent() const {
          ParentOrShadowHostElement()->IsSVGElement();
 }
 
-MutableStylePropertySet* SVGElement::AnimatedSMILStyleProperties() const {
+MutableCSSPropertyValueSet* SVGElement::AnimatedSMILStyleProperties() const {
   if (HasSVGRareData())
     return SvgRareData()->AnimatedSMILStyleProperties();
   return nullptr;
 }
 
-MutableStylePropertySet* SVGElement::EnsureAnimatedSMILStyleProperties() {
+MutableCSSPropertyValueSet* SVGElement::EnsureAnimatedSMILStyleProperties() {
   return EnsureSVGRareData()->EnsureAnimatedSMILStyleProperties();
 }
 

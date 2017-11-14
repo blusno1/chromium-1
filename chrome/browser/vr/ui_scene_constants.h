@@ -38,8 +38,11 @@ static constexpr float kFullscreenVerticalOffset = -0.1f * kFullscreenDistance;
 
 static constexpr float kExitPromptWidth = 0.672f * kContentDistance;
 static constexpr float kExitPromptHeight = 0.2f * kContentDistance;
+static constexpr float kAudioPermissionPromptWidth = 0.552f * kContentDistance;
+static constexpr float kAudioPermissionPromptHeight = 0.2f * kContentDistance;
+
 static constexpr float kExitPromptVerticalOffset = -0.09f * kContentDistance;
-static constexpr float kExitPromptBackplaneSize = 1000.0;
+static constexpr float kPromptBackplaneSize = 1000.0;
 
 // Distance-independent milimeter size of the URL bar.
 static constexpr float kUrlBarWidthDMM = 0.672f;
@@ -194,6 +197,9 @@ static constexpr float kSuggestionDescriptionTextHeight = 0.015f;
 
 static constexpr int kControllerFadeInMs = 200;
 static constexpr int kControllerFadeOutMs = 550;
+
+static constexpr float kSpeechRecognitionResultTextYOffset = 0.5f;
+static constexpr int kSpeechRecognitionResultTimeoutSeconds = 2;
 
 }  // namespace vr
 

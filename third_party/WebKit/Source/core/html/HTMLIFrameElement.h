@@ -28,7 +28,6 @@
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLIFrameElementSandbox.h"
 #include "platform/Supplementable.h"
-#include "public/platform/WebVector.h"
 #include "third_party/WebKit/common/feature_policy/feature_policy.h"
 
 namespace blink {
@@ -56,9 +55,10 @@ class CORE_EXPORT HTMLIFrameElement final
 
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const override;
-  void CollectStyleForPresentationAttribute(const QualifiedName&,
-                                            const AtomicString&,
-                                            MutableStylePropertySet*) override;
+  void CollectStyleForPresentationAttribute(
+      const QualifiedName&,
+      const AtomicString&,
+      MutableCSSPropertyValueSet*) override;
 
   InsertionNotificationRequest InsertedInto(ContainerNode*) override;
   void RemovedFrom(ContainerNode*) override;

@@ -29,6 +29,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "base/process/process.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
@@ -50,7 +51,6 @@
 #include "content/common/edit_command.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
-#include "content/common/frame_policy.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
 #include "content/common/navigation_params.h"
@@ -172,6 +172,7 @@
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "storage/common/data_element.h"
+#include "third_party/WebKit/common/frame_policy.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/InterfaceProvider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
@@ -225,6 +226,7 @@
 #include "url/origin.h"
 #include "url/url_constants.h"
 #include "url/url_util.h"
+#include "v8/include/v8.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/renderer/pepper/pepper_browser_connection.h"
@@ -1305,8 +1307,8 @@ RenderFrameImpl::RenderFrameImpl(CreateParams params)
   // provided at construction time. See: https://crbug.com/729021/.
   CHECK(params.interface_provider.is_bound());
   remote_interfaces_.Bind(std::move(params.interface_provider));
-  blink_interface_registry_.reset(
-      new BlinkInterfaceRegistryImpl(registry_.GetWeakPtr()));
+  blink_interface_registry_.reset(new BlinkInterfaceRegistryImpl(
+      registry_.GetWeakPtr(), associated_interfaces_.GetWeakPtr()));
 
   // Must call after binding our own remote interfaces.
   media_factory_.SetupMojo();
@@ -2393,7 +2395,8 @@ void RenderFrameImpl::OnUpdateOpener(int opener_routing_id) {
   frame_->SetOpener(opener);
 }
 
-void RenderFrameImpl::OnDidUpdateFramePolicy(const FramePolicy& frame_policy) {
+void RenderFrameImpl::OnDidUpdateFramePolicy(
+    const blink::FramePolicy& frame_policy) {
   frame_->SetFrameOwnerPolicy(frame_policy.sandbox_flags,
                               frame_policy.container_policy);
 }
@@ -2661,7 +2664,6 @@ void RenderFrameImpl::LoadNavigationErrorPage(
             : blink::WebFrameLoadType::kStandard;
   const blink::WebHistoryItem& history_item =
       entry ? entry->root() : blink::WebHistoryItem();
-  DCHECK_EQ(WebURLError::Domain::kNet, error.domain());
 
   // Requests blocked by the X-Frame-Options HTTP response header don't display
   // error pages but a blank page instead.
@@ -2839,8 +2841,7 @@ blink::WebPlugin* RenderFrameImpl::CreatePlugin(
 }
 
 void RenderFrameImpl::LoadErrorPage(int reason) {
-  blink::WebURLError error(blink::WebURLError::Domain::kNet, reason,
-                           frame_->GetDocument().Url());
+  blink::WebURLError error(reason, frame_->GetDocument().Url());
 
   std::string error_html;
   GetContentClient()->renderer()->GetNavigationErrorStrings(
@@ -3057,6 +3058,13 @@ void RenderFrameImpl::GetInterfaceProvider(
   connector->FilterInterfaces(mojom::kNavigation_FrameSpec,
                               browser_info_.identity, std::move(request),
                               std::move(provider));
+}
+void RenderFrameImpl::GetCanonicalUrlForSharing(
+    GetCanonicalUrlForSharingCallback callback) {
+  WebURL canonical_url = GetWebFrame()->GetDocument().CanonicalUrlForSharing();
+  std::move(callback).Run(canonical_url.IsNull()
+                              ? base::nullopt
+                              : base::make_optional(GURL(canonical_url)));
 }
 
 void RenderFrameImpl::AllowBindings(int32_t enabled_bindings_flags) {
@@ -3391,8 +3399,11 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
   // Note that Blink can't be changed to just pass |fallback_name| as |name| in
   // the case |name| is empty: |fallback_name| should never affect the actual
   // browsing context name, only unique name generation.
+  bool is_new_subframe_created_by_script =
+      v8::Isolate::GetCurrent() && v8::Isolate::GetCurrent()->InContext();
   params.frame_unique_name = unique_name_helper_.GenerateNameForNewChildFrame(
-      params.frame_name.empty() ? fallback_name.Utf8() : params.frame_name);
+      params.frame_name.empty() ? fallback_name.Utf8() : params.frame_name,
+      is_new_subframe_created_by_script);
   params.frame_policy = {sandbox_flags, container_policy};
   params.frame_owner_properties =
       ConvertWebFrameOwnerPropertiesToFrameOwnerProperties(
@@ -3428,6 +3439,8 @@ blink::WebLocalFrame* RenderFrameImpl::CreateChildFrame(
       devtools_frame_token);
   child_render_frame->unique_name_helper_.set_propagated_name(
       params.frame_unique_name);
+  if (is_new_subframe_created_by_script)
+    child_render_frame->unique_name_helper_.Freeze();
   child_render_frame->InitializeBlameContext(this);
   blink::WebLocalFrame* web_frame = parent->CreateLocalChild(
       scope, child_render_frame,
@@ -4444,7 +4457,7 @@ bool RenderFrameImpl::RunModalPromptDialog(
                                 default_value.Utf16(),
                                 frame_->GetDocument().Url(), &result);
   if (ok)
-    actual_value->Assign(WebString::FromUTF16(result));
+    *actual_value = WebString::FromUTF16(result);
   return ok;
 }
 
@@ -5182,7 +5195,6 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
   params->method = "GET";
   params->intended_as_new_entry =
       navigation_state->request_params().intended_as_new_entry;
-  params->did_create_new_entry = commit_type == blink::kWebStandardCommit;
   params->should_replace_current_entry =
       document_loader->ReplacesCurrentHistoryItem();
   params->post_id = -1;
@@ -5195,9 +5207,20 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
   // are unwound or moved to RenderFrameHost (crbug.com/304341) we can move the
   // client to be based on the routing_id of the RenderFrameHost.
   params->render_view_routing_id = render_view_->routing_id();
-  params->socket_address.set_host(response.RemoteIPAddress().Utf8());
-  params->socket_address.set_port(response.RemotePort());
   params->was_within_same_document = navigation_state->WasWithinSameDocument();
+
+  // "Standard" commits from Blink create new NavigationEntries. We also treat
+  // main frame "inert" commits as creating new NavigationEntries if they
+  // replace the current entry on a cross-document navigation (e.g., client
+  // redirects, location.replace, navigation to same URL), since this will
+  // replace all the subframes and could go cross-origin. We don't want to rely
+  // on updating the existing NavigationEntry in this case, since it could leave
+  // stale state around.
+  params->did_create_new_entry =
+      (commit_type == blink::kWebStandardCommit) ||
+      (commit_type == blink::kWebHistoryInertCommit && !frame->Parent() &&
+       params->should_replace_current_entry &&
+       !params->was_within_same_document);
 
   WebDocument frame_document = frame->GetDocument();
   // Set the origin of the frame.  This will be replicated to the corresponding
@@ -5494,7 +5517,7 @@ void RenderFrameImpl::OnFailedNavigation(
 
   // Send the provisional load failure.
   WebURLError error(
-      WebURLError::Domain::kNet, error_code,
+      error_code,
       has_stale_copy_in_cache ? WebURLError::HasCopyInCache::kTrue
                               : WebURLError::HasCopyInCache::kFalse,
       WebURLError::IsWebSecurityViolation::kFalse, common_params.url);

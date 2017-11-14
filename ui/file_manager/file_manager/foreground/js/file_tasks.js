@@ -136,7 +136,7 @@ FileTasks.TaskPickerType = {
 };
 
 /**
- * A promise to obtain 'enable-zip-archiver-unpacker' switch.
+ * A promise to obtain '{enable,disable}-zip-archiver-unpacker' switch.
  * @type {Promise<boolean>}
  * @private
  */
@@ -182,16 +182,21 @@ FileTasks.create = function(
       if (!FileTasks.zipArchiverUnpackerEnabledPromise_) {
         FileTasks.zipArchiverUnpackerEnabledPromise_ =
             new Promise(function(resolve, reject) {
+              // Enabled by default.
               chrome.commandLinePrivate.hasSwitch(
-                  'enable-zip-archiver-unpacker', function(enabled) {
-                    resolve(enabled);
+                  'disable-zip-archiver-unpacker', function(disabled) {
+                    resolve(!disabled);
                   });
             });
       }
 
       FileTasks.zipArchiverUnpackerEnabledPromise_.then(function(
           zipArchiverUnpackerEnabled) {
-        if (!zipArchiverUnpackerEnabled) {
+        if (zipArchiverUnpackerEnabled) {
+          taskItems = taskItems.filter(function(item) {
+            return item.taskId !== FileTasks.ZIP_UNPACKER_TASK_ID;
+          });
+        } else {
           taskItems = taskItems.filter(function(item) {
             return item.taskId !== FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID;
           });

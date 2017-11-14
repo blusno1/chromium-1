@@ -7,6 +7,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
+#include "device/geolocation/public/interfaces/geolocation_context.mojom.h"
 #include "device/screen_orientation/public/interfaces/screen_orientation.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/device/public/interfaces/battery_monitor.mojom.h"
@@ -26,11 +27,11 @@
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
 #else
-#include "device/hid/public/interfaces/hid.mojom.h"
+#include "services/device/public/interfaces/hid.mojom.h"
 #endif
 
 #if defined(OS_LINUX) && defined(USE_UDEV)
-#include "device/hid/public/interfaces/input_service.mojom.h"
+#include "services/device/public/interfaces/input_service.mojom.h"
 #endif
 
 namespace base {
@@ -82,6 +83,7 @@ class DeviceService : public service_manager::Service {
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
   void BindFingerprintRequest(mojom::FingerprintRequest request);
+  void BindGeolocationContextRequest(mojom::GeolocationContextRequest request);
 
 #if defined(OS_LINUX) && defined(USE_UDEV)
   void BindInputDeviceManagerRequest(mojom::InputDeviceManagerRequest request);

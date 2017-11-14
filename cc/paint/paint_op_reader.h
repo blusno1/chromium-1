@@ -27,6 +27,10 @@ class CC_PAINT_EXPORT PaintOpReader {
   }
 
   static void FixupMatrixPostSerialization(SkMatrix* matrix);
+  static bool ReadAndValidateOpHeader(const volatile void* input,
+                                      size_t input_size,
+                                      uint8_t* type,
+                                      uint32_t* skip);
 
   bool valid() const { return valid_; }
 
@@ -44,7 +48,7 @@ class CC_PAINT_EXPORT PaintOpReader {
   void Read(PaintFlags* flags);
   void Read(PaintImage* image);
   void Read(sk_sp<SkData>* data);
-  void Read(sk_sp<SkTextBlob>* blob);
+  void Read(scoped_refptr<PaintTextBlob>* blob);
   void Read(sk_sp<PaintShader>* shader);
   void Read(SkMatrix* matrix);
 
@@ -75,6 +79,10 @@ class CC_PAINT_EXPORT PaintOpReader {
 
   template <typename T>
   void ReadFlattenable(sk_sp<T>* val);
+
+  void Read(std::vector<PaintTypeface>* typefaces);
+  void Read(const std::vector<PaintTypeface>& typefaces,
+            sk_sp<SkTextBlob>* blob);
 
   // Attempts to align the memory to the given alignment. Returns false if there
   // is unsufficient bytes remaining to do this padding.

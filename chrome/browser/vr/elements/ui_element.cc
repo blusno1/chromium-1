@@ -10,13 +10,17 @@
 #include "base/numerics/ranges.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
-#include "chrome/browser/vr/elements/ui_element_transform_operations.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/skia/include/core/SkRRect.h"
+#include "third_party/skia/include/core/SkRect.h"
 #include "ui/gfx/geometry/angle_conversions.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 namespace vr {
 
 namespace {
+
+static constexpr float kHitTestResolutionInMeter = 0.000001f;
 
 int AllocateId() {
   static int g_next_id = 1;
@@ -38,6 +42,9 @@ bool GetRayPlaneDistance(const gfx::Point3F& ray_origin,
 }
 
 }  // namespace
+
+EventHandlers::EventHandlers() = default;
+EventHandlers::~EventHandlers() = default;
 
 UiElement::UiElement() : id_(AllocateId()) {
   animation_player_.set_target(this);
@@ -62,15 +69,45 @@ void UiElement::Render(UiElementRenderer* renderer,
 
 void UiElement::Initialize(SkiaSurfaceProvider* provider) {}
 
-void UiElement::OnHoverEnter(const gfx::PointF& position) {}
+void UiElement::OnHoverEnter(const gfx::PointF& position) {
+  if (event_handlers_.hover_enter) {
+    event_handlers_.hover_enter.Run();
+  } else if (parent()) {
+    parent()->OnHoverEnter(position);
+  }
+}
 
-void UiElement::OnHoverLeave() {}
+void UiElement::OnHoverLeave() {
+  if (event_handlers_.hover_leave) {
+    event_handlers_.hover_leave.Run();
+  } else if (parent()) {
+    parent()->OnHoverLeave();
+  }
+}
 
-void UiElement::OnMove(const gfx::PointF& position) {}
+void UiElement::OnMove(const gfx::PointF& position) {
+  if (event_handlers_.hover_move) {
+    event_handlers_.hover_move.Run(position);
+  } else if (parent()) {
+    parent()->OnMove(position);
+  }
+}
 
-void UiElement::OnButtonDown(const gfx::PointF& position) {}
+void UiElement::OnButtonDown(const gfx::PointF& position) {
+  if (event_handlers_.button_down) {
+    event_handlers_.button_down.Run();
+  } else if (parent()) {
+    parent()->OnButtonDown(position);
+  }
+}
 
-void UiElement::OnButtonUp(const gfx::PointF& position) {}
+void UiElement::OnButtonUp(const gfx::PointF& position) {
+  if (event_handlers_.button_up) {
+    event_handlers_.button_up.Run();
+  } else if (parent()) {
+    parent()->OnButtonUp(position);
+  }
+}
 
 void UiElement::OnFlingStart(std::unique_ptr<blink::WebGestureEvent> gesture,
                              const gfx::PointF& position) {}
@@ -92,10 +129,15 @@ bool UiElement::DoBeginFrame(const base::TimeTicks& time,
   // TODO(mthiesse): This is overly cautious. We may have animations but not
   // trigger any updates, so we should refine this logic and have
   // AnimationPlayer::Tick return a boolean.
-  bool updated = animation_player_.animations().size() > 0;
+  bool animations_updated = animation_player_.animations().size() > 0;
   animation_player_.Tick(time);
   last_frame_time_ = time;
-  return OnBeginFrame(time, look_at) || updated;
+  set_update_phase(kUpdatedAnimations);
+  bool begin_frame_updated = OnBeginFrame(time, look_at);
+  UpdateComputedOpacity();
+  bool was_visible_at_any_point = IsVisible() || updated_visibility_this_frame_;
+  return (begin_frame_updated || animations_updated) &&
+         was_visible_at_any_point;
 }
 
 bool UiElement::OnBeginFrame(const base::TimeTicks& time,
@@ -127,13 +169,6 @@ bool UiElement::IsVisible() const {
 gfx::SizeF UiElement::size() const {
   DCHECK_LE(kUpdatedTexturesAndSizes, phase_);
   return size_;
-}
-
-void UiElement::SetTransformOperations(
-    const UiElementTransformOperations& ui_element_transform_operations) {
-  animation_player_.TransitionTransformOperationsTo(
-      last_frame_time_, TRANSFORM, transform_operations_,
-      ui_element_transform_operations.operations());
 }
 
 void UiElement::SetLayoutOffset(float x, float y) {
@@ -207,9 +242,56 @@ float UiElement::computed_opacity() const {
   return computed_opacity_;
 }
 
-bool UiElement::HitTest(const gfx::PointF& point) const {
-  return point.x() >= 0.0f && point.x() <= 1.0f && point.y() >= 0.0f &&
-         point.y() <= 1.0f;
+bool UiElement::LocalHitTest(const gfx::PointF& point) const {
+  if (point.x() < 0.0f || point.x() > 1.0f || point.y() < 0.0f ||
+      point.y() > 1.0f) {
+    return false;
+  } else if (corner_radius() == 0.f) {
+    return point.x() >= 0.0f && point.x() <= 1.0f && point.y() >= 0.0f &&
+           point.y() <= 1.0f;
+  } else if (size().width() == size().height() &&
+             corner_radius() == size().width() / 2) {
+    return (point - gfx::PointF(0.5, 0.5)).LengthSquared() < 0.25;
+  }
+
+  float width = size().width();
+  float height = size().height();
+  SkRRect rrect = SkRRect::MakeRectXY(SkRect::MakeWH(width, height),
+                                      corner_radius(), corner_radius());
+
+  float left = std::min(point.x() * width, width - kHitTestResolutionInMeter);
+  float top = std::min(point.y() * height, height - kHitTestResolutionInMeter);
+  SkRect point_rect =
+      SkRect::MakeLTRB(left, top, left + kHitTestResolutionInMeter,
+                       top + kHitTestResolutionInMeter);
+  return rrect.contains(point_rect);
+}
+
+void UiElement::HitTest(const HitTestRequest& request,
+                        HitTestResult* result) const {
+  gfx::Vector3dF ray_vector = request.ray_target - request.ray_origin;
+  ray_vector.GetNormalized(&ray_vector);
+  result->type = HitTestResult::Type::kNone;
+  float distance_to_plane;
+  if (!GetRayDistance(request.ray_origin, ray_vector, &distance_to_plane)) {
+    return;
+  }
+
+  if (distance_to_plane < 0 ||
+      distance_to_plane > request.max_distance_to_plane) {
+    return;
+  }
+
+  result->type = HitTestResult::Type::kHitsPlane;
+  result->distance_to_plane = distance_to_plane;
+  result->hit_point =
+      request.ray_origin + gfx::ScaleVector3d(ray_vector, distance_to_plane);
+  gfx::PointF unit_xy_point = GetUnitRectangleCoordinates(result->hit_point);
+  result->local_hit_point.set_x(0.5f + unit_xy_point.x());
+  result->local_hit_point.set_y(0.5f - unit_xy_point.y());
+  if (LocalHitTest(result->local_hit_point)) {
+    result->type = HitTestResult::Type::kHits;
+  }
 }
 
 void UiElement::SetMode(ColorScheme::Mode mode) {
@@ -269,13 +351,12 @@ void UiElement::AddBinding(std::unique_ptr<BindingBase> binding) {
   bindings_.push_back(std::move(binding));
 }
 
-bool UiElement::UpdateBindings() {
-  bool updated = false;
+void UiElement::UpdateBindings() {
+  updated_bindings_this_frame_ = false;
   for (auto& binding : bindings_) {
     if (binding->Update())
-      updated = true;
+      updated_bindings_this_frame_ = true;
   }
-  return updated;
 }
 
 gfx::Point3F UiElement::GetCenter() const {
@@ -365,6 +446,40 @@ bool UiElement::IsAnimatingProperty(TargetProperty property) const {
   return animation_player_.IsAnimatingProperty(static_cast<int>(property));
 }
 
+void UiElement::DoLayOutChildren() {
+  LayOutChildren();
+  if (!bounds_contain_children_) {
+    DCHECK_EQ(0.0f, x_padding_);
+    DCHECK_EQ(0.0f, y_padding_);
+    return;
+  }
+
+  gfx::RectF bounds;
+  bool first = false;
+  for (auto& child : children_) {
+    if (!child->IsVisible()) {
+      continue;
+    }
+    gfx::Point3F child_center;
+    child->LocalTransform().TransformPoint(&child_center);
+    gfx::RectF local_rect =
+        gfx::RectF(child_center.x() - 0.5 * child->size().width(),
+                   child_center.y() - 0.5 * child->size().height(),
+                   child->size().width(), child->size().height());
+    if (first) {
+      bounds = local_rect;
+      first = false;
+    } else {
+      bounds.Union(local_rect);
+    }
+  }
+
+  bounds.Inset(-x_padding_, -y_padding_);
+  bounds.set_origin(bounds.CenterPoint());
+  size_ = bounds.size();
+  local_origin_ = bounds.origin();
+}
+
 void UiElement::LayOutChildren() {
   DCHECK_LE(kUpdatedTexturesAndSizes, phase_);
   for (auto& child : children_) {
@@ -385,21 +500,19 @@ void UiElement::LayOutChildren() {
   }
 }
 
-void UiElement::UpdateComputedOpacityRecursive() {
+void UiElement::UpdateComputedOpacity() {
+  bool was_visible = computed_opacity_ > 0.0f;
   set_computed_opacity(opacity_);
   if (parent_) {
     set_computed_opacity(computed_opacity_ * parent_->computed_opacity());
   }
-
   set_update_phase(kUpdatedComputedOpacity);
-
-  for (auto& child : children_) {
-    child->UpdateComputedOpacityRecursive();
-  }
+  updated_visibility_this_frame_ = IsVisible() != was_visible;
 }
 
 void UiElement::UpdateWorldSpaceTransformRecursive() {
   gfx::Transform transform;
+  transform.Translate(local_origin_.x(), local_origin_.y());
   transform.Scale(size_.width(), size_.height());
 
   // Compute an inheritable transformation that can be applied to this element,

@@ -432,13 +432,10 @@ void FeatureInfo::InitializeFeatures() {
   // so the extension string is always exposed.
   AddExtensionString("GL_OES_vertex_array_object");
 
-// Texture storage image is only usable with native gpu memory buffer support,
-// and should be disabled if we aren't supposed to use GMBs as render targets.
+// Texture storage image is only usable with native gpu memory buffer support.
 #if defined(OS_MACOSX) || (defined(OS_LINUX) && defined(USE_OZONE))
-  if (!workarounds_.disable_gpu_memory_buffers_as_render_targets) {
-    feature_flags_.chromium_texture_storage_image = true;
-    AddExtensionString("GL_CHROMIUM_texture_storage_image");
-  }
+  feature_flags_.chromium_texture_storage_image = true;
+  AddExtensionString("GL_CHROMIUM_texture_storage_image");
 #endif
 
   if (!disallowed_features_.gpu_memory_manager)
@@ -1053,7 +1050,7 @@ void FeatureInfo::InitializeFeatures() {
     validators_.g_l_state.AddValue(GL_TEXTURE_BINDING_RECTANGLE_ARB);
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MACOSX) || (defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY))
   // TODO(dcastagna): Determine ycbcr_420v_image on CrOS at runtime
   // querying minigbm. crbug.com/646148
   if (gl::GetGLImplementation() != gl::kGLImplementationOSMesaGL) {

@@ -33,8 +33,8 @@
 #include "core/clipboard/Pasteboard.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
 #include "core/css/CSSIdentifierValue.h"
+#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSValueList.h"
-#include "core/css/StylePropertySet.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/TagCollection.h"
 #include "core/dom/events/Event.h"
@@ -205,7 +205,7 @@ StaticRangeVector* RangesFromCurrentSelectionOrExtendCaret(
     TextGranularity granularity) {
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
   SelectionModifier selection_modifier(
-      frame, frame.Selection().ComputeVisibleSelectionInDOMTreeDeprecated());
+      frame, frame.Selection().GetSelectionInDOMTree());
   if (selection_modifier.Selection().IsCaret())
     selection_modifier.Modify(SelectionModifyAlteration::kExtend, direction,
                               granularity);
@@ -255,7 +255,7 @@ static LocalFrame* TargetFrame(LocalFrame& frame, Event* event) {
 static bool ApplyCommandToFrame(LocalFrame& frame,
                                 EditorCommandSource source,
                                 InputEvent::InputType input_type,
-                                StylePropertySet* style) {
+                                CSSPropertyValueSet* style) {
   // FIXME: We don't call shouldApplyStyle when the source is DOM; is there a
   // good reason for that?
   switch (source) {
@@ -275,8 +275,8 @@ static bool ExecuteApplyStyle(LocalFrame& frame,
                               InputEvent::InputType input_type,
                               CSSPropertyID property_id,
                               const String& property_value) {
-  MutableStylePropertySet* style =
-      MutableStylePropertySet::Create(kHTMLQuirksMode);
+  MutableCSSPropertyValueSet* style =
+      MutableCSSPropertyValueSet::Create(kHTMLQuirksMode);
   style->SetProperty(property_id, property_value);
   return ApplyCommandToFrame(frame, source, input_type, style);
 }
@@ -286,8 +286,8 @@ static bool ExecuteApplyStyle(LocalFrame& frame,
                               InputEvent::InputType input_type,
                               CSSPropertyID property_id,
                               CSSValueID property_value) {
-  MutableStylePropertySet* style =
-      MutableStylePropertySet::Create(kHTMLQuirksMode);
+  MutableCSSPropertyValueSet* style =
+      MutableCSSPropertyValueSet::Create(kHTMLQuirksMode);
   style->SetProperty(property_id, property_value);
   return ApplyCommandToFrame(frame, source, input_type, style);
 }
@@ -324,8 +324,8 @@ static bool ExecuteToggleStyleInList(LocalFrame& frame,
 
   // FIXME: We shouldn't be having to convert new style into text.  We should
   // have setPropertyCSSValue.
-  MutableStylePropertySet* new_mutable_style =
-      MutableStylePropertySet::Create(kHTMLQuirksMode);
+  MutableCSSPropertyValueSet* new_mutable_style =
+      MutableCSSPropertyValueSet::Create(kHTMLQuirksMode);
   new_mutable_style->SetProperty(property_id, new_style);
   return ApplyCommandToFrame(frame, source, input_type, new_mutable_style);
 }
@@ -358,8 +358,8 @@ static bool ExecuteApplyParagraphStyle(LocalFrame& frame,
                                        InputEvent::InputType input_type,
                                        CSSPropertyID property_id,
                                        const String& property_value) {
-  MutableStylePropertySet* style =
-      MutableStylePropertySet::Create(kHTMLQuirksMode);
+  MutableCSSPropertyValueSet* style =
+      MutableCSSPropertyValueSet::Create(kHTMLQuirksMode);
   style->SetProperty(property_id, property_value);
   // FIXME: We don't call shouldApplyStyle when the source is DOM; is there a
   // good reason for that?
@@ -509,7 +509,7 @@ static WritingDirection TextDirectionForSelection(
       CSSComputedStyleDeclaration* style =
           CSSComputedStyleDeclaration::Create(&n);
       const CSSValue* unicode_bidi =
-          style->GetPropertyCSSValue(GetCSSPropertyUnicodeBidiAPI());
+          style->GetPropertyCSSValue(GetCSSPropertyUnicodeBidi());
       if (!unicode_bidi || !unicode_bidi->IsIdentifierValue())
         continue;
 
@@ -545,7 +545,7 @@ static WritingDirection TextDirectionForSelection(
     CSSComputedStyleDeclaration* style =
         CSSComputedStyleDeclaration::Create(element);
     const CSSValue* unicode_bidi =
-        style->GetPropertyCSSValue(GetCSSPropertyUnicodeBidiAPI());
+        style->GetPropertyCSSValue(GetCSSPropertyUnicodeBidi());
     if (!unicode_bidi || !unicode_bidi->IsIdentifierValue())
       continue;
 
@@ -560,7 +560,7 @@ static WritingDirection TextDirectionForSelection(
     DCHECK(EditingStyleUtilities::IsEmbedOrIsolate(unicode_bidi_value))
         << unicode_bidi_value;
     const CSSValue* direction =
-        style->GetPropertyCSSValue(GetCSSPropertyDirectionAPI());
+        style->GetPropertyCSSValue(GetCSSPropertyDirection());
     if (!direction || !direction->IsIdentifierValue())
       continue;
 
@@ -1122,8 +1122,8 @@ static bool ExecuteMakeTextWritingDirectionLeftToRight(LocalFrame& frame,
                                                        Event*,
                                                        EditorCommandSource,
                                                        const String&) {
-  MutableStylePropertySet* style =
-      MutableStylePropertySet::Create(kHTMLQuirksMode);
+  MutableCSSPropertyValueSet* style =
+      MutableCSSPropertyValueSet::Create(kHTMLQuirksMode);
   style->SetProperty(CSSPropertyUnicodeBidi, CSSValueIsolate);
   style->SetProperty(CSSPropertyDirection, CSSValueLtr);
   frame.GetEditor().ApplyStyle(
@@ -1135,8 +1135,8 @@ static bool ExecuteMakeTextWritingDirectionNatural(LocalFrame& frame,
                                                    Event*,
                                                    EditorCommandSource,
                                                    const String&) {
-  MutableStylePropertySet* style =
-      MutableStylePropertySet::Create(kHTMLQuirksMode);
+  MutableCSSPropertyValueSet* style =
+      MutableCSSPropertyValueSet::Create(kHTMLQuirksMode);
   style->SetProperty(CSSPropertyUnicodeBidi, CSSValueNormal);
   frame.GetEditor().ApplyStyle(
       style, InputEvent::InputType::kFormatSetBlockTextDirection);
@@ -1147,8 +1147,8 @@ static bool ExecuteMakeTextWritingDirectionRightToLeft(LocalFrame& frame,
                                                        Event*,
                                                        EditorCommandSource,
                                                        const String&) {
-  MutableStylePropertySet* style =
-      MutableStylePropertySet::Create(kHTMLQuirksMode);
+  MutableCSSPropertyValueSet* style =
+      MutableCSSPropertyValueSet::Create(kHTMLQuirksMode);
   style->SetProperty(CSSPropertyUnicodeBidi, CSSValueIsolate);
   style->SetProperty(CSSPropertyDirection, CSSValueRtl);
   frame.GetEditor().ApplyStyle(
@@ -1241,7 +1241,7 @@ bool ModifySelectionyWithPageGranularity(
     unsigned vertical_distance,
     SelectionModifyVerticalDirection direction) {
   SelectionModifier selection_modifier(
-      frame, frame.Selection().ComputeVisibleSelectionInDOMTree());
+      frame, frame.Selection().GetSelectionInDOMTree());
   if (!selection_modifier.ModifyWithPageGranularity(alter, vertical_distance,
                                                     direction)) {
     return false;

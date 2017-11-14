@@ -18,6 +18,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "cc/base/devtools_instrumentation.h"
+#include "cc/base/histograms.h"
 #include "cc/raster/tile_task.h"
 #include "cc/tiles/mipmap_util.h"
 #include "components/viz/common/gpu/context_provider.h"
@@ -497,6 +498,17 @@ GpuImageDecodeCache::~GpuImageDecodeCache() {
       this);
   // Unregister this component with memory_coordinator::ClientRegistry.
   base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
+
+  // TODO(vmpstr): If we don't have a client name, it may cause problems in
+  // unittests, since most tests don't set the name but some do. The UMA system
+  // expects the name to be always the same. This assertion is violated in the
+  // tests that do set the name.
+  if (GetClientNameForMetrics()) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        base::StringPrintf("Compositing.%s.CachedImagesCount.Gpu",
+                           GetClientNameForMetrics()),
+        lifetime_max_items_in_cache_, 1, 1000, 20);
+  }
 }
 
 ImageDecodeCache::TaskResult GpuImageDecodeCache::GetTaskForImageAndRef(
@@ -1088,6 +1100,9 @@ bool GpuImageDecodeCache::EnsureCapacity(size_t required_size) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "GpuImageDecodeCache::EnsureCapacity");
   lock_.AssertAcquired();
+
+  lifetime_max_items_in_cache_ =
+      std::max(lifetime_max_items_in_cache_, persistent_cache_.size());
 
   if (CanFitInWorkingSet(required_size) && !ExceedsPreferredCount())
     return true;

@@ -7,25 +7,25 @@
 #import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/ui/commands/history_popup_commands.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/toolbar/clean/toolbar_button.h"
+#import "ios/chrome/browser/ui/toolbar/clean/toolbar_component_options.h"
+#import "ios/chrome/browser/ui/toolbar/clean/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/clean/chrome/browser/ui/commands/navigation_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tab_grid_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tab_strip_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tools_menu_commands.h"
-#import "ios/clean/chrome/browser/ui/toolbar/toolbar_button.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_button_factory.h"
-#import "ios/clean/chrome/browser/ui/toolbar/toolbar_component_options.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_configuration.h"
-#import "ios/clean/chrome/browser/ui/toolbar/toolbar_constants.h"
 #import "ios/third_party/material_components_ios/src/components/ProgressView/src/MaterialProgressView.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-@interface ToolbarViewController ()
-@property(nonatomic, strong) ToolbarButtonFactory* buttonFactory;
+@interface CleanToolbarViewController ()
+@property(nonatomic, strong) CleanToolbarButtonFactory* buttonFactory;
 @property(nonatomic, strong) UIView* locationBarContainer;
 @property(nonatomic, strong) UIStackView* stackView;
 @property(nonatomic, strong) ToolbarButton* backButton;
@@ -39,7 +39,7 @@
 @property(nonatomic, strong) MDCProgressView* progressBar;
 @end
 
-@implementation ToolbarViewController
+@implementation CleanToolbarViewController
 @synthesize buttonFactory = _buttonFactory;
 @synthesize dispatcher = _dispatcher;
 @synthesize locationBarViewController = _locationBarViewController;
@@ -61,7 +61,7 @@
                                        TabHistoryPopupCommands,
                                        TabStripCommands,
                                        ToolsMenuCommands>)dispatcher
-                     buttonFactory:(ToolbarButtonFactory*)buttonFactory {
+                     buttonFactory:(CleanToolbarButtonFactory*)buttonFactory {
   _dispatcher = dispatcher;
   self = [super initWithNibName:nil bundle:nil];
   if (self) {

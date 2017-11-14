@@ -116,16 +116,18 @@ class CORE_EXPORT HTMLTextAreaElement final : public TextControlElement {
   void ChildrenChanged(const ChildrenChange&) override;
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const override;
-  void CollectStyleForPresentationAttribute(const QualifiedName&,
-                                            const AtomicString&,
-                                            MutableStylePropertySet*) override;
+  void CollectStyleForPresentationAttribute(
+      const QualifiedName&,
+      const AtomicString&,
+      MutableCSSPropertyValueSet*) override;
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   void AppendToFormData(FormData&) override;
   void ResetImpl() override;
   bool HasCustomFocusLogic() const override;
   bool ShouldShowFocusRingOnMouseFocus() const override;
   bool IsKeyboardFocusable() const override;
-  void UpdateFocusAppearance(SelectionBehaviorOnFocus) override;
+  void UpdateFocusAppearanceWithOptions(SelectionBehaviorOnFocus,
+                                        const FocusOptions&) override;
 
   void AccessKeyAction(bool send_mouse_events) override;
 

@@ -16,11 +16,11 @@
 #include "chrome/browser/vr/test/constants.h"
 #include "chrome/browser/vr/toolbar_state.h"
 #include "chrome/browser/vr/ui.h"
+#include "chrome/browser/vr/ui_element_renderer.h"
 #include "chrome/browser/vr/ui_input_manager.h"
 #include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_manager.h"
-#include "chrome/browser/vr/vr_shell_renderer.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/security_state/core/security_state.h"
 #include "components/toolbar/vector_icons.h"
@@ -253,7 +253,7 @@ void VrTestContext::OnGlInitialized(const gfx::Size& window_size) {
   ui_->OnGlInitialized(content_texture_id,
                        UiElementRenderer::kTextureLocationLocal, false);
 
-  ui_->vr_shell_renderer()->GetControllerRenderer()->SetUp(
+  ui_->ui_element_renderer()->SetUpController(
       ControllerMesh::LoadFromResources());
 }
 
@@ -307,9 +307,15 @@ void VrTestContext::ExitPresent() {}
 void VrTestContext::ExitFullscreen() {}
 void VrTestContext::NavigateBack() {}
 void VrTestContext::ExitCct() {}
-void VrTestContext::OnUnsupportedMode(vr::UiUnsupportedMode mode) {}
+void VrTestContext::OnUnsupportedMode(vr::UiUnsupportedMode mode) {
+  if (mode == UiUnsupportedMode::kUnhandledPageInfo)
+    ui_->SetExitVrPromptEnabled(true, mode);
+}
 void VrTestContext::OnExitVrPromptResult(vr::UiUnsupportedMode reason,
-                                         vr::ExitVrPromptChoice choice) {}
+                                         vr::ExitVrPromptChoice choice) {
+  LOG(ERROR) << "exit prompt result: " << choice;
+  ui_->SetExitVrPromptEnabled(false, UiUnsupportedMode::kCount);
+}
 void VrTestContext::OnContentScreenBoundsChanged(const gfx::SizeF& bounds) {}
 
 }  // namespace vr

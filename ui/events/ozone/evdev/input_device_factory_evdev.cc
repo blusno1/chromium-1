@@ -10,6 +10,7 @@
 
 #include <utility>
 
+#include "base/files/scoped_file.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -83,7 +84,7 @@ void SetGestureBoolProperty(GesturePropertyProvider* provider,
 
 std::unique_ptr<EventConverterEvdev> CreateConverter(
     const OpenInputDeviceParams& params,
-    ScopedInputDevice fd,
+    base::ScopedFD fd,
     const EventDeviceInfo& devinfo) {
 #if defined(USE_EVDEV_GESTURES)
   // Touchpad or mouse: use gestures library.
@@ -109,10 +110,11 @@ std::unique_ptr<EventConverterEvdev> CreateConverter(
   }
 
   // Graphics tablet
-  if (devinfo.HasTablet())
+  if (devinfo.HasTablet()) {
     return base::WrapUnique<EventConverterEvdev>(new TabletEventConverterEvdev(
         std::move(fd), params.path, params.id, params.cursor, devinfo,
         params.dispatcher));
+  }
 
   if (devinfo.HasGamepad()) {
     return base::WrapUnique<EventConverterEvdev>(new GamepadEventConverterEvdev(
@@ -131,7 +133,7 @@ std::unique_ptr<EventConverterEvdev> OpenInputDevice(
   const base::FilePath& path = params.path;
   TRACE_EVENT1("evdev", "OpenInputDevice", "path", path.value());
 
-  ScopedInputDevice fd(open(path.value().c_str(), O_RDWR | O_NONBLOCK));
+  base::ScopedFD fd(open(path.value().c_str(), O_RDWR | O_NONBLOCK));
   if (fd.get() < 0) {
     PLOG(ERROR) << "Cannot open " << path.value();
     return nullptr;
@@ -321,11 +323,16 @@ void InputDeviceFactoryEvdev::ApplyInputDeviceSettings() {
 
   for (const auto& it : converters_) {
     EventConverterEvdev* converter = it.second.get();
-    // The device was activated/deactivated we need to notify so
-    // Interactions MQs can be updated.
-    if (converter->IsEnabled() != IsDeviceEnabled(converter))
+
+    bool should_be_enabled = IsDeviceEnabled(converter);
+    bool was_enabled = converter->IsEnabled();
+    if (should_be_enabled != was_enabled) {
+      converter->SetEnabled(should_be_enabled);
+
+      // The device was activated/deactivated we need to notify so
+      // Interactions MQs can be updated.
       UpdateDirtyFlags(converter);
-    converter->SetEnabled(IsDeviceEnabled(converter));
+    }
 
     if (converter->type() == InputDeviceType::INPUT_DEVICE_INTERNAL &&
         converter->HasKeyboard()) {
@@ -337,6 +344,7 @@ void InputDeviceFactoryEvdev::ApplyInputDeviceSettings() {
     converter->SetTouchEventLoggingEnabled(
         input_device_settings_.touch_event_logging_enabled);
   }
+
   NotifyDevicesUpdated();
 }
 
@@ -500,10 +508,7 @@ void InputDeviceFactoryEvdev::EnablePalmSuppression(bool enabled) {
   if (enabled == palm_suppression_enabled_)
     return;
   palm_suppression_enabled_ = enabled;
-
-  for (const auto& it : converters_) {
-    it.second->SetEnabled(IsDeviceEnabled(it.second.get()));
-  }
+  ApplyInputDeviceSettings();
 }
 
 }  // namespace ui

@@ -658,6 +658,11 @@ content::WebContents* VrShell::GetNonNativePageWebContents() const {
 
 void VrShell::OnUnsupportedMode(vr::UiUnsupportedMode mode) {
   switch (mode) {
+    case vr::UiUnsupportedMode::kAndroidPermissionNeeded: {
+      JNIEnv* env = base::android::AttachCurrentThread();
+      Java_VrShellImpl_onUnhandledPermissionPrompt(env, j_vr_shell_);
+      break;
+    }
     case vr::UiUnsupportedMode::kUnhandledPageInfo: {
       JNIEnv* env = base::android::AttachCurrentThread();
       Java_VrShellImpl_onUnhandledPageInfo(env, j_vr_shell_);
@@ -723,6 +728,11 @@ void VrShell::SetVoiceSearchActive(bool active) {
   if (!active && !speech_recognizer_)
     return;
 
+  if (!HasAudioPermission()) {
+    OnUnsupportedMode(vr::UiUnsupportedMode::kAndroidPermissionNeeded);
+    return;
+  }
+
   if (!speech_recognizer_) {
     Profile* profile = ProfileManager::GetActiveUserProfile();
     std::string profile_locale = g_browser_process->GetApplicationLocale();
@@ -734,6 +744,11 @@ void VrShell::SetVoiceSearchActive(bool active) {
   } else {
     speech_recognizer_->Stop();
   }
+}
+
+bool VrShell::HasAudioPermission() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_VrShellImpl_hasAudioPermission(env, j_vr_shell_);
 }
 
 void VrShell::PollMediaAccessFlag() {
@@ -900,6 +915,7 @@ jlong Init(JNIEnv* env,
            jboolean web_vr_autopresentation_expected,
            jboolean in_cct,
            jboolean browsing_disabled,
+           jboolean has_or_can_request_audio_permission,
            jlong gvr_api,
            jboolean reprojected_rendering,
            jfloat display_width_meters,
@@ -912,6 +928,8 @@ jlong Init(JNIEnv* env,
   ui_initial_state.in_web_vr = for_web_vr;
   ui_initial_state.web_vr_autopresentation_expected =
       web_vr_autopresentation_expected;
+  ui_initial_state.has_or_can_request_audio_permission =
+      has_or_can_request_audio_permission;
 
   return reinterpret_cast<intptr_t>(new VrShell(
       env, obj, reinterpret_cast<ui::WindowAndroid*>(window_android),

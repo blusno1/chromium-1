@@ -6,10 +6,14 @@
 
 #include "base/macros.h"
 #include "base/numerics/ranges.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/vr/color_scheme.h"
+#include "chrome/browser/vr/elements/button.h"
 #include "chrome/browser/vr/elements/content_element.h"
+#include "chrome/browser/vr/elements/rect.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/elements/ui_element_name.h"
+#include "chrome/browser/vr/elements/vector_icon.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/speech_recognizer.h"
 #include "chrome/browser/vr/target_property.h"
@@ -50,18 +54,19 @@ const std::set<UiElementName> kHitTestableElements = {
     kLocationAccessIndicator,
     kExitPrompt,
     kExitPromptBackplane,
+    kAudioPermissionPrompt,
     kUrlBar,
     kLoadingIndicator,
-    kCloseButton,
     kWebVrTimeoutSpinner,
     kWebVrTimeoutMessage,
     kWebVrTimeoutMessageIcon,
     kWebVrTimeoutMessageText,
-    kWebVrTimeoutMessageButton,
     kWebVrTimeoutMessageButtonText,
-    kVoiceSearchButton,
-    kSpeechRecognitionPromptMicrophoneIcon,
-    kSpeechRecognitionPromptBackplane,
+    kSpeechRecognitionResultBackplane,
+    kSpeechRecognitionListeningBackplane,
+};
+const std::set<UiElementName> kSpecialHitTestableElements = {
+    kCloseButton, kWebVrTimeoutMessageButton, kVoiceSearchButton,
 };
 const std::set<UiElementName> kElementsVisibleWithExitWarning = {
     kScreenDimmer, kExitWarning,
@@ -76,13 +81,37 @@ MATCHER_P2(SizeFsAreApproximatelyEqual, other, tolerance, "") {
 }
 
 void CheckHitTestableRecursive(UiElement* element) {
+  // This shouldn't be necessary in the future once crbug.com/782395 is fixed.
+  // we can use class name to identify a child element in a composited element
+  // such as Button.
+  if (kSpecialHitTestableElements.find(element->name()) !=
+      kSpecialHitTestableElements.end()) {
+    bool has_hittestable_child = false;
+    for (auto& child : *element) {
+      if (child.hit_testable())
+        has_hittestable_child = true;
+    }
+    EXPECT_TRUE(has_hittestable_child)
+        << "element name: " << UiElementNameToString(element->name());
+    return;
+  }
   const bool should_be_hit_testable =
       kHitTestableElements.find(element->name()) != kHitTestableElements.end();
   EXPECT_EQ(should_be_hit_testable, element->hit_testable())
-      << "element name: " << element->name();
+      << "element name: " << UiElementNameToString(element->name());
   for (const auto& child : element->children()) {
     CheckHitTestableRecursive(child.get());
   }
+}
+
+void VerifyButtonColor(Button* button,
+                       SkColor foreground_color,
+                       SkColor background_color,
+                       const std::string& trace_name) {
+  SCOPED_TRACE(trace_name);
+  EXPECT_EQ(button->foreground()->GetColor(), foreground_color);
+  EXPECT_EQ(button->background()->edge_color(), background_color);
+  EXPECT_EQ(button->background()->center_color(), background_color);
 }
 
 }  // namespace
@@ -228,22 +257,22 @@ TEST_F(UiSceneManagerTest, UiUpdatesForIncognito) {
 TEST_F(UiSceneManagerTest, VoiceSearchHiddenInIncognito) {
   MakeManager(kNotInCct, kNotInWebVr);
 
-  model_->experimental_features_enabled = true;
   EXPECT_TRUE(OnBeginFrame());
   EXPECT_TRUE(IsVisible(kVoiceSearchButton));
 
   SetIncognito(true);
   EXPECT_TRUE(OnBeginFrame());
   EXPECT_FALSE(IsVisible(kVoiceSearchButton));
+}
 
-  // If experimental VR features are disabled, then we should never show the
-  // button, regardless of whether or not we're in incognito mode.
-  model_->experimental_features_enabled = false;
-  SetIncognito(false);
+TEST_F(UiSceneManagerTest, VoiceSearchHiddenWhenCantAskForPermission) {
+  MakeManager(kNotInCct, kNotInWebVr);
+
+  model_->speech.has_or_can_request_audio_permission = true;
   EXPECT_TRUE(OnBeginFrame());
-  EXPECT_FALSE(IsVisible(kVoiceSearchButton));
+  EXPECT_TRUE(IsVisible(kVoiceSearchButton));
 
-  SetIncognito(true);
+  model_->speech.has_or_can_request_audio_permission = false;
   EXPECT_TRUE(OnBeginFrame());
   EXPECT_FALSE(IsVisible(kVoiceSearchButton));
 }
@@ -684,28 +713,47 @@ TEST_F(UiSceneManagerTest, WebVrTimeout) {
       true);
 }
 
-TEST_F(UiSceneManagerTest, SpeechRecognitionPromptBindings) {
+TEST_F(UiSceneManagerTest, SpeechRecognitionUiVisibility) {
   MakeManager(kNotInCct, kNotInWebVr);
   UiElement* growing_circle =
-      scene_->GetUiElementByName(kSpeechRecognitionPromptGrowingCircle);
+      scene_->GetUiElementByName(kSpeechRecognitionListeningGrowingCircle);
 
-  model_->recognizing_speech = true;
+  model_->speech.recognizing_speech = true;
   EXPECT_TRUE(AnimateBy(MsToDelta(200)));
   VerifyVisibility(
-      {kSpeechRecognitionPrompt, kSpeechRecognitionPromptBackplane}, true);
+      {kSpeechRecognitionListening, kSpeechRecognitionListeningMicrophoneIcon,
+       kSpeechRecognitionListeningBackplane,
+       kSpeechRecognitionListeningInnerCircle,
+       kSpeechRecognitionListeningGrowingCircle},
+      true);
   EXPECT_FALSE(IsVisible(k2dBrowsingForeground));
+  EXPECT_FALSE(IsVisible(kSpeechRecognitionResult));
   EXPECT_FALSE(IsAnimating(growing_circle, {CIRCLE_GROW}));
 
-  model_->speech_recognition_state = SPEECH_RECOGNITION_READY;
+  model_->speech.speech_recognition_state = SPEECH_RECOGNITION_READY;
   EXPECT_TRUE(AnimateBy(MsToDelta(300)));
   EXPECT_TRUE(IsAnimating(growing_circle, {CIRCLE_GROW}));
 
-  model_->recognizing_speech = false;
-  model_->speech_recognition_state = SPEECH_RECOGNITION_END;
+  model_->speech.recognition_result = base::ASCIIToUTF16("test");
+  model_->speech.recognizing_speech = false;
+  model_->speech.speech_recognition_state = SPEECH_RECOGNITION_END;
   EXPECT_TRUE(AnimateBy(MsToDelta(500)));
+
+  VerifyVisibility({kSpeechRecognitionResult, kSpeechRecognitionResultCircle,
+                    kSpeechRecognitionResultMicrophoneIcon,
+                    kSpeechRecognitionResultBackplane},
+                   true);
   EXPECT_FALSE(IsAnimating(growing_circle, {CIRCLE_GROW}));
-  VerifyVisibility(
-      {kSpeechRecognitionPrompt, kSpeechRecognitionPromptBackplane}, false);
+  EXPECT_FALSE(IsVisible(kSpeechRecognitionListening));
+  EXPECT_FALSE(IsVisible(k2dBrowsingForeground));
+
+  // The visibility of Speech Recognition UI should not change at this point.
+  EXPECT_FALSE(AnimateBy(MsToDelta(600)));
+
+  EXPECT_TRUE(AnimateBy(
+      MsToDelta(500 + kSpeechRecognitionResultTimeoutSeconds * 1000)));
+  EXPECT_FALSE(IsVisible(kSpeechRecognitionListening));
+  EXPECT_FALSE(IsVisible(kSpeechRecognitionResult));
   EXPECT_TRUE(IsVisible(k2dBrowsingForeground));
 }
 
@@ -747,6 +795,43 @@ TEST_F(UiSceneManagerTest, ControllerQuiescence) {
   EXPECT_GT(1.0f, controller_group->computed_opacity());
   EXPECT_TRUE(AnimateBy(MsToDelta(150)));
   EXPECT_EQ(1.0f, controller_group->computed_opacity());
+}
+
+TEST_F(UiSceneManagerTest, CloseButtonColorBindings) {
+  MakeManager(kInCct, kNotInWebVr);
+  EXPECT_TRUE(IsVisible(kCloseButton));
+  Button* button =
+      static_cast<Button*>(scene_->GetUiElementByName(kCloseButton));
+  for (int i = 0; i < ColorScheme::kNumModes; i++) {
+    ColorScheme::Mode mode = static_cast<ColorScheme::Mode>(i);
+    SCOPED_TRACE(mode);
+    if (mode == ColorScheme::kModeIncognito) {
+      manager_->SetIncognito(true);
+    } else if (mode == ColorScheme::kModeFullscreen) {
+      manager_->SetIncognito(false);
+      manager_->SetFullscreen(true);
+    }
+    ColorScheme scheme = ColorScheme::GetColorScheme(mode);
+    EXPECT_TRUE(OnBeginFrame());
+    VerifyButtonColor(button, scheme.button_colors.foreground,
+                      scheme.button_colors.background, "normal");
+    button->hit_plane()->OnHoverEnter(gfx::PointF(0.5f, 0.5f));
+    EXPECT_TRUE(OnBeginFrame());
+    VerifyButtonColor(button, scheme.button_colors.foreground,
+                      scheme.button_colors.background_hover, "hover");
+    button->hit_plane()->OnButtonDown(gfx::PointF(0.5f, 0.5f));
+    EXPECT_TRUE(OnBeginFrame());
+    VerifyButtonColor(button, scheme.button_colors.foreground,
+                      scheme.button_colors.background_press, "press");
+    button->hit_plane()->OnMove(gfx::PointF());
+    EXPECT_TRUE(OnBeginFrame());
+    VerifyButtonColor(button, scheme.button_colors.foreground,
+                      scheme.button_colors.background, "move");
+    button->hit_plane()->OnButtonUp(gfx::PointF());
+    EXPECT_TRUE(OnBeginFrame());
+    VerifyButtonColor(button, scheme.button_colors.foreground,
+                      scheme.button_colors.background, "up");
+  }
 }
 
 }  // namespace vr

@@ -43,10 +43,6 @@ struct CONTENT_EXPORT StreamOverrideParameters {
   std::vector<ResourceResponseInfo> redirect_responses;
   std::vector<net::RedirectInfo> redirect_infos;
 
-  // The delta between the actual transfer size and the one reported by the
-  // AsyncResourceLoader due to not having the ResourceResponse.
-  int total_transfer_size_delta;
-
   int total_transferred = 0;
 
   // Called when this struct is deleted. Used to notify the browser that it can
@@ -96,7 +92,7 @@ class CONTENT_EXPORT WebURLLoaderImpl : public blink::WebURLLoader {
   // WebURLLoader methods:
   void LoadSynchronously(const blink::WebURLRequest& request,
                          blink::WebURLResponse& response,
-                         blink::WebURLError& error,
+                         base::Optional<blink::WebURLError>& error,
                          blink::WebData& data,
                          int64_t& encoded_data_length,
                          int64_t& encoded_body_length) override;

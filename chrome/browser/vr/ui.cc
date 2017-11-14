@@ -5,6 +5,7 @@
 #include "chrome/browser/vr/ui.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/strings/string16.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/vr/content_input_delegate.h"
 #include "chrome/browser/vr/cpu_surface_provider.h"
@@ -12,11 +13,11 @@
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
 #include "chrome/browser/vr/speech_recognizer.h"
+#include "chrome/browser/vr/ui_element_renderer.h"
 #include "chrome/browser/vr/ui_input_manager.h"
 #include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_manager.h"
-#include "chrome/browser/vr/vr_shell_renderer.h"
 #include "chrome/common/chrome_features.h"
 
 namespace vr {
@@ -40,6 +41,8 @@ Ui::Ui(UiBrowserInterface* browser,
       ui_initial_state.web_vr_autopresentation_expected;
   model_->experimental_features_enabled =
       base::FeatureList::IsEnabled(features::kExperimentalVRFeatures);
+  model_->speech.has_or_can_request_audio_permission =
+      ui_initial_state.has_or_can_request_audio_permission;
 }
 
 Ui::~Ui() = default;
@@ -108,11 +111,17 @@ void Ui::SetExitVrPromptEnabled(bool enabled, UiUnsupportedMode reason) {
 }
 
 void Ui::SetSpeechRecognitionEnabled(bool enabled) {
-  model_->recognizing_speech = enabled;
+  model_->speech.recognizing_speech = enabled;
+  if (enabled)
+    model_->speech.recognition_result.clear();
+}
+
+void Ui::SetRecognitionResult(const base::string16& result) {
+  model_->speech.recognition_result = result;
 }
 
 void Ui::OnSpeechRecognitionStateChanged(int new_state) {
-  model_->speech_recognition_state = new_state;
+  model_->speech.speech_recognition_state = new_state;
 }
 
 void Ui::SetOmniboxSuggestions(
@@ -127,9 +136,9 @@ bool Ui::ShouldRenderWebVr() {
 void Ui::OnGlInitialized(unsigned int content_texture_id,
                          UiElementRenderer::TextureLocation content_location,
                          bool use_ganesh) {
-  vr_shell_renderer_ = base::MakeUnique<VrShellRenderer>();
+  ui_element_renderer_ = base::MakeUnique<UiElementRenderer>();
   ui_renderer_ =
-      base::MakeUnique<UiRenderer>(scene_.get(), vr_shell_renderer_.get());
+      base::MakeUnique<UiRenderer>(scene_.get(), ui_element_renderer_.get());
   if (use_ganesh) {
     provider_ = base::MakeUnique<GaneshSurfaceProvider>();
   } else {

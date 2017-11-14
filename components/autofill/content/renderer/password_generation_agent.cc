@@ -15,7 +15,6 @@
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/form_classifier.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
-#include "components/autofill/content/renderer/password_form_conversion_utils.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/password_form.h"
@@ -169,6 +168,7 @@ PasswordGenerationAgent::PasswordGenerationAgent(
   LogBoolean(Logger::STRING_GENERATION_RENDERER_ENABLED, enabled_);
   registry->AddInterface(base::Bind(&PasswordGenerationAgent::BindRequest,
                                     base::Unretained(this)));
+  password_agent_->SetPasswordGenerationAgent(this);
 }
 PasswordGenerationAgent::~PasswordGenerationAgent() {}
 
@@ -242,6 +242,12 @@ void PasswordGenerationAgent::OnDynamicFormsSeen() {
   FindPossibleGenerationForm();
 }
 
+void PasswordGenerationAgent::OnFieldAutofilled(
+    const blink::WebInputElement& password_element) {
+  if (generation_element_ == password_element)
+    PasswordNoLongerGenerated();
+}
+
 void PasswordGenerationAgent::AllowToRunFormClassifier() {
   form_classifier_enabled_ = true;
 }
@@ -279,7 +285,7 @@ void PasswordGenerationAgent::FindPossibleGenerationForm() {
     // If we can't get a valid PasswordForm, we skip this form because the
     // the password won't get saved even if we generate it.
     std::unique_ptr<PasswordForm> password_form(
-        CreatePasswordFormFromWebForm(forms[i], nullptr, nullptr));
+        password_agent_->GetPasswordFormFromWebForm(forms[i]));
     if (!password_form.get()) {
       LogMessage(Logger::STRING_GENERATION_RENDERER_INVALID_PASSWORD_FORM);
       continue;
@@ -340,18 +346,22 @@ void PasswordGenerationAgent::GeneratedPasswordAccepted(
     if (!render_frame())
       return;
     password_element.SetAutofilled(true);
-    // Needed to notify password_autofill_agent that the content of the field
-    // has changed. Without this we will overwrite the generated
-    // password with an Autofilled password when saving.
-    // https://crbug.com/493455
-    password_agent_->UpdateStateForTextChange(password_element);
     // Advance focus to the next input field. We assume password fields in
     // an account creation form are always adjacent.
     render_frame()->GetRenderView()->GetWebView()->AdvanceFocus(false);
   }
   std::unique_ptr<PasswordForm> presaved_form(CreatePasswordFormToPresave());
-  if (presaved_form) {
+  if (presaved_form)
     GetPasswordManagerDriver()->PresaveGeneratedPassword(*presaved_form);
+
+  // Call UpdateStateForTextChange after the corresponding PasswordFormManager
+  // is notified that the password was generated.
+  for (auto& password_element : generation_form_data_->password_elements) {
+    // Needed to notify password_autofill_agent that the content of the field
+    // has changed. Without this we will overwrite the generated
+    // password with an Autofilled password when saving.
+    // https://crbug.com/493455
+    password_agent_->UpdateStateForTextChange(password_element);
   }
 }
 
@@ -363,11 +373,10 @@ PasswordGenerationAgent::CreatePasswordFormToPresave() {
   // change username and password values.
   std::unique_ptr<PasswordForm> password_form;
   if (!generation_element_.Form().IsNull()) {
-    password_form = CreatePasswordFormFromWebForm(generation_element_.Form(),
-                                                  nullptr, nullptr);
+    password_form =
+        password_agent_->GetPasswordFormFromWebForm(generation_element_.Form());
   } else {
-    password_form = CreatePasswordFormFromUnownedInputElements(
-        *render_frame()->GetWebFrame(), nullptr, nullptr);
+    password_form = password_agent_->GetPasswordFormFromUnownedInputElements();
   }
   if (password_form) {
     password_form->type = PasswordForm::TYPE_GENERATED;
@@ -464,15 +473,14 @@ void PasswordGenerationAgent::SetUpUserTriggeredGeneration() {
   std::unique_ptr<PasswordForm> password_form;
   std::vector<blink::WebFormControlElement> control_elements;
   if (!form.IsNull()) {
-    password_form = CreatePasswordFormFromWebForm(form, nullptr, nullptr);
+    password_form = password_agent_->GetPasswordFormFromWebForm(form);
     control_elements = form_util::ExtractAutofillableElementsInForm(form);
   } else {
     const blink::WebLocalFrame& frame = *render_frame()->GetWebFrame();
     blink::WebDocument doc = frame.GetDocument();
     if (doc.IsNull())
       return;
-    password_form =
-        CreatePasswordFormFromUnownedInputElements(frame, nullptr, nullptr);
+    password_form = password_agent_->GetPasswordFormFromUnownedInputElements();
     control_elements =
         form_util::GetUnownedFormFieldElements(doc.All(), nullptr);
   }

@@ -138,7 +138,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "crashpad_util_test"
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -531,6 +531,11 @@
       }
     ]
   },
+  "Win Builder": {
+    "additional_compile_targets": [
+      "pdf_fuzzers"
+    ]
+  },
   "Win10 Tests x64": {
     "gtest_tests": [
       {
@@ -721,7 +726,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "crashpad_util_test"
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -1276,7 +1281,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "crashpad_util_test"
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -1847,7 +1852,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "crashpad_util_test"
+        "test": "crashpad_tests"
       },
       {
         "swarming": {
@@ -2211,6 +2216,16 @@
           "shards": 10
         }
       }
+    ]
+  },
+  "WinMSVC64": {
+    "additional_compile_targets": [
+      "all"
+    ]
+  },
+  "WinMSVC64 (dbg)": {
+    "additional_compile_targets": [
+      "all"
     ]
   }
 }

@@ -32,13 +32,13 @@
 #include "net/quic/chromium/network_connection.h"
 #include "net/quic/chromium/quic_chromium_client_session.h"
 #include "net/quic/chromium/quic_clock_skew_detector.h"
-#include "net/quic/chromium/quic_http_stream.h"
 #include "net/quic/core/quic_client_push_promise_index.h"
 #include "net/quic/core/quic_config.h"
 #include "net/quic/core/quic_crypto_stream.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/platform/api/quic_string_piece.h"
+#include "net/socket/client_socket_pool.h"
 #include "net/ssl/ssl_config_service.h"
 
 namespace base {
@@ -67,7 +67,6 @@ class QuicServerInfo;
 class QuicStreamFactory;
 class SocketPerformanceWatcherFactory;
 class TransportSecurityState;
-class BidirectionalStreamImpl;
 
 namespace test {
 class QuicStreamFactoryPeer;
@@ -97,7 +96,7 @@ enum QuicPlatformNotification {
   NETWORK_NOTIFICATION_MAX
 };
 
-// Encapsulates a pending request for a QuicHttpStream.
+// Encapsulates a pending request for a QuicChromiumClientSession.
 // If the request is still pending when it is destroyed, it will
 // cancel the request with the factory.
 class NET_EXPORT_PRIVATE QuicStreamRequest {
@@ -114,7 +113,6 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
               PrivacyMode privacy_mode,
               int cert_verify_flags,
               const GURL& url,
-              QuicStringPiece method,
               const NetLogWithSource& net_log,
               NetErrorDetails* net_error_details,
               const CompletionCallback& callback);
@@ -125,9 +123,8 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
   // returns the amount of time waiting job should be delayed.
   base::TimeDelta GetTimeDelayForWaitingJob() const;
 
-  std::unique_ptr<HttpStream> CreateStream();
-
-  std::unique_ptr<BidirectionalStreamImpl> CreateBidirectionalStreamImpl();
+  // Releases the handle to the QUIC session retrieved as a result of Request().
+  std::unique_ptr<QuicChromiumClientSession::Handle> ReleaseSessionHandle();
 
   // Sets |session_|.
   void SetSession(std::unique_ptr<QuicChromiumClientSession::Handle> session);
@@ -149,8 +146,7 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
   DISALLOW_COPY_AND_ASSIGN(QuicStreamRequest);
 };
 
-// A factory for creating new QuicHttpStreams on top of a pool of
-// QuicChromiumClientSessions.
+// A factory for fetching QuicChromiumClientSessions.
 class NET_EXPORT_PRIVATE QuicStreamFactory
     : public NetworkChangeNotifier::IPAddressObserver,
       public NetworkChangeNotifier::NetworkObserver,
@@ -223,7 +219,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   bool CanUseExistingSession(const QuicServerId& server_id,
                              const HostPortPair& destination);
 
-  // Creates a new QuicHttpStream to |host_port_pair| which will be
+  // Fetches a QuicChromiumClientSession to |host_port_pair| which will be
   // owned by |request|.
   // If a matching session already exists, this method will return OK.  If no
   // matching session exists, this will return ERR_IO_PENDING and will invoke
@@ -233,7 +229,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
              QuicTransportVersion quic_version,
              int cert_verify_flags,
              const GURL& url,
-             QuicStringPiece method,
              const NetLogWithSource& net_log,
              QuicStreamRequest* request);
 

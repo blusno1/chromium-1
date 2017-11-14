@@ -55,9 +55,6 @@ void FillWithEmptyClients(Page::PageClients& page_clients) {
 
   DEFINE_STATIC_LOCAL(EmptyEditorClient, dummy_editor_client, ());
   page_clients.editor_client = &dummy_editor_client;
-
-  DEFINE_STATIC_LOCAL(EmptySpellCheckerClient, dummy_spell_checker_client, ());
-  page_clients.spell_checker_client = &dummy_spell_checker_client;
 }
 
 class EmptyPopupMenu : public PopupMenu {
@@ -88,7 +85,7 @@ class EmptyFrameScheduler : public WebFrameScheduler {
   WebFrameScheduler::FrameType GetFrameType() const override {
     return WebFrameScheduler::FrameType::kSubframe;
   }
-  WebViewScheduler* GetWebViewScheduler() override { return nullptr; }
+  WebViewScheduler* GetWebViewScheduler() const override { return nullptr; }
   ScopedVirtualTimePauser CreateScopedVirtualTimePauser() {
     return ScopedVirtualTimePauser();
   }
@@ -100,7 +97,7 @@ class EmptyFrameScheduler : public WebFrameScheduler {
   std::unique_ptr<ActiveConnectionHandle> OnActiveConnectionCreated() override {
     return nullptr;
   }
-  bool IsExemptFromThrottling() const override { return false; }
+  bool IsExemptFromBudgetBasedThrottling() const override { return false; }
 };
 
 PopupMenu* EmptyChromeClient::OpenPopupMenu(LocalFrame&, HTMLSelectElement&) {
@@ -139,7 +136,7 @@ String EmptyChromeClient::AcceptLanguages() {
 std::unique_ptr<WebFrameScheduler> EmptyChromeClient::CreateFrameScheduler(
     BlameContext* blame_context,
     WebFrameScheduler::FrameType frame_type) {
-  return WTF::MakeUnique<EmptyFrameScheduler>();
+  return std::make_unique<EmptyFrameScheduler>();
 }
 
 NavigationPolicy EmptyLocalFrameClient::DecidePolicyForNavigation(

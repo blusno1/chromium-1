@@ -59,6 +59,7 @@ source_set("ui_util") {
     "//base",
     "//base:i18n",
     "//ios/chrome/browser",
+    "//ios/chrome/browser/ui/toolbar:feature",
     "//ios/chrome/browser/ui/toolbar/public:toolbar_base_feature",
     "//ios/web",
     "//ui/base",
@@ -106,8 +107,10 @@ source_set("unit_tests") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks:features",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/find_in_page",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/sessions",
@@ -450,6 +453,7 @@ source_set("eg_tests") {
   testonly = true
   sources = [
     "browser_view_controller_egtest.mm",
+    "keyboard_commands_egtest.mm",
   ]
   deps = [
     ":ui",

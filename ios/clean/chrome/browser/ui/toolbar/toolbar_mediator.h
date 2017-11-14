@@ -9,7 +9,7 @@
 
 #import "ios/chrome/browser/ui/broadcaster/chrome_broadcast_observer.h"
 
-@protocol ToolbarConsumer;
+@protocol CleanToolbarConsumer;
 
 namespace web {
 class WebState;
@@ -18,7 +18,7 @@ class WebStateList;
 
 // A mediator object that provides the relevant properties of a web state
 // to a consumer.
-@interface ToolbarMediator : NSObject<ChromeBroadcastObserver>
+@interface CleanToolbarMediator : NSObject<ChromeBroadcastObserver>
 
 // The WebState whose properties this object mediates. This can change during
 // the lifetime of this object and may be null.
@@ -30,7 +30,7 @@ class WebStateList;
 
 // The consumer for this object. This can change during the lifetime of this
 // object and may be nil.
-@property(nonatomic, strong) id<ToolbarConsumer> consumer;
+@property(nonatomic, strong) id<CleanToolbarConsumer> consumer;
 
 // Stops observing all objects.
 - (void)disconnect;

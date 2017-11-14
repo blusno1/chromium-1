@@ -14,6 +14,7 @@
 #include "content/public/renderer/fixed_received_data.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
+#include "services/network/public/cpp/url_loader_status.h"
 #include "ui/base/l10n/l10n_util.h"
 
 SecurityFilterPeer::SecurityFilterPeer(
@@ -137,12 +138,7 @@ void ReplaceContentPeer::OnReceivedData(std::unique_ptr<ReceivedData> data) {
 }
 
 void ReplaceContentPeer::OnCompletedRequest(
-    int error_code,
-    bool stale_copy_in_cache,
-    const base::TimeTicks& completion_time,
-    int64_t total_transfer_size,
-    int64_t encoded_body_size,
-    int64_t decoded_body_size) {
+    const network::URLLoaderStatus& status) {
   content::ResourceResponseInfo info;
   ProcessResponseInfo(info, &info, mime_type_);
   info.content_length = static_cast<int>(data_.size());
@@ -151,7 +147,7 @@ void ReplaceContentPeer::OnCompletedRequest(
     original_peer_->OnReceivedData(base::MakeUnique<content::FixedReceivedData>(
         data_.data(), data_.size()));
   }
-  original_peer_->OnCompletedRequest(net::OK, stale_copy_in_cache,
-                                     completion_time, total_transfer_size,
-                                     encoded_body_size, decoded_body_size);
+  network::URLLoaderStatus ok_status(status);
+  ok_status.error_code = net::OK;
+  original_peer_->OnCompletedRequest(ok_status);
 }

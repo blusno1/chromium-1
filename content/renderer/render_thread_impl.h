@@ -46,6 +46,7 @@
 #include "content/renderer/layout_test_dependencies.h"
 #include "content/renderer/media/audio_ipc_factory.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
+#include "ipc/ipc_sync_channel.h"
 #include "media/media_features.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -727,9 +728,6 @@ class CONTENT_EXPORT RenderThreadImpl
   // resources given to the compositor or to the viz service should be
   // software-based.
   bool is_gpu_compositing_disabled_ = false;
-
-  // The channel from the renderer process to the GPU process.
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
 
   // The message loop of the renderer main thread.
   // This message loop should be destructed before the RenderThreadImpl

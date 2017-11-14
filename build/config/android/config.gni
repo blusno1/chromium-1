@@ -129,19 +129,16 @@ if (is_android) {
     # The password for the keystore to use for signing builds.
     android_keystore_password = default_android_keystore_password
 
-    # Set to true to run findbugs on JAR targets.
-    run_findbugs = false
-
-    # Set to true to enable verbose findbugs logging. This does nothing if
-    # run_findbugs is false.
-    findbugs_verbose = false
-
     # Enables verbose proguard output (summaries and unfiltered output).
     proguard_verbose = false
 
     # Java debug on Android. Having this on enables multidexing, and turning it
     # off will enable proguard.
     is_java_debug = is_debug
+
+    # Report Java assert failure on Android. Turning it on will report Java
+    # assert failure without crash.
+    report_java_assert = false
 
     # Mark APKs as android:debuggable="true".
     debuggable_apks = !is_official_build

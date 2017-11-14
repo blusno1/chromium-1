@@ -188,6 +188,7 @@ def build_gn_with_ninja_manually(tempdir, options):
   write_buildflag_header_manually(root_gen_dir, 'base/cfi_flags.h',
       {
           'CFI_CAST_CHECK': 'false',
+          'CFI_ICALL_CHECK': 'false',
           'CFI_ENFORCEMENT_TRAP': 'false',
           'CFI_ENFORCEMENT_DIAGNOSTIC': 'false'
       })
@@ -481,6 +482,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/metrics/sample_vector.cc',
       'base/metrics/sparse_histogram.cc',
       'base/metrics/statistics_recorder.cc',
+      'base/observer_list_threadsafe.cc',
       'base/path_service.cc',
       'base/pending_task.cc',
       'base/pickle.cc',

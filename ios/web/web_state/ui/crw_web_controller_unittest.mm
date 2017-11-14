@@ -30,14 +30,13 @@
 #include "ios/web/public/test/fakes/test_web_state_observer.h"
 #import "ios/web/public/test/fakes/test_web_view_content_view.h"
 #import "ios/web/public/test/web_view_content_test_util.h"
-#import "ios/web/public/web_state/crw_web_controller_observer.h"
 #import "ios/web/public/web_state/ui/crw_content_view.h"
 #import "ios/web/public/web_state/ui/crw_native_content.h"
 #import "ios/web/public/web_state/ui/crw_native_content_provider.h"
 #import "ios/web/public/web_state/ui/crw_web_view_content_view.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
 #include "ios/web/public/web_state/web_state_observer.h"
-#import "ios/web/test/fakes/crw_test_back_forward_list.h"
+#import "ios/web/test/fakes/crw_fake_back_forward_list.h"
 #import "ios/web/test/web_test_with_web_controller.h"
 #import "ios/web/test/wk_web_view_crash_utils.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
@@ -62,20 +61,6 @@
 
 @interface CRWWebController (PrivateAPI)
 @property(nonatomic, readwrite) web::PageDisplayState pageDisplayState;
-@end
-
-@interface CountingObserver : NSObject<CRWWebControllerObserver>
-
-@property(nonatomic, readonly) int pageLoadedCount;
-@end
-
-@implementation CountingObserver
-@synthesize pageLoadedCount = _pageLoadedCount;
-
-- (void)pageLoaded:(CRWWebController*)webController {
-  ++_pageLoadedCount;
-}
-
 @end
 
 namespace web {
@@ -168,7 +153,7 @@ class CRWWebControllerTest : public WebTestWithWebController {
     }
 #endif
 
-    mock_wk_list_ = [[CRWTestBackForwardList alloc] init];
+    mock_wk_list_ = [[CRWFakeBackForwardList alloc] init];
     OCMStub([result backForwardList]).andReturn(mock_wk_list_);
     [[[result stub] andReturn:[NSURL URLWithString:@(kTestURLString)]] URL];
     [[result stub] setNavigationDelegate:[OCMArg checkWithBlock:^(id delegate) {
@@ -189,7 +174,7 @@ class CRWWebControllerTest : public WebTestWithWebController {
   __weak id<WKNavigationDelegate> navigation_delegate_;
   UIScrollView* scroll_view_;
   id mock_web_view_;
-  CRWTestBackForwardList* mock_wk_list_;
+  CRWFakeBackForwardList* mock_wk_list_;
 };
 
 // Tests that AllowCertificateError is called with correct arguments if
@@ -512,40 +497,6 @@ TEST_F(CRWWebControllerPageScrollStateTest, DISABLED_AtTop) {
 // Test fixture for testing visible security state.
 typedef WebTestWithWebState CRWWebStateSecurityStateTest;
 
-// Tests that OnPasswordInputShownOnHttp updates the SSLStatus to indicate that
-// a password field has been displayed on an HTTP page.
-TEST_F(CRWWebStateSecurityStateTest, HttpPassword) {
-  LoadHtml(@"<html><body></body></html>", GURL("http://chromium.test"));
-  NavigationManager* nav_manager = web_state()->GetNavigationManager();
-  EXPECT_FALSE(nav_manager->GetLastCommittedItem()->GetSSL().content_status &
-               SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
-  TestWebStateObserver observer(web_state());
-  ASSERT_FALSE(observer.did_change_visible_security_state_info());
-  web_state()->OnPasswordInputShownOnHttp();
-  EXPECT_TRUE(nav_manager->GetLastCommittedItem()->GetSSL().content_status &
-              SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
-  ASSERT_TRUE(observer.did_change_visible_security_state_info());
-  EXPECT_EQ(web_state(),
-            observer.did_change_visible_security_state_info()->web_state);
-}
-
-// Tests that OnCreditCardInputShownOnHttp updates the SSLStatus to indicate
-// that a credit card field has been displayed on an HTTP page.
-TEST_F(CRWWebStateSecurityStateTest, HttpCreditCard) {
-  LoadHtml(@"<html><body></body></html>", GURL("http://chromium.test"));
-  NavigationManager* nav_manager = web_state()->GetNavigationManager();
-  EXPECT_FALSE(nav_manager->GetLastCommittedItem()->GetSSL().content_status &
-               SSLStatus::DISPLAYED_CREDIT_CARD_FIELD_ON_HTTP);
-  TestWebStateObserver observer(web_state());
-  ASSERT_FALSE(observer.did_change_visible_security_state_info());
-  web_state()->OnCreditCardInputShownOnHttp();
-  EXPECT_TRUE(nav_manager->GetLastCommittedItem()->GetSSL().content_status &
-              SSLStatus::DISPLAYED_CREDIT_CARD_FIELD_ON_HTTP);
-  ASSERT_TRUE(observer.did_change_visible_security_state_info());
-  EXPECT_EQ(web_state(),
-            observer.did_change_visible_security_state_info()->web_state);
-}
-
 // Tests that loading HTTP page updates the SSLStatus.
 TEST_F(CRWWebStateSecurityStateTest, LoadHttpPage) {
   TestWebStateObserver observer(web_state());
@@ -584,8 +535,8 @@ TEST_F(CRWWebControllerFormActivityTest, KeyUpEvent) {
   ExecuteJavaScript(@"document.dispatchEvent(new KeyboardEvent('keyup'));");
   TestFormActivityInfo* info = observer.form_activity_info();
   ASSERT_TRUE(info);
-  EXPECT_EQ("keyup", info->type);
-  EXPECT_FALSE(info->input_missing);
+  EXPECT_EQ("keyup", info->form_activity.type);
+  EXPECT_FALSE(info->form_activity.input_missing);
 }
 
 // Real WKWebView is required for CRWWebControllerJSExecutionTest.
@@ -714,27 +665,6 @@ TEST_F(CRWWebControllerNativeContentTest, NativeContentVirtualURL) {
   EXPECT_EQ(navigationManager.GetLastCommittedItem()->GetVirtualURL(),
             virtual_url);
 }
-
-// A separate test class, as none of the |CRWUIWebViewWebControllerTest| setup
-// is needed;
-typedef WebTestWithWebController CRWWebControllerObserversTest;
-
-// Tests that CRWWebControllerObservers are called.
-TEST_F(CRWWebControllerObserversTest, Observers) {
-  CountingObserver* observer = [[CountingObserver alloc] init];
-  EXPECT_FALSE([web_controller() hasObservers]);
-  [web_controller() addObserver:observer];
-  EXPECT_TRUE([web_controller() hasObservers]);
-
-  EXPECT_EQ(0, [observer pageLoadedCount]);
-  [web_controller() webStateImpl]->OnPageLoaded(GURL("http://test"), false);
-  EXPECT_EQ(0, [observer pageLoadedCount]);
-  [web_controller() webStateImpl]->OnPageLoaded(GURL("http://test"), true);
-  EXPECT_EQ(1, [observer pageLoadedCount]);
-
-  [web_controller() removeObserver:observer];
-  EXPECT_FALSE([web_controller() hasObservers]);
-};
 
 // Test fixture for window.open tests.
 class WindowOpenByDomTest : public WebTestWithWebController {
