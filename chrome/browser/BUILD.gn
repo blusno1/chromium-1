@@ -1715,6 +1715,7 @@ split_static_library("browser") {
     "//crypto",
     "//crypto:platform",
     "//device/base",
+
     #"//device/bluetooth:experimental_mojo",
     "//device/usb/mojo",
     "//device/usb/public/interfaces",
