@@ -20,7 +20,7 @@ class BluetoothInternalsHandler : public mojom::BluetoothInternalsHandler,
   ~BluetoothInternalsHandler() override;
 
   // mojom::BluetoothInternalsHandler overrides:
-  void GetBluetoothAdapter(GetBluetoothAdapterCallback callback) override;
+  void GetAdapter(GetAdapterCallback callback) override;
 
  private:
   mojo::Binding<mojom::BluetoothInternalsHandler> binding_;

@@ -15,7 +15,7 @@ BluetoothInternalsHandler::BluetoothInternalsHandler(
 
 BluetoothInternalsHandler::~BluetoothInternalsHandler() {}
 
-void BluetoothInternalsHandler::GetBluetoothAdapter(
-    GetBluetoothAdapterCallback callback) {
-  std::move(callback).Run();
+void BluetoothInternalsHandler::GetAdapter(
+    GetAdapterCallback callback) {
+  std::move(callback).Run(nullptr);
 }

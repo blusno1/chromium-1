@@ -8,5 +8,5 @@ import "device/bluetooth/public/interfaces/adapter.mojom";
 
 interface BluetoothInternalsHandler {
   // Gets an Adapter interface. Returns null if Bluetooth is not supported.
-  GetAdapter() => (Adapter? adapter);
+  GetAdapter() => (bluetooth.mojom.Adapter? adapter);
 };
