@@ -217,7 +217,6 @@ cr.define('adapter_broker', function() {
    *     rejects if Bluetooth is not supported.
    */
   function getAdapterBroker() {
-console.error("getAdapterBroker");
     if (adapterBroker)
       return Promise.resolve(adapterBroker);
 
@@ -225,10 +224,10 @@ console.error("getAdapterBroker");
     Mojo.bindInterface(
         mojom.BluetoothInternalsHandler.name,
         mojo.makeRequest(bluetoothInternalsHandler).handle);
-console.error("getAdapterBroker");
 
     // Get an Adapter service.
     return bluetoothInternalsHandler.getAdapter().then(function(response) {
+console.error("getAdapterBroker");
       if (!response.adapter.ptr.isBound()) {
         throw new Error('Bluetooth Not Supported on this platform.');
       }

@@ -15,7 +15,7 @@ BluetoothInternalsHandler::BluetoothInternalsHandler(
 
 BluetoothInternalsHandler::~BluetoothInternalsHandler() {}
 
-void BluetoothInternalsHandler::GetAdapter(
-    GetAdapterCallback callback) {
+void BluetoothInternalsHandler::GetAdapter(GetAdapterCallback callback) {
+  LOG(ERROR) << "BluetoothInternalsHandler::GetAdapter TODO FACTORY ONE";
   std::move(callback).Run(nullptr);
 }
