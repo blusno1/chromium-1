@@ -21,13 +21,6 @@ class ASH_EXPORT AccessibilityDelegate {
  public:
   virtual ~AccessibilityDelegate() {}
 
-  // Invoked to toggle spoken feedback for accessibility
-  virtual void ToggleSpokenFeedback(
-      AccessibilityNotificationVisibility notify) = 0;
-
-  // Returns true if spoken feedback is enabled.
-  virtual bool IsSpokenFeedbackEnabled() const = 0;
-
   // Invoked to enable the screen magnifier.
   virtual void SetMagnifierEnabled(bool enabled) = 0;
 
@@ -45,12 +38,6 @@ class ASH_EXPORT AccessibilityDelegate {
 
   // Returns if the a11y virtual keyboard is enabled.
   virtual bool IsVirtualKeyboardEnabled() const = 0;
-
-  // Invoked to enable or disable the mono audio output.
-  virtual void SetMonoAudioEnabled(bool enabled) = 0;
-
-  // Returns if the mono audio output is enabled.
-  virtual bool IsMonoAudioEnabled() const = 0;
 
   // Invoked to enable or disable caret highlighting.
   virtual void SetCaretHighlightEnabled(bool enabled) = 0;

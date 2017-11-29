@@ -89,6 +89,7 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
 
   // Returns the mode set on the current process' command line.
   static Mode GetCurrentMode();
+  static Mode ConvertStringToMode(const std::string& input);
   bool ShouldProfileProcessType(int process_type);
 
   // Launches the profiling process and returns a pointer to it.
@@ -104,25 +105,39 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
 
   void ConfigureBackgroundProfilingTriggers();
 
-  // Sends a message to the profiling process that it dump the given process'
+  // Sends a message to the profiling process to dump the given process'
   // memory data to the given file.
   void RequestProcessDump(base::ProcessId pid,
                           base::FilePath dest,
                           base::OnceClosure done);
 
-  // Sends a message to the profiling process that it report the given process'
+  // Sends a message to the profiling process to report all profiled processes
   // memory data to the crash server (slow-report).
-  void RequestProcessReport(base::ProcessId pid, std::string trigger_name);
+  void RequestProcessReport(std::string trigger_name);
 
-  // For testing. Only one can be set at a time. Will be called after the
-  // profiling process dumps heaps into the trace log. No guarantees are made
-  // about the task queue on which the callback will be Run.
-  void SetDumpProcessForTracingCallback(base::OnceClosure callback);
+  using TraceFinishedCallback =
+      base::OnceCallback<void(bool success, std::string trace_json)>;
+
+  // This method must be called from the UI thread. |callback| will be called
+  // asynchronously on the UI thread. If
+  // |stop_immediately_after_heap_dump_for_tests| is true, then |callback| will
+  // be called as soon as the heap dump is added to the trace. Otherwise,
+  // |callback| will be called after 10s. This gives time for the
+  // MemoryDumpProviders to dump to the trace, which is asynchronous and has no
+  // finish notification. This intentionally avoids waiting for the heap-dump
+  // finished signal, in case there's a problem with the profiling process and
+  // the heap-dump is never added to the trace.
+  // Public for testing.
+  void RequestTraceWithHeapDump(
+      TraceFinishedCallback callback,
+      bool stop_immediately_after_heap_dump_for_tests);
 
  private:
   friend struct base::DefaultSingletonTraits<ProfilingProcessHost>;
   friend class BackgroundProfilingTriggersTest;
   friend class MemlogBrowserTest;
+  friend class ProfilingTestDriver;
+  FRIEND_TEST_ALL_PREFIXES(ProfilingProcessHost, ShouldProfileNewRenderer);
 
   ProfilingProcessHost();
   ~ProfilingProcessHost() override;
@@ -157,6 +172,9 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
 
   // Starts the profiling process.
   void LaunchAsService();
+
+  // Called on the UI thread after the heap dump has been added to the trace.
+  void DumpProcessFinishedUIThread();
 
   // Sends the end of the data pipe to the profiling service.
   void AddClientToProfilingService(profiling::mojom::ProfilingClientPtr client,
@@ -232,7 +250,8 @@ class ProfilingProcessHost : public content::BrowserChildProcessObserver,
   // a renderer process if one is already not going.
   bool always_sample_for_tests_;
 
-  // For tests.
+  // Only used for testing. Must only ever be used from the UI thread. Will be
+  // called after the profiling process dumps heaps into the trace log.
   base::OnceClosure dump_process_for_tracing_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfilingProcessHost);

@@ -215,6 +215,10 @@ const base::Feature kUseAndroidOverlay{"UseAndroidOverlay",
 const base::Feature kUseAndroidOverlayAggressively{
     "UseAndroidOverlayAggressively", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables playback of AV1 video files.
+const base::Feature kAv1Decoder{"Av1Decoder",
+                                base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Let video track be unselected when video is playing in the background.
 const base::Feature kBackgroundVideoTrackOptimization{
     "BackgroundVideoTrackOptimization", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -334,14 +338,6 @@ const base::Feature kDelayCopyNV12Textures{"DelayCopyNV12Textures",
 const base::Feature kMediaFoundationH264Encoding{
     "MediaFoundationH264Encoding", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN)
-
-#if defined(OS_MACOSX)
-// Enables a workaround for a CoreAudio issue. The workaround ensures that
-// CoreAudio's pause and resume operations are serialized. These operations are
-// executed when the system is suspended and when it resumes.
-const base::Feature kSerializeCoreAudioPauseResume{
-    "SerializeCoreAudioPauseResume", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(OS_MACOSX)
 
 std::string GetEffectiveAutoplayPolicy(const base::CommandLine& command_line) {
   // |kIgnoreAutoplayRestrictionsForTests| overrides all other settings.

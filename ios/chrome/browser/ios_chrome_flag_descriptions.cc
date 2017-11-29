@@ -11,6 +11,11 @@
 
 namespace flag_descriptions {
 
+const char kBookmarkNewEditPageName[] = "Bookmark New Edit Page";
+const char kBookmarkNewEditPageDescription[] =
+    "When enabled, the new bookmark edit page and folder picker will be used "
+    "in the new bookmark UI.";
+
 const char kBookmarkNewGenerationName[] = "Bookmark New Generation";
 const char kBookmarkNewGenerationDescription[] =
     "When enabled, change to the new bookmark UI which will support bookmark "
@@ -24,6 +29,11 @@ const char kCaptivePortalName[] = "Captive Portal";
 const char kCaptivePortalDescription[] =
     "When enabled, the Captive Portal landing page will be displayed if it is "
     "detected that the user is connected to a Captive Portal network.";
+
+const char kCleanToolbarName[] = "Clean Toolbar";
+const char kCleanToolbarDescription[] =
+    "When enabled, the Clean Toolbar will be used instead of "
+    "WebToolbarController.";
 
 const char kContextualSearch[] = "Contextual Search";
 const char kContextualSearchDescription[] =
@@ -75,6 +85,10 @@ const char kOmniboxUIHideSuggestionUrlTrivialSubdomainsDescription[] =
     "Elides trivially informative subdomains (www, m) from suggested URLs in "
     "the omnibox dropdown.";
 
+const char kPasswordExportName[] = "Password Export";
+const char kPasswordExportDescription[] =
+    "Enables password exporting functionality in password settings.";
+
 const char kPhysicalWeb[] = "Physical Web";
 const char kPhysicalWebDescription[] =
     "When enabled, the omnibox will include suggestions for web pages "
@@ -86,9 +100,8 @@ const char kPropertyAnimationsToolbarDescription[] =
     "When enabled, Toolbar animations will be done using "
     "UIViewPropertyAnimator";
 
-extern const char kSafeAreaCompatibleToolbarName[] =
-    "Safe Area Compatible Toolbar";
-extern const char kSafeAreaCompatibleToolbarDescription[] =
+const char kSafeAreaCompatibleToolbarName[] = "Safe Area Compatible Toolbar";
+const char kSafeAreaCompatibleToolbarDescription[] =
     "When enabled, the toolbar resizes itself when the safe area changes.";
 
 const char kShareCanonicalURLName[] = "Share Canonical URL";

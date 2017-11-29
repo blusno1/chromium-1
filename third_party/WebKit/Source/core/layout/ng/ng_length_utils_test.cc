@@ -4,13 +4,13 @@
 
 #include "core/layout/ng/ng_length_utils.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/CalculationValue.h"
 #include "platform/LayoutUnit.h"
 #include "platform/Length.h"
-#include "platform/wtf/RefPtr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -25,7 +25,7 @@ class NGLengthUtilsTest : public ::testing::Test {
       int block_size,
       bool fixed_inline = false,
       bool fixed_block = false,
-      NGWritingMode writing_mode = NGWritingMode::kHorizontalTopBottom) {
+      WritingMode writing_mode = WritingMode::kHorizontalTb) {
     NGLogicalSize size = {LayoutUnit(inline_size), LayoutUnit(block_size)};
 
     return NGConstraintSpaceBuilder(
@@ -384,7 +384,7 @@ TEST_F(NGLengthUtilsTest, testPadding) {
   style_->SetWritingMode(WritingMode::kVerticalRl);
 
   scoped_refptr<NGConstraintSpace> constraint_space(ConstructConstraintSpace(
-      200, 300, false, false, NGWritingMode::kVerticalRightLeft));
+      200, 300, false, false, WritingMode::kVerticalRl));
 
   NGBoxStrut padding = ComputePadding(*constraint_space, *style_);
 
@@ -402,7 +402,8 @@ TEST_F(NGLengthUtilsTest, testAutoMargins) {
   LayoutUnit kAvailableInlineSize(200);
 
   NGBoxStrut margins;
-  ApplyAutoMargins(*style_, kAvailableInlineSize, kInlineSize, &margins);
+  ApplyAutoMargins(*style_, *style_, kAvailableInlineSize, kInlineSize,
+                   &margins);
 
   EXPECT_EQ(LayoutUnit(), margins.block_start);
   EXPECT_EQ(LayoutUnit(), margins.block_end);
@@ -411,14 +412,16 @@ TEST_F(NGLengthUtilsTest, testAutoMargins) {
 
   style_->SetMarginLeft(Length(0, kFixed));
   margins = NGBoxStrut();
-  ApplyAutoMargins(*style_, kAvailableInlineSize, kInlineSize, &margins);
+  ApplyAutoMargins(*style_, *style_, kAvailableInlineSize, kInlineSize,
+                   &margins);
   EXPECT_EQ(LayoutUnit(0), margins.inline_start);
   EXPECT_EQ(LayoutUnit(50), margins.inline_end);
 
   style_->SetMarginLeft(Length(kAuto));
   style_->SetMarginRight(Length(0, kFixed));
   margins = NGBoxStrut();
-  ApplyAutoMargins(*style_, kAvailableInlineSize, kInlineSize, &margins);
+  ApplyAutoMargins(*style_, *style_, kAvailableInlineSize, kInlineSize,
+                   &margins);
   EXPECT_EQ(LayoutUnit(50), margins.inline_start);
   EXPECT_EQ(LayoutUnit(0), margins.inline_end);
 
@@ -428,9 +431,10 @@ TEST_F(NGLengthUtilsTest, testAutoMargins) {
   style_->SetMarginRight(Length(5000, kFixed));
   margins = NGBoxStrut();
   margins.inline_end = LayoutUnit(5000);
-  ApplyAutoMargins(*style_, kAvailableInlineSize, kInlineSize, &margins);
+  ApplyAutoMargins(*style_, *style_, kAvailableInlineSize, kInlineSize,
+                   &margins);
   EXPECT_EQ(LayoutUnit(0), margins.inline_start);
-  EXPECT_EQ(LayoutUnit(5000), margins.inline_end);
+  EXPECT_EQ(LayoutUnit(50), margins.inline_end);
 }
 
 // Simple wrappers that don't use LayoutUnit(). Their only purpose is to make

@@ -148,6 +148,11 @@ using web::WebStateImpl;
 - (void)selectedTabChanged;
 - (void)dismissToolsMenuPopup;
 - (void)cancelOmniboxEdit;
+
+- (ToolbarButtonUpdater*)buttonUpdater;
+- (void)setToolsMenuStateProvider:(id)provider;
+@property(nonatomic, readonly, weak) UIViewController* viewController;
+
 @end
 
 @implementation TestWebToolbarController
@@ -176,6 +181,18 @@ using web::WebStateImpl;
   return;
 }
 - (void)cancelOmniboxEdit {
+  return;
+}
+- (UIViewController*)viewController {
+  return self;
+}
+- (ToolbarButtonUpdater*)buttonUpdater {
+  return nil;
+}
+- (void)setToolsMenuStateProvider:(id)provider {
+  return;
+}
+- (void)start {
   return;
 }
 @end
@@ -265,9 +282,9 @@ class BrowserViewControllerTest : public BlockCleanupTest {
         newToolbarModelIOSWithDelegate:static_cast<ToolbarModelDelegateIOS*>(
                                            [OCMArg anyPointer])];
     [[[factory stub] andReturn:testWTC]
-        newWebToolbarControllerWithDelegate:[OCMArg any]
-                                  urlLoader:[OCMArg any]
-                                 dispatcher:[OCMArg any]];
+        newToolbarControllerWithDelegate:[OCMArg any]
+                               urlLoader:[OCMArg any]
+                              dispatcher:[OCMArg any]];
     [[[factory stub] andReturn:passKitViewController_]
         newPassKitViewControllerForPass:nil];
     [[[factory stub] andReturn:nil] showPassKitErrorInfoBarForManager:nil];
@@ -444,7 +461,7 @@ TEST_F(BrowserViewControllerTest,
   // The tab should only stop loading on handsets.
   if (!IsIPadIdiom())
     [[static_cast<OCMockObject*>(webController_) expect] stopLoading];
-  [bvc_ locationBarBeganEdit:nil];
+  [bvc_ locationBarBeganEdit];
 
   EXPECT_OCMOCK_VERIFY(static_cast<OCMockObject*>(webController_));
   EXPECT_OCMOCK_VERIFY(tabMock);
@@ -460,7 +477,7 @@ TEST_F(BrowserViewControllerTest,
   static_cast<TestToolbarModelIOS*>(toolbarModelIOS_)->set_is_loading(false);
 
   // Don't set any expectation for stopLoading to be called on the mock tab.
-  [bvc_ locationBarBeganEdit:nil];
+  [bvc_ locationBarBeganEdit];
 
   EXPECT_OCMOCK_VERIFY(tabMock);
 }

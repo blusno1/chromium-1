@@ -14,12 +14,16 @@
 namespace gpu {
 namespace gles2 {
 class GLES2Interface;
-}
-}
+}  // namespace gles2
+}  // namespace gpu
 
 namespace ui {
 class ContextProviderCommandBuffer;
-}
+}  // namespace ui
+
+namespace viz {
+class GLHelper;
+}  // namespace viz
 
 namespace content {
 
@@ -36,13 +40,15 @@ class CONTENT_EXPORT WebGraphicsContext3DProviderImpl
   bool BindToCurrentThread() override;
   gpu::gles2::GLES2Interface* ContextGL() override;
   GrContext* GetGrContext() override;
+  void InvalidateGrContext(uint32_t state) override;
   const gpu::Capabilities& GetCapabilities() const override;
   const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override;
+  viz::GLHelper* GetGLHelper() override;
   bool IsSoftwareRendering() const override;
   void SetLostContextCallback(const base::Closure&) override;
   void SetErrorMessageCallback(
-      const base::Callback<void(const char*, int32_t)>&) override;
-  void SignalQuery(uint32_t, const base::Closure&) override;
+      base::RepeatingCallback<void(const char*, int32_t)>) override;
+  void SignalQuery(uint32_t, base::OnceClosure) override;
 
   ui::ContextProviderCommandBuffer* context_provider() const {
     return provider_.get();
@@ -53,6 +59,7 @@ class CONTENT_EXPORT WebGraphicsContext3DProviderImpl
   void OnContextLost() override;
 
   scoped_refptr<ui::ContextProviderCommandBuffer> provider_;
+  std::unique_ptr<viz::GLHelper> gl_helper_;
   const bool software_rendering_;
   base::Closure context_lost_callback_;
 

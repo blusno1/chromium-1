@@ -52,7 +52,7 @@ enum CallType { GET_PREFERRED_SIZE, GET_HEIGHT_FOR_WIDTH, LAYOUT };
 class DummyEvent : public ui::Event {
  public:
   DummyEvent() : Event(ui::ET_UNKNOWN, base::TimeTicks(), 0) {}
-  ~DummyEvent() override {}
+  ~DummyEvent() override = default;
 };
 
 /* Instrumented/Mock NotificationView subclass ********************************/
@@ -84,7 +84,7 @@ MockNotificationView::MockNotificationView(MessageViewDelegate* controller,
                                            Test* test)
     : NotificationView(controller, notification), test_(test) {}
 
-MockNotificationView::~MockNotificationView() {}
+MockNotificationView::~MockNotificationView() = default;
 
 gfx::Size MockNotificationView::CalculatePreferredSize() const {
   test_->RegisterCall(GET_PREFERRED_SIZE);
@@ -199,6 +199,9 @@ class MessageCenterViewTest : public AshTestBase,
       const Notification& notification) override;
   void ClickOnNotificationButton(const std::string& notification_id,
                                  int button_index) override;
+  void ClickOnNotificationButtonWithReply(const std::string& notification_id,
+                                          int button_index,
+                                          const base::string16& reply) override;
   void ClickOnSettingsButton(const std::string& notification_id) override;
   void UpdateNotificationSize(const std::string& notification_id) override;
 
@@ -234,9 +237,9 @@ class MessageCenterViewTest : public AshTestBase,
   DISALLOW_COPY_AND_ASSIGN(MessageCenterViewTest);
 };
 
-MessageCenterViewTest::MessageCenterViewTest() {}
+MessageCenterViewTest::MessageCenterViewTest() = default;
 
-MessageCenterViewTest::~MessageCenterViewTest() {}
+MessageCenterViewTest::~MessageCenterViewTest() = default;
 
 void MessageCenterViewTest::SetUp() {
   AshTestBase::SetUp();
@@ -387,6 +390,14 @@ std::unique_ptr<ui::MenuModel> MessageCenterViewTest::CreateMenuModel(
 void MessageCenterViewTest::ClickOnNotificationButton(
     const std::string& notification_id,
     int button_index) {
+  // For this test, this method should not be invoked.
+  NOTREACHED();
+}
+
+void MessageCenterViewTest::ClickOnNotificationButtonWithReply(
+    const std::string& notification_id,
+    int button_index,
+    const base::string16& reply) {
   // For this test, this method should not be invoked.
   NOTREACHED();
 }

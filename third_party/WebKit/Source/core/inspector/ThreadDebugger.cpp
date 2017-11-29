@@ -26,8 +26,8 @@
 #include "core/inspector/V8InspectorString.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/bindings/ScriptForbiddenScope.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 
 namespace blink {
 
@@ -104,6 +104,22 @@ void ThreadDebugger::AsyncTaskStarted(void* task) {
 void ThreadDebugger::AsyncTaskFinished(void* task) {
   DCHECK_EQ(reinterpret_cast<intptr_t>(task) % 2, 0);
   v8_inspector_->asyncTaskFinished(task);
+}
+
+v8_inspector::V8StackTraceId ThreadDebugger::StoreCurrentStackTrace(
+    const String& description) {
+  return v8_inspector_->storeCurrentStackTrace(
+      ToV8InspectorStringView(description));
+}
+
+void ThreadDebugger::ExternalAsyncTaskStarted(
+    const v8_inspector::V8StackTraceId& parent) {
+  v8_inspector_->externalAsyncTaskStarted(parent);
+}
+
+void ThreadDebugger::ExternalAsyncTaskFinished(
+    const v8_inspector::V8StackTraceId& parent) {
+  v8_inspector_->externalAsyncTaskFinished(parent);
 }
 
 unsigned ThreadDebugger::PromiseRejected(

@@ -6,6 +6,8 @@
 #define CSSParserImpl_h
 
 #include <memory>
+
+#include "base/macros.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSPropertySourceData.h"
 #include "core/css/CSSPropertyValue.h"
@@ -38,7 +40,6 @@ class Element;
 
 class CSSParserImpl {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(CSSParserImpl);
 
  public:
   CSSParserImpl(const CSSParserContext*, StyleSheetContents* = nullptr);
@@ -54,7 +55,6 @@ class CSSParserImpl {
     kAllowNamespaceRules,
     kRegularRules,
     kKeyframeRules,
-    kApplyRules,  // For @apply inside style rules
     kNoRules,     // For parsing at-rules inside declaration lists
   };
 
@@ -101,13 +101,6 @@ class CSSParserImpl {
                               bool defer_property_parsing = false);
   static CSSSelectorList ParsePageSelector(CSSParserTokenRange,
                                            StyleSheetContents*);
-
-  static ImmutableCSSPropertyValueSet* ParseCustomPropertySet(
-      CSSParserTokenRange);
-  // TODO(shend): Remove this when crbug.com/661854 is fixed. We need to use a
-  // stream for parsing @apply blocks so we can correctly store custom
-  // property values.
-  void ConsumeDeclarationListForAtApply(CSSParserTokenRange);
 
   static std::unique_ptr<Vector<double>> ParseKeyframeKeyList(const String&);
 
@@ -161,8 +154,6 @@ class CSSParserImpl {
   StyleRulePage* ConsumePageRule(CSSParserTokenRange prelude,
                                  const RangeOffset& prelude_offset,
                                  CSSParserTokenStream& block);
-  // Updates parsed_properties_
-  void ConsumeApplyRule(CSSParserTokenRange prelude);
 
   StyleRuleKeyframe* ConsumeKeyframeStyleRule(CSSParserTokenRange prelude,
                                               const RangeOffset& prelude_offset,
@@ -196,6 +187,7 @@ class CSSParserImpl {
   CSSParserObserver* observer_;
 
   Member<CSSLazyParsingState> lazy_state_;
+  DISALLOW_COPY_AND_ASSIGN(CSSParserImpl);
 };
 
 }  // namespace blink

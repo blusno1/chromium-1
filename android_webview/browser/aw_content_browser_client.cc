@@ -325,18 +325,14 @@ bool AwContentBrowserClient::AllowGetCookie(const GURL& url,
 
 bool AwContentBrowserClient::AllowSetCookie(const GURL& url,
                                             const GURL& first_party,
-                                            const std::string& cookie_line,
+                                            const net::CanonicalCookie& cookie,
                                             content::ResourceContext* context,
                                             int render_process_id,
                                             int render_frame_id,
                                             const net::CookieOptions& options) {
-  return AwCookieAccessPolicy::GetInstance()->AllowSetCookie(url,
-                                                             first_party,
-                                                             cookie_line,
-                                                             context,
-                                                             render_process_id,
-                                                             render_frame_id,
-                                                             options);
+  return AwCookieAccessPolicy::GetInstance()->AllowSetCookie(
+      url, first_party, cookie, context, render_process_id, render_frame_id,
+      options);
 }
 
 void AwContentBrowserClient::AllowWorkerFileSystem(
@@ -344,8 +340,7 @@ void AwContentBrowserClient::AllowWorkerFileSystem(
     content::ResourceContext* context,
     const std::vector<std::pair<int, int> >& render_frames,
     base::Callback<void(bool)> callback) {
-  // Android WebView does not yet support web workers.
-  callback.Run(false);
+  callback.Run(true);
 }
 
 bool AwContentBrowserClient::AllowWorkerIndexedDB(
@@ -353,8 +348,7 @@ bool AwContentBrowserClient::AllowWorkerIndexedDB(
     const base::string16& name,
     content::ResourceContext* context,
     const std::vector<std::pair<int, int> >& render_frames) {
-  // Android WebView does not yet support web workers.
-  return false;
+  return true;
 }
 
 content::QuotaPermissionContext*
@@ -558,7 +552,7 @@ void AwContentBrowserClient::BindInterfaceRequestFromFrame(
 
 void AwContentBrowserClient::ExposeInterfacesToRenderer(
     service_manager::BinderRegistry* registry,
-    content::AssociatedInterfaceRegistry* associated_registry,
+    blink::AssociatedInterfaceRegistry* associated_registry,
     content::RenderProcessHost* render_process_host) {
   if (base::FeatureList::IsEnabled(features::kNetworkService)) {
     registry->AddInterface(

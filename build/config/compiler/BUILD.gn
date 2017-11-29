@@ -551,7 +551,7 @@ config("compiler") {
 
     # Disable optimization for now because they increase binary size by too
     # much.
-    if (is_linux && use_lld) {
+    if (use_lld && (is_android || is_linux)) {
       ldflags += [ "-Wl,--lto-O0" ]
     }
 
@@ -563,24 +563,6 @@ config("compiler") {
     # Work-around for http://openradar.appspot.com/20356002
     if (is_mac) {
       ldflags += [ "-Wl,-all_load" ]
-    }
-
-    # Allows the linker to apply --gc-sections and ICF to the LTO object file.
-    # Also, when targeting ARM, without this flag, LTO produces a .text section
-    # that is larger than the maximum call displacement, preventing the linker
-    # from relocating calls (http://llvm.org/PR22999).
-    if (is_linux) {
-      if (use_lld) {
-        ldflags += [
-          "-Wl,-mllvm,-function-sections",
-          "-Wl,-mllvm,-data-sections",
-        ]
-      } else {
-        ldflags += [
-          "-Wl,-plugin-opt,-function-sections",
-          "-Wl,-plugin-opt,-data-sections",
-        ]
-      }
     }
   }
 
@@ -1239,6 +1221,14 @@ config("default_warnings") {
       # in -Wall but gcc does, and it gives false positives.
       cflags += [ "-Wno-maybe-uninitialized" ]
       cflags += [ "-Wno-deprecated-declarations" ]
+
+      # GCC assumes 'this' is never nullptr and optimizes away code
+      # like "if (this == nullptr) ...": [1].  However, some Chromium
+      # code relies on these types of null pointer checks [2], so
+      # disable this optimization.
+      # [1] https://gcc.gnu.org/gcc-6/porting_to.html#this-cannot-be-null
+      # [2] https://crbug.com/784492#c13
+      cflags += [ "-fno-delete-null-pointer-checks" ]
     }
   }
 
@@ -1427,6 +1417,18 @@ config("no_chromium_code") {
   configs = [ ":default_warnings" ]
 }
 
+# noshadowing -----------------------------------------------------------------
+#
+# Allows turning -Wshadow on.
+
+config("noshadowing") {
+  # This flag has to be disabled for nacl because the nacl compiler is too
+  # strict about shadowing.
+  if (is_clang && !is_nacl) {
+    cflags = [ "-Wshadow" ]
+  }
+}
+
 # rtti ------------------------------------------------------------------------
 #
 # Allows turning Run-Time Type Identification on or off.
@@ -1448,6 +1450,32 @@ config("no_rtti") {
       cflags_cc = [ "-fno-rtti" ]
       cflags_objcc = cflags_cc
     }
+  }
+}
+
+# exceptions -------------------------------------------------------------------
+#
+# Allows turning Exceptions on or off.
+# Note: exceptions are disallowed in Google code.
+
+config("exceptions") {
+  if (is_win) {
+    # Enables exceptions in the STL.
+    defines = [ "_HAS_EXCEPTIONS=1" ]
+    cflags_cc = [ "/EHsc" ]
+  } else {
+    cflags_cc = [ "-fexceptions" ]
+    cflags_objcc = cflags_cc
+  }
+}
+
+config("no_exceptions") {
+  if (is_win) {
+    # Disables exceptions in the STL.
+    defines = [ "_HAS_EXCEPTIONS=0" ]
+  } else {
+    cflags_cc = [ "-fno-exceptions" ]
+    cflags_objcc = cflags_cc
   }
 }
 
@@ -1843,8 +1871,8 @@ config("afdo") {
 # Full symbols.
 config("symbols") {
   if (is_win) {
-    if (use_goma) {
-      # Note that this requires is_win_fastlink, enforced elsewhere.
+    if (use_goma || is_clang) {
+      # Note that with VC++ this requires is_win_fastlink, enforced elsewhere.
       cflags = [ "/Z7" ]  # Debug information in the .obj files.
     } else {
       cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.

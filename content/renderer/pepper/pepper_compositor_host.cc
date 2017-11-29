@@ -16,13 +16,14 @@
 #include "cc/layers/texture_layer.h"
 #include "cc/trees/layer_tree_host.h"
 #include "components/viz/client/client_shared_bitmap_manager.h"
-#include "components/viz/common/quads/texture_mailbox.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/gfx_conversion.h"
 #include "content/renderer/pepper/host_globals.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/pepper/ppb_image_data_impl.h"
 #include "content/renderer/render_thread_impl.h"
+#include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/host/dispatch_host_message.h"
 #include "ppapi/host/ppapi_host.h"
@@ -280,11 +281,11 @@ void PepperCompositorHost::UpdateLayer(
         static_cast<cc::TextureLayer*>(layer.get()));
     if (!old_layer ||
         new_layer->common.resource_id != old_layer->common.resource_id) {
-      viz::TextureMailbox mailbox(new_layer->texture->mailbox,
-                                  new_layer->texture->sync_token,
-                                  new_layer->texture->target);
-      texture_layer->SetTextureMailbox(
-          mailbox,
+      auto resource = viz::TransferableResource::MakeGL(
+          new_layer->texture->mailbox, GL_LINEAR, new_layer->texture->target,
+          new_layer->texture->sync_token);
+      texture_layer->SetTransferableResource(
+          resource,
           viz::SingleReleaseCallback::Create(base::Bind(
               &PepperCompositorHost::ResourceReleased,
               weak_factory_.GetWeakPtr(), new_layer->common.resource_id)));
@@ -318,9 +319,10 @@ void PepperCompositorHost::UpdateLayer(
               ->shared_bitmap_manager()
               ->GetBitmapForSharedMemory(image_shm.get());
 
-      viz::TextureMailbox mailbox(bitmap.get(), PP_ToGfxSize(desc.size));
-      image_layer->SetTextureMailbox(
-          mailbox,
+      auto resource = viz::TransferableResource::MakeSoftware(
+          bitmap->id(), bitmap->sequence_number(), PP_ToGfxSize(desc.size));
+      image_layer->SetTransferableResource(
+          resource,
           viz::SingleReleaseCallback::Create(base::Bind(
               &PepperCompositorHost::ImageReleased, weak_factory_.GetWeakPtr(),
               new_layer->common.resource_id, base::Passed(&image_shm),

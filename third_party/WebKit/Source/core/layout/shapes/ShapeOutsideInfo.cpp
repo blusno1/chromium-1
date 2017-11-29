@@ -147,9 +147,9 @@ std::unique_ptr<Shape> ShapeOutsideInfo::CreateShapeForImage(
           ? ToLayoutImage(layout_box_).ReplacedContentRect()
           : LayoutRect(LayoutPoint(), image_size);
 
-  scoped_refptr<Image> image = style_image->GetImage(
-      layout_box_, layout_box_.GetDocument(), layout_box_.StyleRef(),
-      FlooredIntSize(image_size), nullptr);
+  scoped_refptr<Image> image =
+      style_image->GetImage(layout_box_, layout_box_.GetDocument(),
+                            layout_box_.StyleRef(), FlooredIntSize(image_size));
 
   return Shape::CreateRasterShape(image.get(), shape_image_threshold,
                                   image_rect, margin_rect, writing_mode,
@@ -217,6 +217,9 @@ inline LayoutUnit BorderBeforeInWritingMode(const LayoutBox& layout_box,
       return LayoutUnit(layout_box.BorderLeft());
     case WritingMode::kVerticalRl:
       return LayoutUnit(layout_box.BorderRight());
+    // TODO(layout-dev): Sideways-lr and sideways-rl are not yet supported.
+    default:
+      break;
   }
 
   NOTREACHED();
@@ -233,6 +236,9 @@ inline LayoutUnit BorderAndPaddingBeforeInWritingMode(
       return layout_box.BorderLeft() + layout_box.PaddingLeft();
     case WritingMode::kVerticalRl:
       return layout_box.BorderRight() + layout_box.PaddingRight();
+    // TODO(layout-dev): Sideways-lr and sideways-rl are not yet supported.
+    default:
+      break;
   }
 
   NOTREACHED();

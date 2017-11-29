@@ -36,6 +36,7 @@
 #include "WebHTTPBody.h"
 #include "WebReferrerPolicy.h"
 #include "WebSecurityOrigin.h"
+#include "services/network/public/interfaces/cors.mojom-shared.h"
 #include "services/network/public/interfaces/fetch_api.mojom-shared.h"
 
 namespace blink {
@@ -255,10 +256,12 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT int RequestorID() const;
   BLINK_PLATFORM_EXPORT void SetRequestorID(int);
 
-  // A consumer controlled value intended to be used to identify the
-  // process of the requestor.
-  BLINK_PLATFORM_EXPORT int RequestorProcessID() const;
-  BLINK_PLATFORM_EXPORT void SetRequestorProcessID(int);
+  // The unique child id (not PID) of the process from which this request
+  // originated. In the case of out-of-process plugins, this allows to link back
+  // the request to the plugin process (as it is processed through a render view
+  // process).
+  BLINK_PLATFORM_EXPORT int GetPluginChildID() const;
+  BLINK_PLATFORM_EXPORT void SetPluginChildID(int);
 
   // Allows the request to be matched up with its app cache host.
   BLINK_PLATFORM_EXPORT int AppCacheHostID() const;
@@ -343,6 +346,9 @@ class WebURLRequest {
 
   // https://wicg.github.io/cors-rfc1918/#external-request
   BLINK_PLATFORM_EXPORT bool IsExternalRequest() const;
+
+  BLINK_PLATFORM_EXPORT network::mojom::CORSPreflightPolicy
+  GetCORSPreflightPolicy() const;
 
   BLINK_PLATFORM_EXPORT LoadingIPCType GetLoadingIPCType() const;
 

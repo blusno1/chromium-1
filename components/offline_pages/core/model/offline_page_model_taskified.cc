@@ -254,13 +254,6 @@ const base::FilePath& OfflinePageModelTaskified::GetArchiveDirectory(
   return archive_manager_->GetPersistentArchivesDir();
 }
 
-bool OfflinePageModelTaskified::is_loaded() const {
-  NOTIMPLEMENTED();
-  // TODO(romax): Remove the method after switch. No longer needed with
-  // DB.Execute pattern.
-  return false;
-}
-
 ClientPolicyController* OfflinePageModelTaskified::GetPolicyController() {
   return policy_controller_.get();
 }
@@ -311,6 +304,7 @@ void OfflinePageModelTaskified::OnCreateArchiveDone(
   proposed_page.file_path = file_path;
   proposed_page.file_size = file_size;
   proposed_page.title = title;
+  proposed_page.digest = digest;
   AddPage(proposed_page,
           base::Bind(&OfflinePageModelTaskified::OnAddPageForSavePageDone,
                      weak_ptr_factory_.GetWeakPtr(), callback, proposed_page));

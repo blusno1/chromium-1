@@ -9,6 +9,8 @@ import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 
+import java.lang.reflect.InvocationTargetException;
+
 /**
  * Helper for calling GMSCore Safe Browsing API from native code.
  */
@@ -32,7 +34,6 @@ public final class SafeBrowsingApiBridge {
 
     /**
      * Create a SafeBrowsingApiHandler obj and initialize its client, if supported.
-     * Should be called on IO thread.
      *
      * @return the handler if it's usable, or null if the API is not supported.
      */
@@ -40,21 +41,34 @@ public final class SafeBrowsingApiBridge {
     private static SafeBrowsingApiHandler create() {
         SafeBrowsingApiHandler handler;
         try {
-            handler = sHandler.newInstance();
-        } catch (NullPointerException | InstantiationException | IllegalAccessException e) {
+            handler = sHandler.getDeclaredConstructor().newInstance();
+        } catch (NullPointerException | InstantiationException | IllegalAccessException
+                | NoSuchMethodException | InvocationTargetException e) {
             Log.e(TAG, "Failed to init handler: " + e.getMessage());
             return null;
         }
         boolean initSuccesssful = handler.init(
                 ContextUtils.getApplicationContext(), new SafeBrowsingApiHandler.Observer() {
                     @Override
+                    public void onUrlCheckDone(
+                            long callbackId, int resultStatus, String metadata, long checkDelta) {
+                        nativeOnUrlCheckDone(callbackId, resultStatus, metadata, checkDelta);
+                    }
+
+                    // TODO(csharrison): Temporary to avoid breaking downstream. Sending a 0
+                    // checkDelta is fine since the native code doesn't use the value yet.
+                    @Override
                     public void onUrlCheckDone(long callbackId, int resultStatus, String metadata) {
-                        nativeOnUrlCheckDone(callbackId, resultStatus, metadata);
+                        nativeOnUrlCheckDone(
+                                callbackId, resultStatus, metadata, 0 /* checkDelta */);
                     }
                 });
         return initSuccesssful ? handler : null;
     }
 
+    /**
+     * Starts a Safe Browsing check. Must be called on the same sequence as |create|.
+     */
     @CalledByNative
     private static void startUriLookup(
             SafeBrowsingApiHandler handler, long callbackId, String uri, int[] threatsOfInterest) {
@@ -63,5 +77,5 @@ public final class SafeBrowsingApiBridge {
     }
 
     private static native void nativeOnUrlCheckDone(
-            long callbackId, int resultStatus, String metadata);
+            long callbackId, int resultStatus, String metadata, long checkDelta);
 }

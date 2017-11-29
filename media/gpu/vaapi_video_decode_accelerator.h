@@ -31,6 +31,7 @@
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/shared_memory_region.h"
+#include "media/gpu/vaapi/vaapi_picture_factory.h"
 #include "media/gpu/vaapi_wrapper.h"
 #include "media/video/picture.h"
 #include "media/video/video_decode_accelerator.h"
@@ -214,26 +215,26 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
   Config::OutputMode output_mode_;
 
   // Queue of available InputBuffers (picture_buffer_ids).
-  base::queue<linked_ptr<InputBuffer>> input_buffers_;
-  // Number of !IsFlush() InputBuffers in |input_buffers_| for tracing.
-  int num_stream_bufs_at_decoder_;
+  base::queue<std::unique_ptr<InputBuffer>> input_buffers_;
   // Signalled when input buffers are queued onto |input_buffers_| queue.
   base::ConditionVariable input_ready_;
 
   // Current input buffer at decoder.
-  linked_ptr<InputBuffer> curr_input_buffer_;
+  std::unique_ptr<InputBuffer> curr_input_buffer_;
 
   // Queue for incoming output buffers (texture ids).
   using OutputBuffers = base::queue<int32_t>;
   OutputBuffers output_buffers_;
 
+  std::unique_ptr<VaapiPictureFactory> vaapi_picture_factory_;
+
   scoped_refptr<VaapiWrapper> vaapi_wrapper_;
 
-  typedef std::map<int32_t, linked_ptr<VaapiPicture>> Pictures;
-  // All allocated Pictures, regardless of their current state.
-  // Pictures are allocated once and destroyed at the end of decode.
-  // Comes after vaapi_wrapper_ to ensure all pictures are destroyed
-  // before vaapi_wrapper_ is destroyed.
+  // All allocated Pictures, regardless of their current state. Pictures are
+  // allocated once using |create_vaapi_picture_callback_| and destroyed at the
+  // end of decode. Comes after |vaapi_wrapper_| to ensure all pictures are
+  // destroyed before said |vaapi_wrapper_| is destroyed.
+  using Pictures = std::map<int32_t, std::unique_ptr<VaapiPicture>>;
   Pictures pictures_;
 
   // Return a VaapiPicture associated with given client-provided id.

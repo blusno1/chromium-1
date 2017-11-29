@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
@@ -20,7 +21,6 @@
 #include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/app_list_util.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/speech_ui_model.h"
@@ -30,7 +30,6 @@
 #include "ui/app_list/views/contents_view.h"
 #include "ui/app_list/views/search_box_view.h"
 #include "ui/app_list/views/speech_view.h"
-#include "ui/app_list/views/start_page_view.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_targeter.h"
 #include "ui/aura/window_tree_host.h"
@@ -314,7 +313,7 @@ void AppListView::Initialize(const InitParams& params) {
 
   UMA_HISTOGRAM_TIMES(kAppListCreationTimeHistogram,
                       base::Time::Now() - start_time);
-  app_list_main_view_->model()->RecordFolderMetrics();
+  RecordFolderMetrics();
 }
 
 void AppListView::SetBubbleArrow(views::BubbleBorder::Arrow arrow) {
@@ -1250,6 +1249,7 @@ void AppListView::StartAnimationForState(AppListViewState target_state) {
   }
 
   gfx::Rect target_bounds = fullscreen_widget_->GetNativeView()->bounds();
+  const int original_state_y = target_bounds.origin().y();
   target_bounds.set_y(target_state_y);
 
   int animation_duration;
@@ -1265,21 +1265,26 @@ void AppListView::StartAnimationForState(AppListViewState target_state) {
     animation_duration = kAppListAnimationDurationMs;
   }
 
-  std::unique_ptr<ui::LayerAnimationElement> bounds_animation_element =
-      ui::LayerAnimationElement::CreateBoundsElement(
-          target_bounds, base::TimeDelta::FromMilliseconds(animation_duration));
+  ui::Layer* layer = fullscreen_widget_->GetLayer();
+  layer->SetBounds(target_bounds);
+  gfx::Transform transform;
+  transform.Translate(0, original_state_y - target_state_y);
+  layer->SetTransform(transform);
 
-  bounds_animation_element->set_tween_type(gfx::Tween::EASE_OUT);
+  {
+    ui::LayerAnimator* animator = layer->GetAnimator();
+    animator->StopAnimating();
+    ui::ScopedLayerAnimationSettings settings(animator);
+    settings.SetTransitionDuration(
+        base::TimeDelta::FromMilliseconds(animation_duration));
+    settings.SetTweenType(gfx::Tween::EASE_OUT);
+    settings.SetPreemptionStrategy(
+        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+    settings.SetAnimationMetricsReporter(
+        state_animation_metrics_reporter_.get());
 
-  ui::LayerAnimator* animator = fullscreen_widget_->GetLayer()->GetAnimator();
-  animator->set_preemption_strategy(
-      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-  animator->StopAnimating();
-  ui::LayerAnimationSequence* animation_sequence =
-      new ui::LayerAnimationSequence(std::move(bounds_animation_element));
-  animation_sequence->SetAnimationMetricsReporter(
-      state_animation_metrics_reporter_.get());
-  animator->ScheduleAnimation(animation_sequence);
+    layer->SetTransform(gfx::Transform());
+  }
 }
 
 void AppListView::StartCloseAnimation(base::TimeDelta animation_duration) {
@@ -1543,6 +1548,26 @@ void AppListView::SetBackgroundShieldColor() {
   GetWallpaperProminentColors(&prominent_colors);
   app_list_background_shield_->layer()->SetColor(
       GetBackgroundShieldColor(prominent_colors));
+}
+
+void AppListView::RecordFolderMetrics() {
+  int number_of_apps_in_folders = 0;
+  int number_of_folders = 0;
+  AppListItemList* item_list =
+      app_list_main_view_->model()->top_level_item_list();
+  for (size_t i = 0; i < item_list->item_count(); ++i) {
+    AppListItem* item = item_list->item_at(i);
+    if (item->GetItemType() != AppListFolderItem::kItemType)
+      continue;
+    ++number_of_folders;
+    AppListFolderItem* folder = static_cast<AppListFolderItem*>(item);
+    if (folder->folder_type() == AppListFolderItem::FOLDER_TYPE_OEM)
+      continue;  // Don't count items in OEM folders.
+    number_of_apps_in_folders += folder->item_list()->item_count();
+  }
+  UMA_HISTOGRAM_COUNTS_100(kNumberOfFoldersHistogram, number_of_folders);
+  UMA_HISTOGRAM_COUNTS_100(kNumberOfAppsInFoldersHistogram,
+                           number_of_apps_in_folders);
 }
 
 }  // namespace app_list

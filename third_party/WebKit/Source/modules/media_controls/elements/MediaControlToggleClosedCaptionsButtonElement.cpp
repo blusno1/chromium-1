@@ -16,7 +16,6 @@ MediaControlToggleClosedCaptionsButtonElement::
     MediaControlToggleClosedCaptionsButtonElement(
         MediaControlsImpl& media_controls)
     : MediaControlInputElement(media_controls, kMediaShowClosedCaptionsButton) {
-  EnsureUserAgentShadowRoot();
   setType(InputTypeNames::button);
   SetShadowPseudoId(
       AtomicString("-webkit-media-controls-toggle-closed-captions-button"));
@@ -48,7 +47,7 @@ bool MediaControlToggleClosedCaptionsButtonElement::HasOverflowButton() const {
 const char*
 MediaControlToggleClosedCaptionsButtonElement::GetNameForHistograms() const {
   return IsOverflowElement() ? "ClosedCaptionOverflowButton"
-                             : "ClosedCaptionsButton";
+                             : "ClosedCaptionButton";
 }
 
 void MediaControlToggleClosedCaptionsButtonElement::DefaultEventHandler(

@@ -51,7 +51,6 @@
 #include "content/common/page_messages.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/view_messages.h"
-#include "content/public/common/associated_interface_provider.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
@@ -73,7 +72,6 @@
 #include "content/renderer/appcache/web_application_cache_host_impl.h"
 #include "content/renderer/browser_plugin/browser_plugin.h"
 #include "content/renderer/browser_plugin/browser_plugin_manager.h"
-#include "content/renderer/dom_storage/webstoragenamespace_impl.h"
 #include "content/renderer/drop_data_builder.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/history_serialization.h"
@@ -83,7 +81,7 @@
 #include "content/renderer/internal_document_state_data.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/media/audio_device_factory.h"
-#include "content/renderer/media/media_stream_dispatcher.h"
+#include "content/renderer/media/media_stream_device_observer.h"
 #include "content/renderer/media/video_capture_impl_manager.h"
 #include "content/renderer/navigation_state_impl.h"
 #include "content/renderer/render_frame_impl.h"
@@ -109,6 +107,8 @@
 #include "net/http/http_util.h"
 #include "ppapi/features/features.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebConnectionType.h"
@@ -236,7 +236,6 @@ using blink::WebSecurityOrigin;
 using blink::WebSecurityPolicy;
 using blink::WebSettings;
 using blink::WebSize;
-using blink::WebStorageNamespace;
 using blink::WebStorageQuotaCallbacks;
 using blink::WebStorageQuotaError;
 using blink::WebStorageQuotaType;
@@ -446,31 +445,6 @@ void ApplyBlinkSettings(const base::CommandLine& command_line,
   }
 }
 
-WebSettings::V8CacheStrategiesForCacheStorage
-GetV8CacheStrategiesForCacheStorage() {
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  std::string v8_cache_strategies = command_line.GetSwitchValueASCII(
-      switches::kV8CacheStrategiesForCacheStorage);
-  if (v8_cache_strategies.empty()) {
-    v8_cache_strategies =
-        base::FieldTrialList::FindFullName("V8CacheStrategiesForCacheStorage");
-  }
-
-  if (base::StartsWith(v8_cache_strategies, "none",
-                       base::CompareCase::SENSITIVE)) {
-    return WebSettings::V8CacheStrategiesForCacheStorage::kNone;
-  } else if (base::StartsWith(v8_cache_strategies, "normal",
-                              base::CompareCase::SENSITIVE)) {
-    return WebSettings::V8CacheStrategiesForCacheStorage::kNormal;
-  } else if (base::StartsWith(v8_cache_strategies, "aggressive",
-                              base::CompareCase::SENSITIVE)) {
-    return WebSettings::V8CacheStrategiesForCacheStorage::kAggressive;
-  } else {
-    return WebSettings::V8CacheStrategiesForCacheStorage::kDefault;
-  }
-}
-
 // This class represents promise which is robust to (will not be broken by)
 // |DidNotSwapReason::SWAP_FAILS| events.
 class AlwaysDrawSwapPromise : public cc::SwapPromise {
@@ -542,7 +516,6 @@ RenderViewImpl::RenderViewImpl(CompositorDependencies* compositor_deps,
       top_controls_height_(0.f),
       bottom_controls_height_(0.f),
       webview_(nullptr),
-      has_scrolled_focused_editable_node_into_rect_(false),
       page_zoom_level_(params.page_zoom_level),
       main_render_frame_(nullptr),
       frame_widget_(nullptr),
@@ -567,9 +540,9 @@ void RenderViewImpl::Initialize(
 #endif
   display_mode_ = params->initial_size.display_mode;
 
-  webview_ = WebView::Create(this, is_hidden()
-                                       ? blink::kWebPageVisibilityStateHidden
-                                       : blink::kWebPageVisibilityStateVisible);
+  webview_ = WebView::Create(
+      this, is_hidden() ? blink::mojom::PageVisibilityState::kHidden
+                        : blink::mojom::PageVisibilityState::kVisible);
   RenderWidget::Init(show_callback, webview_->GetWidget());
 
   g_view_map.Get().insert(std::make_pair(webview(), this));
@@ -624,10 +597,12 @@ void RenderViewImpl::Initialize(
       RenderFrameImpl::ResolveOpener(params->opener_frame_route_id);
 
   if (params->main_frame_routing_id != MSG_ROUTING_NONE) {
-    CHECK(params->main_frame_interface_provider.is_bound());
+    CHECK(params->main_frame_interface_provider.is_valid());
+    service_manager::mojom::InterfaceProviderPtr main_frame_interface_provider(
+        std::move(params->main_frame_interface_provider));
     main_render_frame_ = RenderFrameImpl::CreateMainFrame(
         this, params->main_frame_routing_id,
-        std::move(params->main_frame_interface_provider),
+        std::move(main_frame_interface_provider),
         params->main_frame_widget_routing_id, params->hidden, screen_info(),
         compositor_deps_, opener_frame, params->devtools_main_frame_token,
         params->replicated_frame_state);
@@ -769,7 +744,6 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->SetLoadsImagesAutomatically(prefs.loads_images_automatically);
   settings->SetImagesEnabled(prefs.images_enabled);
   settings->SetPluginsEnabled(prefs.plugins_enabled);
-  settings->SetEncryptedMediaEnabled(prefs.encrypted_media_enabled);
   settings->SetDOMPasteAllowed(prefs.dom_paste_enabled);
   settings->SetTextAreasAreResizable(prefs.text_areas_are_resizable);
   settings->SetAllowScriptsToCloseWindows(prefs.allow_scripts_to_close_windows);
@@ -889,9 +863,6 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
 
   settings->SetV8CacheOptions(
       static_cast<WebSettings::V8CacheOptions>(prefs.v8_cache_options));
-
-  settings->SetV8CacheStrategiesForCacheStorage(
-      GetV8CacheStrategiesForCacheStorage());
 
   settings->SetImageAnimationPolicy(
       static_cast<WebSettings::ImageAnimationPolicy>(prefs.animation_policy));
@@ -1101,13 +1072,6 @@ void RenderViewImpl::OnGetRenderedText() {
 
 // RenderWidgetInputHandlerDelegate -----------------------------------------
 
-bool RenderViewImpl::DoesRenderWidgetHaveTouchEventHandlersAt(
-    const gfx::Point& point) const {
-  if (!webview())
-    return false;
-  return webview()->HasTouchEventHandlersAt(point);
-}
-
 bool RenderViewImpl::RenderWidgetWillHandleMouseEvent(
     const blink::WebMouseEvent& event) {
   // If the mouse is locked, only the current owner of the mouse lock can
@@ -1229,26 +1193,6 @@ void RenderViewImpl::OnUpdateTargetURLAck() {
     Send(new ViewHostMsg_UpdateTargetURL(GetRoutingID(), pending_target_url_));
 
   target_url_status_ = TARGET_NONE;
-}
-
-void RenderViewImpl::ScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect) {
-  blink::WebAutofillClient* autofill_client = nullptr;
-  if (auto* focused_frame = GetWebView()->FocusedFrame())
-    autofill_client = focused_frame->AutofillClient();
-
-  if (has_scrolled_focused_editable_node_into_rect_ &&
-      rect == rect_for_scrolled_focused_editable_node_ && autofill_client) {
-    autofill_client->DidCompleteFocusChangeInFrame();
-    return;
-  }
-
-  if (!webview()->ScrollFocusedEditableElementIntoRect(rect))
-    return;
-
-  rect_for_scrolled_focused_editable_node_ = rect;
-  has_scrolled_focused_editable_node_into_rect_ = true;
-  if (!compositor()->HasPendingPageScaleAnimation() && autofill_client)
-    autofill_client->DidCompleteFocusChangeInFrame();
 }
 
 void RenderViewImpl::OnSetHistoryOffsetAndLength(int history_offset,
@@ -1435,7 +1379,7 @@ WebView* RenderViewImpl::CreateView(WebLocalFrame* creator,
   return view->webview();
 }
 
-WebWidget* RenderViewImpl::CreatePopupMenu(blink::WebPopupType popup_type) {
+WebWidget* RenderViewImpl::CreatePopup(blink::WebPopupType popup_type) {
   RenderWidget* widget = RenderWidget::CreateForPopup(this, compositor_deps_,
                                                       popup_type, screen_info_);
   if (!widget)
@@ -1447,9 +1391,9 @@ WebWidget* RenderViewImpl::CreatePopupMenu(blink::WebPopupType popup_type) {
   return widget->GetWebWidget();
 }
 
-WebStorageNamespace* RenderViewImpl::CreateSessionStorageNamespace() {
+int64_t RenderViewImpl::GetSessionStorageNamespaceId() {
   CHECK(session_storage_namespace_id_ != kInvalidSessionStorageNamespaceId);
-  return new WebStorageNamespaceImpl(session_storage_namespace_id_);
+  return session_storage_namespace_id_;
 }
 
 void RenderViewImpl::PrintPage(WebLocalFrame* frame) {
@@ -1619,8 +1563,6 @@ void RenderViewImpl::FocusPrevious() {
 // TODO(esprehn): Blink only ever passes Elements, this should take WebElement.
 void RenderViewImpl::FocusedNodeChanged(const WebNode& fromNode,
                                         const WebNode& toNode) {
-  has_scrolled_focused_editable_node_into_rect_ = false;
-
   RenderFrameImpl* previous_frame = nullptr;
   if (!fromNode.IsNull())
     previous_frame =
@@ -1657,7 +1599,16 @@ void RenderViewImpl::DidUpdateLayout() {
 }
 
 void RenderViewImpl::NavigateBackForwardSoon(int offset) {
+  history_navigation_virtual_time_pauser_ =
+      RenderThreadImpl::current()
+          ->GetRendererScheduler()
+          ->CreateWebScopedVirtualTimePauser();
+  history_navigation_virtual_time_pauser_.PauseVirtualTime(true);
   Send(new ViewHostMsg_GoToEntryAtOffset(GetRoutingID(), offset));
+}
+
+void RenderViewImpl::DidCommitProvisionalHistoryLoad() {
+  history_navigation_virtual_time_pauser_.PauseVirtualTime(false);
 }
 
 int RenderViewImpl::HistoryBackListCount() {
@@ -2119,17 +2070,12 @@ void RenderViewImpl::OnResize(const ResizeParams& params) {
     }
   }
 
-  gfx::Size old_visible_viewport_size = visible_viewport_size_;
-
   browser_controls_shrink_blink_size_ =
       params.browser_controls_shrink_blink_size;
   top_controls_height_ = params.top_controls_height;
   bottom_controls_height_ = params.bottom_controls_height;
 
   RenderWidget::OnResize(params);
-
-  if (old_visible_viewport_size != visible_viewport_size_)
-    has_scrolled_focused_editable_node_into_rect_ = false;
 }
 
 void RenderViewImpl::OnSetBackgroundOpaque(bool opaque) {
@@ -2187,9 +2133,9 @@ void RenderViewImpl::OnPageWasHidden() {
     // frame. Currently, this is done because the main frame may override the
     // visibility of the page when prerendering. In order to fix this,
     // prerendering must be made aware of OOPIFs. https://crbug.com/440544
-    blink::WebPageVisibilityState visibilityState =
+    blink::mojom::PageVisibilityState visibilityState =
         GetMainRenderFrame() ? GetMainRenderFrame()->VisibilityState()
-                             : blink::kWebPageVisibilityStateHidden;
+                             : blink::mojom::PageVisibilityState::kHidden;
     webview()->SetVisibilityState(visibilityState, false);
   }
 }
@@ -2200,9 +2146,9 @@ void RenderViewImpl::OnPageWasShown() {
 #endif
 
   if (webview()) {
-    blink::WebPageVisibilityState visibilityState =
+    blink::mojom::PageVisibilityState visibilityState =
         GetMainRenderFrame() ? GetMainRenderFrame()->VisibilityState()
-                             : blink::kWebPageVisibilityStateVisible;
+                             : blink::mojom::PageVisibilityState::kVisible;
     webview()->SetVisibilityState(visibilityState, false);
   }
 }
@@ -2410,13 +2356,13 @@ void RenderViewImpl::SuspendVideoCaptureDevices(bool suspend) {
   if (!main_render_frame_)
     return;
 
-  MediaStreamDispatcher* media_stream_dispatcher =
-      main_render_frame_->GetMediaStreamDispatcher();
-  if (!media_stream_dispatcher)
+  MediaStreamDeviceObserver* media_stream_device_observer =
+      main_render_frame_->GetMediaStreamDeviceObserver();
+  if (!media_stream_device_observer)
     return;
 
   MediaStreamDevices video_devices =
-      media_stream_dispatcher->GetNonScreenCaptureDevices();
+      media_stream_device_observer->GetNonScreenCaptureDevices();
   RenderThreadImpl::current()->video_capture_impl_manager()->SuspendDevices(
       video_devices, suspend);
 #endif  // BUILDFLAG(ENABLE_WEBRTC)

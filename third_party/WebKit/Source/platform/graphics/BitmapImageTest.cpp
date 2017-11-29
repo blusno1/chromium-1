@@ -38,7 +38,7 @@
 #include "platform/scheduler/test/fake_web_task_runner.h"
 #include "platform/testing/HistogramTester.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
-#include "platform/testing/TestingPlatformSupport.h"
+#include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -471,7 +471,7 @@ TEST_F(BitmapImageTestWithMockDecoder, DontAdvanceToIncompleteFrame) {
   image_->SetData(SharedBuffer::Create("data", sizeof("data")), true);
 
   scoped_refptr<scheduler::FakeWebTaskRunner> task_runner =
-      base::AdoptRef(new scheduler::FakeWebTaskRunner);
+      base::MakeRefCounted<scheduler::FakeWebTaskRunner>();
   image_->SetTaskRunnerForTesting(task_runner);
   task_runner->SetTime(10);
 
@@ -506,7 +506,7 @@ TEST_F(BitmapImageTestWithMockDecoder, FrameSkipTracking) {
   image_->SetData(SharedBuffer::Create("data", sizeof("data")), false);
 
   scoped_refptr<scheduler::FakeWebTaskRunner> task_runner =
-      base::AdoptRef(new scheduler::FakeWebTaskRunner);
+      base::MakeRefCounted<scheduler::FakeWebTaskRunner>();
   image_->SetTaskRunnerForTesting(task_runner);
   task_runner->SetTime(10);
 

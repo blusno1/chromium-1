@@ -32,6 +32,7 @@
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
+#include "gpu/command_buffer/service/service_transfer_cache.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/service/image_transport_surface_delegate.h"
@@ -86,8 +87,6 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
                                           public ImageTransportSurfaceDelegate {
  public:
   class Service;
-  typedef base::Callback<void(const std::vector<ui::LatencyInfo>&)>
-      LatencyInfoCallback;
 
   explicit InProcessCommandBuffer(const scoped_refptr<Service>& service);
   ~InProcessCommandBuffer() override;
@@ -141,8 +140,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
                        const base::Closure& callback) override;
   void WaitSyncTokenHint(const SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const SyncToken& sync_token) override;
-  void AddLatencyInfo(
-      const std::vector<ui::LatencyInfo>& latency_info) override;
+  void SetSnapshotRequested() override;
 
   // CommandBufferServiceClient implementation:
   CommandBatchProcessedResult OnCommandBatchProcessed() override;
@@ -165,7 +163,8 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   void DidSwapBuffersComplete(SwapBuffersCompleteParams params) override;
   const gles2::FeatureInfo* GetFeatureInfo() const override;
   const GpuPreferences& GetGpuPreferences() const override;
-  void SetLatencyInfoCallback(const LatencyInfoCallback& callback) override;
+
+  void SetSnapshotRequestedCallback(const base::Closure& callback) override;
   void UpdateVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override;
 
@@ -176,8 +175,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   const GpuFeatureInfo& GetGpuFeatureInfo() const;
 
   using SwapBuffersCompletionCallback = base::Callback<void(
-      const std::vector<ui::LatencyInfo>& latency_info,
-      gfx::SwapResult result,
+      const gfx::SwapResponse& response,
       const GpuProcessHostedCALayerTreeParamsMac* params_mac)>;
   void SetSwapBuffersCompletionCallback(
       const SwapBuffersCompletionCallback& callback);
@@ -197,6 +195,10 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   // See "gpu/ipc/in_process_command_buffer.cc".
   static void InitializeDefaultServiceForTesting(
       const GpuFeatureInfo& gpu_feature_info);
+
+  gpu::gles2::ContextGroup* ContextGroupForTesting() const {
+    return context_group_.get();
+  }
 
   // The serializer interface to the GPU service (i.e. thread).
   class Service {
@@ -232,6 +234,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
     ServiceDiscardableManager* discardable_manager() {
       return &discardable_manager_;
     }
+    ServiceTransferCache* transfer_cache() { return &transfer_cache_; }
     gles2::ShaderTranslatorCache* shader_translator_cache() {
       return &shader_translator_cache_;
     }
@@ -251,6 +254,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
     GpuProcessActivityFlags activity_flags_;
     gles2::ImageManager image_manager_;
     ServiceDiscardableManager discardable_manager_;
+    ServiceTransferCache transfer_cache_;
     gles2::ShaderTranslatorCache shader_translator_cache_;
     gles2::FramebufferCompletenessCache framebuffer_completeness_cache_;
   };
@@ -283,8 +287,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
       const InitializeOnGpuThreadParams& params);
   void Destroy();
   bool DestroyOnGpuThread();
-  void FlushOnGpuThread(int32_t put_offset,
-                        std::vector<ui::LatencyInfo>* latency_info);
+  void FlushOnGpuThread(int32_t put_offset, bool snapshot_requested);
   void UpdateLastStateOnGpuThread();
   void ScheduleDelayedWorkOnGpuThread();
   bool MakeCurrent();
@@ -331,10 +334,8 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   bool delayed_work_pending_;
   ImageFactory* image_factory_;
 
-  LatencyInfoCallback latency_info_callback_;
-
-  // Should only be accessed on the client thread.
-  std::unique_ptr<std::vector<ui::LatencyInfo>> latency_info_;
+  base::Closure snapshot_requested_callback_;
+  bool snapshot_requested_;
 
   // Members accessed on the client thread:
   GpuControlClient* gpu_control_client_;

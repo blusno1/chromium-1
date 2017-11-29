@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <iomanip>
+#include <sstream>
+
 #include "chrome/browser/vr/ui.h"
 
 #include "base/memory/ptr_util.h"
@@ -13,11 +16,12 @@
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
 #include "chrome/browser/vr/speech_recognizer.h"
+#include "chrome/browser/vr/ui_browser_interface.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
 #include "chrome/browser/vr/ui_input_manager.h"
 #include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
-#include "chrome/browser/vr/ui_scene_manager.h"
+#include "chrome/browser/vr/ui_scene_creator.h"
 #include "chrome/common/chrome_features.h"
 
 namespace vr {
@@ -25,24 +29,23 @@ namespace vr {
 Ui::Ui(UiBrowserInterface* browser,
        ContentInputForwarder* content_input_forwarder,
        const UiInitialState& ui_initial_state)
-    : scene_(base::MakeUnique<UiScene>()),
+    : Ui(browser,
+         base::MakeUnique<ContentInputDelegate>(content_input_forwarder),
+         ui_initial_state) {}
+
+Ui::Ui(UiBrowserInterface* browser,
+       std::unique_ptr<ContentInputDelegate> content_input_delegate,
+       const UiInitialState& ui_initial_state)
+    : browser_(browser),
+      scene_(base::MakeUnique<UiScene>()),
       model_(base::MakeUnique<Model>()),
-      content_input_delegate_(
-          base::MakeUnique<ContentInputDelegate>(content_input_forwarder)),
-      scene_manager_(
-          base::MakeUnique<UiSceneManager>(browser,
-                                           scene_.get(),
-                                           content_input_delegate_.get(),
-                                           model_.get(),
-                                           ui_initial_state)),
+      content_input_delegate_(std::move(content_input_delegate)),
       input_manager_(base::MakeUnique<UiInputManager>(scene_.get())),
       weak_ptr_factory_(this) {
-  model_->started_for_autopresentation =
-      ui_initial_state.web_vr_autopresentation_expected;
-  model_->experimental_features_enabled =
-      base::FeatureList::IsEnabled(features::kExperimentalVRFeatures);
-  model_->speech.has_or_can_request_audio_permission =
-      ui_initial_state.has_or_can_request_audio_permission;
+  InitializeModel(ui_initial_state);
+  UiSceneCreator(browser, scene_.get(), content_input_delegate_.get(),
+                 model_.get())
+      .CreateScene();
 }
 
 Ui::~Ui() = default;
@@ -54,20 +57,24 @@ base::WeakPtr<BrowserUiInterface> Ui::GetBrowserUiWeakPtr() {
 void Ui::SetWebVrMode(bool enabled, bool show_toast) {
   model_->web_vr_timeout_state =
       enabled ? kWebVrAwaitingFirstFrame : kWebVrNoTimeoutPending;
-  scene_manager_->SetWebVrMode(enabled, show_toast);
+  model_->web_vr_mode = enabled;
+  model_->web_vr_show_toast = show_toast;
+  if (!enabled) {
+    model_->web_vr_show_splash_screen = false;
+    model_->web_vr_started_for_autopresentation = false;
+  }
 }
 
 void Ui::SetFullscreen(bool enabled) {
-  scene_manager_->SetFullscreen(enabled);
+  model_->fullscreen = enabled;
 }
 
 void Ui::SetToolbarState(const ToolbarState& state) {
-  scene_manager_->SetToolbarState(state);
+  model_->toolbar_state = state;
 }
 
 void Ui::SetIncognito(bool enabled) {
   model_->incognito = enabled;
-  scene_manager_->SetIncognito(enabled);
 }
 
 void Ui::SetLoading(bool loading) {
@@ -79,35 +86,64 @@ void Ui::SetLoadProgress(float progress) {
 }
 
 void Ui::SetIsExiting() {
-  scene_manager_->SetIsExiting();
+  model_->exiting_vr = true;
 }
 
 void Ui::SetHistoryButtonsEnabled(bool can_go_back, bool can_go_forward) {
-  scene_manager_->SetHistoryButtonsEnabled(can_go_back, can_go_forward);
+  // We don't yet support forward navigation so we ignore this parameter.
+  model_->can_navigate_back = can_go_back;
 }
 
-void Ui::SetVideoCapturingIndicator(bool enabled) {
-  scene_manager_->SetVideoCapturingIndicator(enabled);
+void Ui::SetVideoCaptureEnabled(bool enabled) {
+  model_->permissions.video_capture_enabled = enabled;
 }
 
-void Ui::SetScreenCapturingIndicator(bool enabled) {
-  scene_manager_->SetScreenCapturingIndicator(enabled);
+void Ui::SetScreenCaptureEnabled(bool enabled) {
+  model_->permissions.screen_capture_enabled = enabled;
 }
 
-void Ui::SetAudioCapturingIndicator(bool enabled) {
-  scene_manager_->SetAudioCapturingIndicator(enabled);
+void Ui::SetAudioCaptureEnabled(bool enabled) {
+  model_->permissions.audio_capture_enabled = enabled;
 }
 
-void Ui::SetBluetoothConnectedIndicator(bool enabled) {
-  scene_manager_->SetBluetoothConnectedIndicator(enabled);
+void Ui::SetBluetoothConnected(bool enabled) {
+  model_->permissions.bluetooth_connected = enabled;
 }
 
-void Ui::SetLocationAccessIndicator(bool enabled) {
-  scene_manager_->SetLocationAccessIndicator(enabled);
+void Ui::SetLocationAccess(bool enabled) {
+  model_->permissions.location_access = enabled;
 }
 
 void Ui::SetExitVrPromptEnabled(bool enabled, UiUnsupportedMode reason) {
-  scene_manager_->SetExitVrPromptEnabled(enabled, reason);
+  if (!enabled) {
+    DCHECK_EQ(reason, UiUnsupportedMode::kCount);
+    model_->active_modal_prompt_type = kModalPromptTypeNone;
+    return;
+  }
+
+  if (model_->active_modal_prompt_type != kModalPromptTypeNone) {
+    browser_->OnExitVrPromptResult(
+        ExitVrPromptChoice::CHOICE_NONE,
+        GetReasonForPrompt(model_->active_modal_prompt_type));
+  }
+
+  switch (reason) {
+    case UiUnsupportedMode::kUnhandledCodePoint:
+      NOTREACHED();  // This mode does not prompt.
+      return;
+    case UiUnsupportedMode::kUnhandledPageInfo:
+      model_->active_modal_prompt_type = kModalPromptTypeExitVRForSiteInfo;
+      return;
+    case UiUnsupportedMode::kAndroidPermissionNeeded:
+      model_->active_modal_prompt_type =
+          kModalPromptTypeExitVRForAudioPermission;
+      return;
+    case UiUnsupportedMode::kCount:
+      NOTREACHED();  // Should never be used as a mode (when |enabled| is true).
+      return;
+  }
+
+  NOTREACHED();
 }
 
 void Ui::SetSpeechRecognitionEnabled(bool enabled) {
@@ -130,7 +166,7 @@ void Ui::SetOmniboxSuggestions(
 }
 
 bool Ui::ShouldRenderWebVr() {
-  return scene_manager_->ShouldRenderWebVr();
+  return model_->should_render_web_vr();
 }
 
 void Ui::OnGlInitialized(unsigned int content_texture_id,
@@ -144,17 +180,29 @@ void Ui::OnGlInitialized(unsigned int content_texture_id,
   } else {
     provider_ = base::MakeUnique<CpuSurfaceProvider>();
   }
-  scene_manager_->OnGlInitialized(content_texture_id, content_location,
-                                  provider_.get());
+  scene_->OnGlInitialized(provider_.get());
+  model_->content_texture_id = content_texture_id;
+  model_->content_location = content_location;
 }
 
 void Ui::OnAppButtonClicked() {
-  scene_manager_->OnAppButtonClicked();
+  // App button clicks should be a no-op when auto-presenting WebVR.
+  if (model_->web_vr_started_for_autopresentation) {
+    return;
+  }
+
+  // If browsing mode is disabled, the app button should no-op.
+  if (model_->browsing_disabled) {
+    return;
+  }
+
+  // App button click exits the WebVR presentation and fullscreen.
+  browser_->ExitPresent();
+  browser_->ExitFullscreen();
 }
 
 void Ui::OnAppButtonGesturePerformed(
     PlatformController::SwipeDirection direction) {
-  scene_manager_->OnAppButtonGesturePerformed(direction);
 }
 
 void Ui::OnControllerUpdated(const ControllerModel& controller_model,
@@ -165,12 +213,11 @@ void Ui::OnControllerUpdated(const ControllerModel& controller_model,
 }
 
 void Ui::OnProjMatrixChanged(const gfx::Transform& proj_matrix) {
-  scene_manager_->OnProjMatrixChanged(proj_matrix);
+  model_->projection_matrix = proj_matrix;
 }
 
 void Ui::OnWebVrFrameAvailable() {
   model_->web_vr_timeout_state = kWebVrNoTimeoutPending;
-  scene_manager_->OnWebVrFrameAvailable();
 }
 
 void Ui::OnWebVrTimeoutImminent() {
@@ -196,6 +243,38 @@ void Ui::OnPlatformControllerInitialized(PlatformController* controller) {
 bool Ui::IsControllerVisible() const {
   UiElement* controller_group = scene_->GetUiElementByName(kControllerGroup);
   return controller_group && controller_group->GetTargetOpacity() > 0.0f;
+}
+
+bool Ui::SkipsRedrawWhenNotDirty() const {
+  return model_->skips_redraw_when_not_dirty;
+}
+
+void Ui::Dump() {
+  std::ostringstream os;
+  os << std::setprecision(3);
+  os << std::endl;
+  scene_->root_element().DumpHierarchy(std::vector<size_t>(), &os);
+  LOG(ERROR) << os.str();
+}
+
+void Ui::ReinitializeForTest(const UiInitialState& ui_initial_state) {
+  InitializeModel(ui_initial_state);
+}
+
+void Ui::InitializeModel(const UiInitialState& ui_initial_state) {
+  model_->web_vr_started_for_autopresentation =
+      ui_initial_state.web_vr_autopresentation_expected;
+  model_->web_vr_show_splash_screen =
+      ui_initial_state.web_vr_autopresentation_expected;
+  model_->experimental_features_enabled =
+      base::FeatureList::IsEnabled(features::kVrBrowsingExperimentalFeatures);
+  model_->speech.has_or_can_request_audio_permission =
+      ui_initial_state.has_or_can_request_audio_permission;
+  model_->web_vr_mode = ui_initial_state.in_web_vr;
+  model_->in_cct = ui_initial_state.in_cct;
+  model_->browsing_disabled = ui_initial_state.browsing_disabled;
+  model_->skips_redraw_when_not_dirty =
+      ui_initial_state.skips_redraw_when_not_dirty;
 }
 
 }  // namespace vr

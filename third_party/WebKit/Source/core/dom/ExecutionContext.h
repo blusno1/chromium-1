@@ -30,6 +30,7 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleNotifier.h"
 #include "core/dom/ContextLifecycleObserver.h"
@@ -39,7 +40,6 @@
 #include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
-#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebTraceLocation.h"
 #include "v8/include/v8.h"
 
@@ -69,9 +69,10 @@ enum ReasonForCallingCanExecuteScripts {
   kNotAboutToExecuteScript
 };
 
+enum class SecureContextMode { kInsecureContext, kSecureContext };
+
 class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
                                      public Supplementable<ExecutionContext> {
-  WTF_MAKE_NONCOPYABLE(ExecutionContext);
   MERGE_GARBAGE_COLLECTED_MIXINS();
 
  public:
@@ -174,6 +175,11 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   virtual bool IsSecureContext(String& error_message) const = 0;
   virtual bool IsSecureContext() const;
 
+  SecureContextMode SecureContextMode() const {
+    return IsSecureContext() ? SecureContextMode::kSecureContext
+                             : SecureContextMode::kInsecureContext;
+  }
+
   virtual String OutgoingReferrer() const;
   // Parses a comma-separated list of referrer policy tokens, and sets
   // the context's referrer policy to the last one that is a valid
@@ -220,6 +226,7 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   int window_interaction_tokens_;
 
   ReferrerPolicy referrer_policy_;
+  DISALLOW_COPY_AND_ASSIGN(ExecutionContext);
 };
 
 }  // namespace blink

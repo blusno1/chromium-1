@@ -5,10 +5,16 @@
 (async function() {
   TestRunner.addResult(
       `This tests that reloading a page with the inspector opened does not crash (rewritten test from r156199).\n`);
-  await TestRunner.loadHTML(`
-      <!DOCTYPE html>
-      <link rel="import" href="${TestRunner.url('resources/import-open-inspector-linked.html')}">
-    `);
+
+  await TestRunner.evaluateInPageAsync(`
+    (function(){
+      var link = document.createElement('link');
+      link.rel = 'import';
+      link.href = 'resources/import-open-inspector-linked.html';
+      document.head.append(link);
+      return new Promise(f => link.onload = f);
+    })();
+  `);
 
   await TestRunner.evaluateInPagePromise(`
       function getGreeting()
@@ -21,7 +27,7 @@
     function checkGreetingSet(next) {
       TestRunner.evaluateInPage('getGreeting()', callback);
       function callback(result) {
-        TestRunner.addResult('Received: ' + result.value);
+        TestRunner.addResult('Received: ' + result);
         next();
       }
     },

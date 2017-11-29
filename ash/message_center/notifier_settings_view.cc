@@ -99,13 +99,16 @@ std::unique_ptr<views::Painter> CreateFocusPainter() {
 }
 
 // TODO(tetsui): Give more general names and remove kEntryHeight, etc.
-constexpr gfx::Insets kTopLabelPadding(16, 18, 15, 0);
+constexpr gfx::Insets kTopLabelPadding(16, 18, 15, 18);
 const int kQuietModeViewSpacing = 18;
 
 constexpr gfx::Insets kHeaderViewPadding(4, 0, 4, 0);
-constexpr gfx::Insets kQuietModeViewPadding(16, 18, 15, 14);
+constexpr gfx::Insets kQuietModeViewPadding(0, 18, 0, 0);
+constexpr gfx::Insets kQuietModeLabelPadding(16, 0, 15, 0);
+constexpr gfx::Insets kQuietModeTogglePadding(0, 14, 0, 14);
 constexpr SkColor kTopLabelColor = SkColorSetRGB(0x42, 0x85, 0xF4);
 constexpr SkColor kLabelColor = SkColorSetARGB(0xDE, 0x0, 0x0, 0x0);
+constexpr SkColor kTopBorderColor = SkColorSetARGB(0x1F, 0x0, 0x0, 0x0);
 const int kLabelFontSize = 13;
 
 // EntryView ------------------------------------------------------------------
@@ -138,7 +141,7 @@ EntryView::EntryView(views::View* contents)
   AddChildView(contents);
 }
 
-EntryView::~EntryView() {}
+EntryView::~EntryView() = default;
 
 void EntryView::Layout() {
   DCHECK_EQ(1, child_count());
@@ -310,7 +313,7 @@ NotifierSettingsView::NotifierButton::NotifierButton(
   UpdateIconImage(notifier_ui_data.icon);
 }
 
-NotifierSettingsView::NotifierButton::~NotifierButton() {}
+NotifierSettingsView::NotifierButton::~NotifierButton() = default;
 
 void NotifierSettingsView::NotifierButton::UpdateIconImage(
     const gfx::ImageSkia& icon) {
@@ -426,6 +429,8 @@ NotifierSettingsView::NotifierSettingsView()
   header_view_ = new views::View;
   header_view_->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kVertical, kHeaderViewPadding, 0));
+  header_view_->SetBorder(
+      views::CreateSolidSidedBorder(1, 0, 0, 0, kTopBorderColor));
 
   views::View* quiet_mode_view = new views::View;
 
@@ -435,6 +440,7 @@ NotifierSettingsView::NotifierSettingsView()
   quiet_mode_view->SetLayoutManager(quiet_mode_layout);
 
   quiet_mode_icon_ = new views::ImageView();
+  quiet_mode_icon_->SetBorder(views::CreateEmptyBorder(kQuietModeLabelPadding));
   quiet_mode_view->AddChildView(quiet_mode_icon_);
 
   views::Label* quiet_mode_label = new views::Label(l10n_util::GetStringUTF16(
@@ -446,12 +452,16 @@ NotifierSettingsView::NotifierSettingsView()
           kLabelFontSize, gfx::Font::Weight::NORMAL));
   quiet_mode_label->SetAutoColorReadabilityEnabled(false);
   quiet_mode_label->SetEnabledColor(kLabelColor);
+  quiet_mode_label->SetBorder(views::CreateEmptyBorder(kQuietModeLabelPadding));
   quiet_mode_view->AddChildView(quiet_mode_label);
   quiet_mode_layout->SetFlexForView(quiet_mode_label, 1);
 
   quiet_mode_toggle_ = new views::ToggleButton(this);
   quiet_mode_toggle_->SetAccessibleName(l10n_util::GetStringUTF16(
       IDS_ASH_MESSAGE_CENTER_QUIET_MODE_BUTTON_TOOLTIP));
+  quiet_mode_toggle_->SetBorder(
+      views::CreateEmptyBorder(kQuietModeTogglePadding));
+  quiet_mode_toggle_->EnableCanvasFlippingForRTLUI(true);
   SetQuietModeState(MessageCenter::Get()->IsQuietMode());
   quiet_mode_view->AddChildView(quiet_mode_toggle_);
   header_view_->AddChildView(quiet_mode_view);

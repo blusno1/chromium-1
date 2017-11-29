@@ -95,11 +95,10 @@ class ServiceWorkerPaymentAppFactoryBrowserTest : public InProcessBrowserTest {
   // |payment_method_identifiers_set|. Blocks until the factory has finished
   // using all resources.
   void GetAllPaymentAppsForMethods(
-      const std::set<std::string>& payment_method_identifiers_set) {
-    content::BrowserContext* context = browser()
-                                           ->tab_strip_model()
-                                           ->GetActiveWebContents()
-                                           ->GetBrowserContext();
+      const std::vector<std::string>& payment_method_identifiers) {
+    content::WebContents* web_contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    content::BrowserContext* context = web_contents->GetBrowserContext();
     auto downloader = std::make_unique<TestDownloader>(
         content::BrowserContext::GetDefaultStoragePartition(context)
             ->GetURLRequestContext());
@@ -111,16 +110,20 @@ class ServiceWorkerPaymentAppFactoryBrowserTest : public InProcessBrowserTest {
                                  frankpay_.GetURL("frankpay.com", "/"));
     downloader->AddTestServerURL("https://georgepay.com/",
                                  georgepay_.GetURL("georgepay.com", "/"));
-    ServiceWorkerPaymentAppFactory factory;
-    factory.IgnorePortInAppScopeForTesting();
+    ServiceWorkerPaymentAppFactory::GetInstance()
+        ->SetDownloaderAndIgnorePortInAppScopeForTesting(std::move(downloader));
+
+    std::vector<mojom::PaymentMethodDataPtr> method_data;
+    method_data.emplace_back(mojom::PaymentMethodData::New());
+    method_data.back()->supported_methods = payment_method_identifiers;
 
     base::RunLoop run_loop;
-    factory.GetAllPaymentApps(
-        context, std::move(downloader),
+    ServiceWorkerPaymentAppFactory::GetInstance()->GetAllPaymentApps(
+        web_contents,
         WebDataServiceFactory::GetPaymentManifestWebDataForProfile(
             Profile::FromBrowserContext(context),
             ServiceAccessType::EXPLICIT_ACCESS),
-        payment_method_identifiers_set,
+        method_data,
         base::BindOnce(
             &ServiceWorkerPaymentAppFactoryBrowserTest::OnGotAllPaymentApps,
             base::Unretained(this)),

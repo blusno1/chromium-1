@@ -4,10 +4,7 @@ const scriptName = 'v8-cache-script.js';
 self.addEventListener('install', (event) => {
     event.waitUntil(
       caches.open(cacheName)
-        .then((cache) => {
-          return cache.add(new Request(scriptName));
-        })
-    );
+        .then((cache) => cache.add(new Request(scriptName))));
   });
 
 self.addEventListener('fetch', (event) => {

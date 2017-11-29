@@ -63,6 +63,12 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   void SetFrameConnectorDelegate(FrameConnectorDelegate* frame_connector);
 
+#if defined(USE_AURA)
+  // When the viz::FrameSinkId for this child frame is created and registered
+  // remotely, it can be set here.
+  void SetFrameSinkId(const viz::FrameSinkId& frame_sink_id);
+#endif  // defined(USE_AURA)
+
   // This functions registers single-use callbacks that want to be notified when
   // the next frame is swapped. The callback is triggered by
   // ProcessCompositorFrame, which is the appropriate time to request pixel
@@ -195,6 +201,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // viz::HostFrameSinkClient implementation.
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
+  void OnFrameTokenChanged(uint32_t frame_token) override;
 
   // Exposed for tests.
   bool IsChildFrameForTesting() const override;
@@ -217,6 +224,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void UpdateViewportIntersection(const gfx::Rect& viewport_intersection);
 
   void SetIsInert();
+
+  void UpdateRenderThrottlingStatus();
 
   bool has_frame() { return has_frame_; }
 
@@ -316,6 +325,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // The surface client ID of the parent RenderWidgetHostView.  0 if none.
   viz::FrameSinkId parent_frame_sink_id_;
 
+  const bool enable_viz_;
   bool has_frame_ = false;
   viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;

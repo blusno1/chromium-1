@@ -14,11 +14,9 @@
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "components/arc/common/intent_helper.mojom.h"
-#include "components/arc/instance_holder.h"
 #include "components/arc/intent_helper/activity_icon_loader.h"
 #include "components/arc/intent_helper/arc_intent_helper_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "url/gurl.h"
 
 class KeyedServiceBaseFactory;
@@ -35,7 +33,6 @@ class IntentFilter;
 // Receives intents from ARC.
 class ArcIntentHelperBridge
     : public KeyedService,
-      public InstanceHolder<mojom::IntentHelperInstance>::Observer,
       public mojom::IntentHelperHost {
  public:
   // Returns singleton instance for the given BrowserContext,
@@ -46,6 +43,10 @@ class ArcIntentHelperBridge
   // Returns factory for the ArcIntentHelperBridge.
   static KeyedServiceBaseFactory* GetFactory();
 
+  // Appends '.' + |to_append| to the intent helper package name.
+  static std::string AppendStringToIntentHelperPackageName(
+      const std::string& to_append);
+
   ArcIntentHelperBridge(content::BrowserContext* context,
                         ArcBridgeService* bridge_service);
   ~ArcIntentHelperBridge() override;
@@ -53,10 +54,6 @@ class ArcIntentHelperBridge
   void AddObserver(ArcIntentHelperObserver* observer);
   void RemoveObserver(ArcIntentHelperObserver* observer);
   bool HasObserver(ArcIntentHelperObserver* observer) const;
-
-  // InstanceHolder<mojom::IntentHelperInstance>::Observer
-  void OnInstanceReady() override;
-  void OnInstanceClosed() override;
 
   // mojom::IntentHelperHost
   void OnIconInvalidated(const std::string& package_name) override;
@@ -120,7 +117,6 @@ class ArcIntentHelperBridge
   content::BrowserContext* const context_;
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
 
-  mojo::Binding<mojom::IntentHelperHost> binding_;
   std::unique_ptr<OpenUrlDelegate> open_url_delegate_;
   internal::ActivityIconLoader icon_loader_;
 

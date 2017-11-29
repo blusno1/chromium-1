@@ -351,7 +351,7 @@ AccessibilityRole AXNodeObject::NativeAccessibilityRoleIgnoringAria() const {
   if (auto* input = ToHTMLInputElementOrNull(*GetNode())) {
     const AtomicString& type = input->type();
     if (input->DataList())
-      return kComboBoxRole;
+      return kTextFieldWithComboBoxRole;
     if (type == InputTypeNames::button) {
       if ((GetNode()->parentNode() &&
            IsHTMLMenuElement(GetNode()->parentNode())) ||
@@ -626,7 +626,7 @@ bool AXNodeObject::IsTextControl() const {
 
   switch (RoleValue()) {
     case kTextFieldRole:
-    case kComboBoxRole:
+    case kTextFieldWithComboBoxRole:
     case kSearchBoxRole:
     // TODO(dmazzoni): kSpinButtonRole might need to be removed.
     case kSpinButtonRole:
@@ -1137,16 +1137,24 @@ unsigned AXNodeObject::HierarchicalLevel() const {
   return level;
 }
 
+// TODO: rename this just AutoComplete, it's not only ARIA.
 String AXNodeObject::AriaAutoComplete() const {
-  if (!IsARIATextControl())
-    return String();
+  if (IsARIATextControl()) {
+    const AtomicString& aria_auto_complete =
+        GetAOMPropertyOrARIAAttribute(AOMStringProperty::kAutocomplete)
+            .DeprecatedLower();
+    // Illegal values must be passed through, according to CORE-AAM.
+    if (!aria_auto_complete.IsNull())
+      return aria_auto_complete == "none" ? String() : aria_auto_complete;
+  }
 
-  const AtomicString& aria_auto_complete =
-      GetAOMPropertyOrARIAAttribute(AOMStringProperty::kAutocomplete)
-          .DeprecatedLower();
+  if (GetNode() && IsHTMLInputElement(*GetNode())) {
+    HTMLInputElement& input = ToHTMLInputElement(*GetNode());
+    if (input.DataList())
+      return "list";
+  }
 
-  // Illegal values must be passed through, according to CORE-AAM.
-  return aria_auto_complete == "none" ? String() : aria_auto_complete;
+  return String();
 }
 
 namespace {
@@ -1216,7 +1224,6 @@ AccessibilityOrientation AXNodeObject::Orientation() const {
     orientation = kAccessibilityOrientationVertical;
 
   switch (RoleValue()) {
-    case kComboBoxRole:
     case kListBoxRole:
     case kMenuRole:
     case kScrollBarRole:
@@ -1234,6 +1241,8 @@ AccessibilityOrientation AXNodeObject::Orientation() const {
         orientation = kAccessibilityOrientationHorizontal;
 
       return orientation;
+    case kComboBoxGroupingRole:
+    case kComboBoxMenuButtonRole:
     case kRadioGroupRole:
     case kTreeGridRole:
       return orientation;
@@ -1877,13 +1886,13 @@ bool AXNodeObject::NameFromLabelElement() const {
   return false;
 }
 
-void AXNodeObject::GetRelativeBounds(
-    AXObject** out_container,
-    FloatRect& out_bounds_in_container,
-    SkMatrix44& out_container_transform) const {
+void AXNodeObject::GetRelativeBounds(AXObject** out_container,
+                                     FloatRect& out_bounds_in_container,
+                                     SkMatrix44& out_container_transform,
+                                     bool* clips_children) const {
   if (LayoutObjectForRelativeBounds()) {
     AXObject::GetRelativeBounds(out_container, out_bounds_in_container,
-                                out_container_transform);
+                                out_container_transform, clips_children);
     return;
   }
 
@@ -1912,7 +1921,8 @@ void AXNodeObject::GetRelativeBounds(
         if (AXObject* obj = AXObjectCache().Get(&child)) {
           AXObject* container;
           FloatRect bounds;
-          obj->GetRelativeBounds(&container, bounds, out_container_transform);
+          obj->GetRelativeBounds(&container, bounds, out_container_transform,
+                                 clips_children);
           if (container) {
             *out_container = container;
             rects.push_back(bounds);
@@ -1935,7 +1945,8 @@ void AXNodeObject::GetRelativeBounds(
        position_provider = position_provider->ParentObject()) {
     if (position_provider->IsAXLayoutObject()) {
       position_provider->GetRelativeBounds(
-          out_container, out_bounds_in_container, out_container_transform);
+          out_container, out_bounds_in_container, out_container_transform,
+          clips_children);
       if (*out_container)
         out_bounds_in_container.SetSize(
             FloatSize(out_bounds_in_container.Width(),

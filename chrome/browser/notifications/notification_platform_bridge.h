@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "chrome/browser/notifications/displayed_notifications_dispatch_callback.h"
 #include "chrome/browser/notifications/notification_common.h"
+#include "chrome/browser/notifications/notification_handler.h"
 
 namespace message_center {
 class Notification;
@@ -29,11 +30,16 @@ class NotificationPlatformBridge {
 
   static NotificationPlatformBridge* Create();
 
+  // Returns whether a native bridge can handle a notification of the given
+  // type. Ideally, this would always return true, but for now some platforms
+  // can't handle TRANSIENT notifications.
+  static bool CanHandleType(NotificationHandler::Type notification_type);
+
   virtual ~NotificationPlatformBridge() {}
 
   // Shows a toast on screen using the data passed in |notification|.
   virtual void Display(
-      NotificationCommon::Type notification_type,
+      NotificationHandler::Type notification_type,
       const std::string& profile_id,
       bool is_incognito,
       const message_center::Notification& notification,

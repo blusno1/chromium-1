@@ -134,6 +134,9 @@ public class SafeBrowsingTest {
         private static final int MALWARE_CODE = 4;
         private static final int UNWANTED_SOFTWARE_CODE = 3;
 
+        // Mock time it takes for a lookup request to complete.
+        private static final long CHECK_DELTA_US = 10;
+
         @Override
         public boolean init(Context context, Observer result) {
             mObserver = result;
@@ -166,9 +169,11 @@ public class SafeBrowsingTest {
                 metadata = SAFE_METADATA;
             }
 
+            // clang-format off
             ThreadUtils.runOnUiThread(
-                    (Runnable) () -> mObserver.onUrlCheckDone(callbackId, STATUS_SUCCESS,
-                            metadata));
+                    (Runnable) () -> mObserver.onUrlCheckDone(
+                        callbackId, STATUS_SUCCESS, metadata, CHECK_DELTA_US));
+            // clang-format on
         }
     }
 
@@ -969,13 +974,11 @@ public class SafeBrowsingTest {
     @Feature({"AndroidWebView"})
     @CommandLineFlags.Add(AwSwitches.WEBVIEW_ENABLE_SAFEBROWSING_SUPPORT)
     public void testSafeBrowsingClickDiagnosticLink() throws Throwable {
-        // Only malware interstitials have the diagnostic-link
         final String responseUrl = mTestServer.getURL(MALWARE_HTML_PATH);
         final String diagnosticUrl =
-                Uri.parse("https://www.google.com/safebrowsing/diagnostic")
+                Uri.parse("https://transparencyreport.google.com/safe-browsing/search")
                         .buildUpon()
-                        .appendQueryParameter("site", responseUrl)
-                        .appendQueryParameter("client", "chromium")
+                        .appendQueryParameter("url", responseUrl)
                         .appendQueryParameter("hl", LocaleUtils.getDefaultLocaleString())
                         .toString();
         loadInterstitialAndClickLink(MALWARE_HTML_PATH, "diagnostic-link", diagnosticUrl);

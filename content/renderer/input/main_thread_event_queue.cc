@@ -238,9 +238,6 @@ MainThreadEventQueue::MainThreadEventQueue(
       enable_non_blocking_due_to_main_thread_responsiveness_flag_(
           base::FeatureList::IsEnabled(
               features::kMainThreadBusyScrollIntervention)),
-      handle_raf_aligned_mouse_input_(
-          allow_raf_aligned_input &&
-          base::FeatureList::IsEnabled(features::kRafAlignedMouseInputEvents)),
       needs_low_latency_(false),
       main_task_runner_(main_task_runner),
       renderer_scheduler_(renderer_scheduler),
@@ -523,9 +520,8 @@ bool MainThreadEventQueue::IsRafAlignedEvent(
   switch (event->event().GetType()) {
     case blink::WebInputEvent::kMouseMove:
     case blink::WebInputEvent::kMouseWheel:
-      return handle_raf_aligned_mouse_input_ && !needs_low_latency_;
     case blink::WebInputEvent::kTouchMove:
-      return !needs_low_latency_;
+      return !needs_low_latency_ && !needs_low_latency_until_pointer_up_;
     default:
       return false;
   }
@@ -537,6 +533,21 @@ void MainThreadEventQueue::HandleEventOnMainThread(
     HandledEventCallback handled_callback) {
   if (client_)
     client_->HandleInputEvent(event, latency, std::move(handled_callback));
+
+  if (needs_low_latency_until_pointer_up_) {
+    // Reset the needs low latency until pointer up mode if necessary.
+    switch (event.Event().GetType()) {
+      case blink::WebInputEvent::kMouseUp:
+      case blink::WebInputEvent::kTouchCancel:
+      case blink::WebInputEvent::kTouchEnd:
+      case blink::WebInputEvent::kPointerCancel:
+      case blink::WebInputEvent::kPointerUp:
+        needs_low_latency_until_pointer_up_ = false;
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 void MainThreadEventQueue::SetNeedsMainFrame() {
@@ -563,6 +574,10 @@ void MainThreadEventQueue::ClearClient() {
 
 void MainThreadEventQueue::SetNeedsLowLatency(bool low_latency) {
   needs_low_latency_ = low_latency;
+}
+
+void MainThreadEventQueue::RequestUnbufferedInputEvents() {
+  needs_low_latency_until_pointer_up_ = true;
 }
 
 }  // namespace content

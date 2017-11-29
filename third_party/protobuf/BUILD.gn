@@ -152,8 +152,9 @@ if (is_component_build && is_desktop_linux) {
     sources = [
       "mirclient.cc",
     ]
-    ldflags = [ "-Wl,--version-script=" +
-                rebase_path("//third_party/protobuf/mirclient.map") ]
+    ldflags =
+        [ "-Wl,--version-script=" +
+          rebase_path("//third_party/protobuf/mirclient.map", root_build_dir) ]
     output_extension = "so.9"
   }
 }
@@ -619,6 +620,13 @@ if (current_toolchain == host_toolchain) {
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
 
+    if (is_win) {
+      # Work around incremental linking randomly creating corrupt binaries,
+      # crbug.com/644525.
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs += [ "//build/config/win:no_incremental_linking" ]
+    }
+
     cflags = protobuf_lite_cflags
 
     deps = [
@@ -639,6 +647,13 @@ if (current_toolchain == host_toolchain) {
 
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    if (is_win) {
+      # Work around incremental linking randomly creating corrupt binaries,
+      # crbug.com/644525.
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs += [ "//build/config/win:no_incremental_linking" ]
+    }
   }
 }
 
@@ -724,4 +739,60 @@ group("py_proto") {
   data += get_target_outputs(":copy_six")
   data += get_target_outputs(":copy_google_protobuf")
   data += get_target_outputs(":copy_google_protobuf_internal")
+}
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+
+  android_library("protobuf_lite_javalib") {
+    chromium_code = false
+    java_files = [
+      "java/core/src/main/java/com/google/protobuf/AbstractMessageLite.java",
+      "java/core/src/main/java/com/google/protobuf/AbstractParser.java",
+      "java/core/src/main/java/com/google/protobuf/AbstractProtobufList.java",
+      "java/core/src/main/java/com/google/protobuf/BooleanArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/ByteBufferWriter.java",
+      "java/core/src/main/java/com/google/protobuf/ByteOutput.java",
+      "java/core/src/main/java/com/google/protobuf/ByteString.java",
+      "java/core/src/main/java/com/google/protobuf/CodedInputStream.java",
+      "java/core/src/main/java/com/google/protobuf/CodedOutputStream.java",
+      "java/core/src/main/java/com/google/protobuf/DoubleArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/ExperimentalApi.java",
+      "java/core/src/main/java/com/google/protobuf/ExtensionLite.java",
+      "java/core/src/main/java/com/google/protobuf/ExtensionRegistryFactory.java",
+      "java/core/src/main/java/com/google/protobuf/ExtensionRegistryLite.java",
+      "java/core/src/main/java/com/google/protobuf/FieldSet.java",
+      "java/core/src/main/java/com/google/protobuf/FloatArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/GeneratedMessageLite.java",
+      "java/core/src/main/java/com/google/protobuf/IntArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/Internal.java",
+      "java/core/src/main/java/com/google/protobuf/InvalidProtocolBufferException.java",
+      "java/core/src/main/java/com/google/protobuf/LazyField.java",
+      "java/core/src/main/java/com/google/protobuf/LazyFieldLite.java",
+      "java/core/src/main/java/com/google/protobuf/LazyStringArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/LazyStringList.java",
+      "java/core/src/main/java/com/google/protobuf/LongArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/MapEntryLite.java",
+      "java/core/src/main/java/com/google/protobuf/MapFieldLite.java",
+      "java/core/src/main/java/com/google/protobuf/MessageLite.java",
+      "java/core/src/main/java/com/google/protobuf/MessageLiteOrBuilder.java",
+      "java/core/src/main/java/com/google/protobuf/MessageLiteToString.java",
+      "java/core/src/main/java/com/google/protobuf/MutabilityOracle.java",
+      "java/core/src/main/java/com/google/protobuf/NioByteString.java",
+      "java/core/src/main/java/com/google/protobuf/Parser.java",
+      "java/core/src/main/java/com/google/protobuf/PrimitiveNonBoxingCollection.java",
+      "java/core/src/main/java/com/google/protobuf/ProtobufArrayList.java",
+      "java/core/src/main/java/com/google/protobuf/ProtocolStringList.java",
+      "java/core/src/main/java/com/google/protobuf/RopeByteString.java",
+      "java/core/src/main/java/com/google/protobuf/SmallSortedMap.java",
+      "java/core/src/main/java/com/google/protobuf/TextFormatEscaper.java",
+      "java/core/src/main/java/com/google/protobuf/UninitializedMessageException.java",
+      "java/core/src/main/java/com/google/protobuf/UnknownFieldSetLite.java",
+      "java/core/src/main/java/com/google/protobuf/UnmodifiableLazyStringList.java",
+      "java/core/src/main/java/com/google/protobuf/UnsafeByteOperations.java",
+      "java/core/src/main/java/com/google/protobuf/UnsafeUtil.java",
+      "java/core/src/main/java/com/google/protobuf/Utf8.java",
+      "java/core/src/main/java/com/google/protobuf/WireFormat.java",
+    ]
+  }
 }

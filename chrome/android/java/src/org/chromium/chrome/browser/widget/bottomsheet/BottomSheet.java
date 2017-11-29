@@ -34,12 +34,15 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.SysUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.LibraryProcessType;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.NativePageHost;
 import org.chromium.chrome.browser.TabLoadStatus;
 import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChrome;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
@@ -129,6 +132,18 @@ public class BottomSheet
 
     /** The amount of time it takes to transition sheet content in or out. */
     private static final long TRANSITION_DURATION_MS = 150;
+
+    /**
+     * The default duration the in-product help bubble should be visible before dismissing
+     * automatically.
+     */
+    private static final int HELP_BUBBLE_TIMEOUT_DURATION_MS = 10000;
+
+    /**
+     * The name of the fieldtrial parameter used to determine the timeout duration for the
+     * in-product help bubble.
+     */
+    private static final String HELP_BUBBLE_TIMEOUT_PARAM_NAME = "x_iph-timeout-duration-ms";
 
     /**
      * The fraction of the way to the next state the sheet must be swiped to animate there when
@@ -286,6 +301,12 @@ public class BottomSheet
     /** Whether or not scroll events are currently being blocked for the 'velocity' swipe logic. */
     private boolean mVelocityLogicBlockSwipe;
 
+    /** Whether the swipe velocity for the toolbar was recorded. */
+    private boolean mIsSwipeVelocityRecorded;
+
+    /** The speed of the swipe the last time the sheet was opened. */
+    private long mLastSheetOpenMicrosPerDp;
+
     /**
      * An interface defining content that can be displayed inside of the bottom sheet for Chrome
      * Home.
@@ -358,22 +379,13 @@ public class BottomSheet
     private class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
         @Override
         public boolean onDown(MotionEvent e) {
+            if (e == null) return false;
             return shouldGestureMoveSheet(e, e);
         }
 
         @Override
         public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-            if (!canMoveSheet()) {
-                // Currently it's possible to enter the tab switcher after an onScroll() event has
-                // began. If that happens, reset the sheet offset and return false to end the scroll
-                // event.
-                // TODO(twellington): Remove this after it is no longer possible to close the NTP
-                // while moving the BottomSheet.
-                setSheetState(SHEET_STATE_PEEK, false);
-                return false;
-            }
-
-            if (!shouldGestureMoveSheet(e1, e2)) return false;
+            if (e1 == null || !shouldGestureMoveSheet(e1, e2)) return false;
 
             // Only start scrolling if the scroll is up or down. If the user is already scrolling,
             // continue moving the sheet.
@@ -418,7 +430,7 @@ public class BottomSheet
 
         @Override
         public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-            if (!shouldGestureMoveSheet(e1, e2) || !mIsScrolling) return false;
+            if (e1 == null || !shouldGestureMoveSheet(e1, e2) || !mIsScrolling) return false;
 
             cancelAnimation();
 
@@ -469,9 +481,20 @@ public class BottomSheet
             return true;
         }
 
+        boolean shouldRecordHistogram = initialEvent != currentEvent;
+
         if (currentEvent.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            mIsSwipeVelocityRecorded = false;
             mVelocityLogicBlockSwipe = false;
+            shouldRecordHistogram = false;
         }
+
+        float scrollDistanceDp = MathUtils.distance(initialEvent.getX(), initialEvent.getY(),
+                                         currentEvent.getX(), currentEvent.getY())
+                / mDpToPx;
+        long timeDeltaMs = currentEvent.getEventTime() - initialEvent.getDownTime();
+        mLastSheetOpenMicrosPerDp =
+                Math.round(scrollDistanceDp > 0f ? timeDeltaMs * 1000 / scrollDistanceDp : 0f);
 
         String logicType = FeatureUtilities.getChromeHomeSwipeLogicType();
 
@@ -485,26 +508,43 @@ public class BottomSheet
             float allowedSwipeWidth = mContainerWidth * SWIPE_ALLOWED_FRACTION;
             startX = mVisibleViewportRect.left + (mContainerWidth - allowedSwipeWidth) / 2;
             endX = startX + allowedSwipeWidth;
-        } else if (ChromeSwitches.CHROME_HOME_SWIPE_LOGIC_VELOCITY.equals(logicType)) {
+        } else if (ChromeSwitches.CHROME_HOME_SWIPE_LOGIC_VELOCITY.equals(logicType)
+                || ChromeFeatureList.isEnabled(
+                           ChromeFeatureList.CHROME_HOME_SWIPE_VELOCITY_FEATURE)) {
             if (mVelocityLogicBlockSwipe) return false;
 
-            float scrollDistanceDp = MathUtils.distance(initialEvent.getX(), initialEvent.getY(),
-                                             currentEvent.getX(), currentEvent.getY())
-                    / mDpToPx;
-            long timeDelta = currentEvent.getEventTime() - initialEvent.getDownTime();
-
-            double dpPerMs = scrollDistanceDp / (double) timeDelta;
+            double dpPerMs = scrollDistanceDp / (double) timeDeltaMs;
 
             if (dpPerMs > SHEET_SWIPE_MAX_DP_PER_MS) {
+                if (shouldRecordHistogram && !mIsSwipeVelocityRecorded) {
+                    recordSwipeVelocity("Android.ChromeHome.OpenSwipeVelocity.Fail",
+                            (int) mLastSheetOpenMicrosPerDp);
+                    mIsSwipeVelocityRecorded = true;
+                }
                 mVelocityLogicBlockSwipe = true;
                 return false;
             }
 
+            if (shouldRecordHistogram && !mIsSwipeVelocityRecorded) {
+                recordSwipeVelocity("Android.ChromeHome.OpenSwipeVelocity.Success",
+                        (int) mLastSheetOpenMicrosPerDp);
+                mIsSwipeVelocityRecorded = true;
+            }
             return true;
         }
 
         return currentEvent.getRawX() > startX && currentEvent.getRawX() < endX
                 || getSheetState() != SHEET_STATE_PEEK;
+    }
+
+    /**
+     * Record swipe velocity in microseconds per dp. This histogram will record between 0 and 20k
+     * microseconds with 50 buckets.
+     * @param name The name of the histogram.
+     * @param microsPerDp The microseconds per dp being recorded.
+     */
+    private void recordSwipeVelocity(String name, int microsPerDp) {
+        RecordHistogram.recordCustomCountHistogram(name, microsPerDp, 1, 20000, 50);
     }
 
     /**
@@ -538,6 +578,58 @@ public class BottomSheet
                     @Override
                     public void onFailure() {}
                 });
+
+        // An observer for recording metrics.
+        this.addObserver(new EmptyBottomSheetObserver() {
+            /**
+             * Whether or not the velocity of the swipe to open the sheet should be recorded. This
+             * will only be true if the sheet was opened by swipe.
+             */
+            private boolean mShouldRecordSwipeVelocity;
+
+            @Override
+            public void onSheetOpened(@StateChangeReason int reason) {
+                mShouldRecordSwipeVelocity = reason == StateChangeReason.SWIPE;
+            }
+
+            @Override
+            public void onSheetClosed(@StateChangeReason int reason) {
+                boolean shouldRecordClose = reason == StateChangeReason.SWIPE
+                        || reason == StateChangeReason.BACK_PRESS
+                        || reason == StateChangeReason.TAP_SCRIM;
+                if (mShouldRecordSwipeVelocity && shouldRecordClose) {
+                    recordSwipeVelocity("Android.ChromeHome.OpenSwipeVelocity.NoNavigation",
+                            (int) mLastSheetOpenMicrosPerDp);
+                }
+                mShouldRecordSwipeVelocity = false;
+            }
+
+            @Override
+            public void onLoadUrl(String url) {
+                recordVelocityForNavigation();
+            }
+
+            @Override
+            public void onSheetContentChanged(BottomSheetContent newContent) {
+                if (newContent == null) return;
+                @ContentType
+                int contentId = newContent.getType();
+                if (contentId != BottomSheetContentController.TYPE_SUGGESTIONS
+                        && contentId != BottomSheetContentController.TYPE_INCOGNITO_HOME) {
+                    recordVelocityForNavigation();
+                }
+            }
+
+            /**
+             * Record the velocity for the last sheet-open event.
+             */
+            private void recordVelocityForNavigation() {
+                if (!mShouldRecordSwipeVelocity) return;
+                recordSwipeVelocity("Android.ChromeHome.OpenSwipeVelocity.Navigation",
+                        (int) mLastSheetOpenMicrosPerDp);
+                mShouldRecordSwipeVelocity = false;
+            }
+        });
     }
 
     /**
@@ -1215,8 +1307,16 @@ public class BottomSheet
         for (BottomSheetObserver o : mObservers) o.onSheetOpened(reason);
         mActivity.addViewObscuringAllTabs(this);
 
+        if (mHelpBubble != null) mHelpBubble.dismiss();
+
         Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
         tracker.notifyEvent(EventConstants.BOTTOM_SHEET_EXPANDED);
+
+        if (reason == StateChangeReason.SWIPE) {
+            tracker.notifyEvent(EventConstants.BOTTOM_SHEET_EXPANDED_FROM_SWIPE);
+        } else if (reason == StateChangeReason.EXPAND_BUTTON) {
+            tracker.notifyEvent(EventConstants.BOTTOM_SHEET_EXPANDED_FROM_BUTTON);
+        }
     }
 
     /**
@@ -1242,7 +1342,7 @@ public class BottomSheet
         setFocusableInTouchMode(false);
         setContentDescription(null);
 
-        showHelpBubbleIfNecessary();
+        showColdStartHelpBubble();
     }
 
     /**
@@ -1703,61 +1803,99 @@ public class BottomSheet
      * Show the in-product help bubble for the {@link BottomSheet} if it has not already been shown.
      * This method must be called after the toolbar has had at least one layout pass.
      */
-    public void showHelpBubbleIfNecessary() {
+    public void showColdStartHelpBubble() {
         // If FRE is not complete, the FRE screen is likely covering ChromeTabbedActivity so the
-        // help bubble should not be shown. Also skip showing if the bottom sheet is already open,
-        // the UI has not been initialized (indicated by mLayoutManager == null), or the tab
-        // switcher is showing.
-        if (isSheetOpen() || mLayoutManager == null || mLayoutManager.overviewVisible()
-                || !FirstRunStatus.getFirstRunFlowComplete()) {
-            return;
-        }
+        // help bubble should not be shown.
+        if (!FirstRunStatus.getFirstRunFlowComplete()) return;
 
-        final Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
+        Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
         tracker.addOnInitializedCallback(new Callback<Boolean>() {
             @Override
             public void onResult(Boolean success) {
+                // Skip showing if the tracker failed to initialize.
                 if (!success) return;
 
-                showHelpBubble(false);
+                maybeShowHelpBubble(false, false);
             }
         });
     }
 
     /**
-     * Show the in-product help bubble for the {@link BottomSheet} regardless of whether it has
-     * been shown before. This method must be called after the toolbar has had at least one layout
-     * pass and ChromeFeatureList has been initialized.
+     * Show the in-product help bubble for the {@link BottomSheet} if conditions are right. This
+     * method must be called after the toolbar has had at least one layout pass and
+     * ChromeFeatureList has been initialized.
      * @param fromMenu Whether the help bubble is being displayed in response to a click on the
      *                 IPH menu header.
+     * @param fromPullToRefresh Whether the help bubble is being displayed due to a pull to refresh.
      */
-    public void showHelpBubble(boolean fromMenu) {
-        final Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
+    public void maybeShowHelpBubble(boolean fromMenu, boolean fromPullToRefresh) {
+        // Skip showing if the bottom sheet is already open, the UI has not been initialized
+        // (indicated by mLayoutManager == null), or the tab switcher is showing.
+        if (isSheetOpen() || mLayoutManager == null || mLayoutManager.overviewVisible()) {
+            return;
+        }
 
-        boolean showColdStartIph = !fromMenu
+        // Determine which IPH feature to use for triggering the help UI.
+        Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
+        boolean showRefreshIph = fromPullToRefresh
+                && tracker.shouldTriggerHelpUI(
+                           FeatureConstants.CHROME_HOME_PULL_TO_REFRESH_FEATURE);
+        boolean showColdStartIph = !fromMenu && !fromPullToRefresh
                 && tracker.shouldTriggerHelpUI(FeatureConstants.CHROME_HOME_EXPAND_FEATURE);
-        if (!fromMenu && !showColdStartIph) return;
+        if (!fromMenu && !showRefreshIph && !showColdStartIph) return;
 
-        boolean showExpandButtonHelpBubble = mDefaultToolbarView.isUsingExpandButton();
-
+        // Determine which strings to use.
+        boolean showExpandButtonHelpBubble =
+                !showRefreshIph && mDefaultToolbarView.isUsingExpandButton();
         View anchorView = showExpandButtonHelpBubble
                 ? mControlContainer.findViewById(R.id.expand_sheet_button)
                 : mControlContainer;
-        int stringId = showExpandButtonHelpBubble
-                ? R.string.bottom_sheet_expand_button_help_bubble_message
-                : R.string.bottom_sheet_help_bubble_message;
-        int accessibilityStringId = showExpandButtonHelpBubble
-                ? R.string.bottom_sheet_accessibility_expand_button_help_bubble_message
+        int stringId = showRefreshIph ? R.string.bottom_sheet_pull_to_refresh_help_bubble_message
+                                      : showExpandButtonHelpBubble
+                        ? R.string.bottom_sheet_accessibility_expand_button_help_bubble_message
+                        : R.string.bottom_sheet_help_bubble_message;
+        int accessibilityStringId = showRefreshIph
+                ? R.string.bottom_sheet_pull_to_refresh_help_bubble_accessibility_message
                 : stringId;
 
+        // Register an overview mode observer so the bubble can be dismissed if overview mode
+        // is shown.
+        EmptyOverviewModeObserver overviewModeObserver = new EmptyOverviewModeObserver() {
+            @Override
+            public void onOverviewModeStartedShowing(boolean showToolbar) {
+                mHelpBubble.dismiss();
+            }
+        };
+        mLayoutManager.addOverviewModeObserver(overviewModeObserver);
+
+        // Force the browser controls to stay visible while the help bubble is showing.
+        int persistentControlsToken =
+                mFullscreenManager.getBrowserVisibilityDelegate().showControlsPersistent();
+
+        // Create the help bubble and setup dismissal behavior.
         mHelpBubble = new ViewAnchoredTextBubble(
                 getContext(), anchorView, stringId, accessibilityStringId);
-        mHelpBubble.setDismissOnTouchInteraction(true);
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_PERSISTENT_IPH)) {
+            int dismissTimeout = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
+                    ChromeFeatureList.CHROME_HOME_PERSISTENT_IPH, HELP_BUBBLE_TIMEOUT_PARAM_NAME,
+                    HELP_BUBBLE_TIMEOUT_DURATION_MS);
+            mHelpBubble.setAutoDismissTimeout(dismissTimeout);
+        } else {
+            mHelpBubble.setDismissOnTouchInteraction(true);
+        }
+
         mHelpBubble.addOnDismissListener(new OnDismissListener() {
             @Override
             public void onDismiss() {
+                mFullscreenManager.getBrowserVisibilityDelegate().hideControlsPersistent(
+                        persistentControlsToken);
+                mLayoutManager.removeOverviewModeObserver(overviewModeObserver);
+
                 if (fromMenu) {
                     tracker.dismissed(FeatureConstants.CHROME_HOME_MENU_HEADER_FEATURE);
+                } else if (fromPullToRefresh) {
+                    tracker.dismissed(FeatureConstants.CHROME_HOME_PULL_TO_REFRESH_FEATURE);
                 } else {
                     tracker.dismissed(FeatureConstants.CHROME_HOME_EXPAND_FEATURE);
                 }
@@ -1768,10 +1906,12 @@ public class BottomSheet
             }
         });
 
+        // Highlight the expand button if necessary.
         if (showExpandButtonHelpBubble) {
             ViewHighlighter.turnOnHighlight(anchorView, true);
         }
 
+        // Show the bubble.
         int inset = getContext().getResources().getDimensionPixelSize(
                 R.dimen.bottom_sheet_help_bubble_inset);
         mHelpBubble.setInsetPx(0, inset, 0, inset);

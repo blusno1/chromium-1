@@ -10,6 +10,7 @@
 
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form.h"
+#include "content/public/common/common_param_traits.h"
 #include "ipc/ipc_message_macros.h"
 #include "url/ipc/url_param_traits.h"
 #include "url/origin.h"
@@ -50,6 +51,7 @@ IPC_STRUCT_TRAITS_BEGIN(autofill::FormData)
   IPC_STRUCT_TRAITS_MEMBER(name)
   IPC_STRUCT_TRAITS_MEMBER(origin)
   IPC_STRUCT_TRAITS_MEMBER(action)
+  IPC_STRUCT_TRAITS_MEMBER(main_frame_origin)
   IPC_STRUCT_TRAITS_MEMBER(is_form_tag)
   IPC_STRUCT_TRAITS_MEMBER(is_formless_checkout)
   IPC_STRUCT_TRAITS_MEMBER(fields)

@@ -124,6 +124,7 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   void SelectedPageChanged(int old_selected, int new_selected) override;
   void TransitionStarted() override;
   void TransitionChanged() override;
+  void TransitionEnded() override;
 
   // The factory for the presenter's delegate.
   std::unique_ptr<AppListPresenterDelegateFactory> factory_;
@@ -146,9 +147,6 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
 
   // Whether should schedule snap back animation.
   bool should_snap_back_ = false;
-
-  // Whether the fullscreen app list feature is enabled;
-  const bool is_fullscreen_app_list_enabled_;
 
   // The app list interface pointer; used for reporting visibility changes.
   mojom::AppListPtr app_list_;

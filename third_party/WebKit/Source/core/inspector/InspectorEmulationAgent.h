@@ -5,6 +5,7 @@
 #ifndef InspectorEmulationAgent_h
 #define InspectorEmulationAgent_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/Emulation.h"
@@ -25,8 +26,6 @@ class RGBA;
 class CORE_EXPORT InspectorEmulationAgent final
     : public InspectorBaseAgent<protocol::Emulation::Metainfo>,
       public WebViewScheduler::VirtualTimeObserver {
-  WTF_MAKE_NONCOPYABLE(InspectorEmulationAgent);
-
  public:
   class Client {
    public:
@@ -49,11 +48,26 @@ class CORE_EXPORT InspectorEmulationAgent final
   protocol::Response setCPUThrottlingRate(double) override;
   protocol::Response setVirtualTimePolicy(
       const String& policy,
-      protocol::Maybe<int> virtual_time_budget_ms,
-      protocol::Maybe<int> max_virtual_time_task_starvation_count) override;
+      protocol::Maybe<double> virtual_time_budget_ms,
+      protocol::Maybe<int> max_virtual_time_task_starvation_count,
+      double* virtual_time_base_ms) override;
   protocol::Response setNavigatorOverrides(const String& platform) override;
   protocol::Response setDefaultBackgroundColorOverride(
       protocol::Maybe<protocol::DOM::RGBA>) override;
+  protocol::Response setDeviceMetricsOverride(
+      int width,
+      int height,
+      double device_scale_factor,
+      bool mobile,
+      protocol::Maybe<double> scale,
+      protocol::Maybe<int> screen_width,
+      protocol::Maybe<int> screen_height,
+      protocol::Maybe<int> position_x,
+      protocol::Maybe<int> position_y,
+      protocol::Maybe<bool> dont_set_visible_size,
+      protocol::Maybe<protocol::Emulation::ScreenOrientation>,
+      protocol::Maybe<protocol::Page::Viewport>) override;
+  protocol::Response clearDeviceMetricsOverride() override;
 
   // InspectorBaseAgent overrides.
   protocol::Response disable() override;
@@ -73,6 +87,8 @@ class CORE_EXPORT InspectorEmulationAgent final
   Member<WebLocalFrameImpl> web_local_frame_;
   Client* client_;
   bool virtual_time_observer_registered_;
+
+  DISALLOW_COPY_AND_ASSIGN(InspectorEmulationAgent);
 };
 
 }  // namespace blink

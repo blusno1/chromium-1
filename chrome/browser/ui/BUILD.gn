@@ -1,7 +1,6 @@
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-
 import("//build/config/chromecast_build.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
@@ -120,6 +119,9 @@ split_static_library("ui") {
     "history_ui.h",
     "interventions/framebust_block_message_delegate.cc",
     "interventions/framebust_block_message_delegate.h",
+    "interventions/intervention_delegate.h",
+    "interventions/intervention_infobar_delegate.cc",
+    "interventions/intervention_infobar_delegate.h",
     "javascript_dialogs/chrome_javascript_native_dialog_factory.h",
     "javascript_dialogs/javascript_dialog.h",
     "javascript_dialogs/javascript_dialog_tab_helper.cc",
@@ -136,6 +138,8 @@ split_static_library("ui") {
     "page_info/page_info_ui.h",
     "passwords/account_avatar_fetcher.cc",
     "passwords/account_avatar_fetcher.h",
+    "passwords/destination_file_system.cc",
+    "passwords/destination_file_system.h",
     "passwords/manage_passwords_state.cc",
     "passwords/manage_passwords_state.h",
     "passwords/manage_passwords_view_utils.cc",
@@ -156,18 +160,6 @@ split_static_library("ui") {
     "protocol_dialog_delegate.h",
     "proximity_auth/proximity_auth_error_bubble.h",
     "screen_capture_notification_ui.h",
-    "search/new_tab_page_interceptor_service.cc",
-    "search/new_tab_page_interceptor_service.h",
-    "search/new_tab_page_interceptor_service_factory.cc",
-    "search/new_tab_page_interceptor_service_factory.h",
-    "search/ntp_user_data_logger.cc",
-    "search/ntp_user_data_logger.h",
-    "search/search_ipc_router.cc",
-    "search/search_ipc_router.h",
-    "search/search_ipc_router_policy_impl.cc",
-    "search/search_ipc_router_policy_impl.h",
-    "search/search_tab_helper.cc",
-    "search/search_tab_helper.h",
     "search_engines/edit_search_engine_controller.cc",
     "search_engines/edit_search_engine_controller.h",
     "search_engines/keyword_editor_controller.cc",
@@ -374,7 +366,6 @@ split_static_library("ui") {
     "//chrome/browser/ui/webui/omnibox:mojo_bindings",
     "//chrome/browser/ui/webui/usb_internals:mojo_bindings",
     "//chrome/common",
-    "//chrome/common:search_mojom",
     "//chrome/common/net",
     "//chrome/installer/util:with_no_strings",
     "//components/about_ui",
@@ -412,6 +403,7 @@ split_static_library("ui") {
     "//components/invalidation/impl",
     "//components/keyed_service/content",
     "//components/keyed_service/core",
+    "//components/navigation_metrics",
     "//components/net_log",
     "//components/ntp_snippets",
     "//components/ntp_tiles",
@@ -463,6 +455,7 @@ split_static_library("ui") {
     "//components/toolbar:vector_icons",
     "//components/tracing:startup_tracing",
     "//components/ui_devtools",
+    "//components/ukm:ukm",
     "//components/ukm/content",
     "//components/undo",
     "//components/update_client",
@@ -490,6 +483,7 @@ split_static_library("ui") {
     "//ppapi/features",
     "//printing/features",
     "//rlz/features",
+    "//services/metrics/public/cpp:ukm_builders",
     "//services/service_manager/runner/common",
     "//skia",
     "//storage/browser",
@@ -528,6 +522,10 @@ split_static_library("ui") {
     "//v8:v8_version",
   ]
   allow_circular_includes_from = []
+
+  if (is_win || is_mac || is_desktop_linux || is_chromeos) {
+    deps += [ "//chrome/browser/ui/webui/discards:mojo_bindings" ]
+  }
 
   if (!is_fuchsia) {
     # TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
@@ -617,8 +615,6 @@ split_static_library("ui") {
       "android/infobars/translate_infobar.h",
       "android/infobars/update_password_infobar.cc",
       "android/infobars/update_password_infobar.h",
-      "android/interventions/framebust_block_message_delegate_bridge.cc",
-      "android/interventions/framebust_block_message_delegate_bridge.h",
       "android/javascript_app_modal_dialog_android.cc",
       "android/javascript_app_modal_dialog_android.h",
       "android/javascript_dialog_android.cc",
@@ -859,6 +855,18 @@ split_static_library("ui") {
       "scoped_tabbed_browser_displayer.h",
       "search/instant_controller.cc",
       "search/instant_controller.h",
+      "search/new_tab_page_interceptor_service.cc",
+      "search/new_tab_page_interceptor_service.h",
+      "search/new_tab_page_interceptor_service_factory.cc",
+      "search/new_tab_page_interceptor_service_factory.h",
+      "search/ntp_user_data_logger.cc",
+      "search/ntp_user_data_logger.h",
+      "search/search_ipc_router.cc",
+      "search/search_ipc_router.h",
+      "search/search_ipc_router_policy_impl.cc",
+      "search/search_ipc_router_policy_impl.h",
+      "search/search_tab_helper.cc",
+      "search/search_tab_helper.h",
       "singleton_tabs.cc",
       "singleton_tabs.h",
       "startup/automation_infobar_delegate.cc",
@@ -896,6 +904,7 @@ split_static_library("ui") {
       "tabs/pinned_tab_service.h",
       "tabs/pinned_tab_service_factory.cc",
       "tabs/pinned_tab_service_factory.h",
+      "tabs/tab_change_type.h",
       "tabs/tab_features.cc",
       "tabs/tab_features.h",
       "tabs/tab_menu_model.cc",
@@ -913,6 +922,8 @@ split_static_library("ui") {
       "tabs/tab_strip_model_stats_recorder.h",
       "tabs/tab_utils.cc",
       "tabs/tab_utils.h",
+      "tabs/web_contents_closer.cc",
+      "tabs/web_contents_closer.h",
       "task_manager/task_manager_columns.cc",
       "task_manager/task_manager_columns.h",
       "task_manager/task_manager_table_model.cc",
@@ -1136,6 +1147,7 @@ split_static_library("ui") {
       "//chrome/browser/media/router",
       "//chrome/browser/profile_resetter:profile_reset_report_proto",
       "//chrome/common:features",
+      "//chrome/common:search_mojom",
       "//components/feedback/proto",
       "//components/keep_alive_registry",
       "//components/network_session_configurator/common",
@@ -1242,8 +1254,8 @@ split_static_library("ui") {
       "ash/launcher/multi_profile_browser_status_monitor.h",
       "ash/launcher/settings_window_observer.cc",
       "ash/launcher/settings_window_observer.h",
-      "ash/lock_screen_client.cc",
-      "ash/lock_screen_client.h",
+      "ash/login_screen_client.cc",
+      "ash/login_screen_client.h",
       "ash/media_client.cc",
       "ash/media_client.h",
       "ash/multi_user/multi_user_context_menu.h",
@@ -1274,6 +1286,8 @@ split_static_library("ui") {
       "ash/volume_controller.h",
       "ash/vpn_list_forwarder.cc",
       "ash/vpn_list_forwarder.h",
+      "ash/wallpaper_controller_client.cc",
+      "ash/wallpaper_controller_client.h",
       "browser_commands_chromeos.cc",
       "browser_commands_chromeos.h",
       "extensions/extension_installed_notification.cc",
@@ -1296,10 +1310,12 @@ split_static_library("ui") {
       "views/extensions/request_file_system_dialog_view.h",
       "views/frame/browser_frame_ash.cc",
       "views/frame/browser_frame_ash.h",
-      "views/frame/browser_header_painter_ash.cc",
-      "views/frame/browser_header_painter_ash.h",
+      "views/frame/browser_frame_header_ash.cc",
+      "views/frame/browser_frame_header_ash.h",
       "views/frame/browser_non_client_frame_view_ash.cc",
       "views/frame/browser_non_client_frame_view_ash.h",
+      "views/frame/hosted_app_frame_header_ash.cc",
+      "views/frame/hosted_app_frame_header_ash.h",
       "views/frame/immersive_context_mus.cc",
       "views/frame/immersive_context_mus.h",
       "views/frame/immersive_handler_factory_mus.cc",
@@ -1454,8 +1470,6 @@ split_static_library("ui") {
       "webui/chromeos/system_web_dialog_delegate.h",
       "webui/chromeos/user_image_source.cc",
       "webui/chromeos/user_image_source.h",
-      "webui/chromeos/voice_search_ui.cc",
-      "webui/chromeos/voice_search_ui.h",
       "webui/extensions/chromeos/kiosk_apps_handler.cc",
       "webui/extensions/chromeos/kiosk_apps_handler.h",
       "webui/help/help_utils_chromeos.cc",
@@ -1497,8 +1511,7 @@ split_static_library("ui") {
     deps += [
       "//ash",
       "//ash:ash_with_content",
-      "//ash/mus:lib",
-      "//ash/public/cpp:ash_public_cpp",
+      "//ash/public/cpp",
       "//ash/resources/vector_icons",
       "//ash/strings",
       "//chrome/browser/chromeos",
@@ -1537,6 +1550,19 @@ split_static_library("ui") {
     if (use_cras) {
       defines += [ "USE_CRAS" ]
     }
+  } else if (!is_android) {
+    # !is_chromeos && !is_android
+    sources += [
+      "webui/settings/printing_handler.cc",
+      "webui/settings/printing_handler.h",
+    ]
+  }
+
+  if (is_win || is_mac || is_desktop_linux || is_chromeos) {
+    sources += [
+      "webui/discards/discards_ui.cc",
+      "webui/discards/discards_ui.h",
+    ]
   }
 
   if (is_win || is_mac || is_desktop_linux) {
@@ -1564,6 +1590,8 @@ split_static_library("ui") {
       "views/external_protocol_dialog.cc",
       "views/external_protocol_dialog.h",
       "views/profiles/avatar_button_style.h",
+      "views/profiles/badged_profile_photo.cc",
+      "views/profiles/badged_profile_photo.h",
       "views/profiles/profile_chooser_view.cc",
       "views/profiles/profile_chooser_view.h",
       "webui/app_launcher_page_ui.cc",
@@ -1592,6 +1620,8 @@ split_static_library("ui") {
       "webui/signin/signin_error_ui.h",
       "webui/signin/signin_supervised_user_import_handler.cc",
       "webui/signin/signin_supervised_user_import_handler.h",
+      "webui/signin/signin_utils_desktop.cc",
+      "webui/signin/signin_utils_desktop.h",
       "webui/signin/signin_web_dialog_ui.cc",
       "webui/signin/signin_web_dialog_ui.h",
       "webui/signin/sync_confirmation_handler.cc",
@@ -1618,6 +1648,8 @@ split_static_library("ui") {
 
     if (enable_dice_support) {
       sources += [
+        "webui/signin/dice_turn_sync_on_helper.cc",
+        "webui/signin/dice_turn_sync_on_helper.h",
         "webui/signin/signin_dice_internals_handler.cc",
         "webui/signin/signin_dice_internals_handler.h",
       ]
@@ -1703,6 +1735,7 @@ split_static_library("ui") {
       "cocoa/chrome_command_dispatcher_delegate.mm",
       "cocoa/chrome_style.cc",
       "cocoa/chrome_style.h",
+      "cocoa/color_chooser_mac.h",
       "cocoa/color_chooser_mac.mm",
       "cocoa/confirm_quit.h",
       "cocoa/confirm_quit_panel_controller.h",
@@ -2687,6 +2720,10 @@ split_static_library("ui") {
       "views/extensions/extension_keybinding_registry_views.cc",
       "views/extensions/extension_keybinding_registry_views.h",
       "views/extensions/extension_uninstall_dialog_view.cc",
+      "views/extensions/pwa_confirmation_view.cc",
+      "views/extensions/pwa_confirmation_view.h",
+      "views/extensions/web_app_info_image_source.cc",
+      "views/extensions/web_app_info_image_source.h",
       "views/first_run_bubble.cc",
       "views/first_run_bubble.h",
       "views/fullscreen_control/fullscreen_control_host.cc",
@@ -2865,6 +2902,8 @@ split_static_library("ui") {
         "views/accessibility/invert_bubble_view.h",
         "views/autofill/autofill_popup_base_view.cc",
         "views/autofill/autofill_popup_base_view.h",
+        "views/autofill/autofill_popup_view_native_views.cc",
+        "views/autofill/autofill_popup_view_native_views.h",
         "views/autofill/autofill_popup_view_views.cc",
         "views/autofill/autofill_popup_view_views.h",
         "views/autofill/card_unmask_prompt_views_shim.cc",
@@ -3017,6 +3056,8 @@ split_static_library("ui") {
         "views/ssl_client_certificate_selector.h",
         "views/status_bubble_views.cc",
         "views/status_bubble_views.h",
+        "views/tab_contents/chrome_web_contents_view_focus_helper.cc",
+        "views/tab_contents/chrome_web_contents_view_focus_helper.h",
         "views/tab_dialogs_views.cc",
         "views/tab_dialogs_views.h",
         "views/tab_icon_view.cc",
@@ -3033,6 +3074,8 @@ split_static_library("ui") {
         "views/tabs/stacked_tab_strip_layout.h",
         "views/tabs/tab.cc",
         "views/tabs/tab.h",
+        "views/tabs/tab_close_button.cc",
+        "views/tabs/tab_close_button.h",
         "views/tabs/tab_controller.h",
         "views/tabs/tab_drag_controller.cc",
         "views/tabs/tab_drag_controller.h",
@@ -3719,8 +3762,10 @@ static_library("test_support") {
     sources += [
       "ash/fake_tablet_mode_controller.cc",
       "ash/fake_tablet_mode_controller.h",
+      "ash/test_wallpaper_controller.cc",
+      "ash/test_wallpaper_controller.h",
     ]
-    deps += [ "//ash/public/cpp:ash_public_cpp" ]
+    deps += [ "//ash/public/cpp" ]
   }
 
   if (enable_extensions) {

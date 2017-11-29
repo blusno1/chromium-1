@@ -748,9 +748,9 @@ class QuicNetworkTransactionTest
   }
 
   static void AddCertificate(SSLSocketDataProvider* ssl_data) {
-    ssl_data->cert =
+    ssl_data->ssl_info.cert =
         ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
-    ASSERT_TRUE(ssl_data->cert);
+    ASSERT_TRUE(ssl_data->ssl_info.cert);
   }
 
   const QuicTransportVersion version_;
@@ -1155,6 +1155,7 @@ TEST_P(QuicNetworkTransactionTest, QuicProxyWithCert) {
 }
 
 TEST_P(QuicNetworkTransactionTest, AlternativeServicesDifferentHost) {
+  session_params_.quic_allow_remote_alt_svc = true;
   HostPortPair origin("www.example.org", 443);
   HostPortPair alternative("mail.example.org", 443);
 
@@ -2989,6 +2990,7 @@ TEST_P(QuicNetworkTransactionTest, ResetAfterHandshakeConfirmedThenBroken) {
 // This is a regression tests for crbug/731303.
 TEST_P(QuicNetworkTransactionTest,
        ResetPooledAfterHandshakeConfirmedThenBroken) {
+  session_params_.quic_allow_remote_alt_svc = true;
   session_params_.retry_without_alt_svc_on_quic_errors = true;
 
   GURL origin1 = request_.url;
@@ -3101,6 +3103,7 @@ TEST_P(QuicNetworkTransactionTest,
       url::SchemeHostPort(origin2),
       AlternativeService(kProtoQUIC, "www.example.com", 443), expiration,
       supported_versions_);
+
   // First request opens connection to |destination1|
   // with QuicServerId.host() == origin1.host().
   SendRequestAndExpectQuicResponse("hello!");
@@ -3144,6 +3147,7 @@ TEST_P(QuicNetworkTransactionTest,
 // service which uses existing QUIC session if available. If no existing QUIC
 // session can be used, use the first alternative service from the list.
 TEST_P(QuicNetworkTransactionTest, UseExistingAlternativeServiceForQuic) {
+  session_params_.quic_allow_remote_alt_svc = true;
   MockRead http_reads[] = {
       MockRead("HTTP/1.1 200 OK\r\n"),
       MockRead("Alt-Svc: quic=\"foo.example.org:443\", quic=\":444\"\r\n\r\n"),
@@ -3279,6 +3283,7 @@ TEST_P(QuicNetworkTransactionTest, UseExistingQUICAlternativeProxy) {
 // Pool to existing session with matching QuicServerId
 // even if alternative service destination is different.
 TEST_P(QuicNetworkTransactionTest, PoolByOrigin) {
+  session_params_.quic_allow_remote_alt_svc = true;
   MockQuicData mock_quic_data;
   QuicStreamOffset request_header_offset(0);
   QuicStreamOffset response_header_offset(0);
@@ -3343,6 +3348,7 @@ TEST_P(QuicNetworkTransactionTest, PoolByOrigin) {
 // even if origin is different, and even if the alternative service with
 // matching destination is not the first one on the list.
 TEST_P(QuicNetworkTransactionTest, PoolByDestination) {
+  session_params_.quic_allow_remote_alt_svc = true;
   GURL origin1 = request_.url;
   GURL origin2("https://www.example.org/");
   ASSERT_NE(origin1.host(), origin2.host());
@@ -3433,6 +3439,7 @@ TEST_P(QuicNetworkTransactionTest, PoolByDestination) {
 // if this is also the first existing QUIC session.
 TEST_P(QuicNetworkTransactionTest,
        UseSharedExistingAlternativeServiceForQuicWithValidCert) {
+  session_params_.quic_allow_remote_alt_svc = true;
   // Default cert is valid for *.example.org
 
   // HTTP data for request to www.example.org.
@@ -4769,7 +4776,7 @@ TEST_P(QuicNetworkTransactionTest, RetryAfterSynchronousNoBufferSpace) {
   session_.reset();
 }
 
-TEST_P(QuicNetworkTransactionTest, RetryAgainAfterAsyncNoBufferSpace) {
+TEST_P(QuicNetworkTransactionTest, MaxRetriesAfterAsyncNoBufferSpace) {
   session_params_.origins_to_force_quic_on.insert(
       HostPortPair::FromString("mail.example.org:443"));
 
@@ -4777,21 +4784,36 @@ TEST_P(QuicNetworkTransactionTest, RetryAgainAfterAsyncNoBufferSpace) {
   QuicStreamOffset offset = 0;
   socket_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // No more data to read
   socket_data.AddWrite(ConstructInitialSettingsPacket(1, &offset));
-  for (int i = 0; i < 21; ++i) {
+  for (int i = 0; i < 13; ++i) {  // 12 retries then one final failure.
     socket_data.AddWrite(ASYNC, ERR_NO_BUFFER_SPACE);
   }
   socket_data.AddSocketDataToFactory(&socket_factory_);
 
   CreateSession();
+  // Use a TestTaskRunner to avoid waiting in real time for timeouts.
+  scoped_refptr<TestTaskRunner> quic_task_runner_(new TestTaskRunner(&clock_));
+  QuicStreamFactoryPeer::SetTaskRunner(session_->quic_stream_factory(),
+                                       quic_task_runner_.get());
 
+  QuicTime start = clock_.Now();
   HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
   TestCompletionCallback callback;
   int rv = trans.Start(&request_, callback.callback(), net_log_.bound());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  while (!callback.have_result()) {
+    base::RunLoop().RunUntilIdle();
+    quic_task_runner_->RunUntilIdle();
+  }
+  ASSERT_TRUE(callback.have_result());
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
+  EXPECT_TRUE(socket_data.AllReadDataConsumed());
+  EXPECT_TRUE(socket_data.AllWriteDataConsumed());
+  // Backoff should take between 4 - 5 seconds.
+  EXPECT_TRUE(clock_.Now() - start > QuicTime::Delta::FromSeconds(4));
+  EXPECT_TRUE(clock_.Now() - start < QuicTime::Delta::FromSeconds(5));
 }
 
-TEST_P(QuicNetworkTransactionTest, RetryOnceAfterSynchronousNoBufferSpace) {
+TEST_P(QuicNetworkTransactionTest, MaxRetriesAfterSynchronousNoBufferSpace) {
   session_params_.origins_to_force_quic_on.insert(
       HostPortPair::FromString("mail.example.org:443"));
 
@@ -4799,18 +4821,33 @@ TEST_P(QuicNetworkTransactionTest, RetryOnceAfterSynchronousNoBufferSpace) {
   QuicStreamOffset offset = 0;
   socket_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // No more data to read
   socket_data.AddWrite(ConstructInitialSettingsPacket(1, &offset));
-  for (int i = 0; i < 21; ++i) {
+  for (int i = 0; i < 13; ++i) {  // 12 retries then one final failure.
     socket_data.AddWrite(ASYNC, ERR_NO_BUFFER_SPACE);
   }
   socket_data.AddSocketDataToFactory(&socket_factory_);
 
   CreateSession();
+  // Use a TestTaskRunner to avoid waiting in real time for timeouts.
+  scoped_refptr<TestTaskRunner> quic_task_runner_(new TestTaskRunner(&clock_));
+  QuicStreamFactoryPeer::SetTaskRunner(session_->quic_stream_factory(),
+                                       quic_task_runner_.get());
 
+  QuicTime start = clock_.Now();
   HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
   TestCompletionCallback callback;
   int rv = trans.Start(&request_, callback.callback(), net_log_.bound());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  while (!callback.have_result()) {
+    base::RunLoop().RunUntilIdle();
+    quic_task_runner_->RunUntilIdle();
+  }
+  ASSERT_TRUE(callback.have_result());
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
+  EXPECT_TRUE(socket_data.AllReadDataConsumed());
+  EXPECT_TRUE(socket_data.AllWriteDataConsumed());
+  // Backoff should take between 4 - 5 seconds.
+  EXPECT_TRUE(clock_.Now() - start > QuicTime::Delta::FromSeconds(4));
+  EXPECT_TRUE(clock_.Now() - start < QuicTime::Delta::FromSeconds(5));
 }
 
 // Adds coverage to catch regression such as https://crbug.com/622043
@@ -5157,6 +5194,71 @@ TEST_P(QuicNetworkTransactionTest, RawHeaderSizeSuccessfullPushHeadersFirst) {
   EXPECT_TRUE(mock_quic_data.AllWriteDataConsumed());
 }
 
+TEST_P(QuicNetworkTransactionTest, HostInWhitelist) {
+  session_params_.quic_host_whitelist.insert("mail.example.org");
+
+  MockRead http_reads[] = {
+      MockRead("HTTP/1.1 200 OK\r\n"), MockRead(kQuicAlternativeServiceHeader),
+      MockRead("hello world"),
+      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
+      MockRead(ASYNC, OK)};
+
+  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
+                                     0);
+  socket_factory_.AddSocketDataProvider(&http_data);
+  AddCertificate(&ssl_data_);
+  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+
+  MockQuicData mock_quic_data;
+  QuicStreamOffset header_stream_offset = 0;
+  mock_quic_data.AddWrite(
+      ConstructInitialSettingsPacket(1, &header_stream_offset));
+  mock_quic_data.AddWrite(ConstructClientRequestHeadersPacket(
+      2, GetNthClientInitiatedStreamId(0), true, true,
+      GetRequestHeaders("GET", "https", "/"), &header_stream_offset));
+  mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
+      1, GetNthClientInitiatedStreamId(0), false, false,
+      GetResponseHeaders("200 OK")));
+  mock_quic_data.AddRead(ConstructServerDataPacket(
+      2, GetNthClientInitiatedStreamId(0), false, true, 0, "hello!"));
+  mock_quic_data.AddWrite(ConstructClientAckPacket(3, 2, 1, 1));
+  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
+  mock_quic_data.AddRead(ASYNC, 0);               // EOF
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  AddHangingNonAlternateProtocolSocketData();
+  CreateSession();
+
+  SendRequestAndExpectHttpResponse("hello world");
+  SendRequestAndExpectQuicResponse("hello!");
+}
+
+TEST_P(QuicNetworkTransactionTest, HostNotInWhitelist) {
+  session_params_.quic_host_whitelist.insert("mail.example.com");
+
+  MockRead http_reads[] = {
+      MockRead("HTTP/1.1 200 OK\r\n"), MockRead(kQuicAlternativeServiceHeader),
+      MockRead("hello world"),
+      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
+      MockRead(ASYNC, OK)};
+
+  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
+                                     0);
+  socket_factory_.AddSocketDataProvider(&http_data);
+  AddCertificate(&ssl_data_);
+  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+  socket_factory_.AddSocketDataProvider(&http_data);
+  AddCertificate(&ssl_data_);
+  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+
+  AddHangingNonAlternateProtocolSocketData();
+  CreateSession();
+
+  SendRequestAndExpectHttpResponse("hello world");
+  SendRequestAndExpectHttpResponse("hello world");
+}
+
 class QuicNetworkTransactionWithDestinationTest
     : public PlatformTest,
       public ::testing::WithParamInterface<PoolingTestParams> {
@@ -5179,6 +5281,7 @@ class QuicNetworkTransactionWithDestinationTest
 
     HttpNetworkSession::Params session_params;
     session_params.enable_quic = true;
+    session_params.quic_allow_remote_alt_svc = true;
     session_params.quic_supported_versions = supported_versions_;
 
     HttpNetworkSession::Context session_context;

@@ -52,6 +52,7 @@
 #if !defined(OS_NACL)
 #include "cc/paint/display_item_list.h"  // nogncheck
 #include "cc/paint/paint_op_buffer_serializer.h"
+#include "cc/paint/transfer_cache_entry.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
 #endif
@@ -367,9 +368,9 @@ void GLES2Implementation::FreeSharedMemory(void* mem) {
   mapped_memory_->FreePendingToken(mem, helper_->InsertToken());
 }
 
-void GLES2Implementation::RunIfContextNotLost(const base::Closure& callback) {
+void GLES2Implementation::RunIfContextNotLost(base::OnceClosure callback) {
   if (!lost_context_callback_run_)
-    callback.Run();
+    std::move(callback).Run();
 }
 
 void GLES2Implementation::FlushPendingWork() {
@@ -377,7 +378,7 @@ void GLES2Implementation::FlushPendingWork() {
 }
 
 void GLES2Implementation::SignalSyncToken(const gpu::SyncToken& sync_token,
-                                          const base::Closure& callback) {
+                                          base::OnceClosure callback) {
   SyncToken verified_sync_token;
   if (sync_token.HasData() &&
       GetVerifiedSyncTokenForIPC(sync_token, &verified_sync_token)) {
@@ -385,10 +386,10 @@ void GLES2Implementation::SignalSyncToken(const gpu::SyncToken& sync_token,
     gpu_control_->SignalSyncToken(
         verified_sync_token,
         base::Bind(&GLES2Implementation::RunIfContextNotLost,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+                   weak_ptr_factory_.GetWeakPtr(), base::Passed(&callback)));
   } else {
     // Invalid sync token, just call the callback immediately.
-    callback.Run();
+    std::move(callback).Run();
   }
 }
 
@@ -403,15 +404,14 @@ bool GLES2Implementation::IsSyncTokenSignaled(
 }
 
 void GLES2Implementation::SignalQuery(uint32_t query,
-                                      const base::Closure& callback) {
+                                      base::OnceClosure callback) {
   // Flush previously entered commands to ensure ordering with any
   // glBeginQueryEXT() calls that may have been put into the context.
   ShallowFlushCHROMIUM();
   gpu_control_->SignalQuery(
       query,
       base::Bind(&GLES2Implementation::RunIfContextNotLost,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 callback));
+                 weak_ptr_factory_.GetWeakPtr(), base::Passed(&callback)));
 }
 
 void GLES2Implementation::SetAggressivelyFreeResources(
@@ -6089,13 +6089,12 @@ uint64_t GLES2Implementation::ShareGroupTracingGUID() const {
 }
 
 void GLES2Implementation::SetErrorMessageCallback(
-    const base::Callback<void(const char*, int32_t)>& callback) {
-  error_message_callback_ = callback;
+    base::RepeatingCallback<void(const char*, int32_t)> callback) {
+  error_message_callback_ = std::move(callback);
 }
 
-void GLES2Implementation::AddLatencyInfo(
-    const std::vector<ui::LatencyInfo>& latency_info) {
-  gpu_control_->AddLatencyInfo(latency_info);
+void GLES2Implementation::SetSnapshotRequested() {
+  gpu_control_->SetSnapshotRequested();
 }
 
 bool GLES2Implementation::ThreadSafeShallowLockDiscardableTexture(
@@ -7076,6 +7075,9 @@ void GLES2Implementation::InitializeDiscardableTextureCHROMIUM(
   }
   ClientDiscardableHandle handle =
       manager->InitializeTexture(helper_->command_buffer(), texture_id);
+  if (!handle.IsValid())
+    return;
+
   helper_->InitializeDiscardableTextureCHROMIUM(texture_id, handle.shm_id(),
                                                 handle.byte_offset());
 }
@@ -7107,6 +7109,28 @@ bool GLES2Implementation::LockDiscardableTextureCHROMIUM(GLuint texture_id) {
   }
   helper_->LockDiscardableTextureCHROMIUM(texture_id);
   return true;
+}
+
+void GLES2Implementation::CreateTransferCacheEntryCHROMIUM(
+    GLuint64 handle_id,
+    GLuint handle_shm_id,
+    GLuint handle_shm_offset,
+    const cc::ClientTransferCacheEntry& entry) {
+#if defined(OS_NACL)
+  NOTREACHED();
+#else
+  ScopedMappedMemoryPtr mapped_alloc(entry.SerializedSize(), helper_,
+                                     mapped_memory_.get());
+  DCHECK(mapped_alloc.valid());
+  bool succeeded = entry.Serialize(
+      mapped_alloc.size(), reinterpret_cast<uint8_t*>(mapped_alloc.address()));
+  DCHECK(succeeded);
+
+  helper_->CreateTransferCacheEntryCHROMIUM(
+      handle_id, handle_shm_id, handle_shm_offset,
+      static_cast<uint32_t>(entry.Type()), mapped_alloc.shm_id(),
+      mapped_alloc.offset(), mapped_alloc.size());
+#endif
 }
 
 void GLES2Implementation::UpdateCachedExtensionsIfNeeded() {
@@ -7213,9 +7237,14 @@ void GLES2Implementation::RasterCHROMIUM(const cc::DisplayItemList* list,
                      << ", " << post_translate_x << ", " << post_translate_y
                      << ", " << post_scale << ")");
 
+  if (std::abs(post_scale) < std::numeric_limits<float>::epsilon())
+    return;
+
   gfx::Rect playback_rect(clip_x, clip_y, clip_w, clip_h);
-  std::vector<size_t> indices = list->rtree_.Search(playback_rect);
-  if (indices.empty())
+  gfx::Rect query_rect =
+      gfx::ScaleToEnclosingRect(playback_rect, 1.f / post_scale);
+  std::vector<size_t> offsets = list->rtree_.Search(query_rect);
+  if (offsets.empty())
     return;
 
   // TODO(enne): tune these numbers
@@ -7238,7 +7267,7 @@ void GLES2Implementation::RasterCHROMIUM(const cc::DisplayItemList* list,
   cc::PaintOpBufferSerializer::SerializeCallback serialize_cb = base::Bind(
       &PaintOpSerializer::Serialize, base::Unretained(&op_serializer));
   cc::PaintOpBufferSerializer serializer(serialize_cb, nullptr);
-  serializer.Serialize(&list->paint_op_buffer_, &indices, preamble);
+  serializer.Serialize(&list->paint_op_buffer_, &offsets, preamble);
   DCHECK(serializer.valid());
   op_serializer.SendSerializedData();
 

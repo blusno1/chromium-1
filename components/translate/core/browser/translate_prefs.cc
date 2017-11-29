@@ -8,10 +8,13 @@
 #include <utility>
 
 #include "base/feature_list.h"
+#include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -21,10 +24,11 @@
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/common/translate_util.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/l10n/l10n_util_collator.h"
 
 namespace translate {
 
-const char TranslatePrefs::kPrefLanguageProfile[] = "language_profile";
 const char TranslatePrefs::kPrefTranslateSiteBlacklist[] =
     "translate_site_blacklist";
 const char TranslatePrefs::kPrefTranslateWhitelists[] = "translate_whitelists";
@@ -51,13 +55,6 @@ const char TranslatePrefs::kPrefTranslateAutoAlwaysCount[] =
 const char TranslatePrefs::kPrefTranslateAutoNeverCount[] =
     "translate_auto_never_count";
 #endif
-
-// For reading ULP prefs.
-const char kConfidence[] = "confidence";
-const char kLanguage[] = "language";
-const char kPreference[] = "preference";
-const char kProbability[] = "probability";
-const char kReading[] = "reading";
 
 // The below properties used to be used but now are deprecated. Don't use them
 // since an old profile might have some values there.
@@ -162,6 +159,11 @@ void DenialTimeUpdate::AddDenialTime(base::Time denial_time) {
     GetDenialTimes()->Remove(0, nullptr);
 }
 
+TranslateLanguageInfo::TranslateLanguageInfo() = default;
+
+TranslateLanguageInfo::TranslateLanguageInfo(
+    const TranslateLanguageInfo& other) = default;
+
 TranslatePrefs::TranslatePrefs(PrefService* user_prefs,
                                const char* accept_languages_pref,
                                const char* preferred_languages_pref)
@@ -173,8 +175,17 @@ TranslatePrefs::TranslatePrefs(PrefService* user_prefs,
 #endif
 }
 
-bool TranslatePrefs::IsEnabled() const {
-  return prefs_->GetBoolean(prefs::kEnableTranslate);
+bool TranslatePrefs::IsOfferTranslateEnabled() const {
+  return prefs_->GetBoolean(prefs::kOfferTranslateEnabled);
+}
+
+bool TranslatePrefs::IsTranslateAllowedByPolicy() const {
+  const PrefService::Preference* const pref =
+      prefs_->FindPreference(prefs::kOfferTranslateEnabled);
+  DCHECK(pref);
+  DCHECK(pref->GetValue()->is_bool());
+
+  return pref->GetValue()->GetBool() || !pref->IsManaged();
 }
 
 void TranslatePrefs::SetCountry(const std::string& country) {
@@ -343,6 +354,85 @@ void TranslatePrefs::RearrangeLanguage(
   std::rotate(first, it, last);
 
   UpdateLanguageList(languages);
+}
+
+// static
+void TranslatePrefs::GetLanguageInfoList(
+    const std::string& app_locale,
+    bool translate_allowed,
+    std::vector<TranslateLanguageInfo>* language_list) {
+  DCHECK(language_list != nullptr);
+
+  if (app_locale.empty()) {
+    return;
+  }
+
+  language_list->clear();
+
+  // Collect the language codes from the supported accept-languages.
+  std::vector<std::string> language_codes;
+  l10n_util::GetAcceptLanguagesForLocale(app_locale, &language_codes);
+
+  // Map of [display name -> {language code, native display name}].
+  typedef std::pair<std::string, base::string16> LanguagePair;
+  typedef std::map<base::string16, LanguagePair,
+                   l10n_util::StringComparator<base::string16>>
+      LanguageMap;
+
+  // Collator used to sort display names in the given locale.
+  UErrorCode error = U_ZERO_ERROR;
+  std::unique_ptr<icu::Collator> collator(
+      icu::Collator::createInstance(icu::Locale(app_locale.c_str()), error));
+  if (U_FAILURE(error)) {
+    collator.reset();
+  }
+  LanguageMap language_map(
+      l10n_util::StringComparator<base::string16>(collator.get()));
+
+  // Build the list of display names and the language map.
+  for (const auto& code : language_codes) {
+    const base::string16 display_name =
+        l10n_util::GetDisplayNameForLocale(code, app_locale, false);
+    const base::string16 native_display_name =
+        l10n_util::GetDisplayNameForLocale(code, code, false);
+    language_map[display_name] = std::make_pair(code, native_display_name);
+  }
+
+  // Get the list of translatable languages and convert to a set.
+  std::vector<std::string> translate_languages;
+  translate::TranslateDownloadManager::GetSupportedLanguages(
+      translate_allowed, &translate_languages);
+  const std::set<std::string> translate_language_set(
+      translate_languages.begin(), translate_languages.end());
+
+  // Build the language list from the language map.
+  for (const auto& entry : language_map) {
+    const base::string16& display_name = entry.first;
+    const LanguagePair& pair = entry.second;
+
+    TranslateLanguageInfo language;
+    language.code = pair.first;
+
+    base::string16 adjusted_display_name(display_name);
+    base::i18n::AdjustStringForLocaleDirection(&adjusted_display_name);
+    language.display_name = base::UTF16ToUTF8(adjusted_display_name);
+
+    base::string16 adjusted_native_display_name(pair.second);
+    base::i18n::AdjustStringForLocaleDirection(&adjusted_native_display_name);
+    language.native_display_name =
+        base::UTF16ToUTF8(adjusted_native_display_name);
+
+    std::string supports_translate_code = pair.first;
+    if (base::FeatureList::IsEnabled(translate::kImprovedLanguageSettings)) {
+      // Extract the base language: if the base language can be translated, then
+      // even the regional one should be marked as such.
+      translate::ToTranslateLanguageSynonym(&supports_translate_code);
+    }
+    language.supports_translate =
+        translate_language_set.count(supports_translate_code) > 0;
+
+    language_list->push_back(language);
+  }
 }
 
 void TranslatePrefs::BlockLanguage(const std::string& input_language) {
@@ -679,9 +769,6 @@ void TranslatePrefs::RegisterProfilePrefs(
   registry->RegisterDictionaryPref(
       kPrefTranslateTooOftenDeniedForLanguage,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterDictionaryPref(
-      kPrefLanguageProfile,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
 #if defined(OS_ANDROID)
   registry->RegisterDictionaryPref(
       kPrefTranslateAutoAlwaysCount,
@@ -786,59 +873,6 @@ bool TranslatePrefs::IsListEmpty(const char* pref_id) const {
 bool TranslatePrefs::IsDictionaryEmpty(const char* pref_id) const {
   const base::DictionaryValue* dict = prefs_->GetDictionary(pref_id);
   return (dict == nullptr || dict->empty());
-}
-
-double TranslatePrefs::GetReadingFromUserLanguageProfile(
-    LanguageAndProbabilityList* out_value) const {
-  const base::DictionaryValue* dict =
-      prefs_->GetDictionary(kPrefLanguageProfile);
-  const base::DictionaryValue* entries = nullptr;
-
-  // Return 0.0 if no ULP prefs.
-  if (!dict)
-    return 0.0;
-
-  // Return 0.0 if no such list.
-  if (!dict->GetDictionary(kReading, &entries))
-    return 0.0;
-
-  double confidence = 0.0;
-  // Return 0.0 if cannot find confidence.
-  if (!entries->GetDouble(kConfidence, &confidence))
-    return 0.0;
-
-  const base::ListValue* preference = nullptr;
-  // Return the confidence if there are no item on the 'preference' field.
-  if (!entries->GetList(kPreference, &preference))
-    return confidence;
-
-  // Use a map to fold the probability of all the same normalized language
-  // code together.
-  std::map<std::string, double> probability_map;
-  // Iterate through the preference.
-  for (const auto& entry : *preference) {
-    const base::DictionaryValue* item = nullptr;
-    std::string language;
-    double probability = 0.0;
-    if (entry.GetAsDictionary(&item) && item->GetString(kLanguage, &language) &&
-        item->GetDouble(kProbability, &probability)) {
-      // Normalize the the language code known and supported by
-      // Translate.
-      translate::ToTranslateLanguageSynonym(&language);
-      // Discard if the normalized version is unsupported.
-      if (TranslateDownloadManager::IsSupportedLanguage(language)) {
-        probability_map[language] += probability;
-      }
-    }
-  }
-  for (const auto& it : probability_map)
-    out_value->push_back(it);
-  std::sort(out_value->begin(), out_value->end(),
-            [](const LanguageAndProbability& left,
-               const LanguageAndProbability& right) {
-              return left.second > right.second;
-            });
-  return confidence;
 }
 
 }  // namespace translate

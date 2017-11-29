@@ -41,6 +41,7 @@ class WebGraphicsContext3DProviderForTests
 
   // Not used by WebGL code.
   GrContext* GetGrContext() override { return nullptr; }
+  void InvalidateGrContext(uint32_t state) override {}
   bool BindToCurrentThread() override { return false; }
   const gpu::Capabilities& GetCapabilities() const override {
     return capabilities_;
@@ -48,10 +49,11 @@ class WebGraphicsContext3DProviderForTests
   const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override {
     return gpu_feature_info_;
   }
-  void SetLostContextCallback(const base::Closure&) {}
+  viz::GLHelper* GetGLHelper() override { return nullptr; }
+  void SetLostContextCallback(const base::Closure&) override {}
   void SetErrorMessageCallback(
-      const base::Callback<void(const char*, int32_t id)>&) {}
-  void SignalQuery(uint32_t, const base::Closure&) override {}
+      base::RepeatingCallback<void(const char*, int32_t id)>) {}
+  void SignalQuery(uint32_t, base::OnceClosure) override {}
 
  private:
   std::unique_ptr<gpu::gles2::GLES2Interface> gl_;
@@ -429,14 +431,14 @@ class DrawingBufferForTests : public DrawingBuffer {
             client,
             false /* discardFramebufferSupported */,
             true /* wantAlphaChannel */,
-            false /* premultipliedAlpha */,
+            true /* premultipliedAlpha */,
             preserve,
             kWebGL1,
             false /* wantDepth */,
             false /* wantStencil */,
             DrawingBuffer::kAllowChromiumImage /* ChromiumImageUsage */,
             CanvasColorParams()),
-        live_(0) {}
+        live_(nullptr) {}
 
   ~DrawingBufferForTests() override {
     if (live_)

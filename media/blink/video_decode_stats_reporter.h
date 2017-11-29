@@ -85,19 +85,6 @@ class MEDIA_BLINK_EXPORT VideoDecodeStatsReporter {
   // called when ShouldBeReporting() == true.
   void UpdateStats();
 
-  // Round |raw_fps| to the nearest (smaller or larger) "bucket". FrameRates in
-  // the same bucket should have nearly identical decode performance
-  // characteristics. Bucketing helps avoid fragmentation of recorded stats.
-  int GetFpsBucket(double raw_fps) const;
-
-  // Find the nearest "bucket" with dimensions >= |raw_size|. While smaller
-  // buckets may more closely describe |raw_size|, the next largest bucket is
-  // chosen to surface cutoff resolutions in HW-accelerated decoders. Exceeding
-  // the HW cutoff will invoke the software fallback, giving potentially very
-  // different decode performance at larger resolutions. Will return an empty
-  // size if |raw_size| is too small to be bucketed.
-  gfx::Size GetSizeBucket(const gfx::Size& raw_size) const;
-
   // Run |stats_cb_timer_| at the specified |interval|. If the timer is already
   // running, any existing callbacks will be canceled/delayed until
   // |interval| has elapsed.
@@ -133,6 +120,9 @@ class MEDIA_BLINK_EXPORT VideoDecodeStatsReporter {
   // after any state change (e.g. |is_playing_|) as a check on whether to start
   // the the timer.
   bool ShouldBeReporting() const;
+
+  // Error handler callback when IPC hits an error.
+  void OnIpcConnectionError();
 
   // TimeDelta wrappers around |kRecordingIntervalMs| and |kTimyFpsWindowMs|.
   // Defined as a class member to avoid static initialization.
@@ -222,6 +212,10 @@ class MEDIA_BLINK_EXPORT VideoDecodeStatsReporter {
   // Set true by OnHidden(), false by OnVisible(). We should not run the
   // |stats_cb_timer_| when player is backgrounded.
   bool is_backgrounded_ = false;
+
+  // Set false by UpdateStats() if an IPC error is encountered. Assumed true
+  // until an error is found.
+  bool is_ipc_connected_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(VideoDecodeStatsReporter);
 };

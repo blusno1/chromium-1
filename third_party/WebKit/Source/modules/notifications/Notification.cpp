@@ -65,8 +65,8 @@
 namespace blink {
 namespace {
 
-WebNotificationManager* GetNotificationManager() {
-  return Platform::Current()->GetNotificationManager();
+WebNotificationManager* GetWebNotificationManager() {
+  return Platform::Current()->GetWebNotificationManager();
 }
 
 }  // namespace
@@ -151,7 +151,7 @@ Notification::Notification(ExecutionContext* context,
       type_(type),
       state_(State::kLoading),
       data_(data) {
-  DCHECK(GetNotificationManager());
+  DCHECK(GetWebNotificationManager());
 }
 
 Notification::~Notification() {}
@@ -172,8 +172,7 @@ void Notification::PrepareShow() {
     return;
   }
 
-  if (NotificationManager::From(GetExecutionContext())
-          ->GetPermissionStatus(GetExecutionContext()) !=
+  if (NotificationManager::From(GetExecutionContext())->GetPermissionStatus() !=
       mojom::blink::PermissionStatus::GRANTED) {
     DispatchErrorEvent();
     return;
@@ -190,8 +189,8 @@ void Notification::DidLoadResources(NotificationResourcesLoader* loader) {
   SecurityOrigin* origin = GetExecutionContext()->GetSecurityOrigin();
   DCHECK(origin);
 
-  GetNotificationManager()->Show(WebSecurityOrigin(origin), data_,
-                                 loader->GetResources(), this);
+  GetWebNotificationManager()->Show(WebSecurityOrigin(origin), data_,
+                                    loader->GetResources(), this);
   loader_.Clear();
 
   state_ = State::kShowing;
@@ -210,7 +209,7 @@ void Notification::close() {
                                               WrapPersistent(this)));
     state_ = State::kClosing;
 
-    GetNotificationManager()->Close(this);
+    GetWebNotificationManager()->Close(this);
     return;
   }
 
@@ -219,8 +218,8 @@ void Notification::close() {
   SecurityOrigin* origin = GetExecutionContext()->GetSecurityOrigin();
   DCHECK(origin);
 
-  GetNotificationManager()->ClosePersistent(WebSecurityOrigin(origin),
-                                            data_.tag, notification_id_);
+  GetWebNotificationManager()->ClosePersistent(WebSecurityOrigin(origin),
+                                               data_.tag, notification_id_);
 }
 
 void Notification::DispatchShowEvent() {
@@ -380,7 +379,7 @@ String Notification::permission(ExecutionContext* context) {
     return PermissionString(mojom::blink::PermissionStatus::DENIED);
 
   mojom::blink::PermissionStatus status =
-      NotificationManager::From(context)->GetPermissionStatus(context);
+      NotificationManager::From(context)->GetPermissionStatus();
 
   // Permission can only be requested from top-level frames and same-origin
   // iframes. This should be reflected in calls getting permission status.
@@ -444,7 +443,7 @@ const AtomicString& Notification::InterfaceName() const {
 }
 
 void Notification::ContextDestroyed(ExecutionContext*) {
-  GetNotificationManager()->NotifyDelegateDestroyed(this);
+  GetWebNotificationManager()->NotifyDelegateDestroyed(this);
 
   state_ = State::kClosed;
 

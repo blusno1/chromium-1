@@ -15,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/switches.h"
 #include "cc/test/pixel_test.h"
 #include "cc/test/pixel_test_utils.h"
@@ -54,20 +55,19 @@ base::FilePath GetTestFilePath(const base::FilePath::CharType* basename) {
 }  // namespace
 
 class GLRendererCopierPixelTest
-    : public cc::GLRendererPixelTest,
+    : public cc::PixelTest,
       public testing::WithParamInterface<
           std::tuple<GLenum, bool, CopyOutputResult::Format, bool>> {
  public:
   void SetUp() override {
-    // cc::RendererPixelTest sets up the environment/dependencies needed for
-    // these tests. However, this test uses its own GLRendererCopier instance,
-    // and not the default one owned by GLRenderer.
-    cc::GLRendererPixelTest::SetUp();
-    cc::GLRendererPixelTest::renderer_.reset();
+    SetUpGLWithoutRenderer(false /* flipped_output_surface */);
+
+    texture_deleter_ =
+        std::make_unique<TextureDeleter>(base::ThreadTaskRunnerHandle::Get());
+
     gl_ = context_provider()->ContextGL();
     copier_ = std::make_unique<GLRendererCopier>(
-        cc::GLRendererPixelTest::context_provider(),
-        cc::GLRendererPixelTest::texture_mailbox_deleter_.get(),
+        context_provider(), texture_deleter_.get(),
         base::BindRepeating([](const gfx::Rect& draw_rect) {
           gfx::Rect window_rect = draw_rect;
           window_rect.set_y(kSourceSize.height() - window_rect.bottom());
@@ -89,7 +89,7 @@ class GLRendererCopierPixelTest
     DeleteSourceFramebuffer();
     DeleteSourceTexture();
     copier_.reset();
-    cc::GLRendererPixelTest::TearDown();
+    texture_deleter_.reset();
   }
 
   GLRendererCopier* copier() { return copier_.get(); }
@@ -192,13 +192,14 @@ class GLRendererCopierPixelTest
 
   // Reads back the texture in the given |mailbox| to a SkBitmap in Skia-native
   // format.
-  SkBitmap ReadbackToSkBitmap(const TextureMailbox& mailbox,
+  SkBitmap ReadbackToSkBitmap(const gpu::Mailbox& mailbox,
+                              const gpu::SyncToken& sync_token,
                               const gfx::Size& texture_size) {
     // Bind the texture to a framebuffer from which to read the pixels.
-    if (mailbox.sync_token().HasData())
-      gl_->WaitSyncTokenCHROMIUM(mailbox.sync_token().GetConstData());
+    if (sync_token.HasData())
+      gl_->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
     GLuint texture =
-        gl_->CreateAndConsumeTextureCHROMIUM(mailbox.target(), mailbox.name());
+        gl_->CreateAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
     GLuint framebuffer = 0;
     gl_->GenFramebuffers(1, &framebuffer);
     gl_->BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -223,6 +224,7 @@ class GLRendererCopierPixelTest
 
  private:
   gpu::gles2::GLES2Interface* gl_ = nullptr;
+  std::unique_ptr<TextureDeleter> texture_deleter_;
   std::unique_ptr<GLRendererCopier> copier_;
   GLuint source_texture_ = 0;
   GLuint source_framebuffer_ = 0;
@@ -271,7 +273,9 @@ TEST_P(GLRendererCopierPixelTest, ExecutesCopyRequest) {
   const SkBitmap actual =
       (result_format_ == CopyOutputResult::Format::RGBA_BITMAP)
           ? result->AsSkBitmap()
-          : ReadbackToSkBitmap(*result->GetTextureMailbox(), result->size());
+          : ReadbackToSkBitmap(result->GetTextureResult()->mailbox,
+                               result->GetTextureResult()->sync_token,
+                               result->size());
   const auto png_file_path = GetTestFilePath(
       scale_by_half_ ? FILE_PATH_LITERAL("half_of_one_of_16_color_rects.png")
                      : FILE_PATH_LITERAL("one_of_16_color_rects.png"));

@@ -132,7 +132,10 @@ static_library("utility") {
       libs = [ "esent.lib" ]
       ldflags += [ "/DELAYLOAD:esent.dll" ]
 
-      deps += [ "//chrome/services/util_win:lib" ]
+      deps += [
+        "//chrome/services/util_win:lib",
+        "//chrome/services/wifi_util_win:lib",
+      ]
     }
 
     if (is_win || is_mac) {
@@ -164,8 +167,8 @@ static_library("utility") {
 
   if (is_chromeos) {
     deps += [
+      "//ash",
       "//ash/autoclick/mus:lib",
-      "//ash/mus:lib",
       "//ash/touch_hud/mus:lib",
       "//chrome/services/file_util:lib",
     ]

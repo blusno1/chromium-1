@@ -49,10 +49,11 @@
 #include "net/http/http_util.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "services/network/public/cpp/url_loader_status.h"
+#include "services/network/public/cpp/url_loader_completion_status.h"
 
 namespace content {
 namespace protocol {
+
 namespace {
 
 using ProtocolCookieArray = Array<Network::Cookie>;
@@ -461,6 +462,17 @@ String securityState(const GURL& url, const net::CertStatus& cert_status) {
   return Security::SecurityStateEnum::Secure;
 }
 
+DevToolsURLRequestInterceptor::InterceptionStage ToInterceptorStage(
+    const protocol::Network::InterceptionStage& interceptor_stage) {
+  if (interceptor_stage == protocol::Network::InterceptionStageEnum::Request)
+    return DevToolsURLRequestInterceptor::REQUEST;
+  if (interceptor_stage ==
+      protocol::Network::InterceptionStageEnum::HeadersReceived)
+    return DevToolsURLRequestInterceptor::RESPONSE;
+  NOTREACHED();
+  return DevToolsURLRequestInterceptor::REQUEST;
+}
+
 net::Error NetErrorFromString(const std::string& error, bool* ok) {
   *ok = true;
   if (error == Network::ErrorReasonEnum::Failed)
@@ -489,6 +501,32 @@ net::Error NetErrorFromString(const std::string& error, bool* ok) {
     return net::ERR_ADDRESS_UNREACHABLE;
   *ok = false;
   return net::ERR_FAILED;
+}
+
+String NetErrorToString(int net_error) {
+  if (net_error == net::ERR_ABORTED)
+    return Network::ErrorReasonEnum::Aborted;
+  if (net_error == net::ERR_TIMED_OUT)
+    return Network::ErrorReasonEnum::TimedOut;
+  if (net_error == net::ERR_ACCESS_DENIED)
+    return Network::ErrorReasonEnum::AccessDenied;
+  if (net_error == net::ERR_CONNECTION_CLOSED)
+    return Network::ErrorReasonEnum::ConnectionClosed;
+  if (net_error == net::ERR_CONNECTION_RESET)
+    return Network::ErrorReasonEnum::ConnectionReset;
+  if (net_error == net::ERR_CONNECTION_REFUSED)
+    return Network::ErrorReasonEnum::ConnectionRefused;
+  if (net_error == net::ERR_CONNECTION_ABORTED)
+    return Network::ErrorReasonEnum::ConnectionAborted;
+  if (net_error == net::ERR_CONNECTION_FAILED)
+    return Network::ErrorReasonEnum::ConnectionFailed;
+  if (net_error == net::ERR_NAME_NOT_RESOLVED)
+    return Network::ErrorReasonEnum::NameNotResolved;
+  if (net_error == net::ERR_INTERNET_DISCONNECTED)
+    return Network::ErrorReasonEnum::InternetDisconnected;
+  if (net_error == net::ERR_ADDRESS_UNREACHABLE)
+    return Network::ErrorReasonEnum::AddressUnreachable;
+  return Network::ErrorReasonEnum::Failed;
 }
 
 bool AddInterceptedResourceType(
@@ -651,7 +689,6 @@ NetworkHandler::NetworkHandler(const std::string& host_id)
       process_(nullptr),
       host_(nullptr),
       enabled_(false),
-      interception_enabled_(false),
       host_id_(host_id),
       bypass_service_worker_(false),
       weak_factory_(this) {
@@ -693,23 +730,48 @@ Response NetworkHandler::Enable(Maybe<int> max_total_size,
 Response NetworkHandler::Disable() {
   enabled_ = false;
   user_agent_ = std::string();
-  SetRequestInterception(
-      protocol::Array<protocol::Network::RequestPattern>::create());
+  interception_handle_.reset();
   SetNetworkConditions(nullptr);
   extra_headers_.clear();
   return Response::FallThrough();
 }
 
-Response NetworkHandler::ClearBrowserCache() {
-  if (!process_)
-    return Response::InternalError();
+class DevtoolsClearCacheObserver
+    : public content::BrowsingDataRemover::Observer {
+ public:
+  explicit DevtoolsClearCacheObserver(
+      content::BrowsingDataRemover* remover,
+      std::unique_ptr<NetworkHandler::ClearBrowserCacheCallback> callback)
+      : remover_(remover), callback_(std::move(callback)) {
+    remover_->AddObserver(this);
+  }
+
+  ~DevtoolsClearCacheObserver() override { remover_->RemoveObserver(this); }
+  void OnBrowsingDataRemoverDone() override {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    callback_->sendSuccess();
+    delete this;
+  }
+
+ private:
+  content::BrowsingDataRemover* remover_;
+  std::unique_ptr<NetworkHandler::ClearBrowserCacheCallback> callback_;
+};
+
+void NetworkHandler::ClearBrowserCache(
+    std::unique_ptr<ClearBrowserCacheCallback> callback) {
+  if (!process_) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
   content::BrowsingDataRemover* remover =
       content::BrowserContext::GetBrowsingDataRemover(
           process_->GetBrowserContext());
-  remover->Remove(base::Time(), base::Time::Max(),
-                  content::BrowsingDataRemover::DATA_TYPE_CACHE,
-                  content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
-  return Response::OK();
+  remover->RemoveAndReply(
+      base::Time(), base::Time::Max(),
+      content::BrowsingDataRemover::DATA_TYPE_CACHE,
+      content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
+      new DevtoolsClearCacheObserver(remover, std::move(callback)));
 }
 
 void NetworkHandler::ClearBrowserCookies(
@@ -991,7 +1053,7 @@ void NetworkHandler::NavigationPreloadResponseReceived(
 
 void NetworkHandler::NavigationPreloadCompleted(
     const std::string& request_id,
-    const network::URLLoaderStatus& status) {
+    const network::URLLoaderCompletionStatus& status) {
   if (!enabled_)
     return;
   if (status.error_code != net::OK) {
@@ -1068,31 +1130,36 @@ DispatchResponse NetworkHandler::SetRequestInterception(
   if (!interceptor)
     return Response::Error("Interception not supported");
 
-  FrameTreeNode* frame_tree_node = host_->frame_tree_node();
-  if (patterns->length()) {
-    std::vector<DevToolsURLRequestInterceptor::Pattern> interceptor_patterns;
-    for (size_t i = 0; i < patterns->length(); ++i) {
-      base::flat_set<ResourceType> resource_types;
-      std::string resource_type = patterns->get(i)->GetResourceType("");
-      if (!resource_type.empty()) {
-        if (!AddInterceptedResourceType(resource_type, &resource_types)) {
-          return Response::InvalidParams(
-              base::StringPrintf("Cannot intercept resources of type '%s'",
-                                 resource_type.c_str()));
-        }
-      }
-      interceptor_patterns.push_back(DevToolsURLRequestInterceptor::Pattern(
-          patterns->get(i)->GetUrlPattern("*"), std::move(resource_types)));
-    }
-
-    interceptor->StartInterceptingRequests(frame_tree_node,
-                                           weak_factory_.GetWeakPtr(),
-                                           std::move(interceptor_patterns));
-    interception_enabled_ = true;
-  } else {
-    interceptor->StopInterceptingRequests(frame_tree_node);
-    interception_enabled_ = false;
+  if (!patterns->length()) {
+    interception_handle_.reset();
+    return Response::OK();
   }
+
+  std::vector<DevToolsURLRequestInterceptor::Pattern> interceptor_patterns;
+  for (size_t i = 0; i < patterns->length(); ++i) {
+    base::flat_set<ResourceType> resource_types;
+    std::string resource_type = patterns->get(i)->GetResourceType("");
+    if (!resource_type.empty()) {
+      if (!AddInterceptedResourceType(resource_type, &resource_types)) {
+        return Response::InvalidParams(base::StringPrintf(
+            "Cannot intercept resources of type '%s'", resource_type.c_str()));
+      }
+    }
+    interceptor_patterns.push_back(DevToolsURLRequestInterceptor::Pattern(
+        patterns->get(i)->GetUrlPattern("*"), std::move(resource_types),
+        ToInterceptorStage(patterns->get(i)->GetInterceptionStage(
+            protocol::Network::InterceptionStageEnum::Request))));
+  }
+
+  if (interception_handle_) {
+    interception_handle_->UpdatePatterns(std::move(interceptor_patterns));
+  } else {
+    interception_handle_ = interceptor->StartInterceptingRequests(
+        host_->frame_tree_node(), std::move(interceptor_patterns),
+        base::Bind(&NetworkHandler::RequestIntercepted,
+                   weak_factory_.GetWeakPtr()));
+  }
+
   return Response::OK();
 }
 
@@ -1126,7 +1193,6 @@ bool GetPostData(const net::URLRequest* request, std::string* post_data) {
 }
 }  // namespace
 
-// TODO(alexclarke): Support structured data as well as |base64_raw_response|.
 void NetworkHandler::ContinueInterceptedRequest(
     const std::string& interception_id,
     Maybe<std::string> error_reason,
@@ -1177,6 +1243,20 @@ void NetworkHandler::ContinueInterceptedRequest(
       std::move(callback));
 }
 
+void NetworkHandler::GetResponseBodyForInterception(
+    const String& interception_id,
+    std::unique_ptr<GetResponseBodyForInterceptionCallback> callback) {
+  DevToolsInterceptorController* interceptor =
+      DevToolsInterceptorController::FromBrowserContext(
+          process_->GetBrowserContext());
+
+  if (!interceptor) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+  interceptor->GetResponseBody(interception_id, std::move(callback));
+}
+
 // static
 GURL NetworkHandler::ClearUrlRef(const GURL& url) {
   if (!url.has_ref())
@@ -1210,7 +1290,7 @@ std::unique_ptr<Network::Request> NetworkHandler::CreateRequestFromURLRequest(
 
 std::unique_ptr<NavigationThrottle> NetworkHandler::CreateThrottleForNavigation(
     NavigationHandle* navigation_handle) {
-  if (!interception_enabled_)
+  if (!interception_handle_)
     return nullptr;
   std::unique_ptr<NavigationThrottle> throttle(new NetworkNavigationThrottle(
       weak_factory_.GetWeakPtr(), navigation_handle));
@@ -1289,12 +1369,16 @@ const char* ResourceTypeToString(ResourceType resource_type) {
 
 void NetworkHandler::RequestIntercepted(
     std::unique_ptr<InterceptedRequestInfo> info) {
+  protocol::Maybe<protocol::Network::ErrorReason> error_reason;
+  if (info->response_error_code < 0)
+    error_reason = NetErrorToString(info->response_error_code);
   frontend_->RequestIntercepted(
       info->interception_id, std::move(info->network_request),
       info->frame_id.ToString(), ResourceTypeToString(info->resource_type),
-      info->is_navigation, std::move(info->headers_object),
-      std::move(info->http_status_code), std::move(info->redirect_url),
-      std::move(info->auth_challenge));
+      info->is_navigation, std::move(info->redirect_url),
+      std::move(info->auth_challenge), std::move(error_reason),
+      std::move(info->http_response_status_code),
+      std::move(info->response_headers));
 }
 
 void NetworkHandler::SetNetworkConditions(

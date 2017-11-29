@@ -32,6 +32,7 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "core/CSSValueKeywords.h"
 #include "core/CoreInitializer.h"
@@ -90,6 +91,7 @@
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderStateMachine.h"
+#include "core/loader/InteractiveDetector.h"
 #include "core/loader/PrerendererClient.h"
 #include "core/page/ChromeClientImpl.h"
 #include "core/page/ContextMenuController.h"
@@ -136,9 +138,8 @@
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/wtf/AutoReset.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositeAndReadbackAsyncCallback.h"
 #include "public/platform/WebCompositorSupport.h"
@@ -169,6 +170,7 @@
 #include "public/web/WebSelection.h"
 #include "public/web/WebViewClient.h"
 #include "public/web/WebWindowFeatures.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 
 #if defined(WTF_USE_DEFAULT_RENDER_THEME)
 #include "core/layout/LayoutThemeDefault.h"
@@ -295,12 +297,12 @@ class ColorOverlay final : public PageOverlay::Delegate {
 // WebView ----------------------------------------------------------------
 
 WebView* WebView::Create(WebViewClient* client,
-                         WebPageVisibilityState visibility_state) {
+                         mojom::PageVisibilityState visibility_state) {
   return WebViewImpl::Create(client, visibility_state);
 }
 
 WebViewImpl* WebViewImpl::Create(WebViewClient* client,
-                                 WebPageVisibilityState visibility_state) {
+                                 mojom::PageVisibilityState visibility_state) {
   // Pass the WebViewImpl's self-reference to the caller.
   auto web_view = base::AdoptRef(new WebViewImpl(client, visibility_state));
   web_view->AddRef();
@@ -330,7 +332,7 @@ void WebViewImpl::SetPrerendererClient(
 }
 
 WebViewImpl::WebViewImpl(WebViewClient* client,
-                         WebPageVisibilityState visibility_state)
+                         mojom::PageVisibilityState visibility_state)
     : client_(client),
       chrome_client_(ChromeClientImpl::Create(this)),
       context_menu_client_(*this),
@@ -373,7 +375,6 @@ WebViewImpl::WebViewImpl(WebViewClient* client,
                      ->CurrentThread()
                      ->Scheduler()
                      ->CreateWebViewScheduler(this, this)),
-      last_frame_time_monotonic_(0),
       override_compositor_visibility_(false) {
   Page::PageClients page_clients;
   page_clients.chrome_client = chrome_client_.Get();
@@ -898,6 +899,9 @@ bool WebViewImpl::StartPageScaleAnimation(const IntPoint& target_position,
 
 void WebViewImpl::EnableFakePageScaleAnimationForTesting(bool enable) {
   enable_fake_page_scale_animation_for_testing_ = enable;
+  fake_page_scale_animation_target_position_ = IntPoint();
+  fake_page_scale_animation_use_anchor_ = false;
+  fake_page_scale_animation_page_scale_factor_ = 0;
 }
 
 void WebViewImpl::SetShowFPSCounter(bool show) {
@@ -1461,12 +1465,6 @@ bool WebViewImpl::ZoomToMultipleTargetsRect(const WebRect& rect_in_root_frame) {
   return true;
 }
 
-bool WebViewImpl::HasTouchEventHandlersAt(const WebPoint& point) {
-  // FIXME: Implement this. Note that the point must be divided by
-  // pageScaleFactor.
-  return true;
-}
-
 #if !defined(OS_MACOSX)
 // Mac has no way to open a context menu based on a keyboard event.
 WebInputEventResult WebViewImpl::SendContextMenuEvent() {
@@ -1533,8 +1531,8 @@ PagePopup* WebViewImpl::OpenPagePopup(PagePopupClient* client) {
     HidePopups();
   DCHECK(!page_popup_);
 
-  WebWidget* popup_widget = client_->CreatePopupMenu(kWebPopupTypePage);
-  // createPopupMenu returns nullptr if this renderer process is about to die.
+  WebWidget* popup_widget = client_->CreatePopup(kWebPopupTypePage);
+  // CreatePopup returns nullptr if this renderer process is about to die.
   if (!popup_widget)
     return nullptr;
   page_popup_ = ToWebPagePopupImpl(popup_widget);
@@ -1846,8 +1844,6 @@ void WebViewImpl::BeginFrame(double last_frame_time_monotonic) {
   if (WebFrameWidgetBase* widget = MainFrameImpl()->FrameWidget())
     widget->UpdateGestureAnimation(last_frame_time_monotonic);
 
-  last_frame_time_monotonic_ = last_frame_time_monotonic;
-
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       MainFrameImpl()->GetFrame()->GetDocument()->Lifecycle());
   PageWidgetDelegate::Animate(*page_, last_frame_time_monotonic);
@@ -2020,10 +2016,21 @@ WebInputEventResult WebViewImpl::HandleInputEvent(
     return WebInputEventResult::kHandledSystem;
   }
 
+  Document& main_frame_document = *MainFrameImpl()->GetFrame()->GetDocument();
+
   if (input_event.GetType() != WebInputEvent::kMouseMove) {
-    FirstMeaningfulPaintDetector::From(
-        *MainFrameImpl()->GetFrame()->GetDocument())
-        .NotifyInputEvent();
+    FirstMeaningfulPaintDetector::From(main_frame_document).NotifyInputEvent();
+  }
+
+  if (input_event.GetType() != WebInputEvent::kMouseMove &&
+      input_event.GetType() != WebInputEvent::kMouseEnter &&
+      input_event.GetType() != WebInputEvent::kMouseLeave) {
+    InteractiveDetector* interactive_detector(
+        InteractiveDetector::From(main_frame_document));
+    if (interactive_detector) {
+      interactive_detector->OnInvalidatingInputEvent(
+          input_event.TimeStampSeconds());
+    }
   }
 
   if (mouse_capture_node_ &&
@@ -2171,50 +2178,22 @@ void WebViewImpl::SetFocus(bool enable) {
   }
 }
 
-// TODO(ekaramad):This method is almost duplicated in WebFrameWidgetImpl as
-// well. This code needs to be refactored  (http://crbug.com/629721).
-bool WebViewImpl::SelectionBounds(WebRect& anchor, WebRect& focus) const {
+bool WebViewImpl::SelectionBounds(WebRect& anchor_web,
+                                  WebRect& focus_web) const {
   const Frame* frame = FocusedCoreFrame();
   if (!frame || !frame->IsLocalFrame())
     return false;
-
   const LocalFrame* local_frame = ToLocalFrame(frame);
   if (!local_frame)
     return false;
-  FrameSelection& selection = local_frame->Selection();
-  if (!selection.IsAvailable() || selection.GetSelectionInDOMTree().IsNone())
+
+  IntRect anchor;
+  IntRect focus;
+  if (!local_frame->Selection().ComputeAbsoluteBounds(anchor, focus))
     return false;
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  local_frame->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
-  if (selection.ComputeVisibleSelectionInDOMTree().IsNone()) {
-    // plugins/mouse-capture-inside-shadow.html reaches here.
-    return false;
-  }
-
-  DocumentLifecycle::DisallowTransitionScope disallow_transition(
-      local_frame->GetDocument()->Lifecycle());
-
-  if (selection.ComputeVisibleSelectionInDOMTree().IsCaret()) {
-    anchor = focus = selection.AbsoluteCaretBounds();
-  } else {
-    const EphemeralRange selected_range =
-        selection.ComputeVisibleSelectionInDOMTree()
-            .ToNormalizedEphemeralRange();
-    if (selected_range.IsNull())
-      return false;
-    anchor = local_frame->GetEditor().FirstRectForRange(
-        EphemeralRange(selected_range.StartPosition()));
-    focus = local_frame->GetEditor().FirstRectForRange(
-        EphemeralRange(selected_range.EndPosition()));
-  }
-
-  anchor = local_frame->View()->ContentsToViewport(anchor);
-  focus = local_frame->View()->ContentsToViewport(focus);
-
-  if (!selection.ComputeVisibleSelectionInDOMTree().IsBaseFirst())
-    std::swap(anchor, focus);
+  anchor_web = local_frame->View()->ContentsToViewport(anchor);
+  focus_web = local_frame->View()->ContentsToViewport(focus);
   return true;
 }
 
@@ -2508,17 +2487,30 @@ static bool IsElementEditable(const Element* element) {
                                 "textbox");
 }
 
-bool WebViewImpl::ScrollFocusedEditableElementIntoRect(
-    const WebRect& rect_in_viewport) {
-  LocalFrame* frame =
-      GetPage()->MainFrame() && GetPage()->MainFrame()->IsLocalFrame()
-          ? GetPage()->DeprecatedLocalMainFrame()
-          : nullptr;
-  Element* element = FocusedElement();
-  if (!frame || !frame->View() || !element)
+bool WebViewImpl::ScrollFocusedEditableElementIntoView() {
+  Frame* frame = GetPage()->MainFrame();
+  if (!frame)
     return false;
 
-  if (!IsElementEditable(element))
+  Element* element = FocusedElement();
+  if (!element || !IsElementEditable(element))
+    return false;
+
+  if (frame->IsRemoteFrame()) {
+    // The rest of the logic here is not implemented for OOPIFs. For now instead
+    // of implementing the logic below (which involves finding the scale and
+    // scrolling point), editable elements inside OOPIFs are scrolled into view
+    // instead. However, a common logic should be implemented for both OOPIFs
+    // and in-process frames to assure a consistent behavior across all frame
+    // types (https://crbug.com/784982).
+    LayoutObject* layout_object = element->GetLayoutObject();
+    if (!layout_object)
+      return false;
+    layout_object->ScrollRectToVisible(element->BoundingBox());
+    return true;
+  }
+
+  if (!frame->View())
     return false;
 
   element->GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -2528,9 +2520,10 @@ bool WebViewImpl::ScrollFocusedEditableElementIntoRect(
       !GetPage()->GetVisualViewport().ShouldDisableDesktopWorkarounds();
 
   if (zoom_in_to_legible_scale) {
-    // When deciding whether to zoom in on a focused text box, we should decide
-    // not to zoom in if the user won't be able to zoom out. e.g if the textbox
-    // is within a touch-action: none container the user can't zoom back out.
+    // When deciding whether to zoom in on a focused text box, we should
+    // decide not to zoom in if the user won't be able to zoom out. e.g if the
+    // textbox is within a touch-action: none container the user can't zoom
+    // back out.
     TouchAction action = TouchActionUtil::ComputeEffectiveTouchAction(*element);
     if (!(action & TouchAction::kTouchActionPinchZoom))
       zoom_in_to_legible_scale = false;
@@ -3860,19 +3853,14 @@ WebViewScheduler* WebViewImpl::Scheduler() const {
   return scheduler_.get();
 }
 
-void WebViewImpl::SetVisibilityState(WebPageVisibilityState visibility_state,
-                                     bool is_initial_state) {
-  DCHECK(visibility_state == kWebPageVisibilityStateVisible ||
-         visibility_state == kWebPageVisibilityStateHidden ||
-         visibility_state == kWebPageVisibilityStatePrerender);
-
+void WebViewImpl::SetVisibilityState(
+    mojom::PageVisibilityState visibility_state,
+    bool is_initial_state) {
   if (GetPage()) {
-    page_->SetVisibilityState(
-        static_cast<PageVisibilityState>(static_cast<int>(visibility_state)),
-        is_initial_state);
+    page_->SetVisibilityState(visibility_state, is_initial_state);
   }
 
-  bool visible = visibility_state == kWebPageVisibilityStateVisible;
+  bool visible = visibility_state == mojom::PageVisibilityState::kVisible;
   if (layer_tree_view_ && !override_compositor_visibility_)
     layer_tree_view_->SetVisible(visible);
   scheduler_->SetPageVisible(visible);

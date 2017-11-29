@@ -91,7 +91,6 @@
 <translation id="5941711191222866238">लहान करा</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 तास}one{# तास}other{# तास}}</translation>
 <translation id="5948410903763073882">Alt+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="598033046487663418">सर्व अ‍ॅप्स</translation>
 <translation id="6012623610530968780"><ph name="TOTAL_PAGE_NUM" /> पैकी <ph name="SELECTED_PAGE" /> पेज</translation>
 <translation id="6022924867608035986">शोध बॉक्स मजकूर साफ करा</translation>
 <translation id="6040143037577758943">बंद करा</translation>
@@ -108,7 +107,7 @@
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 सेकंदापूर्वी}one{# सेकंदापूर्वी}other{# सेकंदांपूर्वी}}</translation>
 <translation id="6567071839949112727">पूर्वजवर क्लिक करा</translation>
 <translation id="6612467943526193239">कॅलिब्रेशनमधून बाहेर पडण्‍यासाठी Esc दाबा.</translation>
-<translation id="6620110761915583480">फाइल जतन करा</translation>
+<translation id="6620110761915583480">फाइल सेव्ह करा</translation>
 <translation id="6699343763173986273">मीडिया पुढील ट्रॅक</translation>
 <translation id="6786750046913594791">फोल्डर बंद करा</translation>
 <translation id="6808150112686056157">मीडिया थांबवा</translation>

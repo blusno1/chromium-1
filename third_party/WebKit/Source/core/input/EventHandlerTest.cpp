@@ -16,30 +16,22 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
+#include "core/html/HTMLCanvasElement.h"
 #include "core/html/forms/HTMLInputElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/EmptyClients.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
-class EventHandlerTest : public ::testing::Test {
+class EventHandlerTest : public PageTestBase {
  protected:
   void SetUp() override;
-
-  Page& GetPage() const { return dummy_page_holder_->GetPage(); }
-  Document& GetDocument() const { return dummy_page_holder_->GetDocument(); }
-  FrameSelection& Selection() const {
-    return GetDocument().GetFrame()->Selection();
-  }
   void SetHtmlInnerHTML(const char* html_content);
   ShadowRoot* SetShadowContent(const char* shadow_content, const char* host);
-
- protected:
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
 };
 
 class TapEventBuilder : public WebGestureEvent {
@@ -88,7 +80,7 @@ class MousePressEventBuilder : public WebMouseEvent {
 };
 
 void EventHandlerTest::SetUp() {
-  dummy_page_holder_ = DummyPageHolder::Create(IntSize(300, 400));
+  PageTestBase::SetUp(IntSize(300, 400));
 }
 
 void EventHandlerTest::SetHtmlInnerHTML(const char* html_content) {
@@ -789,7 +781,7 @@ class EventHandlerTooltipTest : public EventHandlerTest {
     Page::PageClients clients;
     FillWithEmptyClients(clients);
     clients.chrome_client = chrome_client_.Get();
-    dummy_page_holder_ = DummyPageHolder::Create(IntSize(800, 600), &clients);
+    SetupPageWithClients(&clients);
   }
 
   String& LastToolTip() { return chrome_client_->LastToolTip(); }
@@ -824,6 +816,75 @@ TEST_F(EventHandlerTooltipTest, mouseLeaveClearsTooltip) {
       mouse_leave_event);
 
   EXPECT_EQ(WTF::String(), LastToolTip());
+}
+
+class UnbufferedInputEventsTrackingChromeClient : public EmptyChromeClient {
+ public:
+  UnbufferedInputEventsTrackingChromeClient() {}
+
+  void RequestUnbufferedInputEvents(LocalFrame*) override {
+    received_unbuffered_request_ = true;
+  }
+
+  bool ReceivedRequestForUnbufferedInput() {
+    bool value = received_unbuffered_request_;
+    received_unbuffered_request_ = false;
+    return value;
+  }
+
+ private:
+  bool received_unbuffered_request_ = false;
+};
+
+class EventHandlerLatencyTest : public PageTestBase {
+ protected:
+  void SetUp() override {
+    chrome_client_ = new UnbufferedInputEventsTrackingChromeClient();
+    Page::PageClients page_clients;
+    FillWithEmptyClients(page_clients);
+    page_clients.chrome_client = chrome_client_.Get();
+    SetupPageWithClients(&page_clients);
+  }
+
+  void SetHtmlInnerHTML(const char* html_content) {
+    GetDocument().documentElement()->SetInnerHTMLFromString(
+        String::FromUTF8(html_content));
+    GetDocument().View()->UpdateAllLifecyclePhases();
+  }
+
+  Persistent<UnbufferedInputEventsTrackingChromeClient> chrome_client_;
+};
+
+TEST_F(EventHandlerLatencyTest, NeedsUnbufferedInput) {
+  GetDocument().GetSettings()->SetScriptEnabled(true);
+  SetHtmlInnerHTML(
+      "<canvas style='width: 100px; height: 100px' id='first' "
+      "onpointermove='return;'>");
+
+  HTMLCanvasElement& canvas =
+      ToHTMLCanvasElement(*GetDocument().getElementById("first"));
+
+  ASSERT_FALSE(chrome_client_->ReceivedRequestForUnbufferedInput());
+
+  WebMouseEvent mouse_press_event(
+      WebInputEvent::kMouseDown, WebFloatPoint(51, 50), WebFloatPoint(51, 50),
+      WebPointerProperties::Button::kLeft, 0, WebInputEvent::kNoModifiers,
+      TimeTicks::Now().InSeconds());
+  mouse_press_event.SetFrameScale(1);
+  GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
+      mouse_press_event);
+  ASSERT_FALSE(chrome_client_->ReceivedRequestForUnbufferedInput());
+
+  canvas.SetNeedsUnbufferedInputEvents(true);
+
+  GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
+      mouse_press_event);
+  ASSERT_TRUE(chrome_client_->ReceivedRequestForUnbufferedInput());
+
+  canvas.SetNeedsUnbufferedInputEvents(false);
+  GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
+      mouse_press_event);
+  ASSERT_FALSE(chrome_client_->ReceivedRequestForUnbufferedInput());
 }
 
 }  // namespace blink

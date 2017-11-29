@@ -135,7 +135,6 @@ class CacheStorageDispatcher;
 class CategorizedWorkerPool;
 class ChildResourceMessageFilter;
 class CompositorForwardingMessageFilter;
-class DevToolsAgentFilter;
 class DomStorageDispatcher;
 class FileSystemDispatcher;
 class FrameSwapMessageQueue;
@@ -298,7 +297,7 @@ class CONTENT_EXPORT RenderThreadImpl
       const GURL& url,
       const LayerTreeFrameSinkCallback& callback);
 
-  AssociatedInterfaceRegistry* GetAssociatedInterfaceRegistry();
+  blink::AssociatedInterfaceRegistry* GetAssociatedInterfaceRegistry();
 
   std::unique_ptr<cc::SwapPromise> RequestCopyOfOutputForLayoutTest(
       int32_t routing_id,
@@ -524,9 +523,6 @@ class CONTENT_EXPORT RenderThreadImpl
   void WidgetHidden();
   void WidgetRestored();
 
-  void AddEmbeddedWorkerRoute(int32_t routing_id, IPC::Listener* listener);
-  void RemoveEmbeddedWorkerRoute(int32_t routing_id);
-
   void RegisterPendingFrameCreate(
       const service_manager::BindSourceInfo& source_info,
       int routing_id,
@@ -562,6 +558,7 @@ class CONTENT_EXPORT RenderThreadImpl
       std::unique_ptr<blink::scheduler::RendererScheduler> scheduler);
 
  private:
+  void OnProcessFinalRelease() override;
   // IPC::Listener
   void OnChannelError() override;
 
@@ -665,7 +662,6 @@ class CONTENT_EXPORT RenderThreadImpl
   scoped_refptr<BlobMessageFilter> blob_message_filter_;
   scoped_refptr<AudioInputMessageFilter> audio_input_message_filter_;
   scoped_refptr<MidiMessageFilter> midi_message_filter_;
-  scoped_refptr<DevToolsAgentFilter> devtools_agent_message_filter_;
   scoped_refptr<ServiceWorkerMessageFilter> service_worker_message_filter_;
   scoped_refptr<ChildResourceMessageFilter> resource_message_filter_;
   scoped_refptr<QuotaMessageFilter> quota_message_filter_;
@@ -826,7 +822,7 @@ class CONTENT_EXPORT RenderThreadImpl
   PendingFrameCreateMap pending_frame_creates_;
 
   mojom::StoragePartitionServicePtr storage_partition_service_;
-  mojom::RendererHostPtr renderer_host_;
+  mojom::RendererHostAssociatedPtr renderer_host_;
 
   AssociatedInterfaceRegistryImpl associated_interfaces_;
 

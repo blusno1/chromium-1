@@ -9,7 +9,7 @@
 #include "ash/frame/caption_buttons/frame_back_button.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/frame/custom_frame_view_ash.h"
-#include "ash/frame/default_header_painter.h"
+#include "ash/frame/default_frame_header.h"
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
@@ -21,30 +21,28 @@ namespace ash {
 HeaderView::HeaderView(views::Widget* target_widget,
                        mojom::WindowStyle window_style)
     : target_widget_(target_widget),
-      header_painter_(std::make_unique<DefaultHeaderPainter>(window_style)),
       avatar_icon_(nullptr),
       caption_button_container_(nullptr),
-      fullscreen_visible_fraction_(0) {
+      fullscreen_visible_fraction_(0),
+      should_paint_(true) {
   caption_button_container_ =
       new FrameCaptionButtonContainerView(target_widget_);
   caption_button_container_->UpdateSizeButtonVisibility();
   AddChildView(caption_button_container_);
 
-  header_painter_->Init(target_widget_, this, caption_button_container_,
-                        nullptr);
+  frame_header_ = std::make_unique<DefaultFrameHeader>(
+      target_widget_, this, caption_button_container_, nullptr, window_style);
 
-  Shell::Get()->AddShellObserver(this);
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
 }
 
 HeaderView::~HeaderView() {
   if (Shell::Get()->tablet_mode_controller())
     Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
-  Shell::Get()->RemoveShellObserver(this);
 }
 
 void HeaderView::SchedulePaintForTitle() {
-  header_painter_->SchedulePaintForTitle();
+  frame_header_->SchedulePaintForTitle();
 }
 
 void HeaderView::ResetWindowControls() {
@@ -69,11 +67,11 @@ int HeaderView::GetPreferredHeight() {
   // Calculating the preferred height requires at least one Layout().
   if (!did_layout_)
     Layout();
-  return header_painter_->GetHeaderHeightForPainting();
+  return frame_header_->GetHeaderHeightForPainting();
 }
 
 int HeaderView::GetMinimumWidth() const {
-  return header_painter_->GetMinimumHeaderWidth();
+  return frame_header_->GetMinimumHeaderWidth();
 }
 
 void HeaderView::SetAvatarIcon(const gfx::ImageSkia& avatar) {
@@ -91,7 +89,7 @@ void HeaderView::SetAvatarIcon(const gfx::ImageSkia& avatar) {
     }
     avatar_icon_->SetImage(avatar);
   }
-  header_painter_->UpdateLeftHeaderView(avatar_icon_);
+  frame_header_->UpdateLeftHeaderView(avatar_icon_);
   Layout();
 }
 
@@ -106,7 +104,7 @@ void HeaderView::SetBackButtonState(FrameBackButtonState state) {
     delete back_button_;
     back_button_ = nullptr;
   }
-  header_painter_->UpdateBackButton(back_button_);
+  frame_header_->UpdateBackButton(back_button_);
   Layout();
 }
 
@@ -118,15 +116,15 @@ void HeaderView::SizeConstraintsChanged() {
 
 void HeaderView::SetFrameColors(SkColor active_frame_color,
                                 SkColor inactive_frame_color) {
-  header_painter_->SetFrameColors(active_frame_color, inactive_frame_color);
+  frame_header_->SetFrameColors(active_frame_color, inactive_frame_color);
 }
 
 SkColor HeaderView::GetActiveFrameColor() const {
-  return header_painter_->GetActiveFrameColor();
+  return frame_header_->GetActiveFrameColor();
 }
 
 SkColor HeaderView::GetInactiveFrameColor() const {
-  return header_painter_->GetInactiveFrameColor();
+  return frame_header_->GetInactiveFrameColor();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -135,19 +133,21 @@ SkColor HeaderView::GetInactiveFrameColor() const {
 void HeaderView::Layout() {
   did_layout_ = true;
   if (back_button_)
-    back_button_->set_use_light_images(header_painter_->ShouldUseLightImages());
-  header_painter_->LayoutHeader();
+    back_button_->set_use_light_images(frame_header_->ShouldUseLightImages());
+  frame_header_->LayoutHeader();
 }
 
 void HeaderView::OnPaint(gfx::Canvas* canvas) {
+  if (!should_paint_)
+    return;
+
   bool paint_as_active =
       target_widget_->non_client_view()->frame_view()->ShouldPaintAsActive();
-  header_painter_->SetPaintAsActive(paint_as_active);
+  frame_header_->SetPaintAsActive(paint_as_active);
 
-  HeaderPainter::Mode header_mode = paint_as_active
-                                        ? HeaderPainter::MODE_ACTIVE
-                                        : HeaderPainter::MODE_INACTIVE;
-  header_painter_->PaintHeader(canvas, header_mode);
+  FrameHeader::Mode header_mode =
+      paint_as_active ? FrameHeader::MODE_ACTIVE : FrameHeader::MODE_INACTIVE;
+  frame_header_->PaintHeader(canvas, header_mode);
 }
 
 void HeaderView::ChildPreferredSizeChanged(views::View* child) {
@@ -158,17 +158,6 @@ void HeaderView::ChildPreferredSizeChanged(views::View* child) {
   if (child != caption_button_container_)
     return;
   parent()->Layout();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// HeaderView, ShellObserver overrides:
-
-void HeaderView::OnOverviewModeStarting() {
-  caption_button_container_->SetVisible(false);
-}
-
-void HeaderView::OnOverviewModeEnded() {
-  caption_button_container_->SetVisible(true);
 }
 
 void HeaderView::OnTabletModeStarted() {
@@ -186,6 +175,15 @@ void HeaderView::OnTabletModeEnded() {
 
 views::View* HeaderView::avatar_icon() const {
   return avatar_icon_;
+}
+
+void HeaderView::SetShouldPaintHeader(bool paint) {
+  if (should_paint_ == paint)
+    return;
+
+  should_paint_ = paint;
+  caption_button_container_->SetVisible(should_paint_);
+  SchedulePaint();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

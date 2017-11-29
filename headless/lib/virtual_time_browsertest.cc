@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "content/public/test/browser_test.h"
 #include "headless/public/devtools/domains/emulation.h"
@@ -64,7 +65,8 @@ class VirtualTimeBrowserTest : public HeadlessAsyncDevTooledBrowserTest,
   }
 
   void SetVirtualTimePolicyDone(
-      std::unique_ptr<emulation::SetVirtualTimePolicyResult>) {
+      std::unique_ptr<emulation::SetVirtualTimePolicyResult> result) {
+    EXPECT_LT(0, result->GetVirtualTimeBase());
     // Virtual time is paused, so start navigating.
     devtools_client_->GetPage()->Navigate(initial_url_);
   }
@@ -136,14 +138,14 @@ class VirtualTimeObserverTest : public VirtualTimeBrowserTest {
 
   void OnVirtualTimeAdvanced(
       const emulation::VirtualTimeAdvancedParams& params) override {
-    log_.push_back(
-        base::StringPrintf("Advanced to %dms", params.GetVirtualTimeElapsed()));
+    log_.push_back(base::StringPrintf("Advanced to %.fms",
+                                      params.GetVirtualTimeElapsed()));
   }
 
   void OnVirtualTimePaused(
       const emulation::VirtualTimePausedParams& params) override {
     log_.push_back(
-        base::StringPrintf("Paused @ %dms", params.GetVirtualTimeElapsed()));
+        base::StringPrintf("Paused @ %.fms", params.GetVirtualTimeElapsed()));
   }
 };
 
@@ -158,18 +160,20 @@ class MaxVirtualTimeTaskStarvationCountTest : public VirtualTimeBrowserTest {
                       .spec());
   }
 
-  void MaybeSetVirtualTimePolicy() override {
-    if (!page_enabled || !runtime_enabled)
+  void OnFrameStartedLoading(
+      const page::FrameStartedLoadingParams& params) override {
+    if (initial_load_seen_)
       return;
-
-    // To avoid race conditions start with virtual time paused.
+    initial_load_seen_ = true;
+    // The navigation is underway, so allow virtual time to advance while
+    // network fetches are not pending.
     devtools_client_->GetEmulation()->GetExperimental()->SetVirtualTimePolicy(
         emulation::SetVirtualTimePolicyParams::Builder()
-            .SetPolicy(emulation::VirtualTimePolicy::PAUSE)
+            .SetPolicy(
+                emulation::VirtualTimePolicy::PAUSE_IF_NETWORK_FETCHES_PENDING)
+            .SetBudget(4000)
             .SetMaxVirtualTimeTaskStarvationCount(100)
-            .Build(),
-        base::Bind(&VirtualTimeBrowserTest::SetVirtualTimePolicyDone,
-                   base::Unretained(this)));
+            .Build());
   }
 
   // emulation::Observer implementation:
@@ -279,6 +283,116 @@ class FrameDetatchWithPendingResourceLoadVirtualTimeTest
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(
     FrameDetatchWithPendingResourceLoadVirtualTimeTest);
 
+class VirtualTimeLocalStorageTest : public VirtualTimeBrowserTest {
+ public:
+  VirtualTimeLocalStorageTest() {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    SetInitialURL(embedded_test_server()
+                      ->GetURL("/virtual_time_local_storage.html")
+                      .spec());
+  }
+
+  void OnFrameStartedLoading(
+      const page::FrameStartedLoadingParams& params) override {
+    if (initial_load_seen_)
+      return;
+    initial_load_seen_ = true;
+    // The navigation is underway, so allow virtual time to advance while
+    // network fetches are not pending.
+    devtools_client_->GetEmulation()->GetExperimental()->SetVirtualTimePolicy(
+        emulation::SetVirtualTimePolicyParams::Builder()
+            .SetPolicy(
+                emulation::VirtualTimePolicy::PAUSE_IF_NETWORK_FETCHES_PENDING)
+            .SetBudget(4001)
+            .SetMaxVirtualTimeTaskStarvationCount(100)
+            .Build());
+  }
+
+  void OnConsoleAPICalled(
+      const runtime::ConsoleAPICalledParams& params) override {
+    EXPECT_EQ(runtime::ConsoleAPICalledType::LOG, params.GetType());
+    ASSERT_EQ(1u, params.GetArgs()->size());
+    ASSERT_EQ(runtime::RemoteObjectType::STRING,
+              (*params.GetArgs())[0]->GetType());
+    std::string count_string = (*params.GetArgs())[0]->GetValue()->GetString();
+    int count;
+    ASSERT_TRUE(base::StringToInt(count_string, &count)) << count_string;
+    // We don't care what exact number |count| has as long as it's not too small
+    // or too large.
+    EXPECT_GT(count, 100);
+    EXPECT_LT(count, 1000);
+    console_log_seen_ = true;
+  }
+
+  // emulation::Observer implementation:
+  void OnVirtualTimeBudgetExpired(
+      const emulation::VirtualTimeBudgetExpiredParams& params) override {
+    // If SetMaxVirtualTimeTaskStarvationCount was not set, this callback would
+    // never fire.
+    EXPECT_TRUE(console_log_seen_);
+    FinishAsynchronousTest();
+  }
+
+  bool console_log_seen_ = false;
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(VirtualTimeLocalStorageTest);
+
+class VirtualTimeSessionStorageTest : public VirtualTimeBrowserTest {
+ public:
+  VirtualTimeSessionStorageTest() {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    SetInitialURL(embedded_test_server()
+                      ->GetURL("/virtual_time_session_storage.html")
+                      .spec());
+  }
+
+  void OnFrameStartedLoading(
+      const page::FrameStartedLoadingParams& params) override {
+    if (initial_load_seen_)
+      return;
+    initial_load_seen_ = true;
+    // The navigation is underway, so allow virtual time to advance while
+    // network fetches are not pending.
+    devtools_client_->GetEmulation()->GetExperimental()->SetVirtualTimePolicy(
+        emulation::SetVirtualTimePolicyParams::Builder()
+            .SetPolicy(
+                emulation::VirtualTimePolicy::PAUSE_IF_NETWORK_FETCHES_PENDING)
+            .SetBudget(4001)
+            .SetMaxVirtualTimeTaskStarvationCount(100)
+            .Build());
+  }
+
+  void OnConsoleAPICalled(
+      const runtime::ConsoleAPICalledParams& params) override {
+    EXPECT_EQ(runtime::ConsoleAPICalledType::LOG, params.GetType());
+    ASSERT_EQ(1u, params.GetArgs()->size());
+    ASSERT_EQ(runtime::RemoteObjectType::STRING,
+              (*params.GetArgs())[0]->GetType());
+    std::string count_string = (*params.GetArgs())[0]->GetValue()->GetString();
+    int count;
+    ASSERT_TRUE(base::StringToInt(count_string, &count)) << count_string;
+    // We don't care what exact number |count| has as long as it's not too small
+    // or too large.
+    EXPECT_GT(count, 100);
+    EXPECT_LT(count, 1000);
+    console_log_seen_ = true;
+  }
+
+  // emulation::Observer implementation:
+  void OnVirtualTimeBudgetExpired(
+      const emulation::VirtualTimeBudgetExpiredParams& params) override {
+    // If SetMaxVirtualTimeTaskStarvationCount was not set, this callback would
+    // never fire.
+    EXPECT_TRUE(console_log_seen_);
+    FinishAsynchronousTest();
+  }
+
+  bool console_log_seen_ = false;
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(VirtualTimeSessionStorageTest);
+
 class DeferredLoadDoesntBlockVirtualTimeTest : public VirtualTimeBrowserTest {
  public:
   DeferredLoadDoesntBlockVirtualTimeTest() {
@@ -344,5 +458,145 @@ class RedirectVirtualTimeTest : public VirtualTimeBrowserTest {
 };
 
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(RedirectVirtualTimeTest);
+
+namespace {
+static constexpr char kFooDotCom[] = R"(
+<html>
+<body>
+<script> console.log(document.location.href); </script>
+<iframe src='/a/'></iframe>\n"
+</body>
+</html>
+)";
+
+static constexpr char kFooDotComSlashA[] = R"(
+<html>
+<body>
+<script> console.log(document.location.href); </script>
+</body>
+</html>
+)";
+
+static constexpr char kBarDotCom[] = R"(
+<html>
+<body>
+<script> console.log(document.location.href); </script>
+<iframe src='/b/' id='frame_b'></iframe>
+<iframe src='/c/'></iframe>
+</body>
+</html>
+)";
+
+static constexpr char kBarDotComSlashB[] = R"(
+<html>
+<body>
+<script> console.log(document.location.href); </script>
+<iframe src='/d/'></iframe>
+</body>
+</html>
+)";
+
+static constexpr char kBarDotComSlashC[] = R"(
+<html>
+<body>
+<script> console.log(document.location.href); </script>
+</body>
+</html>
+)";
+
+static constexpr char kBarDotComSlashD[] = R"(
+<html>
+<body>
+<script> console.log(document.location.href); </script>
+</body>
+</html>
+)";
+
+static constexpr char kBarDotComSlashE[] = R"(
+<html>
+<body>
+<script> console.log(document.location.href); </script>
+<iframe src='/f/'></iframe>
+</body>
+</html>
+)";
+
+static constexpr char kBarDotComSlashF[] = R"(
+<html>
+<body>
+<script> console.log(document.location.href); </script>
+</body>
+</html>
+)";
+
+}  // namespace
+
+class VirtualTimeAndHistoryNavigationTest : public VirtualTimeBrowserTest {
+ public:
+  VirtualTimeAndHistoryNavigationTest() { SetInitialURL("http://foo.com/"); }
+
+  ProtocolHandlerMap GetProtocolHandlers() override {
+    ProtocolHandlerMap protocol_handlers;
+    std::unique_ptr<TestInMemoryProtocolHandler> http_handler(
+        new TestInMemoryProtocolHandler(browser()->BrowserIOThread(), nullptr));
+    http_handler_ = http_handler.get();
+    http_handler->InsertResponse("http://foo.com/", {kFooDotCom, "text/html"});
+    http_handler->InsertResponse("http://foo.com/a/",
+                                 {kFooDotComSlashA, "text/html"});
+    http_handler->InsertResponse("http://bar.com/", {kBarDotCom, "text/html"});
+    http_handler->InsertResponse("http://bar.com/b/",
+                                 {kBarDotComSlashB, "text/html"});
+    http_handler->InsertResponse("http://bar.com/c/",
+                                 {kBarDotComSlashC, "text/html"});
+    http_handler->InsertResponse("http://bar.com/d/",
+                                 {kBarDotComSlashD, "text/html"});
+    http_handler->InsertResponse("http://bar.com/e/",
+                                 {kBarDotComSlashE, "text/html"});
+    http_handler->InsertResponse("http://bar.com/f/",
+                                 {kBarDotComSlashF, "text/html"});
+    protocol_handlers[url::kHttpScheme] = std::move(http_handler);
+    return protocol_handlers;
+  }
+
+  void RunDevTooledTest() override {
+    http_handler_->SetHeadlessBrowserContext(browser_context_);
+    VirtualTimeBrowserTest::RunDevTooledTest();
+  }
+
+  // emulation::Observer implementation:
+  void OnVirtualTimeBudgetExpired(
+      const emulation::VirtualTimeBudgetExpiredParams& params) override {
+    if (step_ < test_commands_.size()) {
+      devtools_client_->GetRuntime()->Evaluate(
+          test_commands_[step_++],
+          base::Bind(&VirtualTimeAndHistoryNavigationTest::OnEvaluateResult,
+                     base::Unretained(this)));
+    } else {
+      FinishAsynchronousTest();
+    }
+  }
+
+  void OnEvaluateResult(std::unique_ptr<runtime::EvaluateResult>) {
+    devtools_client_->GetEmulation()->GetExperimental()->SetVirtualTimePolicy(
+        emulation::SetVirtualTimePolicyParams::Builder()
+            .SetPolicy(
+                emulation::VirtualTimePolicy::PAUSE_IF_NETWORK_FETCHES_PENDING)
+            .SetBudget(5000)
+            .Build());
+  }
+
+  const std::vector<std::string> test_commands_ = {
+      "document.location.href = 'http://bar.com/'",
+      "document.getElementById('frame_b').src = '/e/'",
+      "history.back()",
+      "history.forward()",
+      "history.go(-1)",
+  };
+
+  size_t step_ = 0;
+  TestInMemoryProtocolHandler* http_handler_;  // NOT OWNED
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(VirtualTimeAndHistoryNavigationTest);
 
 }  // namespace headless

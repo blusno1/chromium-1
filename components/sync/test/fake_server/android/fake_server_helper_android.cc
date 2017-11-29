@@ -29,7 +29,8 @@ FakeServerHelperAndroid::FakeServerHelperAndroid(JNIEnv* env, jobject obj) {}
 
 FakeServerHelperAndroid::~FakeServerHelperAndroid() {}
 
-static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+static jlong JNI_FakeServerHelper_Init(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj) {
   FakeServerHelperAndroid* fake_server_android =
       new FakeServerHelperAndroid(env, obj);
   return reinterpret_cast<intptr_t>(fake_server_android);
@@ -145,7 +146,8 @@ void FakeServerHelperAndroid::InjectUniqueClientEntity(
 
   fake_server_ptr->InjectEntity(
       syncer::PersistentUniqueClientEntity::CreateFromEntitySpecifics(
-          base::android::ConvertJavaStringToUTF8(env, name), entity_specifics));
+          base::android::ConvertJavaStringToUTF8(env, name), entity_specifics,
+          12345, 12345));
 }
 
 void FakeServerHelperAndroid::ModifyEntitySpecifics(
@@ -308,4 +310,3 @@ void FakeServerHelperAndroid::ClearServerData(JNIEnv* env,
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
   fake_server_ptr->ClearServerData();
 }
-

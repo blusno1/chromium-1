@@ -26,6 +26,7 @@
 #ifndef PendingScript_h
 #define PendingScript_h
 
+#include "base/macros.h"
 #include "bindings/core/v8/ScriptStreamer.h"
 #include "core/CoreExport.h"
 #include "core/dom/Script.h"
@@ -33,7 +34,6 @@
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/text/TextPosition.h"
 
 namespace blink {
@@ -61,8 +61,6 @@ class CORE_EXPORT PendingScriptClient : public GarbageCollectedMixin {
 class CORE_EXPORT PendingScript
     : public GarbageCollectedFinalized<PendingScript>,
       public TraceWrapperBase {
-  WTF_MAKE_NONCOPYABLE(PendingScript);
-
  public:
   virtual ~PendingScript();
 
@@ -97,9 +95,11 @@ class CORE_EXPORT PendingScript
   virtual bool StartStreamingIfPossible(ScriptStreamer::Type, WTF::Closure) = 0;
   virtual bool IsCurrentlyStreaming() const = 0;
 
-  // The following two methods are used for document.write() intervention and
-  // have effects only for classic scripts.
-  virtual KURL UrlForClassicScript() const = 0;
+  // Used only for tracing, and can return a null URL.
+  // TODO(hiroshige): It's preferable to return the base URL consistently
+  // https://html.spec.whatwg.org/#concept-script-base-url
+  // but it requires further refactoring.
+  virtual KURL UrlForTracing() const = 0;
 
   // Used for DCHECK()s.
   bool IsExternalOrModule() const {
@@ -128,6 +128,7 @@ class CORE_EXPORT PendingScript
   double parser_blocking_load_start_time_;
 
   Member<PendingScriptClient> client_;
+  DISALLOW_COPY_AND_ASSIGN(PendingScript);
 };
 
 }  // namespace blink

@@ -124,6 +124,11 @@ class QUIC_EXPORT_PRIVATE QuicConnectionVisitorInterface {
   virtual void OnSuccessfulVersionNegotiation(
       const QuicTransportVersion& version) = 0;
 
+  // Called when a connectivity probe has been received by the connection.
+  virtual void OnConnectivityProbeReceived(
+      const QuicSocketAddress& self_address,
+      const QuicSocketAddress& peer_address) = 0;
+
   // Called when a blocked socket becomes writable.
   virtual void OnCanWrite() = 0;
 
@@ -668,9 +673,11 @@ class QUIC_EXPORT_PRIVATE QuicConnection
 
   // Sends a connectivity probing packet to |peer_address| with
   // |probing_writer|. If |probing_writer| is nullptr, will use default
-  // packet writer to write the packet.
-  void SendConnectivityProbingPacket(QuicPacketWriter* probing_writer,
-                                     const QuicSocketAddress& peer_address);
+  // packet writer to write the packet. Returns true if subsequent packets can
+  // be written to the probing writer.
+  virtual bool SendConnectivityProbingPacket(
+      QuicPacketWriter* probing_writer,
+      const QuicSocketAddress& peer_address);
 
   // Sends an MTU discovery packet of size |mtu_discovery_target_| and updates
   // the MTU discovery alarm.
@@ -712,6 +719,20 @@ class QUIC_EXPORT_PRIVATE QuicConnection
     return last_packet_source_address_;
   }
 
+  bool fill_up_link_during_probing() const {
+    return fill_up_link_during_probing_;
+  }
+  void set_fill_up_link_during_probing(bool new_value) {
+    fill_up_link_during_probing_ = new_value;
+  }
+
+  // If |defer| is true, configures the connection to defer sending packets in
+  // response to an ACK to the SendAlarm. If |defer| is false, packets may be
+  // sent immediately after receiving an ACK.
+  void set_defer_send_in_response_to_packets(bool defer) {
+    defer_send_in_response_to_packets_ = defer;
+  }
+
  protected:
   // Calls cancel() on all the alarms owned by this connection.
   void CancelAllAlarms();
@@ -742,13 +763,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
     per_packet_options_ = options;
   }
 
-  // If |defer| is true, configures the connection to defer sending packets in
-  // response to an ACK to the SendAlarm. If |defer| is false, packets may be
-  // sent immediately after receiving an ACK.
-  void set_defer_send_in_response_to_packets(bool defer) {
-    defer_send_in_response_to_packets_ = defer;
-  }
-
   PeerAddressChangeType active_peer_migration_type() {
     return active_peer_migration_type_;
   }
@@ -762,11 +776,25 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // Returns true if the packet should be discarded and not sent.
   virtual bool ShouldDiscardPacket(const SerializedPacket& packet);
 
+  // Retransmits packets continuously until blocked by the congestion control.
+  // If there are no packets to retransmit, does not do anything.
+  void SendProbingRetransmissions();
+
+  // Decides whether to send probing retransmissions, and does so if required.
+  void MaybeSendProbingRetransmissions();
+
  private:
   friend class test::QuicConnectionPeer;
   friend class test::PacketSavingConnection;
 
   typedef std::list<SerializedPacket> QueuedPacketList;
+
+  enum PacketContent {
+    NO_FRAMES_RECEIVED,
+    FIRST_FRAME_IS_PING,
+    SECOND_FRAME_IS_PADDING,
+    NOT_PADDED_PING,  // Set if the packet is not {PING, PADDING}.
+  };
 
   // Notifies the visitor of the close and marks the connection as disconnected.
   // Does not send a connection close frame to the peer.
@@ -865,7 +893,24 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // congestion controller if it is the case.
   void CheckIfApplicationLimited();
 
+  // Sets |current_packet_content_| to |type| if applicable. And
+  // starts peer miration if current packet is confirmed not a connectivity
+  // probe and |current_peer_migration_type_| indicates peer address change.
+  void UpdatePacketContent(PacketContent type);
+
   QuicFramer framer_;
+
+  // If true, server will respect client's connectivity probing packets and send
+  // connectivity probing to the source address of the received probing.
+  bool server_reply_to_connectivity_probes_;
+
+  // Contents received in the current packet, especially used to identify
+  // whether the current packet is a padded PING packet.
+  PacketContent current_packet_content_;
+  // Caches the current peer migration type if a peer migration might be
+  // initiated. As soon as the current packet is confirmed not a connectivity
+  // probe, peer migration will start.
+  PeerAddressChangeType current_peer_migration_type_;
   QuicConnectionHelperInterface* helper_;  // Not owned.
   QuicAlarmFactory* alarm_factory_;        // Not owned.
   PerPacketOptions* per_packet_options_;   // Not owned.
@@ -1108,6 +1153,21 @@ class QUIC_EXPORT_PRIVATE QuicConnection
 
   // Consecutive number of sent packets which have no retransmittable frames.
   size_t consecutive_num_packets_with_no_retransmittable_frames_;
+
+  // If true, the connection will fill up the pipe with extra data whenever the
+  // congestion controller needs it in order to make a bandwidth estimate.  This
+  // is useful if the application pesistently underutilizes the link, but still
+  // relies on having a reasonable bandwidth estimate from the connection, e.g.
+  // for real time applications.
+  bool fill_up_link_during_probing_;
+
+  // If true, the probing retransmission will not be started again.  This is
+  // used to safeguard against an accidental tail recursion in probing
+  // retransmission code.
+  bool probing_retransmission_pending_;
+
+  // Id of latest sent control frame. 0 if no control frame has been sent.
+  QuicControlFrameId last_control_frame_id_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicConnection);
 };

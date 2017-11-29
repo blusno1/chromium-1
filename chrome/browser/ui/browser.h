@@ -67,17 +67,17 @@ class BrowserSyncedWindowDelegate;
 class BrowserToolbarModelDelegate;
 class BrowserLiveTabContext;
 class BrowserWindow;
+class FastUnloadController;
 class FindBarController;
 class Profile;
 class ScopedKeepAlive;
 class StatusBubble;
 class TabStripModel;
 class TabStripModelDelegate;
+class UnloadController;
 
 namespace chrome {
 class BrowserCommandController;
-class FastUnloadController;
-class UnloadController;
 }
 
 namespace content {
@@ -828,6 +828,10 @@ class Browser : public TabStripModelObserver,
 
   bool ShouldHideUIForFullscreen() const;
 
+  // Indicates if we have called BrowserList::NotifyBrowserCloseStarted for the
+  // browser.
+  bool IsBrowserClosing() const;
+
   // Returns true if we can start the shutdown sequence for the browser, i.e.
   // the last browser window is being closed.
   bool ShouldStartShutdown() const;
@@ -929,8 +933,8 @@ class Browser : public TabStripModelObserver,
   // Tracks when this browser is being created by session restore.
   bool is_session_restore_;
 
-  std::unique_ptr<chrome::UnloadController> unload_controller_;
-  std::unique_ptr<chrome::FastUnloadController> fast_unload_controller_;
+  std::unique_ptr<UnloadController> unload_controller_;
+  std::unique_ptr<FastUnloadController> fast_unload_controller_;
 
   std::unique_ptr<ChromeBubbleManager> bubble_manager_;
 

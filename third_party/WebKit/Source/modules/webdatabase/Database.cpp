@@ -54,7 +54,7 @@
 #include "platform/WaitableEvent.h"
 #include "platform/heap/SafePoint.h"
 #include "platform/wtf/Atomics.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebDatabaseObserver.h"
@@ -324,8 +324,7 @@ bool Database::OpenAndVerifyVersion(bool set_version_in_new_database,
 
 void Database::RunCreationCallback() {
   probe::AsyncTask async_task(GetExecutionContext(), creation_callback_);
-  bool return_value;
-  creation_callback_->call(nullptr, this, return_value);
+  creation_callback_->InvokeAndReportException(nullptr, this);
   creation_callback_ = nullptr;
 }
 

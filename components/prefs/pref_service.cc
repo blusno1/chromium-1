@@ -317,7 +317,7 @@ const base::Value* PrefService::GetUserPrefValue(
   if (!user_pref_store_->GetMutableValue(path, &value))
     return nullptr;
 
-  if (!value->IsType(pref->GetType())) {
+  if (value->type() != pref->GetType()) {
     NOTREACHED() << "Pref value type doesn't match registered type.";
     return nullptr;
   }
@@ -489,7 +489,7 @@ base::Value* PrefService::GetMutableUserPref(const std::string& path,
   // exist or isn't the correct type, create a new user preference.
   base::Value* value = nullptr;
   if (!user_pref_store_->GetMutableValue(path, &value) ||
-      !value->IsType(type)) {
+      value->type() != type) {
     if (type == base::Value::Type::DICTIONARY) {
       value = new base::DictionaryValue;
     } else if (type == base::Value::Type::LIST) {
@@ -543,22 +543,14 @@ void PrefService::UpdateCommandLinePrefStore(PrefStore* command_line_store) {
 // PrefService::Preference
 
 PrefService::Preference::Preference(const PrefService* service,
-                                    const std::string& name,
+                                    std::string name,
                                     base::Value::Type type)
-    : name_(name), type_(type), pref_service_(service) {
-  DCHECK(service);
-  // Cache the registration flags at creation time to avoid multiple map lookups
-  // later.
-  registration_flags_ = service->pref_registry_->GetRegistrationFlags(name_);
-}
-
-const std::string PrefService::Preference::name() const {
-  return name_;
-}
-
-base::Value::Type PrefService::Preference::GetType() const {
-  return type_;
-}
+    : name_(std::move(name)),
+      type_(type),
+      // Cache the registration flags at creation time to avoid multiple map
+      // lookups later.
+      registration_flags_(service->pref_registry_->GetRegistrationFlags(name_)),
+      pref_service_(service) {}
 
 const base::Value* PrefService::Preference::GetValue() const {
   const base::Value* result = pref_service_->GetPreferenceValue(name_);
@@ -572,7 +564,7 @@ const base::Value* PrefService::Preference::GetRecommendedValue() const {
 
   const base::Value* found_value = nullptr;
   if (pref_value_store()->GetRecommendedValue(name_, type_, &found_value)) {
-    DCHECK(found_value->IsType(type_));
+    DCHECK(found_value->type() == type_);
     return found_value;
   }
 
@@ -636,7 +628,7 @@ const base::Value* PrefService::GetPreferenceValue(
     const base::Value* found_value = nullptr;
     base::Value::Type default_type = default_value->type();
     if (pref_value_store_->GetValue(path, default_type, &found_value)) {
-      DCHECK(found_value->IsType(default_type));
+      DCHECK(found_value->type() == default_type);
       return found_value;
     } else {
       // Every registered preference has at least a default value.

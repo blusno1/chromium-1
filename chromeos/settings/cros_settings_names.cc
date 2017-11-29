@@ -248,6 +248,11 @@ const char kDeviceLoginScreenInputMethods[] =
 // A boolean pref that matches enable-per-user-time-zone chrome://flags value.
 const char kPerUserTimezoneEnabled[] = "cros.flags.per_user_timezone_enabled";
 
+// A boolean pref that matches enable-fine-graned-time-zone-detection
+// chrome://flags value.
+const char kFineGrainedTimeZoneResolveEnabled[] =
+    "cros.flags.fine_grained_time_zone_detection_enabled";
+
 // A dictionary pref containing time intervals and ignored policies.
 // It's used to allow less restricted usage of Chrome OS during off-hours.
 // This pref is set by an admin policy.
@@ -292,5 +297,9 @@ const char kCastReceiverName[] = "cros.device.cast_receiver.name";
 // Boolean indicating whether the client needs to upload an enrollment ID
 // which can be used for automatic forced re-enrollment.
 const char kDeviceEnrollmentIdNeeded[] = "cros.device.enrollment_id_needed";
+
+// A boolean pref that indicates whether unaffiliated users are allowed to
+// use ARC.
+const char kUnaffiliatedArcAllowed[] = "cros.device.unaffiliated_arc_allowed";
 
 }  // namespace chromeos

@@ -36,6 +36,7 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "bindings/core/v8/V8Event.h"
 #include "bindings/core/v8/V8EventListener.h"
 #include "bindings/core/v8/V8HTMLCollection.h"
 #include "bindings/core/v8/V8Node.h"
@@ -113,6 +114,22 @@ void V8Window::eventAttributeGetterCustom(
 
   v8::Local<v8::Value> js_event =
       V8PrivateProperty::GetGlobalEvent(isolate).GetOrUndefined(info.Holder());
+
+  // Track usage of window.event when the event's target is inside V0 shadow
+  // tree.
+  // TODO(yukishiino): Make window.event [Replaceable] and simplify the
+  // following IsWrapper/ToImplWithTypeCheck hack.
+  if (V8DOMWrapper::IsWrapper(isolate, js_event)) {
+    if (Event* event = V8Event::ToImplWithTypeCheck(isolate, js_event)) {
+      if (event->target()) {
+        Node* target_node = event->target()->ToNode();
+        if (target_node && target_node->IsInV0ShadowTree()) {
+          UseCounter::Count(CurrentExecutionContext(isolate),
+                            WebFeature::kWindowEventInV0ShadowTree);
+        }
+      }
+    }
+  }
   V8SetReturnValue(info, js_event);
 }
 
@@ -265,6 +282,17 @@ void V8Window::openMethodCustom(
     return;
   }
 
+  // If the bindings implementation is 100% correct, the current realm and the
+  // entered realm should be same origin-domain. However, to be on the safe
+  // side and add some defense in depth, we'll check against the entered realm
+  // as well here.
+  if (!BindingSecurity::ShouldAllowAccessTo(EnteredDOMWindow(info.GetIsolate()),
+                                            impl, exception_state)) {
+    UseCounter::Count(CurrentExecutionContext(info.GetIsolate()),
+                      WebFeature::kWindowOpenRealmMismatch);
+    return;
+  }
+
   TOSTRING_VOID(V8StringResource<kTreatNullAndUndefinedAsNullString>,
                 url_string, info[0]);
   AtomicString frame_name;
@@ -346,6 +374,17 @@ void V8Window::namedPropertyGetterCustom(
   if (!BindingSecurity::ShouldAllowAccessTo(
           CurrentDOMWindow(info.GetIsolate()), window,
           BindingSecurity::ErrorReportOption::kDoNotReport)) {
+    // HTML 7.2.3.3 CrossOriginGetOwnPropertyHelper ( O, P )
+    // https://html.spec.whatwg.org/multipage/browsers.html#crossorigingetownpropertyhelper-(-o,-p-)
+    // step 3. If P is "then", @@toStringTag, @@hasInstance, or
+    //   @@isConcatSpreadable, then return PropertyDescriptor{ [[Value]]:
+    //   undefined, [[Writable]]: false, [[Enumerable]]: false,
+    //   [[Configurable]]: true }.
+    if (name == "then") {
+      V8SetReturnValueFast(info, v8::Undefined(info.GetIsolate()), window);
+      return;
+    }
+
     BindingSecurity::FailedAccessCheckFor(
         info.GetIsolate(), window->GetWrapperTypeInfo(), info.Holder());
     return;

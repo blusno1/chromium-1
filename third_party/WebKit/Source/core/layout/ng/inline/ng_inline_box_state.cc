@@ -20,6 +20,7 @@ void NGInlineBoxState::ComputeTextMetrics(const ComputedStyle& style,
                                           bool line_height_quirk) {
   text_metrics = NGLineHeightMetrics(style, baseline_type);
   text_top = -text_metrics.ascent;
+  text_height = text_metrics.LineHeight();
   text_metrics.AddLeading(style.ComputedLineHeightAsFixed());
 
   if (!line_height_quirk)
@@ -50,6 +51,20 @@ bool NGInlineBoxState::CanAddTextOfStyle(
       style->GetFont().PrimaryFont() == text_style.GetFont().PrimaryFont())
     return true;
   return false;
+}
+
+LayoutObject*
+NGInlineLayoutStateStack::ContainingLayoutObjectForAbsolutePositionObjects()
+    const {
+  for (unsigned i = stack_.size(); i-- > 1;) {
+    const auto& box = stack_[i];
+    DCHECK(box.style);
+    if (box.style->CanContainAbsolutePositionObjects()) {
+      DCHECK(box.item->GetLayoutObject());
+      return box.item->GetLayoutObject();
+    }
+  }
+  return nullptr;
 }
 
 NGInlineBoxState* NGInlineLayoutStateStack::OnBeginPlaceItems(
@@ -256,7 +271,7 @@ void NGInlineLayoutStateStack::CreateBoxFragments(
   for (const BoxFragmentPlaceholder& placeholder : box_placeholders_) {
     const ComputedStyle* style = placeholder.item->Style();
     NGFragmentBuilder box(placeholder.item->GetLayoutObject(), style,
-                          FromPlatformWritingMode(style->GetWritingMode()),
+                          style->GetWritingMode(),
                           placeholder.item->Direction());
     const NGLogicalOffset& box_offset =
         (*line_box)[placeholder.fragment_end].offset;

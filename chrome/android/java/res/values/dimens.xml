@@ -200,6 +200,7 @@
     <dimen name="control_container_height">56dp</dimen>
     <dimen name="bottom_control_container_height">56dp</dimen>
     <dimen name="custom_tabs_control_container_height">56dp</dimen>
+    <dimen name="fullscreen_activity_control_container_height">0dp</dimen>
 
     <!-- The combined height of the tab strip and toolbar. -->
     <dimen name="tab_strip_and_toolbar_height">56dp</dimen>
@@ -240,7 +241,6 @@
     <dimen name="toolbar_shadow_height">8dp</dimen>
     <dimen name="toolbar_progress_bar_height">2dp</dimen>
     <dimen name="toolbar_button_width">48dp</dimen>
-    <dimen name="toolbar_menu_button_width">42dp</dimen>
     <dimen name="toolbar_handle_height">3dp</dimen>
     <dimen name="toolbar_handle_width">20dp</dimen>
     <dimen name="toolbar_handle_corner_radius">1.5dp</dimen>
@@ -327,7 +327,9 @@
     <dimen name="tile_view_title_margin_top_modern">61dp</dimen>
     <dimen name="ntp_logo_height">116dp</dimen>
     <dimen name="ntp_logo_margin_top_modern">25dp</dimen>
-    <dimen name="ntp_logo_margin_bottom_modern">8dp</dimen>
+    <!-- bottom_control_container_height + 8 -->
+    <dimen name="ntp_logo_margin_bottom_modern">64dp</dimen>
+    <dimen name="ntp_logo_max_internal_space_bottom_modern">8dp</dimen>
     <dimen name="ntp_search_box_height">62dp</dimen>
     <dimen name="ntp_search_box_shadow_width">4dp</dimen>
     <dimen name="ntp_search_box_transition_length">16dp</dimen>
@@ -353,6 +355,9 @@
     <dimen name="snippets_offline_icon_size">18sp</dimen>
     <dimen name="ntp_suggestions_footer_padding_top">40dp</dimen>
     <dimen name="ntp_suggestions_footer_padding_bottom">18dp</dimen>
+    <dimen name="chrome_home_logo_minimum_height">1dp</dimen>
+    <!-- bottom_control_container_height - chrome_home_logo_minimum_height -->
+    <dimen name="chrome_home_suggestions_recycler_view_padding_top">55dp</dimen>
     <dimen name="chrome_home_suggestions_footer_padding_top">24dp</dimen>
     <dimen name="chrome_home_suggestions_footer_padding_bottom">24dp</dimen>
     <dimen name="content_suggestions_card_modern_margin">16dp</dimen>
@@ -374,7 +379,6 @@
     <dimen name="snackbar_shadow_height">8dp</dimen>
 
     <!-- Bookmarks dimensions -->
-    <dimen name="bookmark_item_popup_width">140dp</dimen>
     <dimen name="bookmark_folder_item_left">16dp</dimen>
     <dimen name="bookmark_minimum_dialog_size_tablet">500dp</dimen>
     <dimen name="bookmark_list_view_padding_top">64dp</dimen>
@@ -472,6 +476,7 @@
     <dimen name="list_item_start_icon_width">36dp</dimen>
     <dimen name="list_item_start_icon_corner_radius">18dp</dimen>
     <dimen name="list_item_end_icon_width">56dp</dimen>
+    <dimen name="list_menu_width">140dp</dimen>
 
     <!-- SelectableListLayout dimensions -->
     <dimen name="selectable_list_layout_row_padding">16dp</dimen>

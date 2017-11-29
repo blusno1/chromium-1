@@ -11,12 +11,10 @@
 #include "components/favicon/core/large_icon_service.h"
 #include "components/favicon_base/fallback_icon_style.h"
 #include "components/favicon_base/favicon_types.h"
-#include "components/pref_registry/pref_registry_syncable.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
-#include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/sync/synced_sessions_bridge.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_configurator.h"
@@ -136,11 +134,6 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 @synthesize addingNewFolder = _addingNewFolder;
 @synthesize editingFolderCell = _editingFolderCell;
 
-+ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
-  registry->RegisterIntegerPref(prefs::kIosBookmarkSigninPromoDisplayedCount,
-                                0);
-}
-
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                             delegate:(id<BookmarkTableViewDelegate>)delegate
                             rootNode:(const BookmarkNode*)rootNode
@@ -218,9 +211,7 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   BOOL promoVisible =
       ((_currentRootNode == self.bookmarkModel->root_node()) &&
        [self.delegate bookmarkTableViewShouldShowPromoCell:self]) ||
-      (_signinPromoViewMediator &&
-       _signinPromoViewMediator.signinPromoViewState ==
-           ios::SigninPromoViewState::SigninStarted);
+      (_signinPromoViewMediator && _signinPromoViewMediator.signinInProgress);
 
   if (promoVisible == _promoVisible) {
     return;
@@ -354,10 +345,6 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
     signinPromoCell.signinPromoView.delegate = _signinPromoViewMediator;
     [[_signinPromoViewMediator createConfigurator]
         configureSigninPromoView:signinPromoCell.signinPromoView];
-    __weak BookmarkTableView* weakSelf = self;
-    signinPromoCell.signinPromoView.closeButtonAction = ^() {
-      [weakSelf signinPromoCloseButtonAction];
-    };
     signinPromoCell.selectionStyle = UITableViewCellSelectionStyleNone;
     return signinPromoCell;
   }
@@ -516,6 +503,11 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 
 - (void)signinDidFinish {
   [self promoStateChangedAnimated:NO];
+}
+
+- (void)signinPromoViewMediatorCloseButtonWasTapped:
+    (SigninPromoViewMediator*)mediator {
+  [_delegate bookmarkTableViewDismissPromo:self];
 }
 
 #pragma mark - BookmarkModelBridgeObserver Callbacks
@@ -679,12 +671,6 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
     _editNodes = newEditNodes;
     [self.delegate bookmarkTableView:self selectedEditNodes:_editNodes];
   }
-}
-
-// Removes the sign-in promo view.
-- (void)signinPromoCloseButtonAction {
-  [_signinPromoViewMediator signinPromoViewClosed];
-  [_delegate bookmarkTableViewDismissPromo:self];
 }
 
 - (BOOL)shouldShowPromoCell {

@@ -5,6 +5,7 @@
 #ifndef CSSPaintValue_h
 #define CSSPaintValue_h
 
+#include "base/macros.h"
 #include "core/css/CSSCustomIdentValue.h"
 #include "core/css/CSSImageGeneratorValue.h"
 #include "core/css/CSSPaintImageGenerator.h"
@@ -32,13 +33,11 @@ class CSSPaintValue : public CSSImageGeneratorValue {
 
   String GetName() const;
 
-  // The |container_size| is container size with subpixel snapping, where the
-  // |logical_size| is without it. Both sizes include zoom.
+  // The |container_size| is container size with subpixel snapping.
   scoped_refptr<Image> GetImage(const ImageResourceObserver&,
                                 const Document&,
                                 const ComputedStyle&,
-                                const IntSize& container_size,
-                                const LayoutSize* logical_size);
+                                const IntSize& container_size);
   bool IsFixedSize() const { return false; }
   IntSize FixedSize(const Document&) { return IntSize(); }
 
@@ -65,12 +64,10 @@ class CSSPaintValue : public CSSImageGeneratorValue {
                 Vector<scoped_refptr<CSSVariableData>>&);
 
   class Observer final : public CSSPaintImageGenerator::Observer {
-    WTF_MAKE_NONCOPYABLE(Observer);
-
    public:
     explicit Observer(CSSPaintValue* owner_value) : owner_value_(owner_value) {}
 
-    ~Observer() override {}
+    ~Observer() override = default;
     virtual void Trace(blink::Visitor* visitor) {
       visitor->Trace(owner_value_);
       CSSPaintImageGenerator::Observer::Trace(visitor);
@@ -80,11 +77,12 @@ class CSSPaintValue : public CSSImageGeneratorValue {
 
    private:
     Member<CSSPaintValue> owner_value_;
+    DISALLOW_COPY_AND_ASSIGN(Observer);
   };
 
   void PaintImageGeneratorReady();
 
-  bool ParseInputArguments();
+  bool ParseInputArguments(const Document&);
 
   bool input_arguments_invalid_ = false;
 

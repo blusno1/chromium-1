@@ -29,7 +29,7 @@
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_service_manager.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_holder.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/accessibility/platform/ax_snapshot_node_android_platform.h"
@@ -157,8 +157,8 @@ ArcVoiceInteractionArcHomeService::ArcVoiceInteractionArcHomeService(
     : context_(context),
       arc_bridge_service_(bridge_service),
       assistant_started_timeout_(kAssistantStartedTimeout),
-      wizard_completed_timeout_(kWizardCompletedTimeout),
-      binding_(this) {
+      wizard_completed_timeout_(kWizardCompletedTimeout) {
+  arc_bridge_service_->voice_interaction_arc_home()->SetHost(this);
   arc_bridge_service_->voice_interaction_arc_home()->AddObserver(this);
   ArcSessionManager::Get()->AddObserver(this);
 }
@@ -169,6 +169,7 @@ ArcVoiceInteractionArcHomeService::~ArcVoiceInteractionArcHomeService() =
 void ArcVoiceInteractionArcHomeService::Shutdown() {
   ResetTimeouts();
   arc_bridge_service_->voice_interaction_arc_home()->RemoveObserver(this);
+  arc_bridge_service_->voice_interaction_arc_home()->SetHost(nullptr);
   ArcSessionManager::Get()->RemoveObserver(this);
 }
 
@@ -275,18 +276,7 @@ void ArcVoiceInteractionArcHomeService::OnWizardCompleteTimeout() {
   UnlockPai();
 }
 
-void ArcVoiceInteractionArcHomeService::OnInstanceReady() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  mojom::VoiceInteractionArcHomeInstance* home_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(
-          arc_bridge_service_->voice_interaction_arc_home(), Init);
-  DCHECK(home_instance);
-  mojom::VoiceInteractionArcHomeHostPtr host_proxy;
-  binding_.Bind(mojo::MakeRequest(&host_proxy));
-  home_instance->Init(std::move(host_proxy));
-}
-
-void ArcVoiceInteractionArcHomeService::OnInstanceClosed() {
+void ArcVoiceInteractionArcHomeService::OnConnectionClosed() {
   VLOG(1) << "Voice interaction instance is closed.";
   UnlockPai();
 }

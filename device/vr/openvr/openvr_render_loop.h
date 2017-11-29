@@ -25,7 +25,8 @@ class OpenVRRenderLoop : public base::Thread, mojom::VRPresentationProvider {
   OpenVRRenderLoop();
   ~OpenVRRenderLoop() override;
 
-  void RequestPresent(mojom::VRPresentationProviderRequest request,
+  void RequestPresent(mojom::VRSubmitFrameClientPtrInfo submit_client_info,
+                      mojom::VRPresentationProviderRequest request,
                       base::Callback<void(bool)> callback);
   void ExitPresent();
   base::WeakPtr<OpenVRRenderLoop> GetWeakPtr();
@@ -44,6 +45,7 @@ class OpenVRRenderLoop : public base::Thread, mojom::VRPresentationProvider {
  private:
   // base::Thread overrides:
   void Init() override;
+  void CleanUp() override;
 
   mojom::VRPosePtr GetPose();
 
@@ -58,6 +60,7 @@ class OpenVRRenderLoop : public base::Thread, mojom::VRPresentationProvider {
   gfx::Size source_size_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
   vr::IVRCompositor* vr_compositor_;
+  mojom::VRSubmitFrameClientPtr submit_client_;
   mojo::Binding<mojom::VRPresentationProvider> binding_;
   base::WeakPtrFactory<OpenVRRenderLoop> weak_ptr_factory_;
 

@@ -9,6 +9,7 @@
 #include "net/base/test_completion_callback.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
+#include "net/cert/x509_certificate.h"
 #include "net/dns/fuzzed_host_resolver.h"
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/transport_security_state.h"
@@ -21,13 +22,15 @@
 #include "net/socket/fuzzed_socket_factory.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
-#include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
-#include "net/test/test_data_directory.h"
 
 namespace net {
 
 namespace {
+
+const char kCertData[] = {
+#include "net/data/ssl/certificates/wildcard.inc"
+};
 
 class MockSSLConfigService : public SSLConfigService {
  public:
@@ -66,7 +69,8 @@ struct Env {
         std::make_unique<ChannelIDService>(new DefaultChannelIDStore(nullptr));
     cert_transparency_verifier = std::make_unique<MultiLogCTVerifier>();
     verify_details.cert_verify_result.verified_cert =
-        ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+        X509Certificate::CreateFromBytes(kCertData, arraysize(kCertData));
+    CHECK(verify_details.cert_verify_result.verified_cert);
     verify_details.cert_verify_result.is_issued_by_known_root = true;
   }
 
@@ -99,9 +103,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   HttpServerPropertiesImpl http_server_properties;
 
   bool store_server_configs_in_properties = data_provider.ConsumeBool();
+  bool close_sessions_on_ip_change = data_provider.ConsumeBool();
   bool mark_quic_broken_when_network_blackholes = data_provider.ConsumeBool();
   bool connect_using_default_network = data_provider.ConsumeBool();
   bool migrate_sessions_on_network_change = data_provider.ConsumeBool();
+  // TODO(zhongyi): fuzz with connection migration v2 on when v2 is online.
+  bool migrate_sessions_on_network_change_v2 = false;
   bool migrate_sessions_early = data_provider.ConsumeBool();
   bool allow_server_migration = data_provider.ConsumeBool();
   bool race_cert_verification = data_provider.ConsumeBool();
@@ -113,6 +120,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   if (migrate_sessions_early)
     migrate_sessions_on_network_change = true;
 
+  if (migrate_sessions_on_network_change)
+    close_sessions_on_ip_change = false;
+
   std::unique_ptr<QuicStreamFactory> factory =
       std::make_unique<QuicStreamFactory>(
           env->net_log.net_log(), &host_resolver, env->ssl_config_service.get(),
@@ -121,21 +131,24 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
           &env->transport_security_state, env->cert_transparency_verifier.get(),
           nullptr, &env->crypto_client_stream_factory, &env->random_generator,
           &env->clock, kDefaultMaxPacketSize, std::string(),
-          store_server_configs_in_properties,
+          store_server_configs_in_properties, close_sessions_on_ip_change,
           mark_quic_broken_when_network_blackholes,
           kIdleConnectionTimeoutSeconds, kPingTimeoutSecs,
+          kMaxTimeForCryptoHandshakeSecs, kInitialIdleTimeoutSecs,
           connect_using_default_network, migrate_sessions_on_network_change,
-          migrate_sessions_early, allow_server_migration,
-          race_cert_verification, estimate_initial_rtt, env->connection_options,
-          env->client_connection_options, enable_token_binding);
+          migrate_sessions_on_network_change_v2, migrate_sessions_early,
+          allow_server_migration, race_cert_verification, estimate_initial_rtt,
+          env->connection_options, env->client_connection_options,
+          enable_token_binding);
 
   QuicStreamRequest request(factory.get());
   TestCompletionCallback callback;
   NetErrorDetails net_error_details;
   request.Request(env->host_port_pair,
                   data_provider.PickValueInArray(kSupportedTransportVersions),
-                  PRIVACY_MODE_DISABLED, kCertVerifyFlags, GURL(kUrl),
-                  env->net_log, &net_error_details, callback.callback());
+                  PRIVACY_MODE_DISABLED, DEFAULT_PRIORITY, kCertVerifyFlags,
+                  GURL(kUrl), env->net_log, &net_error_details,
+                  callback.callback());
 
   callback.WaitForResult();
   std::unique_ptr<QuicChromiumClientSession::Handle> session =

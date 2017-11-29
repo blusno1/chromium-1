@@ -201,8 +201,6 @@ static_library("extensions") {
     "api/gcm/gcm_api.h",
     "api/history/history_api.cc",
     "api/history/history_api.h",
-    "api/hotword_private/hotword_private_api.cc",
-    "api/hotword_private/hotword_private_api.h",
     "api/i18n/i18n_api.cc",
     "api/i18n/i18n_api.h",
     "api/identity/extension_token_key.cc",
@@ -976,7 +974,7 @@ static_library("extensions") {
     }
     deps += [
       "//ash",
-      "//ash/public/cpp:ash_public_cpp",
+      "//ash/public/cpp",
       "//components/arc",
       "//components/chrome_apps",
       "//components/constrained_window",
@@ -1076,6 +1074,7 @@ static_library("extensions") {
 
   if (is_win) {
     deps += [
+      "//chrome/services/wifi_util_win/public/interfaces",
       "//third_party/iaccessible2",
       "//third_party/isimpledom",
     ]
@@ -1113,10 +1112,6 @@ static_library("extensions") {
       "api/launcher_page/launcher_page_api.cc",
       "api/launcher_page/launcher_page_api.h",
     ]
-  }
-
-  if (enable_hotwording) {
-    defines += [ "ENABLE_HOTWORDING" ]
   }
 
   if (enable_service_discovery) {

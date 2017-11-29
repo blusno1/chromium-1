@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/arc/cast_receiver/arc_cast_receiver_service.h"
 
+#include <string>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/ptr_util.h"
@@ -77,7 +79,7 @@ ArcCastReceiverService::~ArcCastReceiverService() {
   arc_bridge_service_->cast_receiver()->RemoveObserver(this);
 }
 
-void ArcCastReceiverService::OnInstanceReady() {
+void ArcCastReceiverService::OnConnectionReady() {
   // Push all existing preferences to the Cast Receiver. Always end with
   // the preference for enabling the receiver so that it does not show up
   // briefly with the wrong settings (e.g. its name).

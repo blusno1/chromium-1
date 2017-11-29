@@ -21,7 +21,6 @@
 #import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
-#include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/bookmarks_test_util.h"
@@ -44,6 +43,7 @@
 #error "This file requires ARC support."
 #endif
 
+using chrome_test_util::BookmarksMenuButton;
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::PrimarySignInButton;
@@ -131,13 +131,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   scoped_feature_list.InitAndEnableFeature(kBookmarkNewGeneration);
   [super setUp];
 
-  // Wait for bookmark model to be loaded.
-  GREYAssert(testing::WaitUntilConditionOrTimeout(
-                 testing::kWaitForUIElementTimeout,
-                 ^{
-                   return chrome_test_util::BookmarksLoaded();
-                 }),
-             @"Bookmark model did not load");
+  [ChromeEarlGrey waitForBookmarksToFinishLoading];
   GREYAssert(chrome_test_util::ClearBookmarks(),
              @"Not all bookmarks were removed.");
 }
@@ -2004,8 +1998,8 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   // Check the sign-in promo view is visible.
   [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState];
-  // Check the sign-in promo will not be shown anymore.
-  [BookmarksNewGenTestCase verifyPromoAlreadySeen:YES];
+  // Check the sign-in promo already-seen state didn't change.
+  [BookmarksNewGenTestCase verifyPromoAlreadySeen:NO];
   GREYAssertEqual(
       20, prefs->GetInteger(prefs::kIosBookmarkSigninPromoDisplayedCount),
       @"Should have incremented the display count");
@@ -2057,7 +2051,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   [BookmarksNewGenTestCase openBookmarks];
   [BookmarksNewGenTestCase openMobileBookmarks];
 
-  // Verify the bottom URL is not visible (make sure
+  // Verify bottom URL is not visible before scrolling to bottom (make sure
   // setupBookmarksWhichExceedsScreenHeight works as expected).
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Bottom URL")]
       assertWithMatcher:grey_notVisible()];
@@ -2201,13 +2195,23 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(kBookmarkNewGeneration);
 
-  [BookmarksNewGenTestCase setupStandardBookmarks];
+  [BookmarksNewGenTestCase setupBookmarksWhichExceedsScreenHeight];
   [BookmarksNewGenTestCase openBookmarks];
   [BookmarksNewGenTestCase openMobileBookmarks];
 
   // Select Folder 1.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 1")]
       performAction:grey_tap()];
+
+  // Verify Bottom 1 is not visible before scrolling to bottom (make sure
+  // setupBookmarksWhichExceedsScreenHeight works as expected).
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Bottom 1")]
+      assertWithMatcher:grey_notVisible()];
+
+  // Scroll to the bottom so that Bottom 1 is visible.
+  [BookmarksNewGenTestCase scrollToBottom];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Bottom 1")]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
   // Close bookmarks
   [[EarlGrey selectElementWithMatcher:BookmarksDoneButton()]
@@ -2216,8 +2220,9 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
   // Reopen bookmarks.
   [BookmarksNewGenTestCase openBookmarks];
 
-  // Ensure the contents of Folder 1 is visible.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 2")]
+  // Ensure the Bottom 1 of Folder 1 is visible.  That means both folder and
+  // scroll position are restored successfully.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Bottom 1")]
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
@@ -2458,16 +2463,12 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
 
 // Navigates to the bookmark manager UI.
 + (void)openBookmarks {
-  [ChromeEarlGreyUI openToolsMenu];
-
   // Opens the bookmark manager.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(kToolsMenuBookmarksId)]
-      performAction:grey_tap()];
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI tapToolsMenuButton:BookmarksMenuButton()];
 
-  // Wait for it to load, and the menu to go away.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(kToolsMenuBookmarksId)]
+  // Assert the menu is gone.
+  [[EarlGrey selectElementWithMatcher:BookmarksMenuButton()]
       assertWithMatcher:grey_nil()];
 }
 
@@ -2537,12 +2538,23 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
                          base::SysNSStringToUTF16(@"Bottom URL"), dummyURL);
 
   NSString* dummyTitle = @"Dummy URL";
-  for (int i = 0; i < 30; i++) {
+  for (int i = 0; i < 15; i++) {
     bookmark_model->AddURL(bookmark_model->mobile_node(), 0,
                            base::SysNSStringToUTF16(dummyTitle), dummyURL);
   }
+  NSString* folderTitle = @"Folder 1";
+  const bookmarks::BookmarkNode* folder1 = bookmark_model->AddFolder(
+      bookmark_model->mobile_node(), 0, base::SysNSStringToUTF16(folderTitle));
   bookmark_model->AddURL(bookmark_model->mobile_node(), 0,
                          base::SysNSStringToUTF16(@"Top URL"), dummyURL);
+
+  // Add URLs to Folder 1.
+  bookmark_model->AddURL(folder1, 0, base::SysNSStringToUTF16(@"Bottom 1"),
+                         dummyURL);
+  for (int i = 0; i < 15; i++) {
+    bookmark_model->AddURL(folder1, 0, base::SysNSStringToUTF16(dummyTitle),
+                           dummyURL);
+  }
 }
 
 // Selects MobileBookmarks to open.
@@ -3052,8 +3064,7 @@ id<GREYMatcher> TappableBookmarkNodeWithLabel(NSString* label) {
 //    disabled and empty background appears when _currentRootNode becomes NULL
 //    (maybe programmatically remove the current root node from model, and
 //    trigger a sync).
-// 4. Restoring y position when opening from cache.
-// 5. Test new folder name is committed when name editing is interrupted by
+// 4. Test new folder name is committed when name editing is interrupted by
 //    tapping context bar buttons.
 
 @end

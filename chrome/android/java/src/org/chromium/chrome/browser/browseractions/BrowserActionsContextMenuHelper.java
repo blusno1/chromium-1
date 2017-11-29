@@ -8,12 +8,20 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.app.PendingIntent.CanceledException;
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.res.Resources;
+import android.content.res.Resources.NotFoundException;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.support.annotation.IntDef;
 import android.support.customtabs.browseractions.BrowserActionItem;
 import android.support.customtabs.browseractions.BrowserActionsIntent;
 import android.support.customtabs.browseractions.BrowserActionsIntent.BrowserActionsItemId;
+import android.support.v4.content.res.ResourcesCompat;
+import android.support.v7.content.res.AppCompatResources;
 import android.util.Pair;
 import android.util.SparseArray;
 import android.view.ContextMenu;
@@ -23,6 +31,7 @@ import android.view.View.OnAttachStateChangeListener;
 import android.view.View.OnCreateContextMenuListener;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
@@ -166,7 +175,7 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
         mOnBrowserActionSelectedCallback = onBrowserActionSelectedCallback;
         mProgressDialog = new ProgressDialog(mActivity);
 
-        mItems = buildContextMenuItems(customItems);
+        mItems = buildContextMenuItems(customItems, sourcePackageName);
     }
 
     /**
@@ -183,11 +192,11 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
      * Builds items for Browser Actions context menu.
      */
     private List<Pair<Integer, List<ContextMenuItem>>> buildContextMenuItems(
-            List<BrowserActionItem> customItems) {
+            List<BrowserActionItem> customItems, String sourcePackageName) {
         List<Pair<Integer, List<ContextMenuItem>>> menuItems = new ArrayList<>();
         List<ContextMenuItem> items = new ArrayList<>();
         items.addAll(mBrowserActionsLinkGroup);
-        addBrowserActionItems(items, customItems);
+        addBrowserActionItems(items, customItems, sourcePackageName);
 
         menuItems.add(new Pair<>(R.string.contextmenu_link_title, items));
         return menuItems;
@@ -197,12 +206,39 @@ public class BrowserActionsContextMenuHelper implements OnCreateContextMenuListe
      * Adds custom items to the context menu list and populates custom item action map.
      * @param items List of {@link ContextMenuItem} to display the context menu.
      * @param customItems List of {@link BrowserActionItem} for custom items.
+     * @param sourcePackageName The package name of the requested app.
      */
-    private void addBrowserActionItems(
-            List<ContextMenuItem> items, List<BrowserActionItem> customItems) {
+    private void addBrowserActionItems(List<ContextMenuItem> items,
+            List<BrowserActionItem> customItems, String sourcePackageName) {
+        PackageManager pm = ContextUtils.getApplicationContext().getPackageManager();
+        Resources resources = null;
+        try {
+            resources = pm.getResourcesForApplication(sourcePackageName);
+        } catch (NameNotFoundException e) {
+            Log.e(TAG, "Fail to find the resources", e);
+        }
         for (int i = 0; i < customItems.size() && i < BrowserActionsIntent.MAX_CUSTOM_ITEMS; i++) {
-            items.add(new BrowserActionsCustomContextMenuItem(
-                    CUSTOM_BROWSER_ACTIONS_ID_GROUP.get(i), customItems.get(i)));
+            Drawable drawable = null;
+            if (resources != null && customItems.get(i).getIconId() != 0) {
+                try {
+                    drawable = ResourcesCompat.getDrawable(
+                            resources, customItems.get(i).getIconId(), null);
+                } catch (NotFoundException e1) {
+                    try {
+                        Context context = mActivity.createPackageContext(sourcePackageName,
+                                Context.CONTEXT_IGNORE_SECURITY | Context.CONTEXT_INCLUDE_CODE);
+                        drawable = AppCompatResources.getDrawable(
+                                context, customItems.get(i).getIconId());
+                    } catch (NameNotFoundException e2) {
+                        Log.e(TAG, "Cannot find the package name %s", sourcePackageName, e2);
+                    } catch (NotFoundException e3) {
+                        Log.e(TAG, "Cannot get Drawable for %s", customItems.get(i).getTitle(), e3);
+                    }
+                }
+            }
+            items.add(
+                    new BrowserActionsCustomContextMenuItem(CUSTOM_BROWSER_ACTIONS_ID_GROUP.get(i),
+                            customItems.get(i).getTitle(), drawable));
             mCustomItemActionMap.put(
                     CUSTOM_BROWSER_ACTIONS_ID_GROUP.get(i), customItems.get(i).getAction());
         }

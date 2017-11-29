@@ -36,14 +36,6 @@ using metrics::OmniboxEventProto;
 
 namespace omnibox {
 
-// Feature used to enable the new set of answers in suggest types (currency,
-// dictionary, sports, translation, when is). Note that the state of this
-// Feature is not consulted anywhere in the code. It is only used to force a
-// Finch experiment arm which sends an experiment ID to GWS which triggers
-// serving the new types.
-const base::Feature kNewOmniboxAnswerTypes{"NewOmniboxAnswerTypes",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Feature used to enable the transmission of entity suggestions from GWS
 // to this client.
 const base::Feature kOmniboxEntitySuggestions{
@@ -165,6 +157,11 @@ const base::Feature kSpeculativeServiceWorkerStartOnQueryInput{
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
+
+// Feature used to allow breaking words at underscores in building
+// URLIndexPrivateData.
+const base::Feature kBreakWordsAtUnderscores{"OmniboxBreakWordsAtUnderscores",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_IOS)
 // Feature used to enable ZeroSuggestProvider on iOS.
@@ -328,6 +325,7 @@ bool OmniboxFieldTrial::InZeroSuggestMostVisitedWithoutSerpFieldTrial(
 #endif
 }
 
+// static
 bool OmniboxFieldTrial::InZeroSuggestPersonalizedFieldTrial(
     PrefService* prefs) {
   std::string variant(variations::GetVariationParamValue(
@@ -548,15 +546,27 @@ float OmniboxFieldTrial::HQPExperimentalTopicalityThreshold() {
 
 int OmniboxFieldTrial::MaxNumHQPUrlsIndexedAtStartup() {
   const char* param = kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevicesParam;
-  if (base::SysInfo::IsLowEndDevice())
+  const bool is_low_end_device = base::SysInfo::IsLowEndDevice();
+  if (is_low_end_device)
     param = kMaxNumHQPUrlsIndexedAtStartupOnLowEndDevicesParam;
   std::string param_value(variations::GetVariationParamValue(
       kBundledExperimentFieldTrialName, param));
   int num_urls;
   if (base::StringToInt(param_value, &num_urls))
     return num_urls;
+
+#if defined(OS_ANDROID)
+  // Limits on Android are chosen based on experiment results. See
+  // crbug.com/715852#c18.
+  constexpr int kMaxNumHQPUrlsIndexedAtStartupOnLowEndDevices = 100;
+  constexpr int kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevices = 1000;
+  if (is_low_end_device)
+    return kMaxNumHQPUrlsIndexedAtStartupOnLowEndDevices;
+  return kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevices;
+#else
   // Default value is set to -1 for unlimited number of urls.
   return -1;
+#endif  // defined(OS_ANDROID)
 }
 
 size_t OmniboxFieldTrial::HQPMaxVisitsToScore() {

@@ -259,8 +259,28 @@ void KeyboardController::NotifyContentsBoundsChanging(
     const gfx::Rect& new_bounds) {
   current_keyboard_bounds_ = new_bounds;
   if (ui_->HasContentsWindow() && ui_->GetContentsWindow()->IsVisible()) {
-    for (KeyboardControllerObserver& observer : observer_list_)
+    for (KeyboardControllerObserver& observer : observer_list_) {
+      observer.OnKeyboardAvailabilityChanging(!new_bounds.IsEmpty());
+      observer.OnKeyboardVisibleBoundsChanging(new_bounds);
+
+      // TODO(blakeo): reduce redundant successive calls with that have
+      // identical bounds.
+      const gfx::Rect obscured_workspace_region =
+          container_behavior_->BoundsObscureUsableRegion() ? new_bounds
+                                                           : gfx::Rect();
+      observer.OnKeyboardWorkspaceOccludedBoundsChanging(
+          obscured_workspace_region);
+
+      const gfx::Rect workspace_layout_offset_region =
+          container_behavior_->BoundsAffectWorkspaceLayout() ? new_bounds
+                                                             : gfx::Rect();
+      observer.OnKeyboardWorkspaceDisplacingBoundsChanging(
+          workspace_layout_offset_region);
+
+      // TODO(blakeo): remove this when all consumers have migrated to one of
+      // the notifications above.
       observer.OnKeyboardBoundsChanging(new_bounds);
+    }
     if (keyboard::IsKeyboardOverscrollEnabled())
       ui_->InitInsets(new_bounds);
     else
@@ -700,6 +720,14 @@ void KeyboardController::ChangeState(KeyboardControllerState state) {
 void KeyboardController::ReportLingeringState() {
   UMA_HISTOGRAM_ENUMERATION("VirtualKeyboard.LingeringIntermediateState",
                             state_, KeyboardControllerState::COUNT);
+}
+
+const gfx::Rect KeyboardController::GetWorkspaceObscuringBounds() const {
+  if (keyboard_visible() &&
+      container_behavior_->BoundsAffectWorkspaceLayout()) {
+    return current_keyboard_bounds_;
+  }
+  return gfx::Rect();
 }
 
 const gfx::Rect KeyboardController::AdjustSetBoundsRequest(

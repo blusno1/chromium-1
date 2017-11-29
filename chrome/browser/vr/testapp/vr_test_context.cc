@@ -13,14 +13,13 @@
 #include "chrome/browser/vr/controller_mesh.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
+#include "chrome/browser/vr/model/toolbar_state.h"
 #include "chrome/browser/vr/test/constants.h"
-#include "chrome/browser/vr/toolbar_state.h"
 #include "chrome/browser/vr/ui.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
 #include "chrome/browser/vr/ui_input_manager.h"
 #include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
-#include "chrome/browser/vr/ui_scene_manager.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/security_state/core/security_state.h"
 #include "components/toolbar/vector_icons.h"
@@ -65,20 +64,22 @@ VrTestContext::VrTestContext() : view_scale_factor_(kDefaultViewScaleFactor) {
   base::i18n::InitializeICU();
 
   ui_ = base::MakeUnique<Ui>(this, nullptr, UiInitialState());
+  model_ = ui_->model_for_test();
 
-  GURL gurl("https://dangerous.com/dir/file.html");
-  ToolbarState state(gurl, security_state::SecurityLevel::DANGEROUS,
-                     &toolbar::kHttpsInvalidIcon,
-                     base::UTF8ToUTF16("Not secure"), true, false);
+  ToolbarState state(GURL("https://dangerous.com/dir/file.html"),
+                     security_state::SecurityLevel::HTTP_SHOW_WARNING,
+                     &toolbar::kHttpIcon, base::string16(), true, false);
   ui_->SetToolbarState(state);
   ui_->SetHistoryButtonsEnabled(true, true);
   ui_->SetLoading(true);
   ui_->SetLoadProgress(0.4);
-  ui_->SetVideoCapturingIndicator(true);
-  ui_->SetScreenCapturingIndicator(true);
-  ui_->SetAudioCapturingIndicator(true);
-  ui_->SetBluetoothConnectedIndicator(true);
-  ui_->SetLocationAccessIndicator(true);
+  ui_->SetVideoCaptureEnabled(true);
+  ui_->SetScreenCaptureEnabled(true);
+  ui_->SetAudioCaptureEnabled(true);
+  ui_->SetBluetoothConnected(true);
+  ui_->SetLocationAccess(true);
+  ui_->input_manager()->set_hit_test_strategy(
+      UiInputManager::PROJECT_TO_LASER_ORIGIN_FOR_TEST);
 }
 
 VrTestContext::~VrTestContext() = default;
@@ -89,16 +90,16 @@ void VrTestContext::DrawFrame() {
   RenderInfo render_info;
   render_info.head_pose = head_pose_;
   render_info.surface_texture_size = window_size_;
-  render_info.left_eye_info.viewport = gfx::Rect(window_size_);
-  render_info.left_eye_info.view_matrix = head_pose_;
-  render_info.left_eye_info.proj_matrix = ProjectionMatrix();
-  render_info.left_eye_info.view_proj_matrix = ViewProjectionMatrix();
+  render_info.left_eye_model.viewport = gfx::Rect(window_size_);
+  render_info.left_eye_model.view_matrix = head_pose_;
+  render_info.left_eye_model.proj_matrix = ProjectionMatrix();
+  render_info.left_eye_model.view_proj_matrix = ViewProjectionMatrix();
 
   UpdateController();
 
   // Update the render position of all UI elements (including desktop).
   ui_->scene()->OnBeginFrame(current_time, kForwardVector);
-  ui_->OnProjMatrixChanged(render_info.left_eye_info.proj_matrix);
+  ui_->OnProjMatrixChanged(render_info.left_eye_model.proj_matrix);
   ui_->ui_renderer()->Draw(render_info);
 
   // TODO(cjgrant): Render viewport-aware elements.
@@ -124,10 +125,21 @@ void VrTestContext::HandleInput(ui::Event* event) {
         incognito_ = !incognito_;
         ui_->SetIncognito(incognito_);
         break;
-      case ui::DomCode::US_S: {
+      case ui::DomCode::US_O:
         CreateFakeOmniboxSuggestions();
         break;
-      }
+      case ui::DomCode::US_D:
+        ui_->Dump();
+        break;
+      case ui::DomCode::US_V:
+        ui_->SetVideoCaptureEnabled(!model_->permissions.video_capture_enabled);
+        break;
+      case ui::DomCode::US_W:
+        CycleWebVrModes();
+        break;
+      case ui::DomCode::US_S:
+        ToggleSplashScreen();
+        break;
       default:
         break;
     }
@@ -189,8 +201,17 @@ void VrTestContext::HandleInput(ui::Event* event) {
 }
 
 ControllerModel VrTestContext::UpdateController() {
-  // We first comput two points behind the mouse position in normalized device
-  // coordinates. The z components are arbitrary.
+  // We could map mouse position to controller position, and skip this logic,
+  // but it will make targeting elements with a mouse feel strange and not
+  // mouse-like. Instead, we make the reticle track the mouse position linearly
+  // by working from reticle position backwards to compute controller position.
+  // We also don't apply the elbow model (the controller pivots around its
+  // centroid), so do not expect the positioning of the controller in the test
+  // app to exactly match what will happen in production.
+  //
+  // We first set up a controller model that simulates firing the laser directly
+  // through a screen pixel. We do this by computing two points behind the mouse
+  // position in normalized device coordinates. The z components are arbitrary.
   gfx::Point3F mouse_point_far(
       2.0 * last_mouse_point_.x() / window_size_.width() - 1.0,
       -2.0 * last_mouse_point_.y() / window_size_.height() + 1.0, 0.8);
@@ -246,10 +267,9 @@ ControllerModel VrTestContext::UpdateController() {
   return controller_model;
 }
 
-void VrTestContext::OnGlInitialized(const gfx::Size& window_size) {
+void VrTestContext::OnGlInitialized() {
   unsigned int content_texture_id = CreateFakeContentTexture();
 
-  window_size_ = window_size;
   ui_->OnGlInitialized(content_texture_id,
                        UiElementRenderer::kTextureLocationLocal, false);
 
@@ -288,34 +308,82 @@ void VrTestContext::CreateFakeOmniboxSuggestions() {
     result->suggestions.emplace_back(OmniboxSuggestion(
         base::UTF8ToUTF16("Suggestion ") + base::IntToString16(i + 1),
         base::UTF8ToUTF16("Description text"),
-        AutocompleteMatch::Type::VOICE_SUGGEST));
+        AutocompleteMatch::Type::VOICE_SUGGEST, GURL("http://www.test.com/")));
   }
   ui_->SetOmniboxSuggestions(std::move(result));
 }
 
+void VrTestContext::CycleWebVrModes() {
+  switch (model_->web_vr_timeout_state) {
+    case kWebVrNoTimeoutPending:
+      ui_->SetWebVrMode(true, true);
+      break;
+    case kWebVrAwaitingFirstFrame:
+      ui_->OnWebVrTimeoutImminent();
+      break;
+    case kWebVrTimeoutImminent:
+      ui_->OnWebVrTimedOut();
+      break;
+    case kWebVrTimedOut:
+      ui_->SetWebVrMode(false, false);
+      break;
+  }
+}
+
+void VrTestContext::ToggleSplashScreen() {
+  if (!show_web_vr_splash_screen_) {
+    UiInitialState state;
+    state.web_vr_autopresentation_expected = true;
+    ui_->ReinitializeForTest(state);
+  } else {
+    ui_->ReinitializeForTest(UiInitialState());
+  }
+  show_web_vr_splash_screen_ = !show_web_vr_splash_screen_;
+}
+
 gfx::Transform VrTestContext::ProjectionMatrix() const {
-  return gfx::Transform(view_scale_factor_, 0, 0, 0, 0, view_scale_factor_, 0,
-                        0, 0, 0, -1, 0, 0, 0, -1, 0.5);
+  gfx::Transform transform(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, -1, 0.5);
+  if (window_size_.height() > 0) {
+    transform.Scale(
+        view_scale_factor_,
+        view_scale_factor_ * window_size_.width() / window_size_.height());
+  }
+  return transform;
 }
 
 gfx::Transform VrTestContext::ViewProjectionMatrix() const {
   return ProjectionMatrix() * head_pose_;
 }
 
-void VrTestContext::SetVoiceSearchActive(bool active) {}
+void VrTestContext::SetVoiceSearchActive(bool active) {
+  OnUnsupportedMode(UiUnsupportedMode::kAndroidPermissionNeeded);
+}
 void VrTestContext::ExitPresent() {}
 void VrTestContext::ExitFullscreen() {}
+
+void VrTestContext::Navigate(GURL gurl) {
+  ToolbarState state(gurl, security_state::SecurityLevel::HTTP_SHOW_WARNING,
+                     &toolbar::kHttpIcon, base::string16(), true, false);
+  ui_->SetToolbarState(state);
+}
+
 void VrTestContext::NavigateBack() {}
 void VrTestContext::ExitCct() {}
+
 void VrTestContext::OnUnsupportedMode(vr::UiUnsupportedMode mode) {
-  if (mode == UiUnsupportedMode::kUnhandledPageInfo)
+  if (mode == UiUnsupportedMode::kUnhandledPageInfo ||
+      mode == UiUnsupportedMode::kAndroidPermissionNeeded) {
     ui_->SetExitVrPromptEnabled(true, mode);
+  }
 }
-void VrTestContext::OnExitVrPromptResult(vr::UiUnsupportedMode reason,
-                                         vr::ExitVrPromptChoice choice) {
+void VrTestContext::OnExitVrPromptResult(vr::ExitVrPromptChoice choice,
+                                         vr::UiUnsupportedMode reason) {
   LOG(ERROR) << "exit prompt result: " << choice;
   ui_->SetExitVrPromptEnabled(false, UiUnsupportedMode::kCount);
 }
+
 void VrTestContext::OnContentScreenBoundsChanged(const gfx::SizeF& bounds) {}
+void VrTestContext::StartAutocomplete(const base::string16& string) {}
+void VrTestContext::StopAutocomplete() {}
 
 }  // namespace vr

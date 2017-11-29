@@ -8,10 +8,9 @@
 #error "This file requires ARC support."
 #endif
 
-const int64_t kNonInitialImageAdditionDelayNanosec = 500000LL;
+const CGFloat kToolbarHeight = 56;
 
-NSString* const kMenuWillShowNotification = @"kMenuWillShowNotification";
-NSString* const kMenuWillHideNotification = @"kMenuWillHideNotification";
+const int64_t kNonInitialImageAdditionDelayNanosec = 500000LL;
 
 NSString* const kToolbarIdentifier = @"kToolbarIdentifier";
 NSString* const kIncognitoToolbarIdentifier = @"kIncognitoToolbarIdentifier";

@@ -17,16 +17,15 @@ static_library("vr_common") {
   sources = [
     "animation_player.cc",
     "animation_player.h",
+    "assets.cc",
+    "assets.h",
     "browser_ui_interface.h",
-    "color_scheme.cc",
-    "color_scheme.h",
     "content_input_delegate.cc",
     "content_input_delegate.h",
     "controller_mesh.h",
     "cpu_surface_provider.cc",
     "cpu_surface_provider.h",
     "databinding/binding.h",
-    "databinding/binding_base.cc",
     "databinding/binding_base.h",
     "databinding/vector_binding.h",
     "databinding/vector_element_binding.h",
@@ -40,9 +39,8 @@ static_library("vr_common") {
     "elements/content_element.h",
     "elements/controller.cc",
     "elements/controller.h",
+    "elements/draw_phase.cc",
     "elements/draw_phase.h",
-    "elements/exclusive_screen_toast.cc",
-    "elements/exclusive_screen_toast.h",
     "elements/exclusive_screen_toast_texture.cc",
     "elements/exclusive_screen_toast_texture.h",
     "elements/exit_prompt.cc",
@@ -67,15 +65,21 @@ static_library("vr_common") {
     "elements/render_text_wrapper.h",
     "elements/reticle.cc",
     "elements/reticle.h",
+    "elements/scaled_depth_adjuster.cc",
+    "elements/scaled_depth_adjuster.h",
+    "elements/shadow.cc",
+    "elements/shadow.h",
     "elements/simple_textured_element.h",
     "elements/spinner.cc",
     "elements/spinner.h",
-    "elements/system_indicator.cc",
-    "elements/system_indicator.h",
+    "elements/suggestion.cc",
+    "elements/suggestion.h",
     "elements/system_indicator_texture.cc",
     "elements/system_indicator_texture.h",
     "elements/text.cc",
     "elements/text.h",
+    "elements/text_input.cc",
+    "elements/text_input.h",
     "elements/textured_element.cc",
     "elements/textured_element.h",
     "elements/throbber.cc",
@@ -87,6 +91,8 @@ static_library("vr_common") {
     "elements/ui_element_iterator.h",
     "elements/ui_element_name.cc",
     "elements/ui_element_name.h",
+    "elements/ui_element_type.cc",
+    "elements/ui_element_type.h",
     "elements/ui_texture.cc",
     "elements/ui_texture.h",
     "elements/url_bar.cc",
@@ -113,13 +119,20 @@ static_library("vr_common") {
     "gltf_parser.cc",
     "gltf_parser.h",
     "macros.h",
+    "model/color_scheme.cc",
+    "model/color_scheme.h",
     "model/controller_model.h",
+    "model/modal_prompt_type.cc",
+    "model/modal_prompt_type.h",
     "model/model.cc",
     "model/model.h",
     "model/omnibox_suggestions.cc",
     "model/omnibox_suggestions.h",
+    "model/permissions_model.h",
     "model/reticle_model.h",
     "model/speech_recognition_model.h",
+    "model/toolbar_state.cc",
+    "model/toolbar_state.h",
     "model/web_vr_timeout_state.h",
     "pose_util.cc",
     "pose_util.h",
@@ -147,8 +160,6 @@ static_library("vr_common") {
     "target_property.h",
     "toolbar_helper.cc",
     "toolbar_helper.h",
-    "toolbar_state.cc",
-    "toolbar_state.h",
     "transition.cc",
     "transition.h",
     "ui.cc",
@@ -162,8 +173,8 @@ static_library("vr_common") {
     "ui_renderer.h",
     "ui_scene.cc",
     "ui_scene.h",
-    "ui_scene_manager.cc",
-    "ui_scene_manager.h",
+    "ui_scene_creator.cc",
+    "ui_scene_creator.h",
     "ui_unsupported_mode.h",
     "vr_gl_util.cc",
     "vr_gl_util.h",
@@ -213,6 +224,8 @@ test("vr_common_unittests") {
     "elements/exit_prompt_unittest.cc",
     "elements/linear_layout_unittest.cc",
     "elements/rect_unittest.cc",
+    "elements/scaled_depth_adjuster_unittest.cc",
+    "elements/shadow_unittest.cc",
     "elements/spinner_unittest.cc",
     "elements/throbber_unittest.cc",
     "elements/transient_element_unittest.cc",
@@ -226,27 +239,16 @@ test("vr_common_unittests") {
     "pose_util_unittest.cc",
     "service/vr_device_manager_unittest.cc",
     "speech_recognizer_unittest.cc",
-    "test/animation_utils.cc",
-    "test/animation_utils.h",
     "test/fake_ui_element_renderer.cc",
     "test/fake_ui_element_renderer.h",
-    "test/gl_test_environment_unittest.cc",
-    "test/mock_browser_interface.cc",
-    "test/mock_browser_interface.h",
-    "test/mock_content_input_delegate.cc",
-    "test/mock_content_input_delegate.h",
     "test/paths.cc",
     "test/paths.h",
     "test/run_all_unittests.cc",
-    "test/ui_pixel_test.cc",
-    "test/ui_pixel_test.h",
-    "test/ui_scene_manager_test.cc",
-    "test/ui_scene_manager_test.h",
+    "test/ui_test.cc",
+    "test/ui_test.h",
     "ui_input_manager_unittest.cc",
-    "ui_pixeltest.cc",
-    "ui_renderer_unittest.cc",
-    "ui_scene_manager_unittest.cc",
     "ui_scene_unittest.cc",
+    "ui_unittest.cc",
     "vr_gl_util_unittest.cc",
   ]
 
@@ -257,15 +259,30 @@ test("vr_common_unittests") {
 
   deps = [
     ":vr_test_support",
-    "//cc:test_support",
     "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//testing/gmock",
-    "//ui/gfx:test_support",
     "//ui/gfx/geometry",
-    "//ui/gl",
+  ]
+  if (is_android) {
+    deps += [ "//ui/android:ui_java" ]
+  }
+}
+
+test("vr_pixeltests") {
+  testonly = true
+
+  sources = [
+    "test/run_all_pixeltests.cc",
+    "test/ui_pixel_test.cc",
+    "test/ui_pixel_test.h",
+    "ui_pixeltest.cc",
   ]
 
+  deps = [
+    ":vr_gl_test_support",
+    ":vr_test_support",
+  ]
   if (is_android) {
     deps += [ "//ui/android:ui_java" ]
   }
@@ -277,10 +294,10 @@ test("vr_common_perftests") {
     "text_perftest.cc",
   ]
   deps = [
+    ":vr_gl_test_support",
     ":vr_test_support",
     "//testing/perf",
   ]
-
   if (is_android) {
     deps += [ "//ui/android:ui_java" ]
   }
@@ -298,11 +315,17 @@ source_set("vr_test_support") {
   testonly = true
 
   sources = [
+    "test/animation_utils.cc",
+    "test/animation_utils.h",
     "test/constants.h",
-    "test/gl_test_environment.cc",
-    "test/gl_test_environment.h",
-    "test/vr_common_test_suite.cc",
-    "test/vr_common_test_suite.h",
+    "test/mock_browser_ui_interface.cc",
+    "test/mock_browser_ui_interface.h",
+    "test/mock_content_input_delegate.cc",
+    "test/mock_content_input_delegate.h",
+    "test/mock_ui_browser_interface.cc",
+    "test/mock_ui_browser_interface.h",
+    "test/vr_test_suite.cc",
+    "test/vr_test_suite.h",
   ]
 
   if (!enable_gvr_services) {
@@ -315,6 +338,7 @@ source_set("vr_test_support") {
     ":vr_common",
     ":vr_test_pak",
     "//base/test:test_support",
+    "//cc:test_support",
     "//components/security_state/core",
     "//components/toolbar:vector_icons",
     "//content/test:test_support",
@@ -322,15 +346,34 @@ source_set("vr_test_support") {
     "//skia",
     "//testing/gtest",
     "//ui/accessibility:ax_gen",
-    "//ui/gl:test_support",
+    "//ui/gfx:test_support",
 
     # TODO(mthiesse, crbug.com/769373): Remove dependency on device/vr:fakes.
     "//device/vr:fakes",
+
+    # TODO(cjgrant): Figure out why including //ui/android:ui_java here
+    # doesn't propagate to individual test executable targets.
   ]
 
   data = [
     "test/data/",
     "$root_out_dir/vr_test.pak",
+  ]
+}
+
+source_set("vr_gl_test_support") {
+  testonly = true
+
+  sources = [
+    "test/gl_test_environment.cc",
+    "test/gl_test_environment.h",
+    "test/gl_test_environment_unittest.cc",
+  ]
+
+  public_deps = [
+    "//base/test:test_support",
+    "//skia",
+    "//ui/gl",
   ]
 }
 

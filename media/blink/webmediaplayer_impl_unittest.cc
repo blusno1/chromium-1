@@ -78,6 +78,8 @@ MATCHER_P2(PlaybackRateChanged, old_rate_string, new_rate_string, "") {
 
 class FakeVideoDecodeStatsRecorder : public mojom::VideoDecodeStatsRecorder {
  public:
+  void SetPageInfo(const url::Origin& top_frame_origin,
+                   bool is_top_frame) override {}
   void StartNewRecord(VideoCodecProfile profile,
                       const gfx::Size& natural_size,
                       int frames_per_sec) override {}
@@ -271,9 +273,9 @@ class WebMediaPlayerImplTest : public testing::Test {
  public:
   WebMediaPlayerImplTest()
       : media_thread_("MediaThreadForTest"),
-        web_view_(
-            blink::WebView::Create(nullptr,
-                                   blink::kWebPageVisibilityStateVisible)),
+        web_view_(blink::WebView::Create(
+            nullptr,
+            blink::mojom::PageVisibilityState::kVisible)),
         web_local_frame_(
             blink::WebLocalFrame::CreateMainFrame(web_view_,
                                                   &web_frame_client_,
@@ -1001,19 +1003,19 @@ TEST_F(WebMediaPlayerImplTest, InfiniteDuration) {
   EXPECT_EQ(base::TimeDelta(), GetCurrentTimeInternal());
 
   SetEnded(true);
-  EXPECT_EQ(std::numeric_limits<double>::infinity(), wmpi_->CurrentTime());
+  EXPECT_EQ(0, wmpi_->CurrentTime());
   EXPECT_EQ(base::TimeDelta(), GetCurrentTimeInternal());
 
   // Pause should not pick up infinity for the current time.
   wmpi_->Pause();
-  EXPECT_EQ(std::numeric_limits<double>::infinity(), wmpi_->CurrentTime());
+  EXPECT_EQ(0, wmpi_->CurrentTime());
   EXPECT_EQ(base::TimeDelta(), GetCurrentTimeInternal());
 }
 
 // TODO(lethalantidote): Once |client_| is converted from a dummy to a mock,
 // test that |web_layer| is actually used by |client_|.
 // http://crbug/755880.
-TEST_F(WebMediaPlayerImplTest, OnWebLayerUpdatedGetsWebLayerFromBridge) {
+TEST_F(WebMediaPlayerImplTest, SetContentsLayerGetsWebLayerFromBridge) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitFromCommandLine("UseSurfaceLayerForVideo", "");
   surface_layer_bridge_ = new StrictMock<MockSurfaceLayerBridge>();
@@ -1027,7 +1029,7 @@ TEST_F(WebMediaPlayerImplTest, OnWebLayerUpdatedGetsWebLayerFromBridge) {
 
   EXPECT_CALL(*surface_layer_bridge_, GetWebLayer())
       .WillRepeatedly(Return(web_layer.get()));
-  wmpi_->OnWebLayerUpdated();
+  wmpi_->RegisterContentsLayer(web_layer.get());
 }
 
 TEST_F(WebMediaPlayerImplTest, PlaybackRateChangeMediaLogs) {

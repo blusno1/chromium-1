@@ -5,20 +5,19 @@
 #ifndef CSSVariableData_h
 #define CSSVariableData_h
 
-#include "core/css/CSSPropertyValueSet.h"
+#include "base/macros.h"
 #include "core/css/parser/CSSParserToken.h"
 #include "core/css/parser/CSSParserTokenRange.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 class CSSParserTokenRange;
 class CSSSyntaxDescriptor;
+enum class SecureContextMode;
 
 class CORE_EXPORT CSSVariableData : public RefCounted<CSSVariableData> {
-  WTF_MAKE_NONCOPYABLE(CSSVariableData);
   USING_FAST_MALLOC(CSSVariableData);
 
  public:
@@ -48,9 +47,8 @@ class CORE_EXPORT CSSVariableData : public RefCounted<CSSVariableData> {
 
   bool NeedsVariableResolution() const { return needs_variable_resolution_; }
 
-  const CSSValue* ParseForSyntax(const CSSSyntaxDescriptor&) const;
-
-  CSSPropertyValueSet* PropertySet();
+  const CSSValue* ParseForSyntax(const CSSSyntaxDescriptor&,
+                                 SecureContextMode) const;
 
  private:
   CSSVariableData(const CSSParserTokenRange&,
@@ -63,8 +61,7 @@ class CORE_EXPORT CSSVariableData : public RefCounted<CSSVariableData> {
       : backing_strings_(std::move(backing_strings)),
         tokens_(resolved_tokens),
         is_animation_tainted_(is_animation_tainted),
-        needs_variable_resolution_(false),
-        cached_property_set_(false) {}
+        needs_variable_resolution_(false) {}
 
   void ConsumeAndUpdateTokens(const CSSParserTokenRange&);
 
@@ -75,10 +72,7 @@ class CORE_EXPORT CSSVariableData : public RefCounted<CSSVariableData> {
   Vector<CSSParserToken> tokens_;
   const bool is_animation_tainted_;
   const bool needs_variable_resolution_;
-
-  // Parsed representation for @apply
-  bool cached_property_set_;
-  Persistent<CSSPropertyValueSet> property_set_;
+  DISALLOW_COPY_AND_ASSIGN(CSSVariableData);
 };
 
 }  // namespace blink

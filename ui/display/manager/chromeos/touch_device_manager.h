@@ -172,6 +172,9 @@ class DISPLAY_MANAGER_EXPORT TouchDeviceManager {
   void AssociateInternalDevices(std::vector<ManagedDisplayInfo*>* displays,
                                 std::vector<ui::TouchscreenDevice>* devices);
 
+  void AssociateFromHistoricalData(std::vector<ManagedDisplayInfo*>* displays,
+                                   std::vector<ui::TouchscreenDevice>* devices);
+
   void AssociateUdlDevices(std::vector<ManagedDisplayInfo*>* displays,
                            std::vector<ui::TouchscreenDevice>* devices);
 
@@ -206,6 +209,13 @@ DISPLAY_MANAGER_EXPORT std::ostream& operator<<(
     std::ostream& os,
     const TouchDeviceIdentifier& identifier);
 
+// Returns true if the device has any external touch devices attached.
+DISPLAY_MANAGER_EXPORT bool HasExternalTouchscreenDevice();
+
+// Returns true if the touch device identified by |identifier| is an
+// internal touchscreen device.
+DISPLAY_MANAGER_EXPORT bool IsInternalTouchscreenDevice(
+    const TouchDeviceIdentifier& identifier);
 }  // namespace display
 
 #endif  // UI_DISPLAY_MANAGER_CHROMEOS_TOUCH_DEVICE_MANAGER_H_

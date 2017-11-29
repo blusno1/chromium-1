@@ -77,8 +77,9 @@ bool SVGImageElement::CurrentFrameHasSingleSecurityOrigin() const {
   if (LayoutSVGImage* layout_svg_image = ToLayoutSVGImage(GetLayoutObject())) {
     LayoutImageResource* layout_image_resource =
         layout_svg_image->ImageResource();
-    if (layout_image_resource->HasImage()) {
-      if (Image* image = layout_image_resource->CachedImage()->GetImage())
+    ImageResourceContent* image_content = layout_image_resource->CachedImage();
+    if (image_content) {
+      if (Image* image = image_content->GetImage())
         return image->CurrentFrameHasSingleSecurityOrigin();
     }
   }
@@ -152,8 +153,8 @@ void SVGImageElement::SvgAttributeChanged(const QualifiedName& attr_name) {
 
 void SVGImageElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == SVGNames::asyncAttr &&
-      RuntimeEnabledFeatures::ImageAsyncAttributeEnabled()) {
+  if (params.name == SVGNames::decodingAttr &&
+      RuntimeEnabledFeatures::ImageDecodingAttributeEnabled()) {
     decoding_mode_ = ParseImageDecodingMode(params.new_value);
   } else {
     SVGElement::ParseAttribute(params);

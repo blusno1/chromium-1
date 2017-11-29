@@ -130,6 +130,9 @@
       status: "stable",
     },
     {
+      name: "BlockingDownloadsInSandbox",
+    },
+    {
       name: "BlockMetaSetCookie",
       status: "experimental"
     },
@@ -163,10 +166,6 @@
     },
     {
       name: "ClientPlaceholdersForServerLoFi",
-    },
-    {
-      name: "CoalescedEvents",
-      status: "stable",
     },
     {
       name: "CompositedSelectionUpdate",
@@ -211,10 +210,6 @@
     {
       name: "CSSAdditiveAnimations",
       depends_on: ["StackedCSSPropertyAnimations"],
-      status: "experimental",
-    },
-    {
-      name: "CSSApplyAtRules",
       status: "experimental",
     },
     {
@@ -312,11 +307,6 @@
       status: "test",
     },
     {
-      name: "CustomSchemeHandler",
-      depends_on: ["NavigatorContentUtils"],
-      status: "experimental",
-    },
-    {
       name: "Database",
       status: "stable",
     },
@@ -401,6 +391,10 @@
       status: "stable"
     },
     {
+      name: "FeaturePolicyJavaScriptInterface",
+      status: "experimental"
+    },
+    {
       name: "FetchRequestCache",
       status: "stable",
     },
@@ -433,7 +427,6 @@
     {
       name: "ForeignFetch",
       origin_trial_feature_name: "ForeignFetch",
-      status: "experimental",
     },
     {
       name: "FractionalMouseEvent",
@@ -492,7 +485,7 @@
       status: "test",
     },
     {
-      name: "ImageAsyncAttribute",
+      name: "ImageDecodingAttribute",
       status: "test",
     },
     {
@@ -505,10 +498,6 @@
     {
       name: "InertAttribute",
       status: "experimental",
-    },
-    {
-      name: "InputEvent",
-      status: "stable",
     },
     {
       name: "InputModeAttribute",
@@ -554,7 +543,6 @@
     {
       name: "LinkServiceWorker",
       origin_trial_feature_name: "ForeignFetch",
-      status: "experimental",
     },
     {
       name: "LoadingWithMojo",
@@ -568,6 +556,7 @@
     },
     {
       name: "MediaCapabilities",
+      origin_trial_feature_name: "MediaCapabilities",
       status: "experimental",
     },
     {
@@ -599,10 +588,6 @@
     // Set to reflect the kMediaEngagementBypassAutoplayPolicies feature.
     {
       name: "MediaEngagementBypassAutoplayPolicies",
-    },
-    {
-      name: "MediaPlaybackRateOutOfRange",
-      status: "experimental",
     },
     {
       name: "MediaQueryShape",
@@ -719,6 +704,9 @@
     {
       name: "Notifications",
       status: "stable",
+    },
+    {
+      name: "NotificationsWithMojo",
     },
     {
       name: "NullableDocumentDomain",
@@ -940,7 +928,14 @@
       status: "experimental",
     },
     {
+      name: "ServiceWorkerScriptFullCodeCache",
+    },
+    {
       name: "ServiceWorkerScriptStreaming",
+    },
+    {
+      name: "ServiceWorkerUpdateViaCache",
+      status: "experimental",
     },
     {
       name: "SetRootScroller",

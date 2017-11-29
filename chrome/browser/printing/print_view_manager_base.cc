@@ -32,6 +32,7 @@
 #include "components/printing/browser/print_composite_client.h"
 #include "components/printing/browser/print_manager_utils.h"
 #include "components/printing/common/print_messages.h"
+#include "components/printing/service/public/cpp/pdf_service_mojo_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -80,9 +81,7 @@ PrintViewManagerBase::PrintViewManagerBase(content::WebContents* web_contents)
       printing_rfh_(nullptr),
       printing_succeeded_(false),
       inside_inner_message_loop_(false),
-#if !defined(OS_MACOSX)
       expecting_first_page_(true),
-#endif
       queue_(g_browser_process->print_job_manager()->queue()),
       weak_ptr_factory_(this) {
   DCHECK(queue_.get());
@@ -143,9 +142,7 @@ void PrintViewManagerBase::OnComposePdfDone(
     return;
   }
 
-  UpdateForPrintedPage(
-      params, true,
-      PrintCompositeClient::GetShmFromMojoHandle(std::move(handle)));
+  UpdateForPrintedPage(params, true, GetShmFromMojoHandle(std::move(handle)));
 }
 
 void PrintViewManagerBase::OnDidPrintPage(
@@ -161,12 +158,8 @@ void PrintViewManagerBase::OnDidPrintPage(
     return;
   }
 
-#if defined(OS_MACOSX)
-  const bool metafile_must_be_valid = true;
-#else
   const bool metafile_must_be_valid = expecting_first_page_;
   expecting_first_page_ = false;
-#endif
 
   // Only used when |metafile_must_be_valid| is true.
   std::unique_ptr<base::SharedMemory> shared_buf;
@@ -268,7 +261,7 @@ void PrintViewManagerBase::OnPrintingFailed(int cookie) {
   PrintManager::OnPrintingFailed(cookie);
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  chrome::ShowPrintErrorDialog();
+  ShowPrintErrorDialog();
 #endif
 
   ReleasePrinterQuery();
@@ -488,9 +481,7 @@ void PrintViewManagerBase::DisconnectFromCurrentPrintJob() {
     // DO NOT wait for the job to finish.
     ReleasePrintJob();
   }
-#if !defined(OS_MACOSX)
   expecting_first_page_ = true;
-#endif
 }
 
 void PrintViewManagerBase::TerminatePrintJob(bool cancel) {

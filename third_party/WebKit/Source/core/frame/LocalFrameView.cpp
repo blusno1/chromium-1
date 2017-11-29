@@ -128,13 +128,14 @@
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/text/TextStream.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebDisplayItemList.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebRemoteScrollProperties.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 
 // Used to check for dirty layouts violating document lifecycle rules.
 // If arg evaluates to true, the program will continue. If arg evaluates to
@@ -1142,7 +1143,7 @@ void LocalFrameView::ScheduleOrPerformPostLayoutTasks() {
     // after we return.  postLayoutTasks() can make us need to update again, and
     // we can get stuck in a nasty cycle unless we call it through the timer
     // here.
-    post_layout_tasks_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    post_layout_tasks_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
     if (NeedsLayout())
       UpdateLayout();
   }
@@ -1321,12 +1322,13 @@ void LocalFrameView::UpdateLayout() {
   }  // Reset m_layoutSchedulingEnabled to its previous value.
   CheckDoesNotNeedLayout();
 
-  Lifecycle().AdvanceTo(DocumentLifecycle::kLayoutClean);
+  DocumentLifecycle::Scope lifecycle_scope(Lifecycle(),
+                                           DocumentLifecycle::kLayoutClean);
 
   frame_timing_requests_dirty_ = true;
 
-  // FIXME: Could find the common ancestor layer of all dirty subtrees and
-  // mark from there. crbug.com/462719
+  // FIXME: Could find the common ancestor layer of all dirty subtrees and mark
+  // from there. crbug.com/462719
   GetLayoutViewItem().EnclosingLayer()->UpdateLayerPositionsAfterLayout();
 
   TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
@@ -1750,7 +1752,8 @@ IntPoint LocalFrameView::LastKnownMousePosition() const {
 
 bool LocalFrameView::ShouldSetCursor() const {
   Page* page = GetFrame().GetPage();
-  return page && page->VisibilityState() != kPageVisibilityStateHidden &&
+  return page &&
+         page->VisibilityState() != mojom::PageVisibilityState::kHidden &&
          !frame_->GetEventHandler().IsMousePositionUnknown() &&
          page->GetFocusController().IsActive();
 }
@@ -2585,7 +2588,7 @@ void LocalFrameView::ScheduleUpdatePluginsIfNecessary() {
   DCHECK(!IsInPerformLayout());
   if (update_plugins_timer_.IsActive() || part_update_set_.IsEmpty())
     return;
-  update_plugins_timer_.StartOneShot(0, BLINK_FROM_HERE);
+  update_plugins_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void LocalFrameView::PerformPostLayoutTasks() {
@@ -3198,6 +3201,13 @@ void LocalFrameView::UpdateLifecyclePhasesInternal(
 
   AutoReset<bool> past_layout_lifecycle_update(&past_layout_lifecycle_update_,
                                                true);
+
+  // OOPIF local frame roots that are throttled can return now that layout
+  // is clean and intersection observations can be calculated.
+  if (ShouldThrottleRendering()) {
+    UpdateViewportIntersectionsForSubtree(target_state);
+    return;
+  }
 
   ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
     frame_view.PerformScrollAnchoringAdjustments();
@@ -4736,6 +4746,8 @@ static void PositionScrollbarLayer(GraphicsLayer* graphics_layer,
 
   IntRect scrollbar_rect = scrollbar->FrameRect();
   graphics_layer->SetPosition(scrollbar_rect.Location());
+  graphics_layer->SetOffsetFromLayoutObject(
+      ToIntSize(scrollbar_rect.Location()));
 
   if (scrollbar_rect.Size() == graphics_layer->Size())
     return;
@@ -4758,6 +4770,7 @@ static void PositionScrollCornerLayer(GraphicsLayer* graphics_layer,
     return;
   graphics_layer->SetDrawsContent(!corner_rect.IsEmpty());
   graphics_layer->SetPosition(corner_rect.Location());
+  graphics_layer->SetOffsetFromLayoutObject(ToIntSize(corner_rect.Location()));
   if (corner_rect.Size() != graphics_layer->Size())
     graphics_layer->SetNeedsDisplay();
   graphics_layer->SetSize(FloatSize(corner_rect.Size()));
@@ -5215,10 +5228,11 @@ void LocalFrameView::UpdateRenderThrottlingStatus(
 
   // Note that we disallow throttling of 0x0 and display:none frames because
   // some sites use them to drive UI logic.
-  HTMLFrameOwnerElement* owner_element = frame_->DeprecatedLocalOwner();
-  hidden_for_throttling_ = hidden && !FrameRect().IsEmpty() &&
-                           (owner_element && owner_element->GetLayoutObject());
+  hidden_for_throttling_ = hidden && !FrameRect().IsEmpty();
   subtree_throttled_ = subtree_throttled;
+  HTMLFrameOwnerElement* owner_element = frame_->DeprecatedLocalOwner();
+  if (owner_element)
+    hidden_for_throttling_ &= !!owner_element->GetLayoutObject();
 
   bool is_throttled = CanThrottleRendering();
   bool became_unthrottled = was_throttled && !is_throttled;

@@ -11,6 +11,7 @@
 #include "media/base/media_util.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_types.h"
+#include "media/capabilities/bucket_utility.h"
 #include "media/mojo/interfaces/video_decode_stats_recorder.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -65,6 +66,9 @@ class RecordInterceptor : public mojom::VideoDecodeStatsRecorder {
  public:
   RecordInterceptor() {}
   ~RecordInterceptor() override {}
+
+  MOCK_METHOD2(SetPageInfo,
+               void(const url::Origin& top_frame_origin, bool is_top_frame));
 
   MOCK_METHOD3(StartNewRecord,
                void(VideoCodecProfile profile,
@@ -189,12 +193,6 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
   int CurrentStableFpsSamples() const {
     return reporter_->num_stable_fps_samples_;
   }
-
-  gfx::Size GetSizeBucket(gfx::Size raw_size) {
-    return reporter_->GetSizeBucket(raw_size);
-  }
-
-  int GetFpsBucket(double raw_fps) { return reporter_->GetFpsBucket(raw_fps); }
 
   // Call at the start of tests to stabilize framerate.
   // Preconditions:

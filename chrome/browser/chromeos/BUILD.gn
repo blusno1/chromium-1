@@ -20,7 +20,6 @@ source_set("chromeos") {
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   public_deps = [
-    ":install_attributes_proto",
     "//ash/resources",
     "//ash/strings",
     "//chrome:extra_resources",
@@ -43,11 +42,12 @@ source_set("chromeos") {
     # TODO(tbarzic): Cleanup this list.
     ":attestation_proto",
     ":device_policy_remover_generated",
+    ":user_activity_event_proto",
     "//apps",
     "//ash",
     "//ash:ash_with_content",
     "//ash/autoclick/mus/public/interfaces",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//cc/paint",
     "//chrome/app:command_ids",
     "//chrome/app/vector_icons",
@@ -1041,6 +1041,8 @@ source_set("chromeos") {
     "login/signin/token_handle_fetcher.h",
     "login/signin/token_handle_util.cc",
     "login/signin/token_handle_util.h",
+    "login/signin_partition_manager.cc",
+    "login/signin_partition_manager.h",
     "login/signin_screen_controller.cc",
     "login/signin_screen_controller.h",
     "login/signin_specifics.h",
@@ -1072,6 +1074,8 @@ source_set("chromeos") {
     "login/ui/login_display.h",
     "login/ui/login_display_host.cc",
     "login/ui/login_display_host.h",
+    "login/ui/login_display_host_views.cc",
+    "login/ui/login_display_host_views.h",
     "login/ui/login_display_host_webui.cc",
     "login/ui/login_display_host_webui.h",
     "login/ui/login_feedback.cc",
@@ -1357,8 +1361,15 @@ source_set("chromeos") {
     "power/idle_action_warning_dialog_view.h",
     "power/idle_action_warning_observer.cc",
     "power/idle_action_warning_observer.h",
+    "power/ml/idle_event_notifier.cc",
+    "power/ml/idle_event_notifier.h",
+    "power/ml/user_activity_logger.cc",
+    "power/ml/user_activity_logger.h",
+    "power/ml/user_activity_logger_delegate.h",
     "power/power_data_collector.cc",
     "power/power_data_collector.h",
+    "power/power_metrics_reporter.cc",
+    "power/power_metrics_reporter.h",
     "power/power_prefs.cc",
     "power/power_prefs.h",
     "power/renderer_freezer.cc",
@@ -1457,6 +1468,10 @@ source_set("chromeos") {
     "settings/token_encryptor.h",
     "smb_client/smb_file_system.cc",
     "smb_client/smb_file_system.h",
+    "smb_client/smb_service.cc",
+    "smb_client/smb_service.h",
+    "smb_client/smb_service_factory.cc",
+    "smb_client/smb_service_factory.h",
     "status/data_promo_notification.cc",
     "status/data_promo_notification.h",
     "status/network_menu.cc",
@@ -1754,11 +1769,15 @@ source_set("unit_tests") {
     "file_manager/volume_manager_unittest.cc",
     "file_system_provider/fake_provided_file_system.cc",
     "file_system_provider/fake_provided_file_system.h",
+    "file_system_provider/fake_registry.cc",
+    "file_system_provider/fake_registry.h",
     "file_system_provider/fileapi/buffering_file_stream_reader_unittest.cc",
     "file_system_provider/fileapi/buffering_file_stream_writer_unittest.cc",
     "file_system_provider/fileapi/file_stream_reader_unittest.cc",
     "file_system_provider/fileapi/file_stream_writer_unittest.cc",
     "file_system_provider/fileapi/provider_async_file_util_unittest.cc",
+    "file_system_provider/logging_observer.cc",
+    "file_system_provider/logging_observer.h",
     "file_system_provider/mount_path_util_unittest.cc",
     "file_system_provider/operations/abort_unittest.cc",
     "file_system_provider/operations/add_watcher_unittest.cc",
@@ -1822,6 +1841,7 @@ source_set("unit_tests") {
     "login/screens/network_screen_unittest.cc",
     "login/screens/update_screen_unittest.cc",
     "login/signin/merge_session_load_page_unittest.cc",
+    "login/signin_partition_manager_unittest.cc",
     "login/supervised/supervised_user_authentication_unittest.cc",
     "login/users/affiliation_unittest.cc",
     "login/users/multi_profile_user_controller_unittest.cc",
@@ -1884,7 +1904,10 @@ source_set("unit_tests") {
     "policy/user_cloud_policy_store_chromeos_unittest.cc",
     "power/cpu_data_collector_unittest.cc",
     "power/extension_event_observer_unittest.cc",
+    "power/ml/idle_event_notifier_unittest.cc",
+    "power/ml/user_activity_logger_unittest.cc",
     "power/power_data_collector_unittest.cc",
+    "power/power_metrics_reporter_unittest.cc",
     "power/power_prefs_unittest.cc",
     "power/renderer_freezer_unittest.cc",
     "preferences_unittest.cc",
@@ -1909,6 +1932,7 @@ source_set("unit_tests") {
     "settings/session_manager_operation_unittest.cc",
     "settings/shutdown_policy_handler_unittest.cc",
     "settings/stub_cros_settings_provider_unittest.cc",
+    "smb_client/smb_service_unittest.cc",
     "status/data_promo_notification_unittest.cc",
     "system/automatic_reboot_manager_unittest.cc",
     "system/device_disabling_manager_unittest.cc",
@@ -2018,15 +2042,15 @@ source_set("unit_tests") {
   ]
 }
 
-proto_library("install_attributes_proto") {
-  sources = [
-    "policy/proto/install_attributes.proto",
-  ]
-}
-
 proto_library("attestation_proto") {
   sources = [
     "attestation/attestation_key_payload.proto",
+  ]
+}
+
+proto_library("user_activity_event_proto") {
+  sources = [
+    "power/ml/user_activity_event.proto",
   ]
 }
 

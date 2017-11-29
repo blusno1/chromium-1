@@ -15,6 +15,7 @@ import os
 import shutil
 import signal
 import sys
+import tempfile
 import threading
 import traceback
 import unittest
@@ -413,10 +414,6 @@ def AddInstrumentationTestOptions(parser):
       dest='run_disabled', action='store_true',
       help='Also run disabled tests if applicable.')
   parser.add_argument(
-      '--render-results-directory',
-      dest='render_results_dir',
-      help='Directory to pull render test result images off of the device to.')
-  parser.add_argument(
       '--non-native-packed-relocations',
       action='store_true',
       help='Whether relocations were packed using the Android '
@@ -510,25 +507,29 @@ def AddJUnitTestOptions(parser):
   parser = parser.add_argument_group('junit arguments')
 
   parser.add_argument(
-      '--coverage-dir',
-      dest='coverage_dir', type=os.path.realpath,
+      '--coverage-dir', type=os.path.realpath,
       help='Directory to store coverage info.')
   parser.add_argument(
       '--package-filter',
-      dest='package_filter',
       help='Filters tests by package.')
   parser.add_argument(
       '--runner-filter',
-      dest='runner_filter',
       help='Filters tests by runner class. Must be fully qualified.')
   parser.add_argument(
       '-f', '--test-filter',
-      dest='test_filter',
       help='Filters tests googletest-style.')
   parser.add_argument(
-      '-s', '--test-suite',
-      dest='test_suite', required=True,
+      '-s', '--test-suite', required=True,
       help='JUnit test suite to run.')
+  debug_group = parser.add_mutually_exclusive_group()
+  debug_group.add_argument(
+      '-w', '--wait-for-java-debugger', action='store_const', const='8701',
+      dest='debug_socket', help='Alias for --debug-socket=8701')
+  debug_group.add_argument(
+      '--debug-socket',
+      help='Wait for java debugger to attach at specified socket address '
+           'before running any application code. Also disables test timeouts '
+           'and sets retries=0.')
 
   # These arguments are for Android Robolectric tests.
   parser.add_argument(
@@ -796,8 +797,21 @@ def RunTestsInPlatformMode(args):
 
   global_results_tags = set()
 
+  json_file = tempfile.NamedTemporaryFile(delete=False)
+  json_file.close()
+
   @contextlib.contextmanager
-  def write_json_file():
+  def json_finalizer():
+    try:
+      yield
+    finally:
+      if args.json_results_file and os.path.exists(json_file.name):
+        shutil.move(json_file.name, args.json_results_file)
+      else:
+        os.remove(json_file.name)
+
+  @contextlib.contextmanager
+  def json_writer():
     try:
       yield
     except Exception:
@@ -805,12 +819,9 @@ def RunTestsInPlatformMode(args):
       raise
     finally:
       json_results.GenerateJsonResultsFile(
-          all_raw_results, args.json_results_file,
-          global_tags=list(global_results_tags))
-
-  json_writer = contextlib_ext.Optional(
-      write_json_file(),
-      args.json_results_file)
+          all_raw_results, json_file.name,
+          global_tags=list(global_results_tags),
+          indent=2)
 
   @contextlib.contextmanager
   def upload_logcats_file():
@@ -845,8 +856,8 @@ def RunTestsInPlatformMode(args):
       args, env, test_instance, infra_error)
 
   ### Run.
-  with out_manager:
-    with json_writer, logcats_uploader, env, test_instance, test_run:
+  with out_manager, json_finalizer():
+    with json_writer(), logcats_uploader, env, test_instance, test_run:
 
       repetitions = (xrange(args.repeat + 1) if args.repeat >= 0
                      else itertools.count())
@@ -903,13 +914,13 @@ def RunTestsInPlatformMode(args):
                          str(tot_tests),
                          str(iteration_count))
 
-    if args.local_output and args.json_results_file:
+    if args.local_output:
       with out_manager.ArchivedTempfile(
           'test_results_presentation.html',
           'test_results_presentation',
           output_manager.Datatype.HTML) as results_detail_file:
         result_html_string, _, _ = test_results_presentation.result_details(
-            json_path=args.json_results_file,
+            json_path=json_file.name,
             test_name=args.command,
             cs_base_url='http://cs.chromium.org',
             local_output=True)
@@ -1003,7 +1014,9 @@ def main():
     parser.error('--replace-system-package and --enable-concurrent-adb cannot '
                  'be used together')
 
-  if hasattr(args, 'wait_for_java_debugger') and args.wait_for_java_debugger:
+  if (hasattr(args, 'debug_socket') or
+      (hasattr(args, 'wait_for_java_debugger') and
+      args.wait_for_java_debugger)):
     args.num_retries = 0
 
   try:

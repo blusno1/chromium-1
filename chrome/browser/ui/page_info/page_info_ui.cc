@@ -138,6 +138,8 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
      IDR_ALLOWED_ADS},
     {CONTENT_SETTINGS_TYPE_SOUND, IDS_PAGE_INFO_TYPE_SOUND, IDR_BLOCKED_SOUND,
      IDR_ALLOWED_SOUND},
+    {CONTENT_SETTINGS_TYPE_CLIPBOARD_READ, IDS_PAGE_INFO_TYPE_CLIPBOARD,
+     IDR_BLOCKED_CLIPBOARD, IDR_ALLOWED_CLIPBOARD},
 };
 
 std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
@@ -473,6 +475,11 @@ int PageInfoUI::GetConnectionIconID(PageInfo::SiteConnectionStatus status) {
 // static
 const gfx::ImageSkia PageInfoUI::GetCertificateIcon() {
   return gfx::CreateVectorIcon(kCertificateIcon, 16, gfx::kChromeIconGrey);
+}
+
+// static
+const gfx::ImageSkia PageInfoUI::GetSiteSettingsIcon() {
+  return gfx::CreateVectorIcon(kSettingsIcon, 16, gfx::kChromeIconGrey);
 }
 #endif
 

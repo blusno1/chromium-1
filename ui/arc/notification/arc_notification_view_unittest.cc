@@ -83,6 +83,8 @@ class TestContentViewDelegate : public ArcNotificationContentViewDelegate {
   }
   bool IsExpanded() const override { return false; }
   void SetExpanded(bool expanded) override {}
+  void OnContainerAnimationStarted() override {}
+  void OnContainerAnimationEnded() override {}
 };
 
 std::unique_ptr<message_center::MessageView> CreateCustomMessageViewForTest(
@@ -117,6 +119,14 @@ class TestMessageViewDelegate : public message_center::MessageViewDelegate {
 
   void ClickOnNotificationButton(const std::string& notification_id,
                                  int button_index) override {
+    // For this test, this method should not be invoked.
+    NOTREACHED();
+  }
+
+  void ClickOnNotificationButtonWithReply(
+      const std::string& notification_id,
+      int button_index,
+      const base::string16& reply) override {
     // For this test, this method should not be invoked.
     NOTREACHED();
   }

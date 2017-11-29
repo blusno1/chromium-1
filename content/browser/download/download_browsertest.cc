@@ -890,11 +890,7 @@ class DownloadContentTest : public ContentBrowserTest {
 // Test fixture for parallel downloading.
 class ParallelDownloadTest : public DownloadContentTest {
  protected:
-  ParallelDownloadTest() {}
-
-  ~ParallelDownloadTest() override {}
-
-  void SetUpOnMainThread() override {
+  ParallelDownloadTest() {
     std::map<std::string, std::string> params = {
         {content::kMinSliceSizeFinchKey, "1"},
         {content::kParallelRequestCountFinchKey,
@@ -903,8 +899,9 @@ class ParallelDownloadTest : public DownloadContentTest {
         {content::kParallelRequestRemainingTimeFinchKey, "0"}};
     scoped_feature_list_.InitAndEnableFeatureWithParameters(
         features::kParallelDownloading, params);
-    DownloadContentTest::SetUpOnMainThread();
   }
+
+  ~ParallelDownloadTest() override {}
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -914,13 +911,8 @@ class ParallelDownloadTest : public DownloadContentTest {
 
 }  // namespace
 
-#if defined(OS_ANDROID)
-// Failing/Flaky on Android: https://crbug.com/754679
-#define MAYBE_DownloadCancelled DISABLED_DownloadCancelled
-#else
-#define MAYBE_DownloadCancelled DownloadCancelled
-#endif
-IN_PROC_BROWSER_TEST_F(DownloadContentTest, MAYBE_DownloadCancelled) {
+// Flaky. See https://crbug.com/754679.
+IN_PROC_BROWSER_TEST_F(DownloadContentTest, DISABLED_DownloadCancelled) {
   SetupEnsureNoPendingDownloads();
 
   // Create a download, wait until it's started, and confirm

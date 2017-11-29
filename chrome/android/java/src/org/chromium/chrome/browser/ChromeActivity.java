@@ -223,7 +223,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private boolean mDeferredStartupPosted;
 
     private boolean mTabModelsInitialized;
-    protected boolean mNativeInitialized;
+    private boolean mNativeInitialized;
     private boolean mRemoveWindowBackgroundDone;
 
     // The class cannot implement TouchExplorationStateChangeListener,
@@ -274,9 +274,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     // See enableHardwareAcceleration()
     private boolean mSetWindowHWA;
-
-    // Skips capturing screenshot for testing purpose.
-    private boolean mScreenshotCaptureSkippedForTesting;
 
     /** Whether or not a PolicyChangeListener was added. */
     private boolean mDidAddPolicyChangeListener;
@@ -1229,6 +1226,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     /**
+     * @return Whether native initialization has been completed for this activity.
+     */
+    public boolean didFinishNativeInitialization() {
+        return mNativeInitialized;
+    }
+
+    /**
      * Called when the accessibility status of this device changes.  This might be triggered by
      * touch exploration or general accessibility status updates.  It is an aggregate of two other
      * accessibility update methods.
@@ -1251,11 +1255,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             return true;
         }
         return super.onOptionsItemSelected(item);
-    }
-
-    @VisibleForTesting
-    public void setScreenshotCaptureSkippedForTesting(boolean value) {
-        mScreenshotCaptureSkippedForTesting = value;
     }
 
     /**
@@ -1553,7 +1552,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * @return A {@link ChromeFullscreenManager} instance that's been created.
      */
     protected ChromeFullscreenManager createFullscreenManager() {
-        return new ChromeFullscreenManager(this, false);
+        return new ChromeFullscreenManager(this, ChromeFullscreenManager.CONTROLS_POSITION_TOP);
     }
 
     /**

@@ -68,7 +68,6 @@
 #include "platform/wtf/typed_arrays/ArrayBufferContents.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
-#include "third_party/skia/include/core/SkImageFilter.h"
 
 namespace blink {
 
@@ -187,7 +186,7 @@ void CanvasRenderingContext2D::LoseContext(LostContextMode lost_mode) {
   if (context_lost_mode_ == kSyntheticLostContext && canvas()) {
     Host()->DiscardImageBuffer();
   }
-  dispatch_context_lost_event_timer_.StartOneShot(0, BLINK_FROM_HERE);
+  dispatch_context_lost_event_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void CanvasRenderingContext2D::DidSetSurfaceSize() {
@@ -199,7 +198,8 @@ void CanvasRenderingContext2D::DidSetSurfaceSize() {
 
   if (GetImageBuffer()) {
     if (ContextLostRestoredEventsEnabled()) {
-      dispatch_context_restored_event_timer_.StartOneShot(0, BLINK_FROM_HERE);
+      dispatch_context_restored_event_timer_.StartOneShot(TimeDelta(),
+                                                          BLINK_FROM_HERE);
     } else {
       // legacy synchronous context restoration.
       Reset();
@@ -384,7 +384,7 @@ bool CanvasRenderingContext2D::StateHasFilter() {
   return GetState().HasFilter(canvas(), canvas()->Size(), this);
 }
 
-sk_sp<SkImageFilter> CanvasRenderingContext2D::StateGetFilter() {
+sk_sp<PaintFilter> CanvasRenderingContext2D::StateGetFilter() {
   return GetState().GetFilter(canvas(), canvas()->Size(), this);
 }
 
@@ -409,10 +409,6 @@ PaintCanvas* CanvasRenderingContext2D::ExistingDrawingCanvas() const {
 
 void CanvasRenderingContext2D::DisableDeferral(DisableDeferralReason reason) {
   canvas()->DisableDeferral(reason);
-}
-
-AffineTransform CanvasRenderingContext2D::BaseTransform() const {
-  return canvas()->BaseTransform();
 }
 
 String CanvasRenderingContext2D::font() const {
@@ -1069,6 +1065,14 @@ unsigned CanvasRenderingContext2D::HitRegionsCount() const {
     return hit_region_manager_->GetHitRegionsCount();
 
   return 0;
+}
+
+void CanvasRenderingContext2D::DisableAcceleration() {
+  canvas()->DisableAcceleration();
+}
+
+void CanvasRenderingContext2D::DidInvokeGPUReadbackInCurrentFrame() {
+  canvas()->DidInvokeGPUReadbackInCurrentFrame();
 }
 
 }  // namespace blink

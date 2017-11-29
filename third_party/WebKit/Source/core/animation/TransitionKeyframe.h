@@ -31,6 +31,8 @@ class CORE_EXPORT TransitionKeyframe : public Keyframe {
   void SetCompositorValue(scoped_refptr<AnimatableValue>);
   PropertyHandleSet Properties() const final;
 
+  void AddKeyframePropertiesToV8Object(V8ObjectBuilder&) const override;
+
   class PropertySpecificKeyframe : public Keyframe::PropertySpecificKeyframe {
    public:
     static scoped_refptr<PropertySpecificKeyframe> Create(
@@ -99,7 +101,8 @@ class CORE_EXPORT TransitionKeyframe : public Keyframe {
   }
 
   scoped_refptr<Keyframe::PropertySpecificKeyframe>
-  CreatePropertySpecificKeyframe(const PropertyHandle&) const final;
+  CreatePropertySpecificKeyframe(const PropertyHandle&,
+                                 double offset) const final;
 
   PropertyHandle property_;
   std::unique_ptr<TypedInterpolationValue> value_;

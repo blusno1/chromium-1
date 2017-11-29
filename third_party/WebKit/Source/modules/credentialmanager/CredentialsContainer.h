@@ -26,12 +26,11 @@ class MODULES_EXPORT CredentialsContainer final : public ScriptWrappable {
 
   // CredentialsContainer.idl
   ScriptPromise get(ScriptState*, const CredentialRequestOptions&);
-  ScriptPromise store(ScriptState*, Credential* = 0);
+  ScriptPromise store(ScriptState*, Credential* = nullptr);
   ScriptPromise create(ScriptState*,
                        const CredentialCreationOptions&,
                        ExceptionState&);
   ScriptPromise preventSilentAccess(ScriptState*);
-  ScriptPromise requireUserMediation(ScriptState*);
 
  private:
   CredentialsContainer();

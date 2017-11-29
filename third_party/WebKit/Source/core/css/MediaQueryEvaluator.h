@@ -28,6 +28,7 @@
 #ifndef MediaQueryEvaluator_h
 #define MediaQueryEvaluator_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/text/WTFString.h"
@@ -56,13 +57,12 @@ using MediaQueryResultList = Vector<MediaQueryResult>;
 
 class CORE_EXPORT MediaQueryEvaluator final
     : public GarbageCollectedFinalized<MediaQueryEvaluator> {
-  WTF_MAKE_NONCOPYABLE(MediaQueryEvaluator);
 
  public:
   static void Init();
 
   // Creates evaluator which evaluates to true for all media queries.
-  MediaQueryEvaluator() {}
+  MediaQueryEvaluator() = default;
 
   // Creates evaluator which evaluates only simple media queries
   // Evaluator returns true for acceptedMediaType and returns true for any media
@@ -102,6 +102,7 @@ class CORE_EXPORT MediaQueryEvaluator final
 
   String media_type_;
   Member<MediaValues> media_values_;
+  DISALLOW_COPY_AND_ASSIGN(MediaQueryEvaluator);
 };
 
 }  // namespace blink

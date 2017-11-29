@@ -25,6 +25,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tracing/crash_service_uploader.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_switches.h"
@@ -194,6 +195,10 @@ void ProfilingProcessHost::Register() {
   Add(this);
   registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CREATED,
                  content::NotificationService::AllBrowserContextsAndSources());
+  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+                 content::NotificationService::AllBrowserContextsAndSources());
+  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_TERMINATED,
+                 content::NotificationService::AllBrowserContextsAndSources());
   is_registered_ = true;
 }
 
@@ -237,13 +242,12 @@ void ProfilingProcessHost::Observe(
 
   // NOTIFICATION_RENDERER_PROCESS_CLOSED corresponds to death of an underlying
   // RenderProcess. NOTIFICATION_RENDERER_PROCESS_TERMINATED corresponds to when
-  // the RenderProcessHost's lifetime is ending. The two are related, but it is
-  // possible that a RenderProcessHost is reused if something happens that
-  // forces it to create a new RenderProcess. Since profiling a child process
-  // is scoped by the lifetime of the child process,
-  // NOTIFICATION_RENDERER_PROCESS_CLOSED is the appropriate event.
+  // the RenderProcessHost's lifetime is ending. Ideally, we'd only listen to
+  // the former, but if the RenderProcessHost is destroyed before the
+  // RenderProcess, then the former is never sent.
   if (host == profiled_renderer_ &&
-      type == content::NOTIFICATION_RENDERER_PROCESS_CLOSED) {
+      (type == content::NOTIFICATION_RENDERER_PROCESS_TERMINATED ||
+       type == content::NOTIFICATION_RENDERER_PROCESS_CLOSED)) {
     // |profiled_renderer_| is only ever set in kRendererSampling mode. This
     // code is a deadstore otherwise so it's safe but having a DCHECK makes the
     // intent clear.
@@ -315,6 +319,14 @@ void ProfilingProcessHost::OnDumpProcessesForTracingCallback(
         kTraceEventArgTypes, nullptr /* arg_values */, &wrapper,
         TRACE_EVENT_FLAG_HAS_ID);
   }
+
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+      ->PostTask(FROM_HERE,
+                 base::Bind(&ProfilingProcessHost::DumpProcessFinishedUIThread,
+                            base::Unretained(this)));
+}
+
+void ProfilingProcessHost::DumpProcessFinishedUIThread() {
   if (dump_process_for_tracing_callback_) {
     std::move(dump_process_for_tracing_callback_).Run();
     dump_process_for_tracing_callback_.Reset();
@@ -367,19 +379,7 @@ ProfilingProcessHost::Mode ProfilingProcessHost::GetCurrentMode() {
           kOOPHeapProfilingFeature, kOOPHeapProfilingFeatureMode);
     }
 
-    if (mode == switches::kMemlogModeAll)
-      return Mode::kAll;
-    if (mode == switches::kMemlogModeMinimal)
-      return Mode::kMinimal;
-    if (mode == switches::kMemlogModeBrowser)
-      return Mode::kBrowser;
-    if (mode == switches::kMemlogModeGpu)
-      return Mode::kGpu;
-    if (mode == switches::kMemlogModeRendererSampling)
-      return Mode::kRendererSampling;
-
-    DLOG(ERROR) << "Unsupported value: \"" << mode << "\" passed to --"
-                << switches::kMemlog;
+    return ConvertStringToMode(mode);
   }
   return Mode::kNone;
 #else
@@ -389,6 +389,24 @@ ProfilingProcessHost::Mode ProfilingProcessHost::GetCurrentMode() {
       << "is not available in this build.";
   return Mode::kNone;
 #endif
+}
+
+// static
+ProfilingProcessHost::Mode ProfilingProcessHost::ConvertStringToMode(
+    const std::string& mode) {
+  if (mode == switches::kMemlogModeAll)
+    return Mode::kAll;
+  if (mode == switches::kMemlogModeMinimal)
+    return Mode::kMinimal;
+  if (mode == switches::kMemlogModeBrowser)
+    return Mode::kBrowser;
+  if (mode == switches::kMemlogModeGpu)
+    return Mode::kGpu;
+  if (mode == switches::kMemlogModeRendererSampling)
+    return Mode::kRendererSampling;
+  DLOG(ERROR) << "Unsupported value: \"" << mode << "\" passed to --"
+              << switches::kMemlog;
+  return Mode::kNone;
 }
 
 // static
@@ -438,8 +456,7 @@ void ProfilingProcessHost::RequestProcessDump(base::ProcessId pid,
                      kNoTriggerName, std::move(done)));
 }
 
-void ProfilingProcessHost::RequestProcessReport(base::ProcessId pid,
-                                                std::string trigger_name) {
+void ProfilingProcessHost::RequestProcessReport(std::string trigger_name) {
   // https://crbug.com/753218: Add e2e tests for this code path.
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   if (!connector_) {
@@ -448,25 +465,52 @@ void ProfilingProcessHost::RequestProcessReport(base::ProcessId pid,
     return;
   }
 
+  auto finish_report_callback = base::BindOnce(
+      [](std::string trigger_name, bool success, std::string trace) {
+        if (success) {
+          UploadTraceToCrashServer(std::move(trace), std::move(trigger_name));
+        }
+      },
+      std::move(trigger_name));
+  RequestTraceWithHeapDump(std::move(finish_report_callback), false);
+}
+
+void ProfilingProcessHost::RequestTraceWithHeapDump(
+    TraceFinishedCallback callback,
+    bool stop_immediately_after_heap_dump_for_tests) {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+
+  if (!connector_) {
+    DLOG(ERROR)
+        << "Requesting heap dump when profiling process hasn't started.";
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), false, std::string()));
+    return;
+  }
+
   bool result = content::TracingController::GetInstance()->StartTracing(
       GetBackgroundTracingConfig(), base::Closure());
-  if (!result)
+  if (!result) {
+    DLOG(ERROR) << "Requesting heap dump when tracing has already started.";
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), false, std::string()));
     return;
+  }
 
-  // Once the trace has stopped, upload the log to the crash server.
+  // Once the trace has stopped, run |callback| on the UI thread. At this point,
+  // ownership of |callback| has been transfered to |finish_sink_callback|.
   auto finish_sink_callback = base::Bind(
-      [](std::string trigger_name,
+      [](TraceFinishedCallback callback,
          std::unique_ptr<const base::DictionaryValue> metadata,
          base::RefCountedString* in) {
         std::string result;
         result.swap(in->data());
         content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::UI)
-            ->PostTask(FROM_HERE, base::BindOnce(&UploadTraceToCrashServer,
-                                                 std::move(result),
-                                                 std::move(trigger_name)));
+            ->PostTask(FROM_HERE, base::BindOnce(std::move(callback), true,
+                                                 std::move(result)));
       },
-      std::move(trigger_name));
+      base::Passed(std::move(callback)));
 
   scoped_refptr<content::TracingController::TraceDataEndpoint> sink =
       content::TracingController::CreateStringEndpoint(
@@ -477,16 +521,18 @@ void ProfilingProcessHost::RequestProcessReport(base::ProcessId pid,
           &content::TracingController::StopTracing),
       base::Unretained(content::TracingController::GetInstance()), sink);
 
-  // Wait 10 seconds, then end the trace.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, std::move(stop_tracing_closure),
-      base::TimeDelta::FromSeconds(10));
-}
-
-void ProfilingProcessHost::SetDumpProcessForTracingCallback(
-    base::OnceClosure callback) {
-  DCHECK(!dump_process_for_tracing_callback_);
-  dump_process_for_tracing_callback_ = std::move(callback);
+  if (stop_immediately_after_heap_dump_for_tests) {
+    // There is no race condition between setting
+    // |dump_process_for_tracing_callback_| and starting tracing, since running
+    // the callback is an asynchronous task executed on the UI thread.
+    DCHECK(!dump_process_for_tracing_callback_);
+    dump_process_for_tracing_callback_ = std::move(stop_tracing_closure);
+  } else {
+    // Wait 10 seconds, then end the trace.
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, std::move(stop_tracing_closure),
+        base::TimeDelta::FromSeconds(10));
+  }
 }
 
 void ProfilingProcessHost::MakeConnector(
@@ -632,6 +678,12 @@ bool ProfilingProcessHost::ShouldProfileProcessType(int process_type) {
 
 bool ProfilingProcessHost::ShouldProfileNewRenderer(
     content::RenderProcessHost* renderer) const {
+  // Never profile incognito processes.
+  if (Profile::FromBrowserContext(renderer->GetBrowserContext())
+          ->GetProfileType() == Profile::INCOGNITO_PROFILE) {
+    return false;
+  }
+
   if (mode() == Mode::kAll) {
     return true;
   } else if (mode() == Mode::kRendererSampling && !profiled_renderer_) {

@@ -35,8 +35,6 @@ PermissionType PermissionDescriptorToPermissionType(
       return PermissionType::GEOLOCATION;
     case PermissionName::NOTIFICATIONS:
       return PermissionType::NOTIFICATIONS;
-    case PermissionName::PUSH_NOTIFICATIONS:
-      return PermissionType::PUSH_MESSAGING;
     case PermissionName::MIDI: {
       if (descriptor->extension && descriptor->extension->is_midi() &&
           descriptor->extension->get_midi()->sysex) {
@@ -59,9 +57,9 @@ PermissionType PermissionDescriptorToPermissionType(
     case PermissionName::ACCESSIBILITY_EVENTS:
       return PermissionType::ACCESSIBILITY_EVENTS;
     case PermissionName::CLIPBOARD_READ:
+      return PermissionType::CLIPBOARD_READ;
     case PermissionName::CLIPBOARD_WRITE:
-      NOTIMPLEMENTED();
-      break;
+      return PermissionType::CLIPBOARD_WRITE;
   }
 
   NOTREACHED();
@@ -82,13 +80,14 @@ blink::FeaturePolicyFeature PermissionTypeToFeaturePolicyFeature(
       return blink::FeaturePolicyFeature::kMicrophone;
     case PermissionType::VIDEO_CAPTURE:
       return blink::FeaturePolicyFeature::kCamera;
-    case PermissionType::PUSH_MESSAGING:
     case PermissionType::NOTIFICATIONS:
     case PermissionType::DURABLE_STORAGE:
     case PermissionType::BACKGROUND_SYNC:
     case PermissionType::FLASH:
     case PermissionType::SENSORS:
     case PermissionType::ACCESSIBILITY_EVENTS:
+    case PermissionType::CLIPBOARD_READ:
+    case PermissionType::CLIPBOARD_WRITE:
     case PermissionType::NUM:
       // These aren't exposed by feature policy.
       return blink::FeaturePolicyFeature::kNotFound;

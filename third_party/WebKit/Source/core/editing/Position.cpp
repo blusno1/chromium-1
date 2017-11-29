@@ -68,7 +68,7 @@ const TreeScope* PositionTemplate<Strategy>::CommonAncestorTreeScope(
 
 template <typename Strategy>
 PositionTemplate<Strategy> PositionTemplate<Strategy>::EditingPositionOf(
-    Node* anchor_node,
+    const Node* anchor_node,
     int offset) {
   if (!anchor_node || anchor_node->IsTextNode())
     return PositionTemplate<Strategy>(anchor_node, offset);
@@ -535,24 +535,6 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::LastPositionInNode(
   }
   return PositionTemplate<Strategy>(&anchor_node,
                                     PositionAnchorType::kAfterChildren);
-}
-
-// static
-template <typename Strategy>
-PositionTemplate<Strategy>
-PositionTemplate<Strategy>::FirstPositionInOrBeforeNodeDeprecated(Node* node) {
-  if (!node)
-    return PositionTemplate<Strategy>();
-  return FirstPositionInOrBeforeNode(*node);
-}
-
-// static
-template <typename Strategy>
-PositionTemplate<Strategy>
-PositionTemplate<Strategy>::LastPositionInOrAfterNodeDeprecated(Node* node) {
-  if (!node)
-    return PositionTemplate<Strategy>();
-  return LastPositionInOrAfterNode(*node);
 }
 
 // static

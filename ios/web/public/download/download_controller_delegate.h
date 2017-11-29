@@ -24,13 +24,13 @@ class DownloadControllerDelegate {
   //
   // Renderer-initiated download or download created with
   // DownloadController::CreateDownloadTask() call does not start automatically.
-  // If the client wants to start the download it should set responce writer
-  // via DownloadTask::SetResponseWriter() and call DownloadTask::Start().
+  // If the client wants to start the download it should call
+  // DownloadTask::Start().
   // Clients may call DownloadTask::GetSuggestedFilename() to get the filename
   // for the download and DownloadTask::GetTotalBytes() to get the estimated
   // size.
   virtual void OnDownloadCreated(DownloadController* download_controller,
-                                 const WebState* web_state,
+                                 WebState* web_state,
                                  std::unique_ptr<DownloadTask> task) {}
 
   // Called when DownloadController is about to be destroyed. Delegate should

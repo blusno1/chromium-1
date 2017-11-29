@@ -10,13 +10,10 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "media/cdm/api/content_decryption_module.h"
-#include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::_;
-using ::testing::SaveArg;
-using ::testing::StrictMock;
 using Status = cdm::FileIOClient::Status;
 
 namespace media {
@@ -69,18 +66,27 @@ class MockCdmStorage : public mojom::CdmStorage {
 // unittests would be good.
 // TODO(crbug.com/777550): Implement tests that write to files.
 
-class MojoCdmFileIOTest : public testing::Test {
+class MojoCdmFileIOTest : public testing::Test, public MojoCdmFileIO::Delegate {
  protected:
   MojoCdmFileIOTest() {}
   ~MojoCdmFileIOTest() override {}
 
+  // testing::Test implementation.
   void SetUp() override {
     client_ = std::make_unique<MockFileIOClient>();
     cdm_storage_ = std::make_unique<MockCdmStorage>();
     ASSERT_TRUE(cdm_storage_->SetUp());
-    file_io_ = std::make_unique<MojoCdmFileIO>(
-        client_.get(), cdm_storage_.get(), CdmFileIO::FileReadCB());
+    file_io_ = std::make_unique<MojoCdmFileIO>(this, client_.get(),
+                                               cdm_storage_.get());
   }
+
+  // MojoCdmFileIO::Delegate implementation.
+  void CloseCdmFileIO(MojoCdmFileIO* cdm_file_io) override {
+    DCHECK_EQ(file_io_.get(), cdm_file_io);
+    file_io_.reset();
+  }
+
+  void ReportFileReadSize(int file_size_bytes) override {}
 
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<MojoCdmFileIO> file_io_;

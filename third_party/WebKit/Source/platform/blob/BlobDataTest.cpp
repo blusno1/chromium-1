@@ -25,6 +25,7 @@ namespace blink {
 using mojom::blink::Blob;
 using mojom::blink::BlobPtr;
 using mojom::blink::BlobRegistry;
+using mojom::blink::BlobRegistryPtr;
 using mojom::blink::BlobRegistryRequest;
 using mojom::blink::BlobRequest;
 using mojom::blink::DataElement;
@@ -133,43 +134,6 @@ class MockBlobRegistry : public BlobRegistry {
   Vector<BindingRequest> binding_requests;
 };
 
-class MojoBlobInterfaceProvider final : public InterfaceProvider {
- public:
-  explicit MojoBlobInterfaceProvider(BlobRegistry* mock_registry)
-      : mock_registry_(mock_registry) {}
-
-  void GetInterface(const char* name,
-                    mojo::ScopedMessagePipeHandle handle) override {
-    if (std::string(name) == BlobRegistry::Name_) {
-      registry_bindings_.AddBinding(mock_registry_,
-                                    BlobRegistryRequest(std::move(handle)));
-      return;
-    }
-  }
-
-  void Flush() { registry_bindings_.FlushForTesting(); }
-
- private:
-  BlobRegistry* mock_registry_;
-  mojo::BindingSet<BlobRegistry> registry_bindings_;
-};
-
-class MojoBlobTestPlatform : public TestingPlatformSupport {
- public:
-  explicit MojoBlobTestPlatform(BlobRegistry* mock_registry)
-      : interface_provider_(
-            std::make_unique<MojoBlobInterfaceProvider>(mock_registry)) {}
-
-  InterfaceProvider* GetInterfaceProvider() override {
-    return interface_provider_.get();
-  }
-
-  void Flush() { interface_provider_->Flush(); }
-
- private:
-  std::unique_ptr<MojoBlobInterfaceProvider> interface_provider_;
-};
-
 struct ExpectedElement {
   DataElementPtr element;
   String blob_uuid;
@@ -218,7 +182,12 @@ struct ExpectedElement {
 class BlobDataHandleTest : public ::testing::Test {
  public:
   BlobDataHandleTest()
-      : enable_mojo_blobs_(true), testing_platform_(&mock_blob_registry_) {}
+      : enable_mojo_blobs_(true), blob_registry_binding_(&mock_blob_registry_) {
+    blob_registry_binding_.Bind(MakeRequest(&blob_registry_ptr_));
+    BlobDataHandle::SetBlobRegistryForTesting(blob_registry_ptr_.get());
+  }
+
+  ~BlobDataHandleTest() { BlobDataHandle::SetBlobRegistryForTesting(nullptr); }
 
   void SetUp() override {
     small_test_data_.resize(1024);
@@ -245,7 +214,7 @@ class BlobDataHandleTest : public ::testing::Test {
     test_blob_ =
         BlobDataHandle::Create(std::move(test_data), large_test_data_.size());
 
-    testing_platform_->Flush();
+    blob_registry_ptr_.FlushForTesting();
     ASSERT_EQ(2u, mock_blob_registry_.registrations.size());
     empty_blob_uuid_ = mock_blob_registry_.registrations[0].uuid;
     test_blob_uuid_ = mock_blob_registry_.registrations[1].uuid;
@@ -264,17 +233,17 @@ class BlobDataHandleTest : public ::testing::Test {
     EXPECT_EQ(type, handle->GetType());
     EXPECT_EQ(is_single_unknown_size_file, handle->IsSingleUnknownSizeFile());
 
-    testing_platform_->Flush();
+    blob_registry_ptr_.FlushForTesting();
     EXPECT_EQ(0u, mock_blob_registry_.binding_requests.size());
     ASSERT_EQ(1u, mock_blob_registry_.registrations.size());
-    const auto& reg = mock_blob_registry_.registrations[0];
+    auto& reg = mock_blob_registry_.registrations[0];
     EXPECT_EQ(handle->Uuid(), reg.uuid);
     EXPECT_EQ(type.IsNull() ? "" : type, reg.content_type);
     EXPECT_EQ("", reg.content_disposition);
     ASSERT_EQ(expected_elements.size(), reg.elements.size());
     for (size_t i = 0; i < expected_elements.size(); ++i) {
       const auto& expected = expected_elements[i].element;
-      const auto& actual = reg.elements[i];
+      auto& actual = reg.elements[i];
       if (expected->is_bytes()) {
         ASSERT_TRUE(actual->is_bytes());
         EXPECT_EQ(expected->get_bytes()->length, actual->get_bytes()->length);
@@ -283,7 +252,9 @@ class BlobDataHandleTest : public ::testing::Test {
 
         base::RunLoop loop;
         Vector<uint8_t> received_bytes;
-        actual->get_bytes()->data->RequestAsReply(base::Bind(
+        mojom::blink::BytesProviderPtr data(
+            std::move(actual->get_bytes()->data));
+        data->RequestAsReply(base::Bind(
             [](base::Closure quit_closure, Vector<uint8_t>* bytes_out,
                const Vector<uint8_t>& bytes) {
               *bytes_out = bytes;
@@ -319,7 +290,8 @@ class BlobDataHandleTest : public ::testing::Test {
 
         base::RunLoop loop;
         String received_uuid;
-        actual->get_blob()->blob->GetInternalUUID(base::Bind(
+        mojom::blink::BlobPtr blob(std::move(actual->get_blob()->blob));
+        blob->GetInternalUUID(base::Bind(
             [](base::Closure quit_closure, String* uuid_out,
                const String& uuid) {
               *uuid_out = uuid;
@@ -336,9 +308,9 @@ class BlobDataHandleTest : public ::testing::Test {
  protected:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   ScopedMojoBlobsForTest enable_mojo_blobs_;
-  ScopedTestingPlatformSupport<MojoBlobTestPlatform, BlobRegistry*>
-      testing_platform_;
   MockBlobRegistry mock_blob_registry_;
+  BlobRegistryPtr blob_registry_ptr_;
+  mojo::Binding<BlobRegistry> blob_registry_binding_;
 
   // Significantly less than BlobData's kMaxConsolidatedItemSizeInBytes.
   Vector<uint8_t> small_test_data_;
@@ -359,7 +331,7 @@ TEST_F(BlobDataHandleTest, CreateEmpty) {
   EXPECT_EQ(0u, handle->size());
   EXPECT_FALSE(handle->IsSingleUnknownSizeFile());
 
-  testing_platform_->Flush();
+  blob_registry_ptr_.FlushForTesting();
   EXPECT_EQ(0u, mock_blob_registry_.binding_requests.size());
   ASSERT_EQ(1u, mock_blob_registry_.registrations.size());
   const auto& reg = mock_blob_registry_.registrations[0];
@@ -390,7 +362,7 @@ TEST_F(BlobDataHandleTest, CreateFromUUID) {
   EXPECT_EQ(kSize, handle->size());
   EXPECT_FALSE(handle->IsSingleUnknownSizeFile());
 
-  testing_platform_->Flush();
+  blob_registry_ptr_.FlushForTesting();
   EXPECT_EQ(0u, mock_blob_registry_.registrations.size());
   ASSERT_EQ(1u, mock_blob_registry_.binding_requests.size());
   EXPECT_EQ(kUuid, mock_blob_registry_.binding_requests[0].uuid);

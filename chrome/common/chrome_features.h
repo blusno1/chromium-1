@@ -75,6 +75,10 @@ extern const base::Feature kCaptureThumbnailOnNavigatingAway;
 
 extern const base::Feature kCheckInstallabilityForBannerOnLoad;
 
+#if defined(OS_ANDROID)
+extern const base::Feature kClearOldBrowsingData;
+#endif
+
 extern const base::Feature kClickToOpenPDFPlaceholder;
 
 extern const base::Feature kClipboardContentSetting;
@@ -93,8 +97,6 @@ extern const base::Feature kDesktopIOSPromotion;
 
 extern const base::Feature kDesktopPWAWindowing;
 
-extern const base::Feature kDisplayPersistenceToggleInPermissionPrompts;
-
 #if !defined(OS_ANDROID)
 extern const base::Feature kDoodlesOnLocalNtp;
 #endif
@@ -108,9 +110,21 @@ extern const base::Feature kExpectCTReporting;
 extern const base::Feature kExperimentalAppBanners;
 extern const base::Feature kExperimentalKeyboardLockUI;
 
-#if BUILDFLAG(ENABLE_VR)
-extern const base::Feature kExperimentalVRFeatures;
+// Android expects this string from Java code, so it is always needed.
+// TODO(crbug.com/731802): Use #if BUILDFLAG(ENABLE_VR_BROWSING) instead.
+#if BUILDFLAG(ENABLE_VR) || defined(OS_ANDROID)
+extern const base::Feature kVrBrowsing;
 #endif
+#if BUILDFLAG(ENABLE_VR)
+extern const base::Feature kVrBrowserKeyboard;
+extern const base::Feature kVrBrowsingExperimentalFeatures;
+extern const base::Feature kVrBrowsingExperimentalRendering;
+
+#if BUILDFLAG(ENABLE_OPENVR)
+extern const base::Feature kOpenVR;
+#endif  // ENABLE_OPENVR
+
+#endif  // ENABLE_VR
 
 #if defined(OS_MACOSX)
 extern const base::Feature kFullscreenToolbarReveal;
@@ -127,6 +141,10 @@ extern const base::Feature kHappinessTrackingSystem;
 extern const base::Feature kImportantSitesInCbd;
 
 extern const base::Feature kImprovedRecoveryComponent;
+
+#if !defined(OS_ANDROID)
+extern const base::Feature kLocalScreenCasting;
+#endif
 
 extern const base::Feature kLsdPermissionPrompt;
 
@@ -234,22 +252,15 @@ extern const base::Feature kShowAllDialogsWithViewsToolkit;
 
 extern const base::Feature kSimplifiedFullscreenUI;
 
-extern const base::Feature kSiteDetails;
-
 #if defined(OS_ANDROID)
 extern const base::Feature kSiteNotificationChannels;
 #endif
 
 #if defined(OS_CHROMEOS)
-extern const base::Feature kNativeSamba;
+extern const base::Feature kNativeSmb;
 #endif
 
 extern const base::Feature kSoundContentSetting;
-
-#if !defined(OS_ANDROID)
-extern const base::Feature kStaggeredBackgroundTabOpening;
-extern const base::Feature kStaggeredBackgroundTabOpeningExperiment;
-#endif
 
 extern const base::Feature kSupervisedUserCreation;
 
@@ -270,9 +281,6 @@ extern const base::Feature kUseGoogleLocalNtp;
 #if !defined(OS_ANDROID)
 extern const base::Feature kVoiceSearchOnLocalNtp;
 #endif
-
-extern const base::Feature kVrShell;
-extern const base::Feature kVrShellExperimentalRendering;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kOptInImeMenu;

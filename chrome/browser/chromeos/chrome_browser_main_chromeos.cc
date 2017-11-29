@@ -86,6 +86,7 @@
 #include "chrome/browser/chromeos/power/freezer_cgroup_process_manager.h"
 #include "chrome/browser/chromeos/power/idle_action_warning_observer.h"
 #include "chrome/browser/chromeos/power/power_data_collector.h"
+#include "chrome/browser/chromeos/power/power_metrics_reporter.h"
 #include "chrome/browser/chromeos/power/power_prefs.h"
 #include "chrome/browser/chromeos/power/renderer_freezer.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -108,6 +109,7 @@
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/tablet_mode_client.h"
+#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
@@ -736,6 +738,9 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   chromeos::ResourceReporter::GetInstance()->StartMonitoring(
       task_manager::TaskManagerInterface::GetTaskManager());
 
+  if (!base::FeatureList::IsEnabled(features::kNativeNotifications))
+    notification_client_.reset(NotificationPlatformBridge::Create());
+
   ChromeBrowserMainPartsLinux::PreMainMessageLoopRun();
 }
 
@@ -806,6 +811,8 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
     MagnificationManager::Initialize();
   }
 
+  // TODO(crbug.com/776464): Remove WallpaperManager after everything is
+  // migrated to WallpaperController.
   WallpaperManager::SetPathIds(chrome::DIR_USER_DATA,
                                chrome::DIR_CHROMEOS_WALLPAPERS,
                                chrome::DIR_CHROMEOS_CUSTOM_WALLPAPERS);
@@ -838,6 +845,9 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   // Makes mojo request to TabletModeController in ash.
   tablet_mode_client_ = std::make_unique<TabletModeClient>();
   tablet_mode_client_->Init();
+
+  wallpaper_controller_client_ = std::make_unique<WallpaperControllerClient>();
+  wallpaper_controller_client_->Init();
 
   if (lock_screen_apps::StateController::IsEnabled()) {
     lock_screen_apps_state_controller_ =
@@ -878,9 +888,6 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   // header of new-style notification.
   message_center::MessageCenter::Get()->SetProductOSName(
       l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_OS_NAME));
-
-  if (!base::FeatureList::IsEnabled(features::kNativeNotifications))
-    notification_client_.reset(NotificationPlatformBridge::Create());
 
   // Register all installed components for regular update.
   base::PostTaskWithTraitsAndReplyWithResult(
@@ -1017,6 +1024,10 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   renderer_freezer_ = base::MakeUnique<RendererFreezer>(
       base::MakeUnique<FreezerCgroupProcessManager>());
 
+  power_metrics_reporter_ = std::make_unique<PowerMetricsReporter>(
+      DBusThreadManager::Get()->GetPowerManagerClient(),
+      g_browser_process->local_state());
+
   g_browser_process->platform_part()->InitializeAutomaticRebootManager();
   g_browser_process->platform_part()->InitializeDeviceDisablingManager();
 
@@ -1134,6 +1145,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   network_pref_state_observer_.reset();
   extension_volume_observer_.reset();
   power_prefs_.reset();
+  power_metrics_reporter_.reset();
   renderer_freezer_.reset();
   wake_on_wifi_manager_.reset();
   network_throttling_observer_.reset();
@@ -1159,6 +1171,8 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   g_browser_process->platform_part()->user_manager()->Shutdown();
   WallpaperManager::Shutdown();
 
+  wallpaper_controller_client_.reset();
+
   // Let the DeviceDisablingManager unregister itself as an observer of the
   // CrosSettings singleton before it is destroyed.
   g_browser_process->platform_part()->ShutdownDeviceDisablingManager();
@@ -1178,6 +1192,9 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   // is called.
   g_browser_process->platform_part()->browser_policy_connector_chromeos()->
       PreShutdown();
+
+  // Close the notification client before destroying the profile manager.
+  notification_client_.reset();
 
   // NOTE: Closes ash and destroys ash::Shell.
   ChromeBrowserMainPartsLinux::PostMainMessageLoopRun();

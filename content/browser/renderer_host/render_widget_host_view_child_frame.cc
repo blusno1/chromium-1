@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -16,6 +17,7 @@
 #include "build/build_config.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/common/switches.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -70,10 +72,16 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
       next_surface_sequence_(1u),
       current_surface_scale_factor_(1.f),
       frame_connector_(nullptr),
+      enable_viz_(base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableViz)),
       background_color_(SK_ColorWHITE),
       scroll_bubbling_state_(NO_ACTIVE_GESTURE_SCROLL),
       weak_factory_(this) {
-  if (!IsUsingMus()) {
+  if (IsUsingMus()) {
+    // In Mus the RenderFrameProxy will eventually assign a viz::FrameSinkId
+    // until then set ours invalid, as operations using it will be disregarded.
+    frame_sink_id_ = viz::FrameSinkId();
+  } else {
     GetHostFrameSinkManager()->RegisterFrameSinkId(frame_sink_id_, this);
 #if DCHECK_IS_ON()
     GetHostFrameSinkManager()->SetFrameSinkDebugLabel(
@@ -172,6 +180,14 @@ void RenderWidgetHostViewChildFrame::SetFrameConnectorDelegate(
 #endif
 }
 
+#if defined(USE_AURA)
+void RenderWidgetHostViewChildFrame::SetFrameSinkId(
+    const viz::FrameSinkId& frame_sink_id) {
+  if (IsUsingMus())
+    frame_sink_id_ = frame_sink_id;
+}
+#endif  // defined(USE_AURA)
+
 void RenderWidgetHostViewChildFrame::OnManagerWillDestroy(
     TouchSelectionControllerClientManager* manager) {
   // We get the manager via the observer callback instead of through the
@@ -243,7 +259,7 @@ bool RenderWidgetHostViewChildFrame::IsShowing() {
 gfx::Rect RenderWidgetHostViewChildFrame::GetViewBounds() const {
   gfx::Rect rect;
   if (frame_connector_) {
-    rect = frame_connector_->ChildFrameRect();
+    rect = frame_connector_->frame_rect_in_dip();
 
     RenderWidgetHostView* parent_view =
         frame_connector_->GetParentRenderWidgetHostView();
@@ -316,13 +332,9 @@ SkColor RenderWidgetHostViewChildFrame::background_color() const {
 }
 
 gfx::Size RenderWidgetHostViewChildFrame::GetPhysicalBackingSize() const {
-  gfx::Size size;
-  if (frame_connector_) {
-    size = gfx::ScaleToCeiledSize(
-        frame_connector_->ChildFrameRect().size(),
-        frame_connector_->screen_info().device_scale_factor);
-  }
-  return size;
+  if (frame_connector_)
+    return frame_connector_->frame_rect_in_pixels().size();
+  return gfx::Size();
 }
 
 void RenderWidgetHostViewChildFrame::InitAsPopup(
@@ -423,6 +435,14 @@ void RenderWidgetHostViewChildFrame::SetIsInert() {
   if (host_ && frame_connector_) {
     host_->Send(new ViewMsg_SetIsInert(host_->GetRoutingID(),
                                        frame_connector_->IsInert()));
+  }
+}
+
+void RenderWidgetHostViewChildFrame::UpdateRenderThrottlingStatus() {
+  if (host_ && frame_connector_) {
+    host_->Send(new ViewMsg_UpdateRenderThrottlingStatus(
+        host_->GetRoutingID(), frame_connector_->IsThrottled(),
+        frame_connector_->IsSubtreeThrottled()));
   }
 }
 
@@ -593,6 +613,7 @@ void RenderWidgetHostViewChildFrame::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
     viz::CompositorFrame frame,
     viz::mojom::HitTestRegionListPtr hit_test_region_list) {
+  DCHECK(!enable_viz_);
   TRACE_EVENT0("content",
                "RenderWidgetHostViewChildFrame::OnSwapCompositorFrame");
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
@@ -604,6 +625,7 @@ void RenderWidgetHostViewChildFrame::SubmitCompositorFrame(
 
 void RenderWidgetHostViewChildFrame::OnDidNotProduceFrame(
     const viz::BeginFrameAck& ack) {
+  DCHECK(!enable_viz_);
   support_->DidNotProduceFrame(ack);
 }
 
@@ -791,6 +813,7 @@ void RenderWidgetHostViewChildFrame::WillSendScreenRects() {
   if (frame_connector_) {
     UpdateViewportIntersection(frame_connector_->ViewportIntersection());
     SetIsInert();
+    UpdateRenderThrottlingStatus();
   }
 }
 
@@ -890,6 +913,10 @@ void RenderWidgetHostViewChildFrame::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
   viz::SurfaceSequence sequence(frame_sink_id_, next_surface_sequence_++);
   SendSurfaceInfoToEmbedderImpl(surface_info, sequence);
+}
+
+void RenderWidgetHostViewChildFrame::OnFrameTokenChanged(uint32_t frame_token) {
+  OnFrameTokenChangedForView(frame_token);
 }
 
 void RenderWidgetHostViewChildFrame::SetNeedsBeginFrames(
@@ -999,7 +1026,7 @@ viz::SurfaceId RenderWidgetHostViewChildFrame::SurfaceIdForTesting() const {
 }
 
 void RenderWidgetHostViewChildFrame::CreateCompositorFrameSinkSupport() {
-  if (IsUsingMus())
+  if (IsUsingMus() || enable_viz_)
     return;
 
   DCHECK(!support_);

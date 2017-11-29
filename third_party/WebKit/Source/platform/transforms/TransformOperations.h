@@ -25,10 +25,10 @@
 #ifndef TransformOperations_h
 #define TransformOperations_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/geometry/LayoutSize.h"
 #include "platform/transforms/TransformOperation.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -83,7 +83,7 @@ class PLATFORM_EXPORT TransformOperations {
 
   size_t size() const { return operations_.size(); }
   const TransformOperation* at(size_t index) const {
-    return index < operations_.size() ? operations_.at(index).get() : 0;
+    return index < operations_.size() ? operations_.at(index).get() : nullptr;
   }
 
   bool BlendedBoundsForBox(const FloatBox&,

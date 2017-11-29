@@ -160,7 +160,7 @@ IPC_STRUCT_BEGIN(ExtensionMsg_ExecuteCode_Params)
   IPC_STRUCT_MEMBER(bool, match_about_blank)
 
   // When to inject the code.
-  IPC_STRUCT_MEMBER(int, run_at)
+  IPC_STRUCT_MEMBER(extensions::UserScript::RunLocation, run_at)
 
   // Whether to execute code in the main world (as opposed to an isolated
   // world).
@@ -656,7 +656,7 @@ IPC_MESSAGE_CONTROL3(ExtensionMsg_SetSessionInfo,
                      bool /* is_lock_screen_context */)
 
 // Notify the renderer that its window has closed.
-IPC_MESSAGE_ROUTED0(ExtensionMsg_AppWindowClosed)
+IPC_MESSAGE_ROUTED1(ExtensionMsg_AppWindowClosed, bool /* send_onclosed */)
 
 // Notify the renderer that an extension wants notifications when certain
 // searches match the active page.  This message replaces the old set of

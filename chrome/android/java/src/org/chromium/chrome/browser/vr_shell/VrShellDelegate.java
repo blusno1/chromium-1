@@ -107,7 +107,6 @@ public class VrShellDelegate
 
     private static final long REENTER_VR_TIMEOUT_MS = 1000;
     private static final int EXPECT_DON_TIMEOUT_MS = 2000;
-    private static final long ENTER_VR_FAILED_TIMEOUT_MS = 10000;
 
     private static final String FEEDBACK_REPORT_TYPE = "USER_INITIATED_FEEDBACK_REPORT_VR";
 
@@ -118,6 +117,7 @@ public class VrShellDelegate
     private static VrBroadcastReceiver sVrBroadcastReceiver;
     private static boolean sRegisteredDaydreamHook;
     private static boolean sAddedBlackOverlayView;
+    private static boolean sRegisteredVrAssetsComponent = false;
 
     private ChromeActivity mActivity;
 
@@ -175,9 +175,7 @@ public class VrShellDelegate
     // presentation experience.
     private boolean mVrBrowserUsed;
 
-    private boolean mWaitingForVrTimeout;
-
-    private boolean mDensityChanged;
+    private int mExpectedDensityChange;
 
     // Gets run when the user exits VR mode by clicking the 'x' button or system UI back button.
     private Runnable mCloseButtonListener;
@@ -333,7 +331,7 @@ public class VrShellDelegate
         // Daydream is not supported on pre-N devices.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return;
         if (sInstance != null) return; // Will be handled in onResume.
-        if (!activitySupportsVrBrowsing(activity)) return;
+        if (!activitySupportsVrBrowsing(activity) && sRegisteredVrAssetsComponent) return;
 
         // Reading VR support level and version can be slow, so do it asynchronously.
         new AsyncTask<Void, Void, VrDaydreamApi>() {
@@ -353,9 +351,12 @@ public class VrShellDelegate
             protected void onPostExecute(VrDaydreamApi api) {
                 // Registering the daydream intent has to be done on the UI thread. Note that this
                 // call is slow (~10ms at time of writing).
-                if (api != null
-                        && ApplicationStatus.getStateForActivity(activity)
-                                == ActivityState.RESUMED) {
+                if (api == null) return;
+                if (!sRegisteredVrAssetsComponent) {
+                    registerVrAssetsComponentIfDaydreamUser(api.isDaydreamCurrentViewer());
+                }
+                if (ApplicationStatus.getStateForActivity(activity) == ActivityState.RESUMED
+                        && activitySupportsVrBrowsing(activity)) {
                     registerDaydreamIntent(api, activity);
                 }
             }
@@ -418,20 +419,20 @@ public class VrShellDelegate
      * @return Whether VrShellDelegate handled the density change. If the density change is
      * unhandled, the Activity should be recreated in order to handle the change.
      */
-    public static boolean onDensityChanged(float oldDpi, float newDpi) {
-        if (DEBUG_LOGS) Log.i(TAG, "onDensityChanged [%.2f]->[%.2f] ", oldDpi, newDpi);
+    public static boolean onDensityChanged(int oldDpi, int newDpi) {
+        if (DEBUG_LOGS) Log.i(TAG, "onDensityChanged [%d]->[%d] ", oldDpi, newDpi);
         if (sInstance == null) return false;
         // If density changed while in VR, we expect a second density change to restore the density
         // to what it previously was when we exit VR. We shouldn't have to recreate the activity as
         // all non-VR UI is still using the old density.
-        if (sInstance.mDensityChanged) {
+        if (sInstance.mExpectedDensityChange != 0) {
             assert !sInstance.mInVr && !sInstance.mDonSucceeded;
-            sInstance.mDensityChanged = false;
-            return true;
+            int expectedDensity = sInstance.mExpectedDensityChange;
+            sInstance.mExpectedDensityChange = 0;
+            return (newDpi == expectedDensity);
         }
         if (sInstance.mInVr || sInstance.mDonSucceeded) {
-            sInstance.onDensityChangedInternal(oldDpi, newDpi);
-            sInstance.mDensityChanged = true;
+            sInstance.mExpectedDensityChange = oldDpi;
             return true;
         }
         return false;
@@ -467,7 +468,7 @@ public class VrShellDelegate
     private static boolean activitySupportsVrBrowsing(Activity activity) {
         if (activity instanceof ChromeTabbedActivity) return true;
         if (activity instanceof CustomTabActivity) {
-            return ChromeFeatureList.isEnabled(ChromeFeatureList.VR_CUSTOM_TAB_BROWSING);
+            return ChromeFeatureList.isEnabled(ChromeFeatureList.VR_BROWSING_IN_CUSTOM_TAB);
         }
         return false;
     }
@@ -475,6 +476,14 @@ public class VrShellDelegate
     private static boolean activitySupportsExitFeedback(Activity activity) {
         return activity instanceof ChromeTabbedActivity
                 && ChromeFeatureList.isEnabled(ChromeFeatureList.VR_BROWSING_FEEDBACK);
+    }
+
+    private static void registerVrAssetsComponentIfDaydreamUser(boolean isDaydreamCurrentViewer) {
+        assert !sRegisteredVrAssetsComponent;
+        if (isDaydreamCurrentViewer) {
+            nativeRegisterVrAssetsComponent();
+            sRegisteredVrAssetsComponent = true;
+        }
     }
 
     /**
@@ -549,14 +558,14 @@ public class VrShellDelegate
         // controller.
         if (vrSupportLevel != VR_DAYDREAM) return false;
         if (deviceChangesDensityInVr()) return false;
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.VR_SHELL);
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.VR_BROWSING);
     }
 
     private static boolean deviceChangesDensityInVr() {
         // If the screen density changed while in VR, we have to disable the VR browser as java UI
         // used or created by VR browsing will be broken.
         if (sInstance != null) {
-            if (sInstance.mDensityChanged) return true;
+            if (sInstance.mExpectedDensityChange != 0) return true;
             if (sInstance.mVrSupportLevel != VR_DAYDREAM) return false;
         }
 
@@ -750,8 +759,8 @@ public class VrShellDelegate
         // case of autopresentation, we don't want to enter WebVR mode so that we can show the
         // splash screen. In this case, we enter WebVR mode when the site requests presentation.
         // Note that we don't want to dispatch vrdisplayactivate for auto-present and vr intents.
-        boolean tentativeWebVrMode = mListeningForWebVrActivateBeforePause && !mRequestedWebVr
-                && !mAutopresentWebVr && !mEnterVrOnStartup;
+        boolean tentativeWebVrMode =
+                mListeningForWebVrActivateBeforePause && !mRequestedWebVr && !mEnterVrOnStartup;
         if (tentativeWebVrMode) {
             // Before we fire DisplayActivate, we need focus to propagate to the WebContents we're
             // about to send DisplayActivate to. Focus propagates during onResume, which is when
@@ -803,7 +812,7 @@ public class VrShellDelegate
         mExitedDueToUnsupportedMode = false;
 
         addVrViews();
-        boolean webVrMode = mRequestedWebVr || tentativeWebVrMode && !mAutopresentWebVr;
+        boolean webVrMode = mRequestedWebVr || tentativeWebVrMode || mAutopresentWebVr;
         mVrShell.initializeNative(mActivity.getActivityTab(), webVrMode, mAutopresentWebVr,
                 mActivity instanceof CustomTabActivity);
         mVrShell.setWebVrModeEnabled(webVrMode, false);
@@ -906,12 +915,12 @@ public class VrShellDelegate
         setVrModeEnabled(activity);
         // TODO(ymalik): This should use isTrustedAutopresentIntent once the Daydream Home change
         // that adds the autopresent intent extra rolls out on most devices. This will allow us to
-        // differentiate trusted auto-present intents from Chrome VR intents.
+        // differentiate trusted auto-present intents from other VR intents.
         if (VrIntentUtils.getHandlerInstance().isTrustedDaydreamIntent(intent)) {
             if (DEBUG_LOGS) Log.i(TAG, "onNewIntentWithNative: autopresent");
             assert activitySupportsAutopresentation(activity);
             instance.mAutopresentWebVr = true;
-            if (!ChromeFeatureList.isEnabled(ChromeFeatureList.WEBVR_AUTOPRESENT)) {
+            if (!ChromeFeatureList.isEnabled(ChromeFeatureList.WEBVR_AUTOPRESENT_FROM_INTENT)) {
                 instance.onEnterVrUnsupported();
                 return;
             }
@@ -1061,6 +1070,7 @@ public class VrShellDelegate
 
     @CalledByNative
     private void presentRequested() {
+        if (DEBUG_LOGS) Log.i(TAG, "WebVR page requested presentation");
         mRequestedWebVr = true;
         switch (enterVrInternal()) {
             case ENTER_VR_NOT_NECESSARY:
@@ -1087,7 +1097,6 @@ public class VrShellDelegate
     private int enterVrInternal() {
         if (mPaused) return ENTER_VR_CANCELLED;
         if (mInVr) return ENTER_VR_NOT_NECESSARY;
-        if (mWaitingForVrTimeout) return ENTER_VR_CANCELLED;
 
         // Update VR support level as it can change at runtime
         maybeUpdateVrSupportLevel();
@@ -1156,9 +1165,15 @@ public class VrShellDelegate
 
     protected void onResume() {
         if (DEBUG_LOGS) Log.i(TAG, "onResume");
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1) return;
         if (cancelStartupAnimationIfNeeded()) return;
 
         mPaused = false;
+
+        // We call resume here to be symmetric with onPause in case we get paused/resumed without
+        // being hidden/shown. However, we still don't want to resume if we're not visible to avoid
+        // doing VR rendering that won't be seen.
+        if (mInVr && mVisible) mVrShell.resume();
 
         maybeUpdateVrSupportLevel();
 
@@ -1176,6 +1191,9 @@ public class VrShellDelegate
                 @Override
                 public void run() {
                     if (!mPaused) registerDaydreamIntent(mVrDaydreamApi, mActivity);
+                    if (!sRegisteredVrAssetsComponent) {
+                        registerVrAssetsComponentIfDaydreamUser(isDaydreamCurrentViewer());
+                    }
                 }
             });
         }
@@ -1193,18 +1211,19 @@ public class VrShellDelegate
         } else if (mDonSucceeded) {
             mCancellingEntryAnimation = false;
             handleDonFlowSuccess();
-        } else if (mProbablyInDon) {
-            // This means the user backed out of the DON flow, and we won't be entering VR.
-            maybeSetPresentResult(false, mDonSucceeded);
+        } else {
+            if (mProbablyInDon) {
+                // This means the user backed out of the DON flow, and we won't be entering VR.
+                maybeSetPresentResult(false, mDonSucceeded);
 
-            shutdownVr(true, false);
-            mWaitingForVrTimeout = true;
-            new Handler().postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    mWaitingForVrTimeout = false;
-                }
-            }, ENTER_VR_FAILED_TIMEOUT_MS);
+                shutdownVr(true, false);
+            }
+            // If we were resumed at the wrong density, we need to trigger activity recreation.
+            if (!mInVr && mExpectedDensityChange != 0
+                    && (mActivity.getResources().getConfiguration().densityDpi
+                               != mExpectedDensityChange)) {
+                mActivity.recreate();
+            }
         }
 
         mProbablyInDon = false;
@@ -1233,13 +1252,13 @@ public class VrShellDelegate
 
         // Only resume VrShell once we're visible so that we don't start rendering before being
         // visible and delaying startup.
-        if (mInVr) mVrShell.resume();
+        if (mInVr && !mPaused) mVrShell.resume();
     }
 
     private void onActivityHidden() {
         mVisible = false;
-        // We defer pausing of VrShell until the app is no longer visible to keep head tracking
-        // working for as long as possible while going to daydream home.
+        // In case we're hidden before onPause is called, we pause here. Duplicate calls to pause
+        // are safe.
         if (mInVr) mVrShell.pause();
         if (mShowingDaydreamDoff || mProbablyInDon) return;
 
@@ -1269,6 +1288,7 @@ public class VrShellDelegate
         // vrdisplayactivate event should be dispatched in enterVRFromIntent.
         mListeningForWebVrActivateBeforePause = mListeningForWebVrActivate;
 
+        if (mInVr) mVrShell.pause();
         if (mNativeVrShellDelegate != 0) nativeOnPause(mNativeVrShellDelegate);
 
         mIsDaydreamCurrentViewer = null;
@@ -1341,6 +1361,7 @@ public class VrShellDelegate
 
     @CalledByNative
     private void setListeningForWebVrActivate(boolean listening) {
+        if (DEBUG_LOGS) Log.i(TAG, "WebVR page listening for vrdisplayactivate: " + listening);
         // Non-Daydream devices may not have the concept of display activate. So disable
         // mListeningForWebVrActivate for them.
         if (mVrSupportLevel != VR_DAYDREAM) return;
@@ -1403,6 +1424,10 @@ public class VrShellDelegate
 
         promptForFeedbackIfNeeded(stayingInChrome);
 
+        // Listener may not have been handled yet at this point due to other reasons (e.g back/close
+        // button was pressed while at exit prompt UI in VR), failure should be reported despite
+        // that we are exiting VR.
+        callOnExitVrRequestListener(false);
         assert mOnExitVrRequestListener == null;
     }
 
@@ -1625,10 +1650,6 @@ public class VrShellDelegate
         decor.removeView(mVrShell.getContainer());
     }
 
-    private void onDensityChangedInternal(float oldDpi, float newDpi) {
-        if (mVrShell != null) mVrShell.onDensityChanged(oldDpi, newDpi);
-    }
-
     /**
      * Clean up VrShell, and associated native objects.
      */
@@ -1725,4 +1746,5 @@ public class VrShellDelegate
     private native void nativeOnResume(long nativeVrShellDelegate);
     private native boolean nativeIsClearActivatePending(long nativeVrShellDelegate);
     private native void nativeDestroy(long nativeVrShellDelegate);
+    private static native void nativeRegisterVrAssetsComponent();
 }

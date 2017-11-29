@@ -20,10 +20,10 @@
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/service_worker_modes.h"
 #include "services/network/public/interfaces/fetch_api.mojom.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_client.mojom.h"
 #include "third_party/WebKit/public/platform/modules/cache_storage/cache_storage.mojom.h"
 #include "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerClientType.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_state.mojom.h"
@@ -58,22 +58,6 @@ static const int kInvalidEmbeddedWorkerThreadId = -1;
 // fetch occurred over 24 hours ago.
 static constexpr base::TimeDelta kServiceWorkerScriptMaxCacheAge =
     base::TimeDelta::FromHours(24);
-
-// ServiceWorker provider type.
-enum ServiceWorkerProviderType {
-  SERVICE_WORKER_PROVIDER_UNKNOWN,
-
-  // For ServiceWorker clients.
-  SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-  SERVICE_WORKER_PROVIDER_FOR_WORKER,
-  SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER,
-
-  // For ServiceWorkers.
-  SERVICE_WORKER_PROVIDER_FOR_CONTROLLER,
-
-  SERVICE_WORKER_PROVIDER_TYPE_LAST =
-      SERVICE_WORKER_PROVIDER_FOR_CONTROLLER
-};
 
 // Indicates how the service worker handled a fetch event.
 enum ServiceWorkerFetchEventResult {
@@ -110,7 +94,7 @@ struct CONTENT_EXPORT ServiceWorkerFetchRequest {
 
   static blink::mojom::FetchCacheMode GetCacheModeFromLoadFlags(int load_flags);
 
-  // Be sure to update EstimatedSize() when adding members.
+  // Be sure to update EstimatedStructSize() when adding members.
   network::mojom::FetchRequestMode mode =
       network::mojom::FetchRequestMode::kNoCORS;
   bool is_main_resource_load = false;
@@ -157,7 +141,7 @@ struct CONTENT_EXPORT ServiceWorkerResponse {
   ~ServiceWorkerResponse();
   size_t EstimatedStructSize();
 
-  // Be sure to update EstimatedSize() when adding members.
+  // Be sure to update EstimatedStructSize() when adding members.
   std::vector<GURL> url_list;
   int status_code;
   std::string status_text;
@@ -175,6 +159,12 @@ struct CONTENT_EXPORT ServiceWorkerResponse {
   bool is_in_cache_storage = false;
   std::string cache_storage_cache_name;
   ServiceWorkerHeaderList cors_exposed_header_names;
+
+  // Side data is used to pass the metadata of the response (eg: V8 code cache).
+  std::string side_data_blob_uuid;
+  uint64_t side_data_blob_size = 0;
+  // |side_data_blob| is only used when features::kMojoBlobs is enabled.
+  scoped_refptr<storage::BlobHandle> side_data_blob;
 };
 
 class ChangedVersionAttributesMask {
@@ -203,7 +193,7 @@ class ChangedVersionAttributesMask {
 
 struct ServiceWorkerClientQueryOptions {
   ServiceWorkerClientQueryOptions();
-  blink::WebServiceWorkerClientType client_type;
+  blink::mojom::ServiceWorkerClientType client_type;
   bool include_uncontrolled;
 };
 

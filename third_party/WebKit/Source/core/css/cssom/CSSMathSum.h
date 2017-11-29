@@ -5,6 +5,7 @@
 #ifndef CSSMathSum_h
 #define CSSMathSum_h
 
+#include "base/macros.h"
 #include "core/css/cssom/CSSMathVariadic.h"
 
 namespace blink {
@@ -12,23 +13,14 @@ namespace blink {
 // Represents the sum of one or more CSSNumericValues.
 // See CSSMathSum.idl for more information about this class.
 class CORE_EXPORT CSSMathSum final : public CSSMathVariadic {
-  WTF_MAKE_NONCOPYABLE(CSSMathSum);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   // The constructor defined in the IDL.
   static CSSMathSum* Create(const HeapVector<CSSNumberish>& args,
-                            ExceptionState& exception_state) {
-    if (args.IsEmpty()) {
-      exception_state.ThrowDOMException(kSyntaxError,
-                                        "Arguments can't be empty");
-      return nullptr;
-    }
-
-    // TODO(crbug.com/776173): Implement add typing.
-    CSSNumericValueType type(CSSPrimitiveValue::UnitType::kNumber);
-    return new CSSMathSum(CSSNumericArray::FromNumberishes(args), type);
-  }
+                            ExceptionState&);
+  // Blink-internal constructor.
+  static CSSMathSum* Create(CSSNumericValueVector);
 
   String getOperator() const final { return "sum"; }
 
@@ -38,6 +30,7 @@ class CORE_EXPORT CSSMathSum final : public CSSMathVariadic {
  private:
   CSSMathSum(CSSNumericArray* values, const CSSNumericValueType& type)
       : CSSMathVariadic(values, type) {}
+  DISALLOW_COPY_AND_ASSIGN(CSSMathSum);
 };
 
 }  // namespace blink

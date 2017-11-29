@@ -638,7 +638,6 @@ enum WebFeature {
   kCredentialManagerGetMediationOptional = 961,
   kCredentialManagerGetMediationSilent = 962,
   kCredentialManagerStore = 963,
-  kCredentialManagerRequireUserMediation = 964,
   // The above items are available in M47 branch.
 
   kBlockableMixedContentInSubframeBlocked = 966,
@@ -781,8 +780,6 @@ enum WebFeature {
 
   kCSSSelectorPseudoSlotted = 1118,
   kMediaDevicesEnumerateDevices = 1119,
-  kNonSecureSharedWorkerAccessedFromSecureContext = 1120,
-  kSecureSharedWorkerAccessedFromNonSecureContext = 1121,
   kEventComposedPath = 1123,
   kLinkHeaderPreload = 1124,
   kMouseWheelEvent = 1125,
@@ -858,7 +855,7 @@ enum WebFeature {
   kApplicationCacheAPISecureOrigin = 1248,
   // The above items are available in M50 branch
 
-  kCSSAtRuleApply = 1249,
+  kCSSAtRuleApply = 1249, // Removed
   kCSSSelectorPseudoAny = 1250,
   kDocumentAllItemNoArguments = 1252,
   kDocumentAllItemNamed = 1253,
@@ -1513,18 +1510,12 @@ enum WebFeature {
   kWebDatabaseCreateDropFTS3Table = 1980,
   kFieldEditInSecureContext = 1981,
   kFieldEditInNonSecureContext = 1982,
-  kCredentialManagerCredentialRequestOptionsUnmediated = 1983,
   kCredentialManagerGetMediationRequired = 1984,
-  kCredentialManagerIdName = 1985,
-  kCredentialManagerPasswordName = 1986,
-  kCredentialManagerAdditionalData = 1987,
-  kCredentialManagerCustomFetch = 1988,
   kNetInfoRtt = 1989,
   kNetInfoDownlink = 1990,
   kShapeDetection_BarcodeDetectorConstructor = 1991,
   kShapeDetection_FaceDetectorConstructor = 1992,
   kShapeDetection_TextDetectorConstructor = 1993,
-  kCredentialManagerCredentialRequestOptionsOnlyUnmediated = 1994,
   kInertAttribute = 1995,
   kPluginInstanceAccessFromIsolatedWorld = 1996,
   kPluginInstanceAccessFromMainWorld = 1997,
@@ -1758,6 +1749,23 @@ enum WebFeature {
   kDocumentPageShowRegistered = 2228,
   kDocumentPageShowFired = 2229,
   kReplaceCharsetInXHR = 2230,
+  kRespondToSameOriginRequestWithCrossOriginResponse = 2231,
+  kLinkRelModulePreload = 2232,
+  kPerformanceMeasurePassedInObject = 2233,
+  kPerformanceMeasurePassedInNavigationTiming = 2234,
+  kHTMLFrameSetElementNonNullAnonymousNamedGetter = 2235,
+  kCSPWithUnsafeEval = 2236,
+  kWebAssemblyInstantiation = 2237,
+  kV8IndexAccessor = 2238,
+  kV8MediaCapabilities_DecodingInfo_Method = 2239,
+  kV8MediaCapabilities_EncodingInfo_Method = 2240,
+  kV8MediaCapabilitiesInfo_Supported_AttributeGetter = 2241,
+  kV8MediaCapabilitiesInfo_Smooth_AttributeGetter = 2242,
+  kV8MediaCapabilitiesInfo_PowerEfficient_AttributeGetter = 2243,
+  kWindowEventInV0ShadowTree = 2244,
+  kHTMLAnchorElementDownloadInSandboxWithUserGesture = 2245,
+  kHTMLAnchorElementDownloadInSandboxWithoutUserGesture = 2246,
+  kWindowOpenRealmMismatch = 2247,
 
   // Add new features immediately above this line. Don't change assigned
   // numbers of any item, and don't reuse removed slots.

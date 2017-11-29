@@ -21,12 +21,12 @@
 #import "ios/chrome/browser/ui/image_util.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/toolbar/clean/toolbar_tools_menu_button.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller+protected.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_resource_macros.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/tools_menu_button_observer_bridge.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
-#import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
@@ -82,9 +82,6 @@ using ios::material::TimingFunction;
   ToolsMenuButtonObserverBridge* toolsMenuButtonObserverBridge_;
   ToolbarControllerStyle style_;
 
-  // The following is nil if not visible.
-  ToolsPopupController* toolsPopupController_;
-
   // Backing object for |self.omniboxExpanderAnimator|.
   API_AVAILABLE(ios(10.0)) UIViewPropertyAnimator* _omniboxExpanderAnimator;
 
@@ -92,8 +89,22 @@ using ios::material::TimingFunction;
   API_AVAILABLE(ios(10.0)) UIViewPropertyAnimator* _omniboxContractorAnimator;
 }
 
+// Leading and trailing safe area constraint for faking a safe area. These
+// constraints are activated by calling activateFakeSafeAreaInsets and
+// deactivateFakeSafeAreaInsets.
 @property(nonatomic, strong) NSLayoutConstraint* leadingFakeSafeAreaConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* trailingFakeSafeAreaConstraint;
+
+// These constraints pin the content view to the safe area. They are temporarily
+// disabled when a fake safe area is simulated by calling
+// activateFakeSafeAreaInsets.
+@property(nonatomic, strong) NSLayoutConstraint* leadingSafeAreaConstraint;
+@property(nonatomic, strong) NSLayoutConstraint* trailingSafeAreaConstraint;
+// Style of this toolbar.
+@property(nonatomic, readonly, assign) ToolbarControllerStyle style;
+// The view containing all the content of the toolbar. It respects the trailing
+// and leading anchors of the safe area.
+@property(nonatomic, readonly, strong) UIView* contentView;
 
 // Returns the background image that should be used for |style|.
 - (UIImage*)getBackgroundImageForStyle:(ToolbarControllerStyle)style;
@@ -109,20 +120,14 @@ using ios::material::TimingFunction;
 @synthesize contentView = contentView_;
 @synthesize backgroundView = backgroundView_;
 @synthesize shadowView = shadowView_;
-@synthesize toolsPopupController = toolsPopupController_;
 @synthesize style = style_;
 @synthesize heightConstraint = heightConstraint_;
 @synthesize dispatcher = dispatcher_;
 @synthesize leadingFakeSafeAreaConstraint = _leadingFakeSafeAreaConstraint;
 @synthesize trailingFakeSafeAreaConstraint = _trailingFakeSafeAreaConstraint;
+@synthesize leadingSafeAreaConstraint = _leadingSafeAreaConstraint;
+@synthesize trailingSafeAreaConstraint = _trailingSafeAreaConstraint;
 @dynamic view;
-
-- (NSLayoutConstraint*)heightConstraint {
-  if (!heightConstraint_) {
-    heightConstraint_ = [self.view.heightAnchor constraintEqualToConstant:0];
-  }
-  return heightConstraint_;
-}
 
 - (instancetype)initWithStyle:(ToolbarControllerStyle)style
                    dispatcher:
@@ -181,12 +186,12 @@ using ios::material::TimingFunction;
       safeAreaTrailing = [contentView_.trailingAnchor
           constraintEqualToAnchor:self.view.trailingAnchor];
     }
-    self.leadingFakeSafeAreaConstraint = [contentView_.leadingAnchor
+    _leadingSafeAreaConstraint = safeAreaLeading;
+    _trailingSafeAreaConstraint = safeAreaTrailing;
+    _leadingFakeSafeAreaConstraint = [contentView_.leadingAnchor
         constraintEqualToAnchor:self.view.leadingAnchor];
-    self.trailingFakeSafeAreaConstraint = [contentView_.trailingAnchor
+    _trailingFakeSafeAreaConstraint = [contentView_.trailingAnchor
         constraintEqualToAnchor:self.view.trailingAnchor];
-    safeAreaLeading.priority = UILayoutPriorityDefaultHigh;
-    safeAreaTrailing.priority = UILayoutPriorityDefaultHigh;
     [NSLayoutConstraint activateConstraints:@[
       safeAreaLeading,
       safeAreaTrailing,
@@ -197,7 +202,8 @@ using ios::material::TimingFunction;
 
     toolsMenuButton_ =
         [[ToolbarToolsMenuButton alloc] initWithFrame:toolsMenuButtonFrame
-                                                style:style_];
+                                                style:style_
+                                                small:NO];
     [toolsMenuButton_ addTarget:self.dispatcher
                          action:@selector(showToolsMenu)
                forControlEvents:UIControlEventTouchUpInside];
@@ -293,33 +299,11 @@ using ios::material::TimingFunction;
     SetA11yLabelAndUiAutomationName(toolsMenuButton_, IDS_IOS_TOOLBAR_SETTINGS,
                                     kToolbarToolsMenuButtonIdentifier);
     [self updateStandardButtons];
-
-    NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
-    [defaultCenter addObserver:self
-                      selector:@selector(applicationDidEnterBackground:)
-                          name:UIApplicationDidEnterBackgroundNotification
-                        object:nil];
   }
   return self;
 }
 
-- (void)dealloc {
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
-  [toolsPopupController_ setDelegate:nil];
-}
-
 #pragma mark - Public API
-
-- (void)applicationDidEnterBackground:(NSNotification*)notify {
-  if (toolsPopupController_) {
-    // Dismiss the tools popup menu without animation.
-    [toolsMenuButton_ setToolsMenuIsVisible:NO];
-    toolsPopupController_ = nil;
-    [[NSNotificationCenter defaultCenter]
-        postNotificationName:kMenuWillHideNotification
-                      object:nil];
-  }
-}
 
 - (void)setReadingListModel:(ReadingListModel*)readingListModel {
   readingListModel_ = readingListModel;
@@ -335,6 +319,8 @@ using ios::material::TimingFunction;
       UIEdgeInsetsGetLeading(fakeSafeAreaInsets);
   self.trailingFakeSafeAreaConstraint.constant =
       -UIEdgeInsetsGetTrailing(fakeSafeAreaInsets);
+  self.leadingSafeAreaConstraint.active = NO;
+  self.trailingSafeAreaConstraint.active = NO;
   self.leadingFakeSafeAreaConstraint.active = YES;
   self.trailingFakeSafeAreaConstraint.active = YES;
 }
@@ -342,53 +328,12 @@ using ios::material::TimingFunction;
 - (void)deactivateFakeSafeAreaInsets {
   self.leadingFakeSafeAreaConstraint.active = NO;
   self.trailingFakeSafeAreaConstraint.active = NO;
+  self.leadingSafeAreaConstraint.active = YES;
+  self.trailingSafeAreaConstraint.active = YES;
 }
 
-#pragma mark ToolsMenuPopUp
-
-- (void)showToolsMenuPopupWithConfiguration:
-    (ToolsMenuConfiguration*)configuration {
-  // Because an animation hides and shows the tools popup menu it is possible to
-  // tap the tools button multiple times before the tools menu is shown. Ignore
-  // repeated taps between animations.
-  if (toolsPopupController_)
-    return;
-
-  base::RecordAction(UserMetricsAction("ShowAppMenu"));
-
-  // Keep the button pressed.
-  [toolsMenuButton_ setToolsMenuIsVisible:YES];
-
-  [configuration setToolsMenuButton:toolsMenuButton_];
-  toolsPopupController_ =
-      [[ToolsPopupController alloc] initWithConfiguration:configuration
-                                               dispatcher:self.dispatcher];
-  [toolsPopupController_ setDelegate:self];
-
-  [[NSNotificationCenter defaultCenter]
-      postNotificationName:kMenuWillShowNotification
-                    object:nil];
-}
-
-- (void)dismissToolsMenuPopup {
-  if (!toolsPopupController_)
-    return;
-  ToolsPopupController* tempTPC = toolsPopupController_;
-  [tempTPC containerView].userInteractionEnabled = NO;
-  [tempTPC dismissAnimatedWithCompletion:^{
-    // Unpress the tools menu button by restoring the normal and
-    // highlighted images to their usual state.
-    [toolsMenuButton_ setToolsMenuIsVisible:NO];
-    // Reference tempTPC so the block retains it.
-    [tempTPC self];
-  }];
-  // reset tabHistoryPopupController_ to prevent -applicationDidEnterBackground
-  // from posting another kMenuWillHideNotification.
-  toolsPopupController_ = nil;
-
-  [[NSNotificationCenter defaultCenter]
-      postNotificationName:kMenuWillHideNotification
-                    object:nil];
+- (void)setToolsMenuIsVisibleForToolsMenuButton:(BOOL)isVisible {
+  [toolsMenuButton_ setToolsMenuIsVisible:isVisible];
 }
 
 #pragma mark Appearance
@@ -492,6 +437,19 @@ using ios::material::TimingFunction;
 - (void)hideViewsForNewTabPage:(BOOL)hide {
   DCHECK(!IsIPadIdiom());
   [shadowView_ setHidden:hide];
+}
+
+- (void)adjustToolbarHeight {
+  self.heightConstraint.constant =
+      ToolbarHeightWithTopOfScreenOffset([self statusBarOffset]);
+  self.heightConstraint.active = YES;
+}
+
+- (NSLayoutConstraint*)heightConstraint {
+  if (!heightConstraint_) {
+    heightConstraint_ = [self.view.heightAnchor constraintEqualToConstant:0];
+  }
+  return heightConstraint_;
 }
 
 #pragma mark Animations
@@ -608,19 +566,6 @@ using ios::material::TimingFunction;
   return buttonImageIds[index][style][state];
 }
 
-- (uint32_t)snapshotHash {
-  // Only the 3 lowest bits are used by UIControlState.
-  uint32_t hash = [toolsMenuButton_ state] & 0x07;
-  // When the tools popup controller is valid, it means that the images
-  // representing the tools menu button have been swapped. Factor that in by
-  // adding in whether or not the tools popup menu is a valid object, rather
-  // than trying to figure out which image is currently visible.
-  hash |= toolsPopupController_ ? (1 << 4) : 0;
-  // The label of the stack button changes with the number of tabs open.
-  hash ^= [[stackButton_ titleForState:UIControlStateNormal] hash];
-  return hash;
-}
-
 - (NSMutableArray*)transitionLayers {
   return transitionLayers_;
 }
@@ -682,6 +627,13 @@ using ios::material::TimingFunction;
 - (void)setOmniboxContractorAnimator:
     (UIViewPropertyAnimator*)omniboxContractorAnimator {
   _omniboxContractorAnimator = omniboxContractorAnimator;
+}
+
+#pragma mark - ToolsMenuPresentationProvider
+
+- (UIButton*)presentingButtonForToolsMenuCoordinator:
+    (ToolsMenuCoordinator*)coordinator {
+  return toolsMenuButton_;
 }
 
 #pragma mark - Private Methods
@@ -836,42 +788,21 @@ using ios::material::TimingFunction;
 
 #pragma mark - ActivityServicePositioner
 
-- (CGRect)shareButtonAnchorRect {
-  // Shrink the padding around the shareButton so the popovers are anchored
-  // correctly.
-  return CGRectInset([shareButton_ bounds], kPopoverAnchorHorizontalPadding, 0);
-}
-
 - (UIView*)shareButtonView {
   return shareButton_;
-}
-
-#pragma mark - PopupMenuDelegate methods.
-
-- (void)dismissPopupMenu:(PopupMenuController*)controller {
-  if ([controller isKindOfClass:[ToolsPopupController class]] &&
-      (ToolsPopupController*)controller == toolsPopupController_)
-    [self dismissToolsMenuPopup];
 }
 
 #pragma mark - BubbleViewAnchorPointProvider methods.
 
 - (CGPoint)anchorPointForTabSwitcherButton:(BubbleArrowDirection)direction {
-  // Shrink the padding around the tab switcher button so popovers are anchored
-  // correctly.
-  CGRect unpaddedRect =
-      CGRectInset(stackButton_.frame, kPopoverAnchorHorizontalPadding, 0.0);
-  CGPoint anchorPoint = bubble_util::AnchorPoint(unpaddedRect, direction);
+  CGPoint anchorPoint = bubble_util::AnchorPoint(stackButton_.frame, direction);
   return [stackButton_.superview convertPoint:anchorPoint
                                        toView:stackButton_.window];
 }
 
 - (CGPoint)anchorPointForToolsMenuButton:(BubbleArrowDirection)direction {
-  // Shrink the padding around the tools menu button so popovers are anchored
-  // correctly.
-  CGRect unpaddedRect =
-      CGRectInset(toolsMenuButton_.frame, kPopoverAnchorHorizontalPadding, 0.0);
-  CGPoint anchorPoint = bubble_util::AnchorPoint(unpaddedRect, direction);
+  CGPoint anchorPoint =
+      bubble_util::AnchorPoint(toolsMenuButton_.frame, direction);
   return [toolsMenuButton_.superview convertPoint:anchorPoint
                                            toView:toolsMenuButton_.window];
 }

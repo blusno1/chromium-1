@@ -65,8 +65,8 @@
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/weborigin/KURL.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURL.h"
 
@@ -312,6 +312,58 @@ void ServiceWorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {
   if (WorkerThreadDebugger* debugger =
           WorkerThreadDebugger::From(GetThread()->GetIsolate()))
     debugger->ExceptionThrown(GetThread(), event);
+}
+
+void ServiceWorkerGlobalScope::CountCacheStorageInstalledScript(
+    uint64_t script_size,
+    uint64_t script_metadata_size) {
+  ++cache_storage_installed_script_count_;
+  cache_storage_installed_script_total_size_ += script_size;
+  cache_storage_installed_script_metadata_total_size_ += script_metadata_size;
+
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      CustomCountHistogram, script_size_histogram,
+      ("ServiceWorker.CacheStorageInstalledScript.ScriptSize", 1000, 5000000,
+       50));
+  script_size_histogram.Count(script_size);
+
+  if (script_metadata_size) {
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(
+        CustomCountHistogram, script_metadata_size_histogram,
+        ("ServiceWorker.CacheStorageInstalledScript.CachedMetadataSize", 1000,
+         50000000, 50));
+    script_metadata_size_histogram.Count(script_metadata_size);
+  }
+}
+
+void ServiceWorkerGlobalScope::SetIsInstalling(bool is_installing) {
+  is_installing_ = is_installing;
+  if (is_installing)
+    return;
+
+  // Installing phase is finished; record the stats for the scripts that are
+  // stored in Cache storage during installation.
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      CustomCountHistogram, cache_storage_installed_script_count_histogram,
+      ("ServiceWorker.CacheStorageInstalledScript.Count", 1, 1000, 50));
+  cache_storage_installed_script_count_histogram.Count(
+      cache_storage_installed_script_count_);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      CustomCountHistogram, cache_storage_installed_script_total_size_histogram,
+      ("ServiceWorker.CacheStorageInstalledScript.ScriptTotalSize", 1000,
+       50000000, 50));
+  cache_storage_installed_script_total_size_histogram.Count(
+      cache_storage_installed_script_total_size_);
+
+  if (cache_storage_installed_script_metadata_total_size_) {
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(
+        CustomCountHistogram,
+        cache_storage_installed_script_metadata_total_size_histogram,
+        ("ServiceWorker.CacheStorageInstalledScript.CachedMetadataTotalSize",
+         1000, 50000000, 50));
+    cache_storage_installed_script_metadata_total_size_histogram.Count(
+        cache_storage_installed_script_metadata_total_size_);
+  }
 }
 
 }  // namespace blink

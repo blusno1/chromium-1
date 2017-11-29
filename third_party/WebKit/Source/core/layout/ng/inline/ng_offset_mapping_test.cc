@@ -26,7 +26,8 @@ class NGOffsetMappingTest : public NGLayoutTest {
 
   void SetupHtml(const char* id, String html) {
     SetBodyInnerHTML(html);
-    layout_block_flow_ = ToLayoutNGBlockFlow(GetLayoutObjectByElementId(id));
+    layout_block_flow_ = ToLayoutBlockFlow(GetLayoutObjectByElementId(id));
+    DCHECK(layout_block_flow_->IsLayoutNGMixin());
     layout_object_ = layout_block_flow_->FirstChild();
     style_ = layout_object_->Style();
   }
@@ -81,10 +82,23 @@ class NGOffsetMappingTest : public NGLayoutTest {
   }
 
   scoped_refptr<const ComputedStyle> style_;
-  LayoutNGBlockFlow* layout_block_flow_ = nullptr;
+  LayoutBlockFlow* layout_block_flow_ = nullptr;
   LayoutObject* layout_object_ = nullptr;
   FontCachePurgePreventer purge_preventer_;
 };
+
+class ParameterizedNGOffsetMappingTest
+    : public ::testing::WithParamInterface<bool>,
+      private ScopedLayoutNGPaintFragmentsForTest,
+      public NGOffsetMappingTest {
+ public:
+  ParameterizedNGOffsetMappingTest()
+      : ScopedLayoutNGPaintFragmentsForTest(GetParam()) {}
+};
+
+INSTANTIATE_TEST_CASE_P(All,
+                        ParameterizedNGOffsetMappingTest,
+                        ::testing::Bool());
 
 #define TEST_UNIT(unit, type, owner, dom_start, dom_end, text_content_start, \
                   text_content_end)                                          \
@@ -100,14 +114,14 @@ class NGOffsetMappingTest : public NGLayoutTest {
   EXPECT_EQ(start, ranges.at(owner).first);   \
   EXPECT_EQ(end, ranges.at(owner).second)
 
-TEST_F(NGOffsetMappingTest, StoredResult) {
+TEST_P(ParameterizedNGOffsetMappingTest, StoredResult) {
   SetupHtml("t", "<div id=t>foo</div>");
   EXPECT_FALSE(IsOffsetMappingStored());
   GetOffsetMapping();
   EXPECT_TRUE(IsOffsetMappingStored());
 }
 
-TEST_F(NGOffsetMappingTest, OneTextNode) {
+TEST_P(ParameterizedNGOffsetMappingTest, OneTextNode) {
   SetupHtml("t", "<div id=t>foo</div>");
   const Node* foo_node = layout_object_->GetNode();
   const NGOffsetMapping& result = GetOffsetMapping();
@@ -170,7 +184,7 @@ TEST_F(NGOffsetMappingTest, OneTextNode) {
   EXPECT_TRUE(IsAfterNonCollapsedContent(Position(foo_node, 3)));
 }
 
-TEST_F(NGOffsetMappingTest, TwoTextNodes) {
+TEST_P(ParameterizedNGOffsetMappingTest, TwoTextNodes) {
   SetupHtml("t", "<div id=t>foo<span id=s>bar</span></div>");
   const LayoutText* foo = ToLayoutText(layout_object_);
   const LayoutText* bar = GetLayoutTextUnder("s");
@@ -238,7 +252,7 @@ TEST_F(NGOffsetMappingTest, TwoTextNodes) {
   EXPECT_TRUE(IsAfterNonCollapsedContent(Position(bar_node, 3)));
 }
 
-TEST_F(NGOffsetMappingTest, BRBetweenTextNodes) {
+TEST_P(ParameterizedNGOffsetMappingTest, BRBetweenTextNodes) {
   SetupHtml("t", u"<div id=t>foo<br>bar</div>");
   const LayoutText* foo = ToLayoutText(layout_object_);
   const LayoutText* br = ToLayoutText(foo->NextSibling());
@@ -293,7 +307,7 @@ TEST_F(NGOffsetMappingTest, BRBetweenTextNodes) {
   EXPECT_EQ(Position(bar_node, 0), GetLastPosition(4));
 }
 
-TEST_F(NGOffsetMappingTest, OneTextNodeWithCollapsedSpace) {
+TEST_P(ParameterizedNGOffsetMappingTest, OneTextNodeWithCollapsedSpace) {
   SetupHtml("t", "<div id=t>foo  bar</div>");
   const Node* node = layout_object_->GetNode();
   const NGOffsetMapping& result = GetOffsetMapping();
@@ -366,7 +380,7 @@ TEST_F(NGOffsetMappingTest, OneTextNodeWithCollapsedSpace) {
   EXPECT_TRUE(IsAfterNonCollapsedContent(Position(node, 8)));
 }
 
-TEST_F(NGOffsetMappingTest, FullyCollapsedWhiteSpaceNode) {
+TEST_P(ParameterizedNGOffsetMappingTest, FullyCollapsedWhiteSpaceNode) {
   SetupHtml("t",
             "<div id=t>"
             "<span id=s1>foo </span>"
@@ -432,7 +446,7 @@ TEST_F(NGOffsetMappingTest, FullyCollapsedWhiteSpaceNode) {
       StartOfNextNonCollapsedContent(Position(space_node, 0u)).IsNull());
 }
 
-TEST_F(NGOffsetMappingTest, ReplacedElement) {
+TEST_P(ParameterizedNGOffsetMappingTest, ReplacedElement) {
   SetupHtml("t", "<div id=t>foo <img> bar</div>");
   const LayoutText* foo = ToLayoutText(layout_object_);
   const LayoutObject* img = foo->NextSibling();
@@ -489,7 +503,7 @@ TEST_F(NGOffsetMappingTest, ReplacedElement) {
   EXPECT_EQ(Position(bar_node, 0), GetLastPosition(5));
 }
 
-TEST_F(NGOffsetMappingTest, FirstLetter) {
+TEST_P(ParameterizedNGOffsetMappingTest, FirstLetter) {
   SetupHtml("t",
             "<style>div:first-letter{color:red}</style>"
             "<div id=t>foo</div>");
@@ -519,7 +533,7 @@ TEST_F(NGOffsetMappingTest, FirstLetter) {
   EXPECT_EQ(Position(foo_node, 1), GetLastPosition(1));
 }
 
-TEST_F(NGOffsetMappingTest, FirstLetterWithLeadingSpace) {
+TEST_P(ParameterizedNGOffsetMappingTest, FirstLetterWithLeadingSpace) {
   SetupHtml("t",
             "<style>div:first-letter{color:red}</style>"
             "<div id=t>  foo</div>");
@@ -555,7 +569,7 @@ TEST_F(NGOffsetMappingTest, FirstLetterWithLeadingSpace) {
   EXPECT_EQ(Position(foo_node, 2), GetLastPosition(0));
 }
 
-TEST_F(NGOffsetMappingTest, FirstLetterWithoutRemainingText) {
+TEST_P(ParameterizedNGOffsetMappingTest, FirstLetterWithoutRemainingText) {
   SetupHtml("t",
             "<style>div:first-letter{color:red}</style>"
             "<div id=t>  f</div>");
@@ -586,7 +600,7 @@ TEST_F(NGOffsetMappingTest, FirstLetterWithoutRemainingText) {
   EXPECT_EQ(Position(text_node, 2), GetLastPosition(0));
 }
 
-TEST_F(NGOffsetMappingTest, FirstLetterInDifferentBlock) {
+TEST_P(ParameterizedNGOffsetMappingTest, FirstLetterInDifferentBlock) {
   SetupHtml("t",
             "<style>:first-letter{float:right}</style><div id=t>foo</div>");
   Element* div = GetDocument().getElementById("t");
@@ -650,7 +664,7 @@ TEST_F(NGOffsetMappingTest, FirstLetterInDifferentBlock) {
   EXPECT_EQ(Position(text_node, 1), remaining_text_result.GetLastPosition(1));
 }
 
-TEST_F(NGOffsetMappingTest, WhiteSpaceTextNodeWithoutLayoutText) {
+TEST_P(ParameterizedNGOffsetMappingTest, WhiteSpaceTextNodeWithoutLayoutText) {
   SetupHtml("t", "<div id=t> <span>foo</span></div>");
   Element* div = GetDocument().getElementById("t");
   const Node* text_node = div->firstChild();
@@ -659,7 +673,8 @@ TEST_F(NGOffsetMappingTest, WhiteSpaceTextNodeWithoutLayoutText) {
   EXPECT_TRUE(StartOfNextNonCollapsedContent(Position(text_node, 0u)).IsNull());
 }
 
-TEST_F(NGOffsetMappingTest, OneContainerWithLeadingAndTrailingSpaces) {
+TEST_P(ParameterizedNGOffsetMappingTest,
+       OneContainerWithLeadingAndTrailingSpaces) {
   SetupHtml("t", "<div id=t><span id=s>  foo  </span></div>");
   const Node* span = GetElementById("s");
   const Node* text = span->firstChild();
@@ -683,7 +698,7 @@ TEST_F(NGOffsetMappingTest, OneContainerWithLeadingAndTrailingSpaces) {
   EXPECT_EQ(3u, *GetTextContentOffset(Position::AfterNode(*span)));
 }
 
-TEST_F(NGOffsetMappingTest, ContainerWithGeneratedContent) {
+TEST_P(ParameterizedNGOffsetMappingTest, ContainerWithGeneratedContent) {
   SetupHtml("t",
             "<style>#s::before{content:'bar'} #s::after{content:'baz'}</style>"
             "<div id=t><span id=s>foo</span></div>");
@@ -703,6 +718,26 @@ TEST_F(NGOffsetMappingTest, ContainerWithGeneratedContent) {
   // Offset mapping for inline containers skips generated content.
   EXPECT_EQ(3u, *GetTextContentOffset(Position::BeforeNode(*span)));
   EXPECT_EQ(6u, *GetTextContentOffset(Position::AfterNode(*span)));
+}
+
+TEST_P(ParameterizedNGOffsetMappingTest, Table) {
+  SetupHtml("t", "<table><tr><td id=t>  foo  </td></tr></table>");
+
+  const Node* foo_node = layout_object_->GetNode();
+  const NGOffsetMapping& result = GetOffsetMapping();
+
+  EXPECT_EQ("foo", result.GetText());
+
+  ASSERT_EQ(3u, result.GetUnits().size());
+  TEST_UNIT(result.GetUnits()[0], NGOffsetMappingUnitType::kCollapsed, foo_node,
+            0u, 2u, 0u, 0u);
+  TEST_UNIT(result.GetUnits()[1], NGOffsetMappingUnitType::kIdentity, foo_node,
+            2u, 5u, 0u, 3u);
+  TEST_UNIT(result.GetUnits()[2], NGOffsetMappingUnitType::kCollapsed, foo_node,
+            5u, 7u, 3u, 3u);
+
+  ASSERT_EQ(1u, result.GetRanges().size());
+  TEST_RANGE(result.GetRanges(), foo_node, 0u, 3u);
 }
 
 }  // namespace blink

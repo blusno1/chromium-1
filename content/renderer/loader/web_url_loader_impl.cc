@@ -410,7 +410,7 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
   void OnReceivedData(std::unique_ptr<ReceivedData> data);
   void OnTransferSizeUpdated(int transfer_size_diff);
   void OnReceivedCachedMetadata(const char* data, int len);
-  void OnCompletedRequest(const network::URLLoaderStatus& status);
+  void OnCompletedRequest(const network::URLLoaderCompletionStatus& status);
 
  private:
   friend class base::RefCounted<Context>;
@@ -468,7 +468,8 @@ class WebURLLoaderImpl::RequestPeerImpl : public RequestPeer {
   void OnReceivedData(std::unique_ptr<ReceivedData> data) override;
   void OnTransferSizeUpdated(int transfer_size_diff) override;
   void OnReceivedCachedMetadata(const char* data, int len) override;
-  void OnCompletedRequest(const network::URLLoaderStatus& status) override;
+  void OnCompletedRequest(
+      const network::URLLoaderCompletionStatus& status) override;
 
  private:
   scoped_refptr<Context> context_;
@@ -611,15 +612,17 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
 
   resource_request->headers = GetWebURLRequestHeaders(request);
   resource_request->load_flags = GetLoadFlagsForWebURLRequest(request);
-  // origin_pid only needs to be non-zero if the request originates outside
-  // the render process, so we can use requestorProcessID even for requests
-  // from in-process plugins.
-  resource_request->origin_pid = request.RequestorProcessID();
+  // |plugin_child_id| only needs to be non-zero if the request originates
+  // outside the render process, so we can use requestorProcessID even
+  // for requests from in-process plugins.
+  resource_request->plugin_child_id = request.GetPluginChildID();
   resource_request->resource_type = WebURLRequestToResourceType(request);
   resource_request->priority =
       ConvertWebKitPriorityToNetPriority(request.GetPriority());
   resource_request->appcache_host_id = request.AppCacheHostID();
   resource_request->should_reset_appcache = request.ShouldResetAppCache();
+  resource_request->is_external_request = request.IsExternalRequest();
+  resource_request->cors_preflight_policy = request.GetCORSPreflightPolicy();
   resource_request->service_worker_mode =
       GetServiceWorkerModeForWebURLRequest(request);
   resource_request->fetch_request_mode = request.GetFetchRequestMode();
@@ -879,7 +882,7 @@ void WebURLLoaderImpl::Context::OnReceivedCachedMetadata(
 }
 
 void WebURLLoaderImpl::Context::OnCompletedRequest(
-    const network::URLLoaderStatus& status) {
+    const network::URLLoaderCompletionStatus& status) {
   int64_t total_transfer_size = status.encoded_data_length;
   int64_t encoded_body_size = status.encoded_body_length;
 
@@ -904,13 +907,15 @@ void WebURLLoaderImpl::Context::OnCompletedRequest(
         this, TRACE_EVENT_FLAG_FLOW_IN);
 
     if (status.error_code != net::OK) {
-      WebURLError error(status.error_code,
-                        status.exists_in_cache
-                            ? WebURLError::HasCopyInCache::kTrue
-                            : WebURLError::HasCopyInCache::kFalse,
-                        WebURLError::IsWebSecurityViolation::kFalse, url_);
-      client_->DidFail(error, total_transfer_size, encoded_body_size,
-                       status.decoded_body_length);
+      const WebURLError::HasCopyInCache has_copy_in_cache =
+          status.exists_in_cache ? WebURLError::HasCopyInCache::kTrue
+                                 : WebURLError::HasCopyInCache::kFalse;
+      client_->DidFail(
+          status.cors_error_status
+              ? WebURLError(*status.cors_error_status, has_copy_in_cache, url_)
+              : WebURLError(status.error_code, has_copy_in_cache,
+                            WebURLError::IsWebSecurityViolation::kFalse, url_),
+          total_transfer_size, encoded_body_size, status.decoded_body_length);
     } else {
       client_->DidFinishLoading(
           (status.completion_time - TimeTicks()).InSecondsF(),
@@ -1013,7 +1018,7 @@ void WebURLLoaderImpl::Context::HandleDataURL() {
       OnReceivedData(std::make_unique<FixedReceivedData>(data.data(), size));
   }
 
-  network::URLLoaderStatus status(error_code);
+  network::URLLoaderCompletionStatus status(error_code);
   status.encoded_body_length = data.size();
   status.decoded_body_length = data.size();
   OnCompletedRequest(status);
@@ -1063,7 +1068,7 @@ void WebURLLoaderImpl::RequestPeerImpl::OnReceivedCachedMetadata(
 }
 
 void WebURLLoaderImpl::RequestPeerImpl::OnCompletedRequest(
-    const network::URLLoaderStatus& status) {
+    const network::URLLoaderCompletionStatus& status) {
   context_->OnCompletedRequest(status);
 }
 
@@ -1238,16 +1243,23 @@ void WebURLLoaderImpl::LoadSynchronously(const WebURLRequest& request,
 
   // TODO(tc): For file loads, we may want to include a more descriptive
   // status code or status text.
-  int error_code = sync_load_response.error_code;
+  const int error_code = sync_load_response.error_code;
   if (error_code != net::OK) {
-    // SyncResourceHandler returns ERR_ABORTED for CORS redirect errors,
-    // so we treat the error as a web security violation.
-    const bool is_web_security_violation = error_code == net::ERR_ABORTED;
-    error = WebURLError(error_code, WebURLError::HasCopyInCache::kFalse,
-                        is_web_security_violation
-                            ? WebURLError::IsWebSecurityViolation::kTrue
-                            : WebURLError::IsWebSecurityViolation::kFalse,
-                        final_url);
+    if (sync_load_response.cors_error) {
+      // TODO(toyoshim): Pass CORS error related headers here.
+      error =
+          WebURLError(network::CORSErrorStatus(*sync_load_response.cors_error),
+                      WebURLError::HasCopyInCache::kFalse, final_url);
+    } else {
+      // SyncResourceHandler returns ERR_ABORTED for CORS redirect errors,
+      // so we treat the error as a web security violation.
+      const WebURLError::IsWebSecurityViolation is_web_security_violation =
+          error_code == net::ERR_ABORTED
+              ? WebURLError::IsWebSecurityViolation::kTrue
+              : WebURLError::IsWebSecurityViolation::kFalse;
+      error = WebURLError(error_code, WebURLError::HasCopyInCache::kFalse,
+                          is_web_security_violation, final_url);
+    }
     return;
   }
 

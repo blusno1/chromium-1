@@ -458,12 +458,18 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void ShowTreeForThis() const;
   void ShowLayoutTreeForThis() const;
   void ShowLineTreeForThis() const;
-
   void ShowLayoutObject() const;
-  // We don't make stringBuilder an optional parameter so that
-  // showLayoutObject can be called from gdb easily.
-  void ShowLayoutObject(StringBuilder&) const;
-  void ShowLayoutTreeAndMark(const LayoutObject* marked_object1 = nullptr,
+
+  // Dump this layout object to the specified string builder.
+  void DumpLayoutObject(StringBuilder&) const;
+
+  // Dump the subtree established by this layout object to the specified string
+  // builder. There will be one object per line, and descendants will be
+  // indented according to their tree level. The optional "marked_foo"
+  // parameters can be used to mark up to two objects in the subtree with a
+  // label.
+  void DumpLayoutTreeAndMark(StringBuilder&,
+                             const LayoutObject* marked_object1 = nullptr,
                              const char* marked_label1 = nullptr,
                              const LayoutObject* marked_object2 = nullptr,
                              const char* marked_label2 = nullptr,
@@ -649,9 +655,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   bool IsSVGViewportContainer() const {
     return IsOfType(kLayoutObjectSVGViewportContainer);
-  }
-  bool IsSVGGradientStop() const {
-    return IsOfType(kLayoutObjectSVGGradientStop);
   }
   bool IsSVGHiddenContainer() const {
     return IsOfType(kLayoutObjectSVGHiddenContainer);
@@ -1735,6 +1738,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // debugging output
   virtual LayoutRect DebugRect() const;
 
+  // Each LayoutObject has one or more painting fragments (exactly one
+  // in the absence of multicol/pagination).
+  // See ../paint/README.md for more on fragments.
   const FragmentData& FirstFragment() const { return fragment_; }
 
   // Returns the bounding box of the visual rects of all fragments.
@@ -1812,6 +1818,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     }
 #endif
 
+    FragmentData& FirstFragment() { return layout_object_.fragment_; }
+
    protected:
     friend class LayoutBoxModelObject;
     friend class LayoutScrollbar;
@@ -1829,11 +1837,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
                              LocationInBackingAndSelectionVisualRect);
     FRIEND_TEST_ALL_PREFIXES(BoxPaintInvalidatorTest,
                              ComputePaintInvalidationReasonBasic);
-
-    // Each LayoutObject has one or more painting fragments (exactly one
-    // in the absence of multicol/pagination).
-    // See ../paint/README.md for more on fragments.
-    FragmentData& FirstFragment() { return layout_object_.fragment_; }
 
     friend class LayoutObject;
     MutableForPainting(const LayoutObject& layout_object)
@@ -1989,7 +1992,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectSVGTransformableContainer,
     kLayoutObjectSVGViewportContainer,
     kLayoutObjectSVGHiddenContainer,
-    kLayoutObjectSVGGradientStop,
     kLayoutObjectSVGShape,
     kLayoutObjectSVGText,
     kLayoutObjectSVGTextPath,

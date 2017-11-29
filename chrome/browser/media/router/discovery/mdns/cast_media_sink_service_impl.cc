@@ -15,6 +15,7 @@
 #include "chrome/common/media_router/discovery/media_sink_service.h"
 #include "chrome/common/media_router/media_sink.h"
 #include "components/cast_channel/cast_channel_enum.h"
+#include "components/cast_channel/cast_channel_util.h"
 #include "components/cast_channel/cast_socket_service.h"
 #include "components/cast_channel/logger.h"
 #include "components/net_log/chrome_net_log.h"
@@ -181,7 +182,6 @@ CastMediaSinkServiceImpl::CastMediaSinkServiceImpl(
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(cast_socket_service_);
   DCHECK(network_monitor_);
-  network_monitor_->AddObserver(this);
   cast_socket_service_->AddObserver(this);
 
   retry_params_ = RetryParams::GetFromFieldTrialParam();
@@ -224,7 +224,6 @@ CastMediaSinkServiceImpl::CastMediaSinkServiceImpl(
 CastMediaSinkServiceImpl::~CastMediaSinkServiceImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   cast_channel::CastSocketService::GetInstance()->RemoveObserver(this);
-  network_monitor_->RemoveObserver(this);
 }
 
 void CastMediaSinkServiceImpl::SetTaskRunnerForTest(
@@ -241,11 +240,18 @@ void CastMediaSinkServiceImpl::SetClockForTest(
 void CastMediaSinkServiceImpl::Start() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   MediaSinkServiceBase::StartTimer();
+  // This call to |GetNetworkId| ensures that we get the current network ID at
+  // least once during startup in case |AddObserver| occurs after the first
+  // round of notifications has already been dispatched.
+  network_monitor_->GetNetworkId(base::BindOnce(
+      &CastMediaSinkServiceImpl::OnNetworksChanged, AsWeakPtr()));
+  network_monitor_->AddObserver(this);
 }
 
 void CastMediaSinkServiceImpl::Stop() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   MediaSinkServiceBase::StopTimer();
+  network_monitor_->RemoveObserver(this);
 }
 
 void CastMediaSinkServiceImpl::OnFetchCompleted() {
@@ -302,7 +308,7 @@ void CastMediaSinkServiceImpl::OnError(const cast_channel::CastSocket& socket,
   // Need a PostTask() here because RemoveSocket() will release the memory of
   // |socket|. Need to make sure all tasks on |socket| finish before deleting
   // the object.
-  task_runner_->PostTask(
+  task_runner_->PostNonNestableTask(
       FROM_HERE,
       base::Bind(
           base::IgnoreResult(&cast_channel::CastSocketService::RemoveSocket),
@@ -338,21 +344,28 @@ void CastMediaSinkServiceImpl::OnMessage(
 
 void CastMediaSinkServiceImpl::OnNetworksChanged(
     const std::string& network_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Although DiscoveryNetworkMonitor guarantees this condition won't be true
+  // from its Observer interface, the callback from |AddNetworkChangeObserver|
+  // could cause this to happen.
+  if (network_id == current_network_id_) {
+    return;
+  }
   std::string last_network_id = current_network_id_;
   current_network_id_ = network_id;
   dial_sink_failure_count_.clear();
-  if (IsNetworkIdUnknownOrDisconnected(network_id)) {
-    if (!IsNetworkIdUnknownOrDisconnected(last_network_id)) {
-      // Collect current sinks even if OnFetchCompleted hasn't collected the
-      // latest sinks.
-      std::vector<MediaSinkInternal> current_sinks;
-      for (const auto& sink_it : current_sinks_map_) {
-        current_sinks.push_back(sink_it.second);
-      }
-      sink_cache_[last_network_id] = std::move(current_sinks);
+  if (!IsNetworkIdUnknownOrDisconnected(last_network_id)) {
+    // Collect current sinks even if OnFetchCompleted hasn't collected the
+    // latest sinks.
+    std::vector<MediaSinkInternal> current_sinks;
+    for (const auto& sink_it : current_sinks_map_) {
+      current_sinks.push_back(sink_it.second);
     }
-    return;
+    sink_cache_[last_network_id] = std::move(current_sinks);
   }
+  if (IsNetworkIdUnknownOrDisconnected(network_id))
+    return;
+
   auto cache_entry = sink_cache_.find(network_id);
   // Check if we have any cached sinks for this network ID.
   if (cache_entry == sink_cache_.end())
@@ -400,6 +413,9 @@ void CastMediaSinkServiceImpl::OpenChannel(
     std::unique_ptr<net::BackoffEntry> backoff_entry,
     SinkSource sink_source) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!cast_channel::IsValidCastIPAddress(ip_endpoint.address()))
+    return;
 
   // Erase the entry from |dial_sink_failure_count_| since the device is now
   // known to be a Cast device.

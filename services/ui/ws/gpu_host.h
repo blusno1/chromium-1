@@ -8,6 +8,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "components/viz/service/main/viz_main_impl.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
@@ -18,6 +19,10 @@
 #include "services/ui/public/interfaces/gpu.mojom.h"
 #include "services/viz/privileged/interfaces/gl/gpu_host.mojom.h"
 #include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
+
+#if defined(OS_CHROMEOS)
+#include "services/ui/public/interfaces/arc.mojom.h"
+#endif  // defined(OS_CHROMEOS)
 
 namespace service_manager {
 class Connector;
@@ -50,10 +55,13 @@ class GpuHost {
   virtual void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) = 0;
   virtual void OnAcceleratedWidgetDestroyed(gfx::AcceleratedWidget widget) = 0;
 
-  // Requests a viz::mojom::FrameSinkManager interface from mus-gpu.
+  // Requests a viz::mojom::FrameSinkManager interface from viz.
   virtual void CreateFrameSinkManager(
-      viz::mojom::FrameSinkManagerRequest request,
-      viz::mojom::FrameSinkManagerClientPtr client) = 0;
+      viz::mojom::FrameSinkManagerParamsPtr params) = 0;
+
+#if defined(OS_CHROMEOS)
+  virtual void AddArc(mojom::ArcRequest request) = 0;
+#endif  // defined(OS_CHROMEOS)
 };
 
 class DefaultGpuHost : public GpuHost, public viz::mojom::GpuHost {
@@ -76,13 +84,16 @@ class DefaultGpuHost : public GpuHost, public viz::mojom::GpuHost {
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override;
   void OnAcceleratedWidgetDestroyed(gfx::AcceleratedWidget widget) override;
   void CreateFrameSinkManager(
-      viz::mojom::FrameSinkManagerRequest request,
-      viz::mojom::FrameSinkManagerClientPtr client) override;
+      viz::mojom::FrameSinkManagerParamsPtr params) override;
+#if defined(OS_CHROMEOS)
+  void AddArc(mojom::ArcRequest request) override;
+#endif  // defined(OS_CHROMEOS)
 
   // viz::mojom::GpuHost:
   void DidInitialize(const gpu::GPUInfo& gpu_info,
                      const gpu::GpuFeatureInfo& gpu_feature_info) override;
   void DidFailInitialize() override;
+  void DidCreateContextSuccessfully() override;
   void DidCreateOffscreenContext(const GURL& url) override;
   void DidDestroyOffscreenContext(const GURL& url) override;
   void DidDestroyChannel(int32_t client_id) override;
@@ -117,6 +128,9 @@ class DefaultGpuHost : public GpuHost, public viz::mojom::GpuHost {
   base::WaitableEvent viz_main_wait_;
 
   mojo::StrongBindingSet<mojom::Gpu> gpu_bindings_;
+#if defined(OS_CHROMEOS)
+  mojo::StrongBindingSet<mojom::Arc> arc_bindings_;
+#endif  // defined(OS_CHROMEOS)
 
   DISALLOW_COPY_AND_ASSIGN(DefaultGpuHost);
 };

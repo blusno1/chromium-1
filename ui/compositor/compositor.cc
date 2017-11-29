@@ -74,7 +74,8 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
       allow_locks_to_extend_timeout_(false),
       is_pixel_canvas_(enable_pixel_canvas),
       weak_ptr_factory_(this),
-      lock_timeout_weak_ptr_factory_(this) {
+      lock_timeout_weak_ptr_factory_(this),
+      context_creation_weak_ptr_factory_(this) {
   if (context_factory_private) {
     auto* host_frame_sink_manager =
         context_factory_private_->GetHostFrameSinkManager();
@@ -437,14 +438,17 @@ void Compositor::SetAcceleratedWidget(gfx::AcceleratedWidget widget) {
   DCHECK(!widget_valid_);
   widget_ = widget;
   widget_valid_ = true;
-  if (layer_tree_frame_sink_requested_)
-    context_factory_->CreateLayerTreeFrameSink(weak_ptr_factory_.GetWeakPtr());
+  if (layer_tree_frame_sink_requested_) {
+    context_factory_->CreateLayerTreeFrameSink(
+        context_creation_weak_ptr_factory_.GetWeakPtr());
+  }
 }
 
 gfx::AcceleratedWidget Compositor::ReleaseAcceleratedWidget() {
   DCHECK(!IsVisible());
   host_->ReleaseLayerTreeFrameSink();
   context_factory_->RemoveCompositor(this);
+  context_creation_weak_ptr_factory_.InvalidateWeakPtrs();
   widget_valid_ = false;
   gfx::AcceleratedWidget widget = widget_;
   widget_ = gfx::kNullAcceleratedWidget;
@@ -544,10 +548,11 @@ void Compositor::UpdateLayerTreeHost() {
 
 void Compositor::RequestNewLayerTreeFrameSink() {
   DCHECK(!layer_tree_frame_sink_requested_);
-  if (widget_valid_)
-    context_factory_->CreateLayerTreeFrameSink(weak_ptr_factory_.GetWeakPtr());
-  else
-    layer_tree_frame_sink_requested_ = true;
+  layer_tree_frame_sink_requested_ = true;
+  if (widget_valid_) {
+    context_factory_->CreateLayerTreeFrameSink(
+        context_creation_weak_ptr_factory_.GetWeakPtr());
+  }
 }
 
 void Compositor::DidFailToInitializeLayerTreeFrameSink() {
@@ -579,6 +584,11 @@ void Compositor::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
   // TODO(fsamuel): Once surface synchronization is turned on, the fallback
   // surface should be set here.
+}
+
+void Compositor::OnFrameTokenChanged(uint32_t frame_token) {
+  // TODO(yiyix, fsamuel): Implement frame token propagation for Compositor.
+  NOTREACHED();
 }
 
 void Compositor::SetOutputIsSecure(bool output_is_secure) {

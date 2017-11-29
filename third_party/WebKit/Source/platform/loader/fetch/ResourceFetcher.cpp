@@ -354,7 +354,7 @@ void ResourceFetcher::RequestLoadStarted(unsigned long identifier,
     info->SetLoadFinishTime(info->InitialTime());
     scheduled_resource_timing_reports_.push_back(std::move(info));
     if (!resource_timing_report_timer_.IsActive())
-      resource_timing_report_timer_.StartOneShot(0, BLINK_FROM_HERE);
+      resource_timing_report_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
   }
 }
 
@@ -1444,8 +1444,8 @@ bool ResourceFetcher::StartLoad(Resource* resource) {
                                             resource->Options().initiator_info);
 
     if (Context().GetFrameScheduler()) {
-      ScopedVirtualTimePauser virtual_time_pauser =
-          Context().GetFrameScheduler()->CreateScopedVirtualTimePauser();
+      WebScopedVirtualTimePauser virtual_time_pauser =
+          Context().GetFrameScheduler()->CreateWebScopedVirtualTimePauser();
       virtual_time_pauser.PauseVirtualTime(true);
       resource->VirtualTimePauser() = std::move(virtual_time_pauser);
     }

@@ -112,7 +112,7 @@ void FrameSinkManagerImpl::CreateRootCompositorFrameSink(
   DCHECK_EQ(0u, compositor_frame_sinks_.count(frame_sink_id));
   DCHECK(display_provider_);
 
-  std::unique_ptr<BeginFrameSource> begin_frame_source;
+  std::unique_ptr<SyntheticBeginFrameSource> begin_frame_source;
   auto display = display_provider_->CreateDisplay(
       frame_sink_id, surface_handle, renderer_settings, &begin_frame_source);
 
@@ -401,6 +401,12 @@ void FrameSinkManagerImpl::SubmitHitTestRegionList(
 uint64_t FrameSinkManagerImpl::GetActiveFrameIndex(
     const SurfaceId& surface_id) {
   return surface_manager_.GetSurfaceForId(surface_id)->GetActiveFrameIndex();
+}
+
+void FrameSinkManagerImpl::OnFrameTokenChanged(const FrameSinkId& frame_sink_id,
+                                               uint32_t frame_token) {
+  if (client_)
+    client_->OnFrameTokenChanged(frame_sink_id, frame_token);
 }
 
 void FrameSinkManagerImpl::OnAggregatedHitTestRegionListUpdated(

@@ -125,7 +125,6 @@
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/SpellChecker.h"
-#include "core/editing/spellcheck/TextCheckerClientImpl.h"
 #include "core/exported/LocalFrameClientImpl.h"
 #include "core/exported/SharedWorkerRepositoryClientImpl.h"
 #include "core/exported/WebAssociatedURLLoaderImpl.h"
@@ -139,12 +138,12 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/PageScaleConstraintsSet.h"
+#include "core/frame/PausableScriptExecutor.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameOwner.h"
 #include "core/frame/ScreenOrientationController.h"
 #include "core/frame/Settings.h"
 #include "core/frame/SmartClip.h"
-#include "core/frame/SuspendableScriptExecutor.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/VisualViewport.h"
 #include "core/frame/WebFrameWidgetImpl.h"
@@ -204,9 +203,9 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebDoubleSize.h"
 #include "public/platform/WebFloatPoint.h"
@@ -739,7 +738,7 @@ void WebLocalFrameImpl::RequestExecuteScriptAndReturnValue(
   DCHECK(GetFrame());
 
   scoped_refptr<DOMWrapperWorld> main_world = &DOMWrapperWorld::MainWorld();
-  SuspendableScriptExecutor* executor = SuspendableScriptExecutor::Create(
+  PausableScriptExecutor* executor = PausableScriptExecutor::Create(
       GetFrame(), std::move(main_world), CreateSourcesVector(&source, 1),
       user_gesture, callback);
   executor->Run();
@@ -753,9 +752,9 @@ void WebLocalFrameImpl::RequestExecuteV8Function(
     v8::Local<v8::Value> argv[],
     WebScriptExecutionCallback* callback) {
   DCHECK(GetFrame());
-  SuspendableScriptExecutor::CreateAndRun(GetFrame(), ToIsolate(GetFrame()),
-                                          context, function, receiver, argc,
-                                          argv, callback);
+  PausableScriptExecutor::CreateAndRun(GetFrame(), ToIsolate(GetFrame()),
+                                       context, function, receiver, argc, argv,
+                                       callback);
 }
 
 void WebLocalFrameImpl::ExecuteScriptInIsolatedWorld(
@@ -800,15 +799,15 @@ void WebLocalFrameImpl::RequestExecuteScriptInIsolatedWorld(
 
   scoped_refptr<DOMWrapperWorld> isolated_world =
       DOMWrapperWorld::EnsureIsolatedWorld(ToIsolate(GetFrame()), world_id);
-  SuspendableScriptExecutor* executor = SuspendableScriptExecutor::Create(
+  PausableScriptExecutor* executor = PausableScriptExecutor::Create(
       GetFrame(), std::move(isolated_world),
       CreateSourcesVector(sources_in, num_sources), user_gesture, callback);
   switch (option) {
     case kAsynchronousBlockingOnload:
-      executor->RunAsync(SuspendableScriptExecutor::kOnloadBlocking);
+      executor->RunAsync(PausableScriptExecutor::kOnloadBlocking);
       break;
     case kAsynchronous:
-      executor->RunAsync(SuspendableScriptExecutor::kNonBlocking);
+      executor->RunAsync(PausableScriptExecutor::kNonBlocking);
       break;
     case kSynchronous:
       executor->Run();
@@ -864,7 +863,7 @@ void WebLocalFrameImpl::ReloadWithOverrideURL(const WebURL& override_url,
   if (request.IsNull())
     return;
   Load(request, load_type, WebHistoryItem(), kWebHistoryDifferentDocumentLoad,
-       false);
+       false, base::UnguessableToken::Create());
 }
 
 void WebLocalFrameImpl::ReloadImage(const WebNode& web_node) {
@@ -881,7 +880,8 @@ void WebLocalFrameImpl::LoadRequest(const WebURLRequest& request) {
   // TODO(clamy): Remove this function once RenderFrame calls load for all
   // requests.
   Load(request, WebFrameLoadType::kStandard, WebHistoryItem(),
-       kWebHistoryDifferentDocumentLoad, false);
+       kWebHistoryDifferentDocumentLoad, false,
+       base::UnguessableToken::Create());
 }
 
 void WebLocalFrameImpl::LoadHTMLString(const WebData& data,
@@ -1647,7 +1647,6 @@ WebLocalFrameImpl::WebLocalFrameImpl(
       interface_registry_(interface_registry),
       web_dev_tools_frontend_(nullptr),
       input_method_controller_(*this),
-      text_checker_client_(new TextCheckerClientImpl(this)),
       spell_check_panel_host_client_(nullptr),
       self_keep_alive_(this) {
   DCHECK(client_);
@@ -1680,7 +1679,6 @@ void WebLocalFrameImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(print_context_);
   visitor->Trace(context_menu_node_);
   visitor->Trace(input_method_controller_);
-  visitor->Trace(text_checker_client_);
   WebFrame::TraceFrames(visitor, this);
 }
 
@@ -1688,8 +1686,8 @@ void WebLocalFrameImpl::SetCoreFrame(LocalFrame* frame) {
   frame_ = frame;
 
   local_frame_client_->SetVirtualTimePauser(
-      frame_ ? frame_->FrameScheduler()->CreateScopedVirtualTimePauser()
-             : ScopedVirtualTimePauser());
+      frame_ ? frame_->FrameScheduler()->CreateWebScopedVirtualTimePauser()
+             : WebScopedVirtualTimePauser());
 }
 
 void WebLocalFrameImpl::InitializeCoreFrame(Page& page,
@@ -1887,7 +1885,7 @@ void WebLocalFrameImpl::LoadJavaScriptURL(const KURL& url) {
   v8::HandleScope handle_scope(ToIsolate(GetFrame()));
   v8::Local<v8::Value> result =
       GetFrame()->GetScriptController().ExecuteScriptInMainWorldAndReturnValue(
-          ScriptSourceCode(script));
+          ScriptSourceCode(script, ScriptSourceLocationType::kJavascriptUrl));
   if (result.IsEmpty() || !result->IsString())
     return;
   String script_result = ToCoreString(v8::Local<v8::String>::Cast(result));
@@ -1984,11 +1982,13 @@ WebURLRequest WebLocalFrameImpl::RequestForReload(
   return WrappedResourceRequest(request);
 }
 
-void WebLocalFrameImpl::Load(const WebURLRequest& request,
-                             WebFrameLoadType web_frame_load_type,
-                             const WebHistoryItem& item,
-                             WebHistoryLoadType web_history_load_type,
-                             bool is_client_redirect) {
+void WebLocalFrameImpl::Load(
+    const WebURLRequest& request,
+    WebFrameLoadType web_frame_load_type,
+    const WebHistoryItem& item,
+    WebHistoryLoadType web_history_load_type,
+    bool is_client_redirect,
+    const base::UnguessableToken& devtools_navigation_token) {
   DCHECK(GetFrame());
   DCHECK(!request.IsNull());
   const ResourceRequest& resource_request = request.ToResourceRequest();
@@ -2002,7 +2002,9 @@ void WebLocalFrameImpl::Load(const WebURLRequest& request,
   if (text_finder_)
     text_finder_->ClearActiveFindMatch();
 
-  FrameLoadRequest frame_request = FrameLoadRequest(nullptr, resource_request);
+  FrameLoadRequest frame_request =
+      FrameLoadRequest(nullptr, resource_request, /*frame_name=*/AtomicString(),
+                       kCheckContentSecurityPolicy, devtools_navigation_token);
   if (is_client_redirect)
     frame_request.SetClientRedirect(ClientRedirectPolicy::kClientRedirect);
   HistoryItem* history_item = item;
@@ -2529,10 +2531,6 @@ void WebLocalFrameImpl::AdvanceFocusInForm(WebFocusType focus_type) {
 
   next_element->scrollIntoViewIfNeeded(true /*centerIfNeeded*/);
   next_element->focus();
-}
-
-TextCheckerClient& WebLocalFrameImpl::GetTextCheckerClient() const {
-  return *text_checker_client_;
 }
 
 void WebLocalFrameImpl::SetTextCheckClient(

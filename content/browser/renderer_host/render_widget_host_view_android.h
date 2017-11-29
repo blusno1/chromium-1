@@ -198,6 +198,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool OnTouchEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseWheelEvent(const ui::MotionEventAndroid& event) override;
+  bool OnGestureEvent(const ui::GestureEventAndroid& event) override;
   void OnPhysicalBackingSizeChanged() override;
 
   // ui::ViewAndroidObserver implementation:
@@ -241,6 +242,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void DidReceiveCompositorFrameAck() override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
+  void OnFrameTokenChanged(uint32_t frame_token) override;
 
   // viz::BeginFrameObserver implementation.
   void OnBeginFrame(const viz::BeginFrameArgs& args) override;
@@ -475,6 +477,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   float prev_top_shown_pix_;
   float prev_bottom_shown_pix_;
+  float page_scale_;
+  float min_page_scale_;
+  float max_page_scale_;
 
   base::TimeTicks prev_mousedown_timestamp_;
   gfx::Point prev_mousedown_point_;

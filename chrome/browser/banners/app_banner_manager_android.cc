@@ -144,18 +144,25 @@ std::string AppBannerManagerAndroid::GetBannerType() {
                                     : "play";
 }
 
-bool AppBannerManagerAndroid::IsWebAppInstalled(
-    content::BrowserContext* browser_context,
+bool AppBannerManagerAndroid::IsWebAppConsideredInstalled(
+    content::WebContents* web_contents,
+    const GURL& validated_url,
     const GURL& start_url,
     const GURL& manifest_url) {
-  // Returns true if a WebAPK is installed or is being installed.
-  // Does not check whether a non-WebAPK web app is installed: this is detected
-  // by the content settings check in AppBannerSettingsHelper::ShouldShowBanner
-  // (due to the lack of an API to detect what is and isn't on the Android
-  // homescreen). This method will still detect the presence of a WebAPK even if
-  // Chrome's data is cleared.
-  return ShortcutHelper::IsWebApkInstalled(browser_context, start_url,
-                                           manifest_url);
+  // Whether a WebAPK is installed or is being installed. IsWebApkInstalled
+  // will still detect the presence of a WebAPK even if Chrome's data is
+  // cleared.
+  bool is_webapk_installed = ShortcutHelper::IsWebApkInstalled(
+      web_contents->GetBrowserContext(), start_url, manifest_url);
+
+  // If a WebAPK is not installed, we use a heuristic to decide whether we
+  // consider a non-WebAPK to be installed (due to the lack of a pre-Oreo API
+  // to detect what is and isn't on the Android homescreen).
+  // TODO(crbug.com/786268): stop relying on this heuristic once WebAPKs are
+  // common vs legacy PWAs.
+  return is_webapk_installed ||
+         AppBannerSettingsHelper::HasBeenInstalled(web_contents, validated_url,
+                                                   GetAppIdentifier());
 }
 
 InstallableParams AppBannerManagerAndroid::ParamsToPerformInstallableCheck() {
@@ -307,13 +314,15 @@ std::string AppBannerManagerAndroid::ExtractQueryValueForName(
 }
 
 // static
-jint GetHomescreenLanguageOption(JNIEnv* env,
-                                 const JavaParamRef<jclass>& clazz) {
+jint JNI_AppBannerManager_GetHomescreenLanguageOption(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
   return AppBannerSettingsHelper::GetHomescreenLanguageOption();
 }
 
 // static
-ScopedJavaLocalRef<jobject> GetJavaBannerManagerForWebContents(
+ScopedJavaLocalRef<jobject>
+JNI_AppBannerManager_GetJavaBannerManagerForWebContents(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jobject>& java_web_contents) {
@@ -324,25 +333,28 @@ ScopedJavaLocalRef<jobject> GetJavaBannerManagerForWebContents(
 }
 
 // static
-void SetDaysAfterDismissAndIgnoreToTrigger(JNIEnv* env,
-                                           const JavaParamRef<jclass>& clazz,
-                                           jint dismiss_days,
-                                           jint ignore_days) {
+void JNI_AppBannerManager_SetDaysAfterDismissAndIgnoreToTrigger(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    jint dismiss_days,
+    jint ignore_days) {
   AppBannerSettingsHelper::SetDaysAfterDismissAndIgnoreToTrigger(dismiss_days,
                                                                  ignore_days);
 }
 
 // static
-void SetTimeDeltaForTesting(JNIEnv* env,
-                            const JavaParamRef<jclass>& clazz,
-                            jint days) {
+void JNI_AppBannerManager_SetTimeDeltaForTesting(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    jint days) {
   AppBannerManager::SetTimeDeltaForTesting(days);
 }
 
 // static
-void SetTotalEngagementToTrigger(JNIEnv* env,
-                                 const JavaParamRef<jclass>& clazz,
-                                 jdouble engagement) {
+void JNI_AppBannerManager_SetTotalEngagementToTrigger(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    jdouble engagement) {
   AppBannerSettingsHelper::SetTotalEngagementToTrigger(engagement);
 }
 

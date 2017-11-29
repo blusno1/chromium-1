@@ -12,30 +12,30 @@
 namespace blink {
 
 NGLogicalOffset NGPhysicalOffset::ConvertToLogical(
-    NGWritingMode mode,
+    WritingMode mode,
     TextDirection direction,
     NGPhysicalSize outer_size,
     NGPhysicalSize inner_size) const {
   switch (mode) {
-    case kHorizontalTopBottom:
+    case WritingMode::kHorizontalTb:
       if (direction == TextDirection::kLtr)
         return NGLogicalOffset(left, top);
       else
         return NGLogicalOffset(outer_size.width - left - inner_size.width, top);
-    case kVerticalRightLeft:
-    case kSidewaysRightLeft:
+    case WritingMode::kVerticalRl:
+    case WritingMode::kSidewaysRl:
       if (direction == TextDirection::kLtr)
         return NGLogicalOffset(top, outer_size.width - left - inner_size.width);
       else
         return NGLogicalOffset(outer_size.height - top - inner_size.height,
                                outer_size.width - left - inner_size.width);
-    case kVerticalLeftRight:
+    case WritingMode::kVerticalLr:
       if (direction == TextDirection::kLtr)
         return NGLogicalOffset(top, left);
       else
         return NGLogicalOffset(outer_size.height - top - inner_size.height,
                                left);
-    case kSidewaysLeftRight:
+    case WritingMode::kSidewaysLr:
       if (direction == TextDirection::kLtr)
         return NGLogicalOffset(outer_size.height - top - inner_size.height,
                                left);
@@ -73,6 +73,10 @@ bool NGPhysicalOffset::operator==(const NGPhysicalOffset& other) const {
 
 NGPhysicalOffset::NGPhysicalOffset(const LayoutPoint& source)
     : left(source.X()), top(source.Y()) {}
+
+LayoutPoint NGPhysicalOffset::ToLayoutPoint() const {
+  return {left, top};
+}
 
 String NGPhysicalOffset::ToString() const {
   return String::Format("%d,%d", left.ToInt(), top.ToInt());

@@ -246,11 +246,20 @@ Polymer({
     },
 
     /** @private */
-    showImportExportPasswords_: {
+    showExportPasswords_: {
       type: Boolean,
       value: function() {
-        return loadTimeData.valueExists('showImportExportPasswords') &&
-            loadTimeData.getBoolean('showImportExportPasswords');
+        return loadTimeData.valueExists('showExportPasswords') &&
+            loadTimeData.getBoolean('showExportPasswords');
+      }
+    },
+
+    /** @private */
+    showImportPasswords_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.valueExists('showImportPasswords') &&
+            loadTimeData.getBoolean('showImportPasswords');
       }
     },
 
@@ -270,6 +279,7 @@ Polymer({
   listeners: {
     'show-password': 'showPassword_',
     'password-menu-tap': 'onPasswordMenuTap_',
+    'export-passwords': 'onExportPasswords_',
   },
 
   keyBindings: {
@@ -346,6 +356,9 @@ Polymer({
     this.passwordManager_.removeExceptionListChangedListener(
         /** @type {function(!Array<PasswordManager.ExceptionEntry>):void} */ (
             this.setPasswordExceptionsListener_));
+
+    if (this.$.undoToast.open)
+      this.$.undoToast.hide();
   },
 
   /**
@@ -467,11 +480,17 @@ Polymer({
   },
 
   /**
-   * Fires an event that should trigger the password export process.
+   * Opens the export passwords dialog.
    * @private
    */
   onExportTap_: function() {
-    this.passwordManager_.exportPasswords();
+    this.showPasswordsExportDialog_ = true;
+    this.$.exportImportMenu.close();
+  },
+
+  /** @private */
+  onPasswordsExportDialogClosed_: function() {
+    this.showPasswordsExportDialog_ = false;
   },
 
   /**
@@ -503,6 +522,17 @@ Polymer({
    */
   getOnOffLabel_: function(toggleValue) {
     return toggleValue ? this.i18n('toggleOn') : this.i18n('toggleOff');
+  },
+
+  /**
+   * @private
+   * @param {boolean} showExportPasswords
+   * @param {boolean} showImportPasswords
+   * @return {boolean}
+   */
+  showImportOrExportPasswords_: function(
+      showExportPasswords, showImportPasswords) {
+    return showExportPasswords || showImportPasswords;
   }
 });
 })();

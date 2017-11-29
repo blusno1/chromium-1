@@ -27,6 +27,8 @@
 #define Editor_h
 
 #include <memory>
+
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/clipboard/DataTransferAccessPolicy.h"
 #include "core/editing/EditingBehavior.h"
@@ -71,8 +73,6 @@ enum EditorParagraphSeparator {
 };
 
 class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
-  WTF_MAKE_NONCOPYABLE(Editor);
-
  public:
   static Editor* Create(LocalFrame&);
   ~Editor();
@@ -244,7 +244,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
                            FindOptions);
 
   const VisibleSelection& Mark() const;  // Mark, to be used as emacs uses it.
-  void SetMark(const VisibleSelection&);
+  void SetMark();
 
   void ComputeAndSetTypingStyle(CSSPropertyValueSet*, InputEvent::InputType);
 
@@ -296,7 +296,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   static void TidyUpHTMLStructure(Document&);
 
   class RevealSelectionScope {
-    WTF_MAKE_NONCOPYABLE(RevealSelectionScope);
+    DISALLOW_COPY_AND_ASSIGN(RevealSelectionScope);
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
    public:
@@ -360,6 +360,8 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   FrameSelection& GetFrameSelection() const;
 
   bool HandleEditingKeyboardEvent(KeyboardEvent*);
+
+  DISALLOW_COPY_AND_ASSIGN(Editor);
 };
 
 inline void Editor::SetStartNewKillRingSequence(bool flag) {
@@ -368,10 +370,6 @@ inline void Editor::SetStartNewKillRingSequence(bool flag) {
 
 inline const VisibleSelection& Editor::Mark() const {
   return mark_;
-}
-
-inline void Editor::SetMark(const VisibleSelection& selection) {
-  mark_ = selection;
 }
 
 inline bool Editor::MarkedTextMatchesAreHighlighted() const {

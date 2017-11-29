@@ -25,16 +25,6 @@ namespace {
 
 HomedirMethods* g_homedir_methods = NULL;
 
-// Fill authorization protobuffer.
-void FillAuthorizationProtobuf(const Authorization& auth,
-                               cryptohome::AuthorizationRequest* auth_proto) {
-  Key* key = auth_proto->mutable_key();
-  if (!auth.label.empty()) {
-    key->mutable_data()->set_label(auth.label);
-  }
-  key->set_secret(auth.key);
-}
-
 void ParseAuthorizationDataProtobuf(
     const KeyAuthorizationData& authorization_data_proto,
     KeyDefinition::AuthorizationData* authorization_data) {
@@ -109,94 +99,61 @@ class HomedirMethodsImpl : public HomedirMethods {
   ~HomedirMethodsImpl() override {}
 
   void GetKeyDataEx(const Identification& id,
-                    const std::string& label,
+                    const cryptohome::AuthorizationRequest& auth,
+                    const cryptohome::GetKeyDataRequest& request,
                     const GetKeyDataCallback& callback) override {
-    cryptohome::AuthorizationRequest kEmptyAuthProto;
-    cryptohome::GetKeyDataRequest request;
-
-    request.mutable_key()->mutable_data()->set_label(label);
-
     DBusThreadManager::Get()->GetCryptohomeClient()->GetKeyDataEx(
-        id, kEmptyAuthProto, request,
+        id, auth, request,
         base::BindOnce(&HomedirMethodsImpl::OnGetKeyDataExCallback,
                        weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void CheckKeyEx(const Identification& id,
-                  const Authorization& auth,
+                  const cryptohome::AuthorizationRequest& auth,
+                  const cryptohome::CheckKeyRequest& request,
                   const Callback& callback) override {
-    cryptohome::AuthorizationRequest auth_proto;
-    cryptohome::CheckKeyRequest request;
-
-    FillAuthorizationProtobuf(auth, &auth_proto);
-
     DBusThreadManager::Get()->GetCryptohomeClient()->CheckKeyEx(
-        id, auth_proto, request,
+        id, auth, request,
         base::BindOnce(&HomedirMethodsImpl::OnBaseReplyCallback,
                        weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void MountEx(const Identification& id,
-               const Authorization& auth,
+               const AuthorizationRequest& auth,
                const MountRequest& request,
                const MountCallback& callback) override {
-    cryptohome::AuthorizationRequest auth_proto;
-
-    FillAuthorizationProtobuf(auth, &auth_proto);
     DBusThreadManager::Get()->GetCryptohomeClient()->MountEx(
-        id, auth_proto, request,
+        id, auth, request,
         base::BindOnce(&HomedirMethodsImpl::OnMountExCallback,
                        weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void AddKeyEx(const Identification& id,
-                const Authorization& auth,
-                const KeyDefinition& new_key,
-                bool clobber_if_exists,
+                const AuthorizationRequest& auth,
+                const AddKeyRequest& request,
                 const Callback& callback) override {
-    cryptohome::AuthorizationRequest auth_proto;
-    cryptohome::AddKeyRequest request;
-
-    FillAuthorizationProtobuf(auth, &auth_proto);
-    KeyDefinitionToKey(new_key, request.mutable_key());
-    request.set_clobber_if_exists(clobber_if_exists);
-
     DBusThreadManager::Get()->GetCryptohomeClient()->AddKeyEx(
-        id, auth_proto, request,
+        id, auth, request,
         base::BindOnce(&HomedirMethodsImpl::OnBaseReplyCallback,
                        weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void RemoveKeyEx(const Identification& id,
-                   const Authorization& auth,
-                   const std::string& label,
+                   const AuthorizationRequest& auth,
+                   const RemoveKeyRequest& request,
                    const Callback& callback) override {
-    cryptohome::AuthorizationRequest auth_proto;
-    cryptohome::RemoveKeyRequest request;
-
-    FillAuthorizationProtobuf(auth, &auth_proto);
-    request.mutable_key()->mutable_data()->set_label(label);
-
     DBusThreadManager::Get()->GetCryptohomeClient()->RemoveKeyEx(
-        id, auth_proto, request,
+        id, auth, request,
         base::BindOnce(&HomedirMethodsImpl::OnBaseReplyCallback,
                        weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void UpdateKeyEx(const Identification& id,
-                   const Authorization& auth,
-                   const KeyDefinition& new_key,
-                   const std::string& signature,
+                   const AuthorizationRequest& auth,
+                   const UpdateKeyRequest& request,
                    const Callback& callback) override {
-    cryptohome::AuthorizationRequest auth_proto;
-    cryptohome::UpdateKeyRequest pb_update_key;
-
-    FillAuthorizationProtobuf(auth, &auth_proto);
-    KeyDefinitionToKey(new_key, pb_update_key.mutable_changes());
-    pb_update_key.set_authorization_signature(signature);
-
     DBusThreadManager::Get()->GetCryptohomeClient()->UpdateKeyEx(
-        id, auth_proto, pb_update_key,
+        id, auth, request,
         base::BindOnce(&HomedirMethodsImpl::OnBaseReplyCallback,
                        weak_ptr_factory_.GetWeakPtr(), callback));
   }
@@ -219,10 +176,8 @@ class HomedirMethodsImpl : public HomedirMethods {
   }
 
   void MigrateToDircrypto(const Identification& id,
-                          bool minimal_migration,
+                          const cryptohome::MigrateToDircryptoRequest& request,
                           const DBusResultCallback& callback) override {
-    cryptohome::MigrateToDircryptoRequest request;
-    request.set_minimal_migration(minimal_migration);
     DBusThreadManager::Get()->GetCryptohomeClient()->MigrateToDircrypto(
         id, request,
         base::Bind(&HomedirMethodsImpl::OnDBusResultCallback,
@@ -446,6 +401,18 @@ void KeyDefinitionToKey(const KeyDefinition& key_def, Key* key) {
     if (it->bytes)
       entry->set_bytes(*it->bytes);
   }
+}
+
+cryptohome::AuthorizationRequest CreateAuthorizationRequest(
+    const std::string& label,
+    const std::string& secret) {
+  cryptohome::AuthorizationRequest auth_request;
+  Key* key = auth_request.mutable_key();
+  if (!label.empty())
+    key->mutable_data()->set_label(label);
+
+  key->set_secret(secret);
+  return auth_request;
 }
 
 // static

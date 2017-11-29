@@ -360,19 +360,15 @@ bool PaintLayer::FixedToViewport() const {
   // An option for improving this is to cache the nearest scroll node in
   // the local border box properties.
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
-    const auto* view_border_box_properties = GetLayoutObject()
-                                                 .View()
-                                                 ->FirstFragment()
-                                                 .GetRarePaintData()
-                                                 ->LocalBorderBoxProperties();
+    const auto* view_border_box_properties =
+        GetLayoutObject().View()->FirstFragment().LocalBorderBoxProperties();
     const auto* view_scroll = view_border_box_properties->Transform()
                                   ->NearestScrollTranslationNode()
                                   .ScrollNode();
 
     const auto* scroll = GetLayoutObject()
                              .FirstFragment()
-                             .GetRarePaintData()
-                             ->LocalBorderBoxProperties()
+                             .LocalBorderBoxProperties()
                              ->Transform()
                              ->NearestScrollTranslationNode()
                              .ScrollNode();
@@ -440,7 +436,7 @@ void PaintLayer::UpdateTransform(const ComputedStyle* old_style,
     // clip rects here.
     ClearClipRects();
   } else if (has_transform) {
-    ClearClipRects(kAbsoluteClipRects);
+    ClearClipRects(kAbsoluteClipRectsIgnoringViewportClip);
   }
 
   UpdateTransformationMatrix();
@@ -1264,8 +1260,8 @@ LayoutRect PaintLayer::PaintingExtent(const PaintLayer* root_layer,
 }
 
 void* PaintLayer::operator new(size_t sz) {
-  return WTF::PartitionAlloc(WTF::Partitions::LayoutPartition(), sz,
-                             WTF_HEAP_PROFILER_TYPE_NAME(PaintLayer));
+  return WTF::Partitions::LayoutPartition()->Alloc(
+      sz, WTF_HEAP_PROFILER_TYPE_NAME(PaintLayer));
 }
 
 void PaintLayer::operator delete(void* ptr) {
@@ -3119,13 +3115,12 @@ bool PaintLayer::AttemptDirectCompositingUpdate(
   // To cut off almost all the work in the compositing update for
   // this case, we treat inline transforms has having assumed overlap
   // (similar to how we treat animated transforms). Notice that we read
-  // CompositingReasonInlineTransform from the compositing_reasons, which
+  // CompositingReasonInlineTransform from the m_compositingReasons, which
   // means that the inline transform actually triggered assumed overlap in
   // the overlap map.
-  CompositingReasons current_reasons =
-      rare_data_ ? rare_data_->compositing_reasons : kCompositingReasonNone;
   if (diff.TransformChanged() &&
-      !OverlapSkippedDueToInlineTransform(current_reasons))
+      (!rare_data_ ||
+       !(rare_data_->compositing_reasons & kCompositingReasonInlineTransform)))
     return false;
 
   // We composite transparent Layers differently from non-transparent

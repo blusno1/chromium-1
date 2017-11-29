@@ -23,6 +23,7 @@
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
+#include "crypto/sha2.h"
 
 using content::BrowserThread;
 using base::TimeTicks;
@@ -411,18 +412,6 @@ AsyncMatch V4LocalDatabaseManager::CheckCsdWhitelistUrl(const GURL& url,
   return HandleWhitelistCheck(std::move(check));
 }
 
-bool V4LocalDatabaseManager::MatchCsdWhitelistUrl(const GURL& url) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  StoresToCheck stores_to_check({GetUrlCsdWhitelistId()});
-  if (!AreAllStoresAvailableNow(stores_to_check)) {
-    // Fail open: Whitelist everything. See CheckCsdWhitelistUrl.
-    return true;
-  }
-
-  return HandleUrlSynchronously(url, stores_to_check);
-}
-
 bool V4LocalDatabaseManager::MatchDownloadWhitelistString(
     const std::string& str) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -434,14 +423,15 @@ bool V4LocalDatabaseManager::MatchDownloadWhitelistString(
     return false;
   }
 
-  return HandleHashSynchronously(str, stores_to_check);
+  return HandleHashSynchronously(crypto::SHA256HashString(str),
+                                 stores_to_check);
 }
 
 bool V4LocalDatabaseManager::MatchDownloadWhitelistUrl(const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   StoresToCheck stores_to_check({GetUrlCsdDownloadWhitelistId()});
-  if (!AreAllStoresAvailableNow(stores_to_check)) {
+  if (!AreAllStoresAvailableNow(stores_to_check) || !CanCheckUrl(url)) {
     // Fail close: Whitelist nothing. This may generate download-protection
     // pings for whitelisted domains, but that's fine.
     return false;
@@ -470,20 +460,10 @@ ThreatSource V4LocalDatabaseManager::GetThreatSource() const {
   return ThreatSource::LOCAL_PVER4;
 }
 
-bool V4LocalDatabaseManager::IsCsdWhitelistKillSwitchOn() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return false;
-}
-
 bool V4LocalDatabaseManager::IsDownloadProtectionEnabled() const {
   // TODO(vakh): Investigate the possibility of using a command line switch for
   // this instead.
   return true;
-}
-
-bool V4LocalDatabaseManager::IsMalwareKillSwitchOn() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return false;
 }
 
 bool V4LocalDatabaseManager::IsSupported() const {

@@ -21,7 +21,7 @@ namespace blink {
 
 class RuleFeatureSetTest : public ::testing::Test {
  public:
-  RuleFeatureSetTest() {}
+  RuleFeatureSetTest() = default;
 
   void SetUp() {
     document_ = HTMLDocument::CreateForTest();
@@ -35,7 +35,8 @@ class RuleFeatureSetTest : public ::testing::Test {
   RuleFeatureSet::SelectorPreMatch CollectFeatures(
       const String& selector_text) {
     CSSSelectorList selector_list = CSSParser::ParseSelector(
-        StrictCSSParserContext(), nullptr, selector_text);
+        StrictCSSParserContext(SecureContextMode::kInsecureContext), nullptr,
+        selector_text);
 
     StyleRule* style_rule = StyleRule::Create(
         std::move(selector_list),

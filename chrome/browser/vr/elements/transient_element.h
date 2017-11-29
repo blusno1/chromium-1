@@ -19,6 +19,8 @@ class TransientElement : public UiElement {
   // Sets the elements visibility to the given value. If the visibility is
   // changing to true, it stays visible for the set timeout.
   void SetVisible(bool visible) override;
+  void SetVisibleImmediately(bool visible) override;
+
   // Resets the time this element stays visible for if the element is currently
   // visible.
   void RefreshVisible();
@@ -70,7 +72,7 @@ class ShowUntilSignalTransientElement : public TransientElement {
   ~ShowUntilSignalTransientElement() override;
 
   // This must be called before the set timeout to hide the element.
-  void Signal();
+  void Signal(bool value);
 
  private:
   bool OnBeginFrame(const base::TimeTicks& time,

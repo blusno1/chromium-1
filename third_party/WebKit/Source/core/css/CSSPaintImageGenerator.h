@@ -9,7 +9,6 @@
 #include "core/CoreExport.h"
 #include "core/css/cssom/CSSStyleValue.h"
 #include "platform/geometry/IntSize.h"
-#include "platform/geometry/LayoutSize.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -30,7 +29,8 @@ class CORE_EXPORT CSSPaintImageGenerator
   // registered and ready to use.
   class Observer : public GarbageCollectedFinalized<Observer> {
    public:
-    virtual ~Observer(){};
+    virtual ~Observer() = default;
+    ;
     virtual void PaintImageGeneratorReady() = 0;
     virtual void Trace(blink::Visitor* visitor) {}
   };
@@ -48,12 +48,10 @@ class CORE_EXPORT CSSPaintImageGenerator
 
   // Invokes the CSS Paint API 'paint' callback. May return a nullptr
   // representing an invalid image if an error occurred.
-  // The |container_size| is the container size with subpixel snapping, where
-  // the |logical_size| is without it. Both sizes include zoom.
+  // The |container_size| is the container size with subpixel snapping.
   virtual scoped_refptr<Image> Paint(const ImageResourceObserver&,
                                      const IntSize& container_size,
-                                     const CSSStyleValueVector*,
-                                     const LayoutSize* logical_size) = 0;
+                                     const CSSStyleValueVector*) = 0;
 
   virtual const Vector<CSSPropertyID>& NativeInvalidationProperties() const = 0;
   virtual const Vector<AtomicString>& CustomInvalidationProperties() const = 0;

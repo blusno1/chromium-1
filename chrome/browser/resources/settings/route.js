@@ -25,6 +25,7 @@
  *   CLOUD_PRINTERS: (undefined|!settings.Route),
  *   CUPS_PRINTERS: (undefined|!settings.Route),
  *   DATETIME: (undefined|!settings.Route),
+ *   DATETIME_TIMEZONE_SUBPAGE: (undefined|!settings.Route),
  *   DEFAULT_BROWSER: (undefined|!settings.Route),
  *   DETAILED_BUILD_INFO: (undefined|!settings.Route),
  *   DEVICE: (undefined|!settings.Route),
@@ -65,6 +66,7 @@
  *   SITE_SETTINGS_AUTOMATIC_DOWNLOADS: (undefined|!settings.Route),
  *   SITE_SETTINGS_BACKGROUND_SYNC: (undefined|!settings.Route),
  *   SITE_SETTINGS_CAMERA: (undefined|!settings.Route),
+ *   SITE_SETTINGS_CLIPBOARD: (undefined|!settings.Route),
  *   SITE_SETTINGS_COOKIES: (undefined|!settings.Route),
  *   SITE_SETTINGS_DATA_DETAILS: (undefined|!settings.Route),
  *   SITE_SETTINGS_FLASH: (undefined|!settings.Route),
@@ -289,10 +291,9 @@ cr.define('settings', function() {
         r.SITE_SETTINGS_ALL = r.SITE_SETTINGS.createChild('all');
         r.SITE_SETTINGS_SITE_DETAILS =
             r.SITE_SETTINGS_ALL.createChild('/content/siteDetails');
-      } else if (loadTimeData.getBoolean('enableSiteDetails')) {
+      } else {
         // When there is no "All Sites", pressing 'back' from "Site Details"
-        // should return to "Content Settings". This should only occur when
-        // |kSiteSettings| is off and |kSiteDetails| is on.
+        // should return to "Content Settings".
         r.SITE_SETTINGS_SITE_DETAILS =
             r.SITE_SETTINGS.createChild('/content/siteDetails');
       }
@@ -307,6 +308,7 @@ cr.define('settings', function() {
       r.SITE_SETTINGS_BACKGROUND_SYNC =
           r.SITE_SETTINGS.createChild('backgroundSync');
       r.SITE_SETTINGS_CAMERA = r.SITE_SETTINGS.createChild('camera');
+      r.SITE_SETTINGS_CLIPBOARD = r.SITE_SETTINGS.createChild('clipboard');
       r.SITE_SETTINGS_COOKIES = r.SITE_SETTINGS.createChild('cookies');
       r.SITE_SETTINGS_SITE_DATA =
           r.SITE_SETTINGS_COOKIES.createChild('/siteData');
@@ -334,6 +336,8 @@ cr.define('settings', function() {
       // <if expr="chromeos">
       if (pageVisibility.dateTime !== false) {
         r.DATETIME = r.ADVANCED.createSection('/dateTime', 'dateTime');
+        r.DATETIME_TIMEZONE_SUBPAGE =
+            r.DATETIME.createChild('/dateTime/timeZone');
       }
       // </if>
 

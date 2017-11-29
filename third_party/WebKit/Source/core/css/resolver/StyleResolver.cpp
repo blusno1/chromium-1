@@ -53,6 +53,7 @@
 #include "core/css/CSSRuleList.h"
 #include "core/css/CSSSelector.h"
 #include "core/css/CSSSelectorWatch.h"
+#include "core/css/CSSStyleDeclaration.h"
 #include "core/css/CSSStyleRule.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/ElementRuleCollector.h"
@@ -106,37 +107,6 @@ void SetAnimationUpdateIfNeeded(StyleResolverState& state, Element& element) {
         state.AnimationUpdate());
 }
 
-// Returns whether any @apply rule sets a custom property
-bool CacheCustomPropertiesForApplyAtRules(StyleResolverState& state,
-                                          const MatchedPropertiesRange& range) {
-  bool rule_sets_custom_property = false;
-  // TODO(timloh): @apply should also work with properties registered as
-  // non-inherited.
-  if (!state.Style()->InheritedVariables())
-    return false;
-  for (const auto& matched_properties : range) {
-    const CSSPropertyValueSet& properties = *matched_properties.properties;
-    unsigned property_count = properties.PropertyCount();
-    for (unsigned i = 0; i < property_count; ++i) {
-      CSSPropertyValueSet::PropertyReference current = properties.PropertyAt(i);
-      if (current.Id() != CSSPropertyApplyAtRule)
-        continue;
-      AtomicString name(ToCSSCustomIdentValue(current.Value()).Value());
-      CSSVariableData* variable_data =
-          state.Style()->InheritedVariables()->GetVariable(name);
-      if (!variable_data)
-        continue;
-      CSSPropertyValueSet* custom_property_set = variable_data->PropertySet();
-      if (!custom_property_set)
-        continue;
-      if (custom_property_set->FindPropertyIndex(CSSPropertyVariable) != -1)
-        rule_sets_custom_property = true;
-      state.SetCustomPropertySetForApplyAtRule(name, custom_property_set);
-    }
-  }
-  return rule_sets_custom_property;
-}
-
 }  // namespace
 
 using namespace HTMLNames;
@@ -178,7 +148,7 @@ StyleResolver::StyleResolver(Document& document) : document_(document) {
   UpdateMediaType();
 }
 
-StyleResolver::~StyleResolver() {}
+StyleResolver::~StyleResolver() = default;
 
 void StyleResolver::Dispose() {
   matched_properties_cache_.Clear();
@@ -602,10 +572,11 @@ scoped_refptr<ComputedStyle> StyleResolver::StyleForElement(
   DCHECK(GetDocument().GetFrame());
   DCHECK(GetDocument().GetSettings());
 
-  // Once an element has a layoutObject, we don't try to destroy it, since
-  // otherwise the layoutObject will vanish if a style recalc happens during
-  // loading.
-  if (!GetDocument().IsRenderingReady() && !element->GetLayoutObject()) {
+  // Once an element has a layout object or non-layout style, we don't try to
+  // destroy it, since that means it could be rendering already and we cannot
+  // arbitrarily change its style during loading.
+  if (!GetDocument().IsRenderingReady() && !element->GetLayoutObject() &&
+      !element->NonLayoutObjectComputedStyle()) {
     if (!style_not_yet_available_) {
       auto style = ComputedStyle::Create();
       style->AddRef();
@@ -765,7 +736,7 @@ scoped_refptr<AnimatableValue> StyleResolver::CreateAnimatableValueSnapshot(
     Element& element,
     const ComputedStyle& base_style,
     const ComputedStyle* parent_style,
-    CSSPropertyID property,
+    const CSSProperty& property,
     const CSSValue* value) {
   // TODO(alancutter): Avoid creating a StyleResolverState just to apply a
   // single value on a ComputedStyle.
@@ -1262,9 +1233,10 @@ void StyleResolver::ApplyAnimatedStandardProperties(
   // they should instead apply in
   // SVGElement::CollectStyleForPresentationAttribute().
   for (const auto& entry : active_interpolations_map) {
-    CSSPropertyID property = entry.key.IsCSSProperty()
-                                 ? entry.key.CssProperty()
-                                 : entry.key.PresentationAttribute();
+    CSSPropertyID property =
+        entry.key.IsCSSProperty()
+            ? entry.key.GetCSSProperty().PropertyID()
+            : entry.key.PresentationAttribute().PropertyID();
     if (!CSSPropertyPriorityData<priority>::PropertyHasPriority(property))
       continue;
     const Interpolation& interpolation = *entry.value.front();
@@ -1527,29 +1499,7 @@ void StyleResolver::ApplyAllProperty(
     if (inherited_only && !property_class.IsInherited())
       continue;
 
-    StyleBuilder::ApplyProperty(property_id, state, all_value);
-  }
-}
-
-template <CSSPropertyPriority priority,
-          StyleResolver::ShouldUpdateNeedsApplyPass shouldUpdateNeedsApplyPass>
-void StyleResolver::ApplyPropertiesForApplyAtRule(
-    StyleResolverState& state,
-    const CSSValue& value,
-    bool is_important,
-    NeedsApplyPass& needs_apply_pass,
-    PropertyWhitelistType property_whitelist_type) {
-  state.Style()->SetHasVariableReferenceFromNonInheritedProperty();
-  if (!state.Style()->InheritedVariables())
-    return;
-  const String& name = ToCSSCustomIdentValue(value).Value();
-  const CSSPropertyValueSet* property_set =
-      state.CustomPropertySetForApplyAtRule(name);
-  bool inherited_only = false;
-  if (property_set) {
-    ApplyProperties<priority, shouldUpdateNeedsApplyPass>(
-        state, property_set, is_important, inherited_only, needs_apply_pass,
-        property_whitelist_type);
+    StyleBuilder::ApplyProperty(property_class, state, all_value);
   }
 }
 
@@ -1565,17 +1515,10 @@ void StyleResolver::ApplyProperties(
   unsigned property_count = properties->PropertyCount();
   for (unsigned i = 0; i < property_count; ++i) {
     CSSPropertyValueSet::PropertyReference current = properties->PropertyAt(i);
-    CSSPropertyID property = current.Id();
+    CSSPropertyID property_id = current.Id();
 
-    if (property == CSSPropertyApplyAtRule) {
-      DCHECK(!inherited_only);
-      ApplyPropertiesForApplyAtRule<priority, shouldUpdateNeedsApplyPass>(
-          state, current.Value(), is_important, needs_apply_pass,
-          property_whitelist_type);
-      continue;
-    }
-
-    if (property == CSSPropertyAll && is_important == current.IsImportant()) {
+    if (property_id == CSSPropertyAll &&
+        is_important == current.IsImportant()) {
       if (shouldUpdateNeedsApplyPass) {
         needs_apply_pass.Set(kAnimationPropertyPriority, is_important);
         needs_apply_pass.Set(kHighPropertyPriority, is_important);
@@ -1587,13 +1530,13 @@ void StyleResolver::ApplyProperties(
     }
 
     if (shouldUpdateNeedsApplyPass)
-      needs_apply_pass.Set(PriorityForProperty(property),
+      needs_apply_pass.Set(PriorityForProperty(property_id),
                            current.IsImportant());
 
     if (is_important != current.IsImportant())
       continue;
 
-    if (!IsPropertyInWhitelist(property_whitelist_type, property,
+    if (!IsPropertyInWhitelist(property_whitelist_type, property_id,
                                GetDocument()))
       continue;
 
@@ -1606,10 +1549,10 @@ void StyleResolver::ApplyProperties(
       continue;
     }
 
-    if (!CSSPropertyPriorityData<priority>::PropertyHasPriority(property))
+    if (!CSSPropertyPriorityData<priority>::PropertyHasPriority(property_id))
       continue;
 
-    StyleBuilder::ApplyProperty(property, state, current.Value());
+    StyleBuilder::ApplyProperty(current.Property(), state, current.Value());
   }
 }
 
@@ -1788,28 +1731,6 @@ void StyleResolver::ApplyCustomProperties(StyleResolverState& state,
   }
   // TODO(leviw): stop recalculating every time
   CSSVariableResolver(state).ResolveVariableDefinitions();
-
-  if (RuntimeEnabledFeatures::CSSApplyAtRulesEnabled()) {
-    if (CacheCustomPropertiesForApplyAtRules(state,
-                                             match_result.AuthorRules())) {
-      ApplyMatchedProperties<kResolveVariables, kUpdateNeedsApplyPass>(
-          state, match_result.UserRules(), false, apply_inherited_only,
-          needs_apply_pass);
-      ApplyMatchedProperties<kResolveVariables, kUpdateNeedsApplyPass>(
-          state, match_result.AuthorRules(), false, apply_inherited_only,
-          needs_apply_pass);
-      ApplyMatchedProperties<kResolveVariables, kCheckNeedsApplyPass>(
-          state, match_result.AuthorRules(), true, apply_inherited_only,
-          needs_apply_pass);
-      ApplyMatchedProperties<kResolveVariables, kCheckNeedsApplyPass>(
-          state, match_result.UserRules(), true, apply_inherited_only,
-          needs_apply_pass);
-      if (apply_animations == kIncludeAnimations) {
-        ApplyAnimatedCustomProperties(state);
-      }
-      CSSVariableResolver(state).ResolveVariableDefinitions();
-    }
-  }
 }
 
 void StyleResolver::ApplyMatchedAnimationProperties(
@@ -2033,21 +1954,23 @@ void StyleResolver::ApplyCallbackSelectors(StyleResolverState& state) {
 // handled by FontStyleResolver.
 void StyleResolver::ComputeFont(ComputedStyle* style,
                                 const CSSPropertyValueSet& property_set) {
-  CSSPropertyID properties[] = {
-      CSSPropertyFontSize,   CSSPropertyFontFamily,      CSSPropertyFontStretch,
-      CSSPropertyFontStyle,  CSSPropertyFontVariantCaps, CSSPropertyFontWeight,
-      CSSPropertyLineHeight,
+  static const CSSProperty* properties[7] = {
+      &GetCSSPropertyFontSize(),        &GetCSSPropertyFontFamily(),
+      &GetCSSPropertyFontStretch(),     &GetCSSPropertyFontStyle(),
+      &GetCSSPropertyFontVariantCaps(), &GetCSSPropertyFontWeight(),
+      &GetCSSPropertyLineHeight(),
   };
 
   // TODO(timloh): This is weird, the style is being used as its own parent
   StyleResolverState state(GetDocument(), nullptr, style, style);
   state.SetStyle(style);
 
-  for (CSSPropertyID property : properties) {
-    if (property == CSSPropertyLineHeight)
+  for (const CSSProperty* property : properties) {
+    if (property->IDEquals(CSSPropertyLineHeight))
       UpdateFont(state);
-    StyleBuilder::ApplyProperty(property, state,
-                                *property_set.GetPropertyCSSValue(property));
+    StyleBuilder::ApplyProperty(
+        *property, state,
+        *property_set.GetPropertyCSSValue(property->PropertyID()));
   }
 }
 

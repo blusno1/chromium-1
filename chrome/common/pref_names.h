@@ -146,7 +146,6 @@ extern const char kWebKitJavascriptEnabled[];
 extern const char kWebKitWebSecurityEnabled[];
 extern const char kWebKitLoadsImagesAutomatically[];
 extern const char kWebKitPluginsEnabled[];
-extern const char kWebKitEncryptedMediaEnabled[];
 extern const char kWebKitDomPasteEnabled[];
 extern const char kWebKitTextAreasAreResizable[];
 extern const char kWebkitTabsToLinks[];
@@ -260,7 +259,6 @@ extern const char kPowerForceNonzeroBrightnessForUserActivity[];
 extern const char kTermsOfServiceURL[];
 extern const char kAttestationEnabled[];
 extern const char kAttestationExtensionWhitelist[];
-extern const char kTouchHudProjectionEnabled[];
 extern const char kMultiProfileNeverShowIntro[];
 extern const char kMultiProfileWarningShowDismissed[];
 extern const char kMultiProfileUserBehavior[];
@@ -362,6 +360,7 @@ extern const char kEnableDeprecatedWebPlatformFeatures[];
 extern const char kEnableHyperlinkAuditing[];
 extern const char kEnableReferrers[];
 extern const char kEnableDoNotTrack[];
+extern const char kEnableEncryptedMedia[];
 
 extern const char kImportAutofillFormData[];
 extern const char kImportBookmarks[];
@@ -613,12 +612,6 @@ extern const char kAudioCaptureAllowedUrls[];
 extern const char kVideoCaptureAllowed[];
 extern const char kVideoCaptureAllowedUrls[];
 
-extern const char kHotwordSearchEnabled[];
-extern const char kHotwordAlwaysOnSearchEnabled[];
-extern const char kHotwordAlwaysOnNotificationSeen[];
-extern const char kHotwordAudioLoggingEnabled[];
-extern const char kHotwordPreviousLanguage[];
-
 #if defined(OS_CHROMEOS)
 extern const char kDeviceSettingsCache[];
 extern const char kHardwareKeyboardLayout[];
@@ -657,6 +650,11 @@ extern const char kConsumerManagementStage[];
 extern const char kIsBootstrappingSlave[];
 extern const char kReportArcStatusEnabled[];
 extern const char kNetworkThrottlingEnabled[];
+extern const char kPowerMetricsDailySample[];
+extern const char kPowerMetricsIdleScreenDimCount[];
+extern const char kPowerMetricsIdleScreenOffCount[];
+extern const char kPowerMetricsIdleSuspendCount[];
+extern const char kPowerMetricsLidClosedSuspendCount[];
 #endif  // defined(OS_CHROMEOS)
 
 extern const char kClearPluginLSODataEnabled[];
@@ -819,6 +817,7 @@ extern const char kLatestVersionWhenClickedUpdateMenuItem[];
 extern const char kMediaRouterCloudServicesPrefSet[];
 extern const char kMediaRouterEnableCloudServices[];
 extern const char kMediaRouterFirstRunFlowAcknowledged[];
+extern const char kMediaRouterMediaRemotingEnabled[];
 extern const char kMediaRouterTabMirroringSources[];
 
 extern const char kOriginTrialPublicKey[];
@@ -899,6 +898,11 @@ extern const char kTabStatsTotalTabCountMax[];
 extern const char kTabStatsMaxTabsPerWindow[];
 extern const char kTabStatsWindowCountMax[];
 extern const char kTabStatsDailySample[];
+
+extern const char kUnsafelyTreatInsecureOriginAsSecure[];
+
+extern const char kIsolateOrigins[];
+extern const char kSitePerProcess[];
 
 }  // namespace prefs
 

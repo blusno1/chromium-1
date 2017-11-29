@@ -141,10 +141,10 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
     // It is important to initialize the promo controller with the browser state
     // passed in, as it could be incognito.
-    _bookmarkPromoController =
-        [[BookmarkPromoController alloc] initWithBrowserState:browserState
-                                                     delegate:self
-                                                   dispatcher:self.dispatcher];
+    _bookmarkPromoController = [[BookmarkPromoController alloc]
+        initWithBrowserState:browserState
+                    delegate:self
+                   presenter:self /* id<SigninPresenter> */];
   }
   return self;
 }
@@ -170,9 +170,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
   if (base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
-    if (self.isReconstructingFromCache) {
-      [self setupUIStackCacheIfApplicable];
-    }
     // Set the delegate here to make sure it is working when navigating in the
     // ViewController hierarchy (as each view controller is setting itself as
     // delegate).
@@ -181,6 +178,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 }
 
 - (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
   if (base::FeatureList::IsEnabled(kBookmarkNewGeneration)) {
     // Set the content position after views are laid out,
     // to ensure the right window of rows is shown. Once
@@ -190,6 +188,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
           setContentPosition:self.cachedContentPosition.floatValue];
       self.cachedContentPosition = nil;
     }
+    // The height of contextBar might change due to word wrapping of buttons
+    // after titleLabel or orientation changed.
+    [self.contextBar updateHeight];
   }
 }
 
@@ -902,6 +903,14 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   if (![self isViewLoaded])
     return;
 
+  // Bookmark Model is loaded after presenting Bookmarks,  we need to check
+  // again here if restoring of cache position is needed.  It is to prevent
+  // crbug.com/765503.
+  if (base::FeatureList::IsEnabled(kBookmarkNewGeneration) &&
+      bookmark_utils_ios::GetBookmarkUIPositionCache(_bookmarks)) {
+    self.isReconstructingFromCache = YES;
+  }
+
   DCHECK(self.waitForModelView);
   __weak BookmarkHomeViewController* weakSelf = self;
   [self.waitForModelView stopWaitingWithCompletion:^{
@@ -1012,6 +1021,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
   if (_rootNode != self.bookmarks->root_node()) {
     [self setupContextBar];
+  }
+  if (self.isReconstructingFromCache) {
+    [self setupUIStackCacheIfApplicable];
   }
 }
 

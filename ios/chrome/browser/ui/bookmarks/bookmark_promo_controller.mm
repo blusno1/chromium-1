@@ -6,42 +6,19 @@
 
 #include <memory>
 
-#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "google_apis/gaia/google_service_auth_error.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
-#import "ios/chrome/browser/ui/ui_util.h"
+#import "ios/chrome/browser/ui/signin_interaction/public/signin_presenter.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 namespace {
-// Enum is used to record the actions performed by the user on the promo cell.
-// |Stars.PromoActions|.
-enum {
-  // Recorded each time the promo cell is presented to the user.
-  BOOKMARKS_PROMO_ACTION_DISPLAYED,
-  // The user selected the NO THANKS button.
-  BOOKMARKS_PROMO_ACTION_DISMISSED,
-  // The user selected the SIGN-IN button.
-  BOOKMARKS_PROMO_ACTION_COMPLETED,
-  // NOTE: Add new promo actions in sources only immediately above this line.
-  // Also, make sure the enum list for histogram |Stars.PromoActions| in
-  // histograms.xml is updated with any change in here.
-  BOOKMARKS_PROMO_ACTION_COUNT
-};
-
-// The histogram used to record user actions performed on the promo cell.
-const char kBookmarksPromoActionsHistogram[] = "Stars.PromoActions";
-
 class SignInObserver;
 }  // namespace
 
@@ -52,11 +29,11 @@ class SignInObserver;
   bool _promoDisplayedRecorded;
 }
 
-// Dispatcher for sending commands.
-@property(nonatomic, readonly, weak) id<ApplicationCommands> dispatcher;
+// Presenter which can show signin UI.
+@property(nonatomic, readonly, weak) id<SigninPresenter> presenter;
 
 // Records that the promo was displayed. Can be called several times per
-// instance but will effectively record the histogram only once per instance.
+// instance but will effectively record the user action only once per instance.
 - (void)recordPromoDisplayed;
 
 // SignInObserver Callbacks
@@ -97,20 +74,16 @@ class SignInObserver : public SigninManagerBase::Observer {
 
 @synthesize delegate = _delegate;
 @synthesize promoState = _promoState;
-@synthesize dispatcher = _dispatcher;
-
-+ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
-  registry->RegisterBooleanPref(prefs::kIosBookmarkPromoAlreadySeen, false);
-}
+@synthesize presenter = _presenter;
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                             delegate:
                                 (id<BookmarkPromoControllerDelegate>)delegate
-                          dispatcher:(id<ApplicationCommands>)dispatcher {
+                           presenter:(id<SigninPresenter>)presenter {
   self = [super init];
   if (self) {
     _delegate = delegate;
-    _dispatcher = dispatcher;
+    _presenter = presenter;
     // Incognito browserState can go away before this class is released, this
     // code avoids keeping a pointer to it.
     _isIncognito = browserState->IsOffTheRecord();
@@ -136,27 +109,18 @@ class SignInObserver : public SigninManagerBase::Observer {
 }
 
 - (void)showSignInFromViewController:(UIViewController*)baseViewController {
-  UMA_HISTOGRAM_ENUMERATION(kBookmarksPromoActionsHistogram,
-                            BOOKMARKS_PROMO_ACTION_COMPLETED,
-                            BOOKMARKS_PROMO_ACTION_COUNT);
   base::RecordAction(
       base::UserMetricsAction("Signin_Signin_FromBookmarkManager"));
   ShowSigninCommand* command = [[ShowSigninCommand alloc]
       initWithOperation:AUTHENTICATION_OPERATION_SIGNIN
             accessPoint:signin_metrics::AccessPoint::
                             ACCESS_POINT_BOOKMARK_MANAGER];
-  [self.dispatcher showSignin:command baseViewController:baseViewController];
+  [self.presenter showSignin:command];
 }
 
 - (void)hidePromoCell {
   DCHECK(!_isIncognito);
   DCHECK(_browserState);
-
-  UMA_HISTOGRAM_ENUMERATION(kBookmarksPromoActionsHistogram,
-                            BOOKMARKS_PROMO_ACTION_DISMISSED,
-                            BOOKMARKS_PROMO_ACTION_COUNT);
-  PrefService* prefs = _browserState->GetPrefs();
-  prefs->SetBoolean(prefs::kIosBookmarkPromoAlreadySeen, true);
   self.promoState = NO;
 }
 
@@ -173,8 +137,10 @@ class SignInObserver : public SigninManagerBase::Observer {
     return;
 
   DCHECK(_browserState);
-  PrefService* prefs = _browserState->GetPrefs();
-  if (!prefs->GetBoolean(prefs::kIosBookmarkPromoAlreadySeen)) {
+  if ([SigninPromoViewMediator
+          shouldDisplaySigninPromoViewWithAccessPoint:
+              signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER
+                                         browserState:_browserState]) {
     SigninManager* signinManager =
         ios::SigninManagerFactory::GetForBrowserState(_browserState);
     self.promoState = !signinManager->IsAuthenticated();
@@ -189,9 +155,6 @@ class SignInObserver : public SigninManagerBase::Observer {
   if (_promoDisplayedRecorded)
     return;
   _promoDisplayedRecorded = YES;
-  UMA_HISTOGRAM_ENUMERATION(kBookmarksPromoActionsHistogram,
-                            BOOKMARKS_PROMO_ACTION_DISPLAYED,
-                            BOOKMARKS_PROMO_ACTION_COUNT);
   base::RecordAction(
       base::UserMetricsAction("Signin_Impression_FromBookmarkManager"));
 }

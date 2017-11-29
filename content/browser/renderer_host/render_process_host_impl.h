@@ -72,10 +72,6 @@ class GpuClient;
 class IndexedDBDispatcherHost;
 class InProcessChildThreadParams;
 class NotificationMessageFilter;
-#if BUILDFLAG(ENABLE_WEBRTC)
-class MediaStreamDispatcherHost;
-class P2PSocketDispatcherHost;
-#endif
 class PermissionServiceContext;
 class PeerConnectionTrackerHost;
 class PushMessagingManager;
@@ -89,6 +85,11 @@ class SiteInstance;
 class SiteInstanceImpl;
 class StoragePartition;
 class StoragePartitionImpl;
+
+#if BUILDFLAG(ENABLE_WEBRTC)
+class MediaStreamDispatcherHost;
+class P2PSocketDispatcherHost;
+#endif
 
 typedef base::Thread* (*RendererMainThreadFactoryFunction)(
     const InProcessChildThreadParams& params);
@@ -193,9 +194,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   bool StartWebRTCEventLog(const base::FilePath& file_path) override;
   bool StopWebRTCEventLog() override;
   void SetEchoCanceller3(bool enable) override;
-  void SetWebRtcLogMessageCallback(
-      base::Callback<void(const std::string&)> callback) override;
-  void ClearWebRtcLogMessageCallback() override;
   WebRtcStopRtpDumpCallback StartRtpDump(
       bool incoming,
       bool outgoing,
@@ -390,7 +388,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   PermissionServiceContext& permission_service_context() {
     return *permission_service_context_;
-  };
+  }
 
  protected:
   // A proxy for our IPC::Channel that lives on the IO thread.
@@ -455,6 +453,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
       mojom::RendererHost::GetBrowserHistogramCallback;
   void GetBrowserHistogram(const std::string& name,
                            BrowserHistogramCallback callback) override;
+  void SuddenTerminationChanged(bool enabled) override;
+  void ShutdownRequest() override;
 
   void BindRouteProvider(mojom::RouteProviderAssociatedRequest request);
 
@@ -468,12 +468,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
       viz::mojom::SharedBitmapAllocationNotifierRequest request);
   void CreateStoragePartitionService(
       mojom::StoragePartitionServiceRequest request);
-  void CreateRendererHost(mojom::RendererHostRequest request);
+  void CreateRendererHost(mojom::RendererHostAssociatedRequest request);
   void CreateURLLoaderFactory(mojom::URLLoaderFactoryRequest request);
 
   // Control message handlers.
-  void OnShutdownRequest();
-  void SuddenTerminationChanged(bool enabled);
   void OnUserMetricsRecordAction(const std::string& action);
   void OnCloseACK(int old_route_id);
 
@@ -764,7 +762,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   mojom::ChildControlPtr child_control_interface_;
   mojom::RouteProviderAssociatedPtr remote_route_provider_;
   mojom::RendererAssociatedPtr renderer_interface_;
-  mojo::Binding<mojom::RendererHost> renderer_host_binding_;
+  mojo::AssociatedBinding<mojom::RendererHost> renderer_host_binding_;
 
   // Tracks active audio and video streams within the render process; used to
   // determine if if a process should be backgrounded.

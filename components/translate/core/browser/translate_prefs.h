@@ -19,7 +19,6 @@
 #include "url/gurl.h"
 
 class PrefService;
-class Profile;
 
 namespace base {
 class DictionaryValue;
@@ -77,6 +76,22 @@ class DenialTimeUpdate {
   base::ListValue* time_list_;  // Weak, owned by the containing prefs service.
 };
 
+// This class holds various info about a language, that are related to Translate
+// Preferences and Language Settings.
+struct TranslateLanguageInfo {
+  TranslateLanguageInfo();
+  TranslateLanguageInfo(const TranslateLanguageInfo&);
+
+  // This ISO code of the language.
+  std::string code;
+  // The display name of the language in the current locale.
+  std::string display_name;
+  // The display name of the language in the language locale.
+  std::string native_display_name;
+  // Whether we support translate for this language.
+  bool supports_translate = false;
+};
+
 // The wrapper of PrefService object for Translate.
 //
 // It is assumed that |prefs_| is alive while this instance is alive.
@@ -114,8 +129,12 @@ class TranslatePrefs {
                  const char* accept_languages_pref,
                  const char* preferred_languages_pref);
 
-  // Checks if the translate feature is enabled.
-  bool IsEnabled() const;
+  // Checks if the "offer translate" (i.e. automatic translate bubble) feature
+  // is enabled.
+  bool IsOfferTranslateEnabled() const;
+
+  // Checks if translate is allowed by policy.
+  bool IsTranslateAllowedByPolicy() const;
 
   // Sets the country that the application is run in. Determined by the
   // VariationsService, can be left empty. Used by the TranslateRanker.
@@ -149,6 +168,17 @@ class TranslatePrefs {
   void RearrangeLanguage(const std::string& language,
                          RearrangeSpecifier where,
                          const std::vector<std::string>& enabled_languages);
+
+  // Returns the list of TranslateLanguageInfo for all languages that are
+  // available in the given locale.
+  // The list returned in |languages| is sorted alphabetically based on the
+  // display names in the given locale.
+  // May cause a supported language list fetch unless |translate_allowed| is
+  // false.
+  static void GetLanguageInfoList(
+      const std::string& app_locale,
+      bool translate_allowed,
+      std::vector<TranslateLanguageInfo>* languages);
 
   bool IsSiteBlacklisted(const std::string& site) const;
   void BlacklistSite(const std::string& site);
@@ -219,17 +249,6 @@ class TranslatePrefs {
                             const std::string& language);
   bool ShouldAutoTranslate(const std::string& original_language,
                            std::string* target_language);
-
-  // Language and probability pair.
-  typedef std::pair<std::string, double> LanguageAndProbability;
-  typedef std::vector<LanguageAndProbability> LanguageAndProbabilityList;
-
-  // Output the User Profile Profile's (ULP) "reading list" into |list| as
-  // ordered list of <string, double> pair, sorted by the double in decreasing
-  // order. Return the confidence of the list or 0.0 if there no ULP "reading
-  // list".
-  double GetReadingFromUserLanguageProfile(
-      LanguageAndProbabilityList* list) const;
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
   static void MigrateUserPrefs(PrefService* user_prefs,

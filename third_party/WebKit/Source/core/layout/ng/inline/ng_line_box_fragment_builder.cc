@@ -18,7 +18,7 @@ namespace blink {
 NGLineBoxFragmentBuilder::NGLineBoxFragmentBuilder(
     NGInlineNode node,
     scoped_refptr<const ComputedStyle> style,
-    NGWritingMode writing_mode,
+    WritingMode writing_mode,
     TextDirection)
     : NGContainerFragmentBuilder(style, writing_mode, TextDirection::kLtr),
       node_(node) {}
@@ -38,8 +38,7 @@ NGLogicalSize NGLineBoxFragmentBuilder::Size() const {
 
 LayoutUnit NGLineBoxFragmentBuilder::ComputeBlockSize() const {
   LayoutUnit block_size;
-  NGWritingMode writing_mode(
-      FromPlatformWritingMode(node_.Style().GetWritingMode()));
+  WritingMode writing_mode(node_.Style().GetWritingMode());
 
   for (size_t i = 0; i < children_.size(); ++i) {
     block_size = std::max(
@@ -120,20 +119,21 @@ void NGLineBoxFragmentBuilder::AddChildren(ChildList& children) {
 scoped_refptr<NGLayoutResult> NGLineBoxFragmentBuilder::ToLineBoxFragment() {
   DCHECK_EQ(offsets_.size(), children_.size());
 
-  NGWritingMode writing_mode(
-      FromPlatformWritingMode(node_.Style().GetWritingMode()));
+  WritingMode writing_mode(node_.Style().GetWritingMode());
   NGPhysicalSize physical_size =
       NGLogicalSize(inline_size_, block_size_).ConvertToPhysical(writing_mode);
 
+  NGPhysicalOffsetRect contents_visual_rect({}, physical_size);
   for (size_t i = 0; i < children_.size(); ++i) {
     NGPhysicalFragment* child = children_[i].get();
     child->SetOffset(offsets_[i].ConvertToPhysical(
         writing_mode, Direction(), physical_size, child->Size()));
+    child->PropagateContentsVisualRect(&contents_visual_rect);
   }
 
   scoped_refptr<NGPhysicalLineBoxFragment> fragment =
       base::AdoptRef(new NGPhysicalLineBoxFragment(
-          Style(), physical_size, children_, metrics_,
+          Style(), physical_size, children_, contents_visual_rect, metrics_,
           break_token_ ? std::move(break_token_)
                        : NGInlineBreakToken::Create(node_)));
 

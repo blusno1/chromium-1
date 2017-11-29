@@ -51,8 +51,7 @@ def _WriteToStream(lines, use_pager=None, to_file=None):
   if use_pager is None and sys.stdout.isatty():
     # Does not take into account line-wrapping... Oh well.
     first_lines = list(itertools.islice(lines, _THRESHOLD_FOR_PAGER))
-    if len(first_lines) == _THRESHOLD_FOR_PAGER:
-      use_pager = True
+    use_pager = len(first_lines) == _THRESHOLD_FOR_PAGER
     lines = itertools.chain(first_lines, lines)
 
   if use_pager:
@@ -68,7 +67,7 @@ def _WriteToStream(lines, use_pager=None, to_file=None):
 class _Session(object):
   _readline_initialized = False
 
-  def __init__(self, size_infos, lazy_paths):
+  def __init__(self, size_infos, output_directory_finder, tool_prefix_finder):
     self._printed_variables = []
     self._variables = {
         'Print': self._PrintFunc,
@@ -82,7 +81,8 @@ class _Session(object):
         'printed': self._printed_variables,
         'models': models,
     }
-    self._lazy_paths = lazy_paths
+    self._output_directory_finder = output_directory_finder
+    self._tool_prefix_finder = tool_prefix_finder
     self._size_infos = size_infos
     self._disassemble_prefix_len = None
 
@@ -163,14 +163,6 @@ class _Session(object):
     logging.debug('Diff complete')
     return ret
 
-  def _GetObjToPrint(self, obj=None):
-    if isinstance(obj, int):
-      obj = self._printed_variables[obj]
-    elif not self._printed_variables or self._printed_variables[-1] != obj:
-      if not isinstance(obj, models.SymbolGroup) or len(obj) > 0:
-        self._printed_variables.append(obj)
-    return obj if obj is not None else self._size_infos[-1]
-
   def _PrintFunc(self, obj=None, verbose=False, summarize=True, recursive=False,
                  use_pager=None, to_file=None):
     """Prints out the given Symbol / SymbolGroup / SizeInfo.
@@ -178,9 +170,7 @@ class _Session(object):
     For convenience, |obj| will be appended to the global "printed" list.
 
     Args:
-      obj: The object to be printed. Defaults to |size_infos[-1]|. Also accepts
-          an index into the |_printed_variables| array for showing previous
-          results.
+      obj: The object to be printed.
       verbose: Show more detailed output.
       summarize: If False, show symbols only (no headers / summaries).
       recursive: Print children of nested SymbolGroups.
@@ -188,7 +178,8 @@ class _Session(object):
           default is to automatically pipe when output is long.
       to_file: Rather than print to stdio, write to the given file.
     """
-    obj = self._GetObjToPrint(obj)
+    if obj is not None:
+      self._printed_variables.append(obj)
     lines = describe.GenerateLines(
         obj, verbose=verbose, recursive=recursive, summarize=summarize,
         format_name='text')
@@ -200,20 +191,19 @@ class _Session(object):
     For convenience, |obj| will be appended to the global "printed" list.
 
     Args:
-      obj: The object to be printed as CSV. Defaults to |size_infos[-1]|. Also
-          accepts an index into the |_printed_variables| array for showing
-          previous results.
+      obj: The object to be printed as CSV.
       use_pager: Pipe output through `less`. Ignored when |obj| is a Symbol.
           default is to automatically pipe when output is long.
       to_file: Rather than print to stdio, write to the given file.
     """
-    obj = self._GetObjToPrint(obj)
+    if obj is not None:
+      self._printed_variables.append(obj)
     lines = describe.GenerateLines(obj, verbose=verbose, recursive=False,
                                    format_name='csv')
     _WriteToStream(lines, use_pager=use_pager, to_file=to_file)
 
   def _ElfPathAndToolPrefixForSymbol(self, size_info, elf_path):
-    tool_prefix = self._lazy_paths.tool_prefix
+    tool_prefix = self._tool_prefix_finder.Tentative()
     orig_tool_prefix = size_info.metadata.get(models.METADATA_TOOL_PREFIX)
     if orig_tool_prefix:
       orig_tool_prefix = path_util.FromSrcRootRelative(orig_tool_prefix)
@@ -236,11 +226,12 @@ class _Session(object):
     if elf_path:
       paths_to_try.append(elf_path)
     else:
-      auto_lazy_paths = [
-          path_util.LazyPaths(any_path_within_output_directory=s.size_path)
-          for s in self._size_infos]
-      for lazy_paths in auto_lazy_paths + [self._lazy_paths]:
-        output_dir = lazy_paths.output_directory
+      auto_output_directory_finders = [
+          path_util.OutputDirectoryFinder(
+              any_path_within_output_directory=s.size_path)
+          for s in self._size_infos] + [self._output_directory_finder]
+      for output_directory_finder in auto_output_directory_finders:
+        output_dir = output_directory_finder.Tentative()
         if output_dir:
           # Local build: File is located in output directory.
           paths_to_try.append(
@@ -301,7 +292,7 @@ class _Session(object):
           when auto-detection fails.
     """
     assert not symbol.IsGroup()
-    assert symbol.address and symbol.section_name == '.text'
+    assert symbol.address and symbol.section_name == models.SECTION_TEXT
     assert not symbol.IsDelta(), ('Cannot disasseble a Diff\'ed symbol. Try '
                                   'passing .before_symbol or .after_symbol.')
     size_info = self._SizeInfoForSymbol(symbol)
@@ -319,7 +310,7 @@ class _Session(object):
         self._disassemble_prefix_len = prefix_len
 
     if self._disassemble_prefix_len is not None:
-      output_directory = self._lazy_paths.output_directory
+      output_directory = self._output_directory_finder.Tentative()
       # Only matters for non-generated paths, so be lenient here.
       if output_directory is None:
         output_directory = os.path.join(path_util.SRC_ROOT, 'out', 'Release')
@@ -472,11 +463,13 @@ def Run(args, parser):
       parser.error('All inputs must end with ".size"')
 
   size_infos = [archive.LoadAndPostProcessSizeInfo(p) for p in args.inputs]
-  lazy_paths = path_util.LazyPaths(tool_prefix=args.tool_prefix,
-                                   output_directory=args.output_directory,
-                                   any_path_within_output_directory=
-                                       args.inputs[0])
-  session = _Session(size_infos, lazy_paths)
+  output_directory_finder = path_util.OutputDirectoryFinder(
+      value=args.output_directory,
+      any_path_within_output_directory=args.inputs[0])
+  tool_prefix_finder = path_util.ToolPrefixFinder(
+      value=args.tool_prefix,
+      output_directory_finder=output_directory_finder)
+  session = _Session(size_infos, output_directory_finder, tool_prefix_finder)
 
   if args.query:
     logging.info('Running query from command-line.')

@@ -8,6 +8,7 @@
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/layout/HitTestResult.h"
 #include "platform/exported/WebActiveGestureAnimation.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 
 namespace blink {
 
@@ -100,10 +101,6 @@ void WebViewFrameWidget::SetCursorVisibilityState(bool is_visible) {
   return web_view_->SetCursorVisibilityState(is_visible);
 }
 
-bool WebViewFrameWidget::HasTouchEventHandlersAt(const WebPoint& point) {
-  return web_view_->HasTouchEventHandlersAt(point);
-}
-
 void WebViewFrameWidget::ApplyViewportDeltas(
     const WebFloatSize& visual_viewport_delta,
     const WebFloatSize& layout_viewport_delta,
@@ -177,7 +174,7 @@ void WebViewFrameWidget::UpdateBrowserControlsState(
 }
 
 void WebViewFrameWidget::SetVisibilityState(
-    WebPageVisibilityState visibility_state) {
+    mojom::PageVisibilityState visibility_state) {
   return web_view_->SetVisibilityState(visibility_state, false);
 }
 

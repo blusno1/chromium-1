@@ -30,13 +30,13 @@
 
 #include "build/build_config.h"
 #include "platform/PlatformExport.h"
+#include "platform/fonts/CanvasRotationInVertical.h"
 #include "platform/fonts/CustomFontData.h"
 #include "platform/fonts/FontBaseline.h"
 #include "platform/fonts/FontData.h"
 #include "platform/fonts/FontMetrics.h"
 #include "platform/fonts/FontPlatformData.h"
 #include "platform/fonts/TypesettingFeatures.h"
-#include "platform/fonts/opentype/OpenTypeVerticalData.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/StringHash.h"
@@ -51,10 +51,15 @@ namespace blink {
 // given
 // character.
 struct GlyphData {
-  GlyphData(Glyph g = 0, const SimpleFontData* f = nullptr)
-      : glyph(g), font_data(f) {}
+  STACK_ALLOCATED();
+  GlyphData(
+      Glyph g = 0,
+      const SimpleFontData* f = nullptr,
+      CanvasRotationInVertical rotation = CanvasRotationInVertical::kRegular)
+      : glyph(g), font_data(f), canvas_rotation(rotation) {}
   Glyph glyph;
   const SimpleFontData* font_data;
+  CanvasRotationInVertical canvas_rotation;
 };
 
 class FontDescription;
@@ -65,26 +70,15 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
   static scoped_refptr<SimpleFontData> Create(
       const FontPlatformData& platform_data,
       scoped_refptr<CustomFontData> custom_data = nullptr,
-      bool is_text_orientation_fallback = false,
       bool subpixel_ascent_descent = false) {
     return base::AdoptRef(new SimpleFontData(
-        platform_data, std::move(custom_data), is_text_orientation_fallback,
-        subpixel_ascent_descent));
+        platform_data, std::move(custom_data), subpixel_ascent_descent));
   }
 
   const FontPlatformData& PlatformData() const { return platform_data_; }
-  const OpenTypeVerticalData* VerticalData() const {
-    return vertical_data_.get();
-  }
 
   scoped_refptr<SimpleFontData> SmallCapsFontData(const FontDescription&) const;
   scoped_refptr<SimpleFontData> EmphasisMarkFontData(const FontDescription&) const;
-  scoped_refptr<SimpleFontData> VerticalRightOrientationFontData() const;
-
-  bool IsTextOrientationFallback() const {
-    return is_text_orientation_fallback_;
-  }
-  bool IsTextOrientationFallbackOf(const SimpleFontData*) const;
 
   FontMetrics& GetFontMetrics() { return font_metrics_; }
   const FontMetrics& GetFontMetrics() const { return font_metrics_; }
@@ -152,11 +146,7 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
  protected:
   SimpleFontData(const FontPlatformData&,
                  scoped_refptr<CustomFontData> custom_data,
-                 bool is_text_orientation_fallback = false,
                  bool subpixel_ascent_descent = false);
-
-  // Only used for testing.
-  SimpleFontData(const FontPlatformData&, scoped_refptr<OpenTypeVerticalData>);
 
  private:
   void PlatformInit(bool subpixel_ascent_descent);
@@ -175,8 +165,6 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
   FontPlatformData platform_data_;
   SkPaint paint_;
 
-  scoped_refptr<OpenTypeVerticalData> vertical_data_;
-
   Glyph space_glyph_;
   float space_width_;
   Glyph zero_glyph_;
@@ -190,7 +178,6 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
 
     scoped_refptr<SimpleFontData> small_caps;
     scoped_refptr<SimpleFontData> emphasis_mark;
-    scoped_refptr<SimpleFontData> vertical_right_orientation;
 
    private:
     DerivedFontData() {}
@@ -200,13 +187,11 @@ class PLATFORM_EXPORT SimpleFontData : public FontData {
 
   scoped_refptr<CustomFontData> custom_font_data_;
 
-  unsigned is_text_orientation_fallback_ : 1;
-
   // These are set to non-zero when ascent or descent is rounded or shifted
   // to be smaller than the actual ascent or descent. When calculating visual
   // overflows, we should add the inflations.
-  unsigned visual_overflow_inflation_for_ascent_ : 2;
-  unsigned visual_overflow_inflation_for_descent_ : 2;
+  unsigned visual_overflow_inflation_for_ascent_;
+  unsigned visual_overflow_inflation_for_descent_;
 
   mutable LayoutUnit em_height_ascent_;
   mutable LayoutUnit em_height_descent_;

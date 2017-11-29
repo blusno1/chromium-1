@@ -9,6 +9,7 @@
 
 #include "base/containers/adapters.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/ranges.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -22,6 +23,21 @@ namespace vr {
 
 namespace {
 
+constexpr float kTolerance = 1e-5f;
+
+// Returns true if two elements are in the same plane.
+bool ArePlanar(const UiElement& e1, const UiElement& e2) {
+  gfx::Vector3dF n1 = e1.GetNormal();
+  gfx::Vector3dF n2 = e2.GetNormal();
+  if (!base::IsApproximatelyEqual(n1.x(), n2.x(), kTolerance) ||
+      !base::IsApproximatelyEqual(n1.y(), n2.y(), kTolerance) ||
+      !base::IsApproximatelyEqual(n1.z(), n2.z(), kTolerance)) {
+    return false;
+  }
+  return base::IsApproximatelyEqual(
+      0.0f, gfx::DotProduct(n1, e1.GetCenter() - e2.GetCenter()), kTolerance);
+}
+
 template <typename P>
 UiScene::Elements GetVisibleElements(UiElement* root,
                                      UiElement* reticle_element,
@@ -29,11 +45,29 @@ UiScene::Elements GetVisibleElements(UiElement* root,
   Reticle* reticle = static_cast<Reticle*>(reticle_element);
   UiElement* target = reticle ? reticle->TargetElement() : nullptr;
   UiScene::Elements elements;
+  int reticle_parent_id = 0;
   for (auto& element : *root) {
     if (element.IsVisible() && predicate(&element)) {
       elements.push_back(&element);
-      if (target && target->id() == element.id())
-        elements.push_back(reticle);
+      if (target && target->id() == element.id()) {
+        reticle_parent_id = element.id();
+        // Draw the reticle after the last child that resides in the same plane
+        // as this element. This way, the reticle can't be partially hidden as
+        // it passes across portions of a composite element. By walking the
+        // element's subtree in reverse pre-order, we start at the last-rendered
+        // child and work backwards, possibly as far as the originally targeted
+        // element.
+        for (auto& child : base::Reversed(element)) {
+          if (predicate(&child) && ArePlanar(element, child)) {
+            reticle_parent_id = child.id();
+            break;
+          }
+        }
+      }
+    }
+    if (reticle_parent_id == element.id()) {
+      elements.push_back(reticle);
+      reticle->set_draw_phase(element.draw_phase());
     }
   }
   return elements;
@@ -219,10 +253,27 @@ UiScene::Elements UiScene::GetVisibleControllerElements() const {
           Reticle* reticle = static_cast<Reticle*>(element);
           // If the reticle has a non-null target element,
           // it would have been positioned elsewhere.
-          return !reticle->TargetElement();
+          bool need_to_add_reticle = !reticle->TargetElement();
+          if (need_to_add_reticle) {
+            // We must always update the reticle's draw phase when it is
+            // included in a list of elements we vend. The other controller
+            // elements are drawn in the foreground phase, so we will update the
+            // reticle to match here.
+            reticle->set_draw_phase(kPhaseForeground);
+          }
+          return need_to_add_reticle;
         }
         return element->draw_phase() == kPhaseForeground;
       });
+}
+
+UiScene::Elements UiScene::GetPotentiallyVisibleElements() const {
+  UiScene::Elements elements;
+  for (auto& element : *root_element_) {
+    if (element.draw_phase() != kPhaseNone)
+      elements.push_back(&element);
+  }
+  return elements;
 }
 
 UiScene::UiScene() {
@@ -235,8 +286,6 @@ UiScene::UiScene() {
 
 UiScene::~UiScene() = default;
 
-// TODO(vollick): we should bind to gl-initialized state. Elements will
-// initialize when the binding fires, automatically.
 void UiScene::OnGlInitialized(SkiaSurfaceProvider* provider) {
   gl_initialized_ = true;
   provider_ = provider;

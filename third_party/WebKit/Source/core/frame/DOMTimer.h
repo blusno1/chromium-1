@@ -27,19 +27,19 @@
 #ifndef DOMTimer_h
 #define DOMTimer_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ScheduledAction.h"
 #include "core/CoreExport.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/frame/SuspendableTimer.h"
+#include "core/frame/PausableTimer.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
 class ExecutionContext;
 
 class CORE_EXPORT DOMTimer final : public GarbageCollectedFinalized<DOMTimer>,
-                                   public SuspendableTimer {
+                                   public PausableTimer {
   USING_GARBAGE_COLLECTED_MIXIN(DOMTimer);
 
  public:

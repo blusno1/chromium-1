@@ -21,6 +21,7 @@ class Event;
 namespace vr {
 
 class Ui;
+struct Model;
 
 // This class provides a home for the VR UI in a testapp context, and
 // manipulates the UI according to user input.
@@ -29,7 +30,7 @@ class VrTestContext : public vr::UiBrowserInterface {
   VrTestContext();
   ~VrTestContext() override;
 
-  void OnGlInitialized(const gfx::Size& window_size);
+  void OnGlInitialized();
   void DrawFrame();
   void HandleInput(ui::Event* event);
 
@@ -39,14 +40,21 @@ class VrTestContext : public vr::UiBrowserInterface {
   void NavigateBack() override;
   void ExitCct() override;
   void OnUnsupportedMode(vr::UiUnsupportedMode mode) override;
-  void OnExitVrPromptResult(vr::UiUnsupportedMode reason,
-                            vr::ExitVrPromptChoice choice) override;
+  void OnExitVrPromptResult(vr::ExitVrPromptChoice choice,
+                            vr::UiUnsupportedMode reason) override;
   void OnContentScreenBoundsChanged(const gfx::SizeF& bounds) override;
   void SetVoiceSearchActive(bool active) override;
+  void StartAutocomplete(const base::string16& string) override;
+  void StopAutocomplete() override;
+  void Navigate(GURL gurl) override;
+
+  void set_window_size(const gfx::Size& size) { window_size_ = size; }
 
  private:
   unsigned int CreateFakeContentTexture();
   void CreateFakeOmniboxSuggestions();
+  void CycleWebVrModes();
+  void ToggleSplashScreen();
   gfx::Transform ProjectionMatrix() const;
   gfx::Transform ViewProjectionMatrix() const;
   ControllerModel UpdateController();
@@ -64,8 +72,13 @@ class VrTestContext : public vr::UiBrowserInterface {
 
   float view_scale_factor_ = 1.f;
 
+  // This avoids storing a duplicate of the model state here.
+  Model* model_;
+
   bool fullscreen_ = false;
   bool incognito_ = false;
+
+  bool show_web_vr_splash_screen_ = false;
 
   ControllerModel last_controller_model_;
 

@@ -27,6 +27,7 @@
 #ifndef Image_h
 #define Image_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/SharedBuffer.h"
 #include "platform/geometry/IntRect.h"
@@ -38,7 +39,6 @@
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadSafeRefCounted.h"
 #include "platform/wtf/WeakPtr.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -269,7 +269,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   PaintImage::Id paint_image_id() const { return stable_image_id_; }
 
  protected:
-  Image(ImageObserver* = 0, bool is_multipart = false);
+  Image(ImageObserver* = nullptr, bool is_multipart = false);
 
   void DrawTiledBackground(GraphicsContext&,
                            const FloatRect& dst_rect,

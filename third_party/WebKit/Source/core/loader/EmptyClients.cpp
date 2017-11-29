@@ -86,8 +86,8 @@ class EmptyFrameScheduler : public WebFrameScheduler {
     return WebFrameScheduler::FrameType::kSubframe;
   }
   WebViewScheduler* GetWebViewScheduler() const override { return nullptr; }
-  ScopedVirtualTimePauser CreateScopedVirtualTimePauser() {
-    return ScopedVirtualTimePauser();
+  WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser() {
+    return WebScopedVirtualTimePauser();
   }
   void DidStartProvisionalLoad(bool is_main_frame) override {}
   void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
@@ -161,11 +161,13 @@ DocumentLoader* EmptyLocalFrameClient::CreateDocumentLoader(
     LocalFrame* frame,
     const ResourceRequest& request,
     const SubstituteData& substitute_data,
-    ClientRedirectPolicy client_redirect_policy) {
+    ClientRedirectPolicy client_redirect_policy,
+    const base::UnguessableToken& devtools_navigation_token) {
   DCHECK(frame);
 
   return DocumentLoader::Create(frame, request, substitute_data,
-                                client_redirect_policy);
+                                client_redirect_policy,
+                                devtools_navigation_token);
 }
 
 LocalFrame* EmptyLocalFrameClient::CreateFrame(const AtomicString&,
@@ -196,14 +198,9 @@ WebRemotePlaybackClient* EmptyLocalFrameClient::CreateWebRemotePlaybackClient(
   return nullptr;
 }
 
-TextCheckerClient& EmptyLocalFrameClient::GetTextCheckerClient() const {
-  DEFINE_STATIC_LOCAL(EmptyTextCheckerClient, client, ());
-  return client;
+WebTextCheckClient* EmptyLocalFrameClient::GetTextCheckerClient() const {
+  return nullptr;
 }
-
-void EmptyTextCheckerClient::RequestCheckingOfString(TextCheckingRequest*) {}
-
-void EmptyTextCheckerClient::CancelAllPendingRequests() {}
 
 std::unique_ptr<WebServiceWorkerProvider>
 EmptyLocalFrameClient::CreateServiceWorkerProvider() {

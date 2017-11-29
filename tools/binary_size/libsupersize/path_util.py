@@ -4,6 +4,7 @@
 
 """Functions for dealing with determining --tool-prefix."""
 
+import abc
 import distutils.spawn
 import logging
 import os
@@ -11,65 +12,50 @@ import os
 _STATUS_DETECTED = 1
 _STATUS_VERIFIED = 2
 
-SRC_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+SRC_ROOT = os.environ.get('CHECKOUT_SOURCE_ROOT',
+    os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                 os.pardir, os.pardir, os.pardir)))
 
 _SAMPLE_TOOL_SUFFIX = 'readelf'
 
 
-class LazyPaths(object):
-  def __init__(self, tool_prefix=None, output_directory=None,
-               any_path_within_output_directory=None):
-    self._tool_prefix = tool_prefix
-    self._output_directory = output_directory
+class _PathFinder(object):
+  def __init__(self, name, value):
+    self._status = _STATUS_DETECTED if value is not None else 0
+    self._name = name
+    self._value = value
+
+  @abc.abstractmethod
+  def Detect(self):
+    pass
+
+  @abc.abstractmethod
+  def Verify(self):
+    pass
+
+  def Tentative(self):
+    if self._status < _STATUS_DETECTED:
+      self._value = self.Detect()
+      logging.debug('Detected --%s=%s', self._name, self._value)
+      self._status = _STATUS_DETECTED
+    return self._value
+
+  def Finalized(self):
+    if self._status < _STATUS_VERIFIED:
+      self.Tentative()
+      self.Verify()
+      logging.info('Using --%s=%s', self._name, self._value)
+      self._status = _STATUS_VERIFIED
+    return self._value
+
+
+class OutputDirectoryFinder(_PathFinder):
+  def __init__(self, value=None, any_path_within_output_directory=None):
+    super(OutputDirectoryFinder, self).__init__(
+        name='output-directory', value=value)
     self._any_path_within_output_directory = any_path_within_output_directory
-    self._output_directory_status = (
-        _STATUS_DETECTED if output_directory is not None else 0)
-    self._tool_prefix_status = (
-        _STATUS_DETECTED if tool_prefix is not None else 0)
 
-  @property
-  def tool_prefix(self):
-    if self._tool_prefix_status < _STATUS_DETECTED:
-      self._tool_prefix_status = _STATUS_DETECTED
-      self._tool_prefix = self._DetectToolPrefix() or ''
-      logging.debug('Detected --tool-prefix=%s', self._tool_prefix)
-    return self._tool_prefix
-
-  @property
-  def output_directory(self):
-    if self._output_directory_status < _STATUS_DETECTED:
-      self._output_directory_status = _STATUS_DETECTED
-      self._output_directory = self._DetectOutputDirectory()
-      logging.debug('Detected --output-directory=%s', self._output_directory)
-    return self._output_directory
-
-  def VerifyOutputDirectory(self):
-    output_directory = self.output_directory
-    if self._output_directory_status < _STATUS_VERIFIED:
-      self._output_directory_status = _STATUS_VERIFIED
-      if not output_directory or not os.path.isdir(output_directory):
-        raise Exception('Bad --output-directory. Path not found: %s' %
-                        output_directory)
-      logging.info('Using --output-directory=%s', output_directory)
-    return output_directory
-
-  def VerifyToolPrefix(self):
-    tool_prefix = self.tool_prefix
-    if self._tool_prefix_status < _STATUS_VERIFIED:
-      self._tool_prefix_status = _STATUS_VERIFIED
-      if os.path.sep not in tool_prefix:
-        full_path = distutils.spawn.find_executable(
-            tool_prefix + _SAMPLE_TOOL_SUFFIX)
-      else:
-        full_path = tool_prefix + _SAMPLE_TOOL_SUFFIX
-
-      if not full_path or not os.path.isfile(full_path):
-        raise Exception('Bad --tool-prefix. Path not found: %s' % full_path)
-      logging.info('Using --tool-prefix=%s', self._tool_prefix)
-    return tool_prefix
-
-  def _DetectOutputDirectory(self):
+  def Detect(self):
     # Try and find build.ninja.
     abs_path = os.path.abspath(self._any_path_within_output_directory)
     while True:
@@ -85,26 +71,61 @@ class LazyPaths(object):
       return '.'
     return None
 
-  def _DetectToolPrefix(self):
-    output_directory = self.output_directory
+  def Verify(self):
+    if not self._value or not os.path.isdir(self._value):
+      raise Exception('Bad --%s. Path not found: %s' %
+                      (self._name, self._value))
+
+
+class ToolPrefixFinder(_PathFinder):
+  def __init__(self, value=None, output_directory_finder=None,
+               linker_name=None):
+    super(ToolPrefixFinder, self).__init__(
+        name='tool-prefix', value=value)
+    self._output_directory_finder = output_directory_finder
+    self._linker_name = linker_name;
+
+  def Detect(self):
+    output_directory = self._output_directory_finder.Tentative()
     if output_directory:
-      # Auto-detect from build_vars.txt
-      build_vars_path = os.path.join(output_directory, 'build_vars.txt')
-      if os.path.exists(build_vars_path):
-        with open(build_vars_path) as f:
-          build_vars = dict(l.rstrip().split('=', 1) for l in f if '=' in l)
-        tool_prefix = build_vars['android_tool_prefix']
-        ret = os.path.normpath(os.path.join(output_directory, tool_prefix))
-        # Need to maintain a trailing /.
-        if tool_prefix.endswith(os.path.sep):
-          ret += os.path.sep
+      ret = None
+      if self._linker_name == 'lld':
+        ret = os.path.join(SRC_ROOT, 'third_party', 'llvm-build',
+                           'Release+Asserts', 'bin', 'llvm-')
+      else:
+        # Auto-detect from build_vars.txt
+        build_vars_path = os.path.join(output_directory, 'build_vars.txt')
+        if os.path.exists(build_vars_path):
+          with open(build_vars_path) as f:
+            build_vars = dict(l.rstrip().split('=', 1) for l in f if '=' in l)
+          tool_prefix = build_vars['android_tool_prefix']
+          ret = os.path.normpath(os.path.join(output_directory, tool_prefix))
+          # Maintain a trailing '/' if needed.
+          if tool_prefix.endswith(os.path.sep):
+            ret += os.path.sep
+      if ret:
         # Check for output directories that have a stale build_vars.txt.
         if os.path.isfile(ret + _SAMPLE_TOOL_SUFFIX):
           return ret
+        else:
+          err_lines = ['tool-prefix not found: %s' % ret]
+          if ret.endswith('llvm-'):
+            err_lines.append('Probably need to run: '
+                             'tools/clang/scripts/download_objdump.py')
+          raise Exception('\n'.join(err_lines))
     from_path = distutils.spawn.find_executable(_SAMPLE_TOOL_SUFFIX)
     if from_path:
       return from_path[:-7]
     return None
+
+  def Verify(self):
+    if os.path.sep not in self._value:
+      full_path = distutils.spawn.find_executable(
+          self._value + _SAMPLE_TOOL_SUFFIX)
+    else:
+      full_path = self._value + _SAMPLE_TOOL_SUFFIX
+    if not full_path or not os.path.isfile(full_path):
+      raise Exception('Bad --%s. Path not found: %s' % (self._name, full_path))
 
 
 def FromSrcRootRelative(path):
@@ -138,4 +159,8 @@ def GetObjDumpPath(tool_prefix):
 
 
 def GetReadElfPath(tool_prefix):
+  # Work-around for llvm-readobj bug where 'File: ...' info is not printed:
+  # https://bugs.llvm.org/show_bug.cgi?id=35351
+  if tool_prefix[-5:] == 'llvm-':
+    return 'readelf'
   return tool_prefix + 'readelf'

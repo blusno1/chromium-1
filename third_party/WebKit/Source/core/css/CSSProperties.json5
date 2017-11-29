@@ -122,6 +122,13 @@
       valid_type: "bool",
     },
 
+    // - compositable
+    // The property can be animated by the compositor
+    compositable: {
+      default: false,
+      valid_type: "bool",
+    },
+
     // - runtime_flag
     // The name of the flag on RuntimeEnabledFeatures
     // (e.g. "CSSScrollBoundaryBehavior") that conditionally enables the
@@ -361,6 +368,8 @@
       name: "animation-duration",
       property_class: "Duration",
       property_methods: ["ParseSingleValue"],
+      typedom_types: ["Time"],
+      separator: ",",
       custom_apply_functions_all: true,
       priority: "Animation",
     },
@@ -412,6 +421,8 @@
       name: "transition-duration",
       property_class: "Duration",
       property_methods: ["ParseSingleValue"],
+      typedom_types: ["Time"],
+      separator: ",",
       custom_apply_functions_all: true,
       priority: "Animation",
     },
@@ -724,6 +735,7 @@
       property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
+      compositable: true,
       runtime_flag: "CSSBackdropFilter",
       field_group: "*",
       field_template: "external",
@@ -900,20 +912,20 @@
     },
     {
       name: "border-image-outset",
-      property_class: "BorderImageOutset",
+      property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "border-image-repeat",
-      property_class: "BorderImageRepeat",
+      property_class: true,
       property_methods: ["ParseSingleValue"],
       custom_apply_functions_all: true,
     },
     {
       name: "border-image-slice",
-      property_class: "BorderImageSlice",
+      property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       custom_apply_functions_all: true,
@@ -929,7 +941,7 @@
     },
     {
       name: "border-image-width",
-      property_class: "BorderImageWidth",
+      property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       custom_apply_functions_all: true,
@@ -1375,6 +1387,7 @@
       property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
+      compositable: true,
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/StyleFilterData.h"],
@@ -1446,7 +1459,7 @@
     },
     {
       name: "flood-opacity",
-      property_class: "Opacity",
+      property_class: "FloodOrStopOpacity",
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       svg: true,
@@ -1991,9 +2004,10 @@
     },
     {
       name: "opacity",
-      property_class: "Opacity",
+      property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
+      compositable: true,
       field_group: "*",
       field_template: "primitive",
       default_value: "1.0",
@@ -2586,7 +2600,7 @@
     },
     {
       name: "stop-opacity",
-      property_class: "Opacity",
+      property_class: "FloodOrStopOpacity",
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       svg: true,
@@ -2875,6 +2889,7 @@
       property_class: true,
       property_methods: ["ParseSingleValue", "IsLayoutDependent"],
       interpolable: true,
+      compositable: true,
       field_group: "*",
       field_template: "external",
       include_paths: ["platform/transforms/TransformOperations.h"],
@@ -2918,6 +2933,7 @@
       property_class: true,
       property_methods: ["ParseSingleValue", "IsLayoutDependent"],
       interpolable: true,
+      compositable: true,
       runtime_flag: "CSSIndependentTransformProperties",
       field_group: "*",
       field_template: "pointer",
@@ -2932,6 +2948,7 @@
       property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
+      compositable: true,
       runtime_flag: "CSSIndependentTransformProperties",
       field_group: "*",
       field_template: "pointer",
@@ -2946,6 +2963,7 @@
       property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
+      compositable: true,
       runtime_flag: "CSSIndependentTransformProperties",
       field_group: "*",
       field_template: "pointer",
@@ -3307,20 +3325,20 @@
     },
     {
       name: "-webkit-mask-box-image-outset",
-      property_class: "BorderImageOutset",
+      property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-box-image-repeat",
-      property_class: "BorderImageRepeat",
+      property_class: true,
       property_methods: ["ParseSingleValue"],
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-box-image-slice",
-      property_class: "BorderImageSlice",
+      property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       custom_apply_functions_all: true,
@@ -3334,7 +3352,7 @@
     },
     {
       name: "-webkit-mask-box-image-width",
-      property_class: "BorderImageWidth",
+      property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       custom_apply_functions_all: true,

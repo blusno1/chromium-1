@@ -70,6 +70,9 @@ void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
   DCHECK(surface->active_referenced_surfaces());
   UpdateSurfaceReferences(surface->surface_id().local_surface_id(),
                           *surface->active_referenced_surfaces());
+  uint32_t frame_token = surface->GetActiveFrame().metadata.frame_token;
+  if (frame_token)
+    frame_sink_manager_->OnFrameTokenChanged(frame_sink_id_, frame_token);
 }
 
 void CompositorFrameSinkSupport::RefResources(
@@ -113,9 +116,19 @@ void CompositorFrameSinkSupport::SetBeginFrameSource(
 void CompositorFrameSinkSupport::EvictCurrentSurface() {
   if (!current_surface_id_.is_valid())
     return;
+
   SurfaceId to_destroy_surface_id = current_surface_id_;
   current_surface_id_ = SurfaceId();
   surface_manager_->DestroySurface(to_destroy_surface_id);
+
+  // For display root surfaces the surface is no longer going to be visible.
+  // Make it unreachable from the top-level root.
+  if (referenced_local_surface_id_.has_value()) {
+    auto reference = MakeTopLevelRootReference(
+        SurfaceId(frame_sink_id_, referenced_local_surface_id_.value()));
+    surface_manager_->RemoveSurfaceReferences({reference});
+    referenced_local_surface_id_.reset();
+  }
 }
 
 void CompositorFrameSinkSupport::SetNeedsBeginFrame(bool needs_begin_frame) {
@@ -124,7 +137,7 @@ void CompositorFrameSinkSupport::SetNeedsBeginFrame(bool needs_begin_frame) {
 }
 
 void CompositorFrameSinkSupport::DidNotProduceFrame(const BeginFrameAck& ack) {
-  TRACE_EVENT2("cc", "CompositorFrameSinkSupport::DidNotProduceFrame",
+  TRACE_EVENT2("viz", "CompositorFrameSinkSupport::DidNotProduceFrame",
                "ack.source_id", ack.source_id, "ack.sequence_number",
                ack.sequence_number);
   DCHECK_GE(ack.sequence_number, BeginFrameArgs::kStartingFrameNumber);
@@ -152,7 +165,8 @@ bool CompositorFrameSinkSupport::SubmitCompositorFrame(
     const LocalSurfaceId& local_surface_id,
     CompositorFrame frame,
     mojom::HitTestRegionListPtr hit_test_region_list) {
-  TRACE_EVENT0("cc", "CompositorFrameSinkSupport::SubmitCompositorFrame");
+  TRACE_EVENT1("viz", "CompositorFrameSinkSupport::SubmitCompositorFrame",
+               "FrameSinkId", frame_sink_id_.ToString());
   DCHECK(local_surface_id.is_valid());
   DCHECK(!frame.render_pass_list.empty());
 
@@ -186,8 +200,14 @@ bool CompositorFrameSinkSupport::SubmitCompositorFrame(
     SurfaceInfo surface_info(surface_id, frame.device_scale_factor(),
                              frame.size_in_pixels());
 
-    if (!surface_info.is_valid()) {
-      TRACE_EVENT_INSTANT0("cc", "Invalid SurfaceInfo",
+    // LocalSurfaceIds should be monotonically increasing. This ID is used
+    // to determine the freshness of a surface at aggregation time.
+    bool monotonically_increasing_id =
+        local_surface_id.local_id() >
+        current_surface_id_.local_surface_id().local_id();
+
+    if (!surface_info.is_valid() || !monotonically_increasing_id) {
+      TRACE_EVENT_INSTANT0("viz", "Surface Invariants Violation",
                            TRACE_EVENT_SCOPE_THREAD);
       EvictCurrentSurface();
       std::vector<ReturnedResource> resources =
@@ -384,6 +404,16 @@ void CompositorFrameSinkSupport::DetachCaptureClient(
       std::find(capture_clients_.begin(), capture_clients_.end(), client);
   if (it != capture_clients_.end())
     capture_clients_.erase(it);
+}
+
+gfx::Size CompositorFrameSinkSupport::GetSurfaceSize() {
+  if (current_surface_id_.is_valid()) {
+    Surface* current_surface =
+        surface_manager_->GetSurfaceForId(current_surface_id_);
+    if (current_surface)
+      return current_surface->size_in_pixels();
+  }
+  return gfx::Size();
 }
 
 void CompositorFrameSinkSupport::RequestCopyOfSurface(

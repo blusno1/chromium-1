@@ -27,6 +27,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_op_buffer.h"
+#include "cc/paint/transfer_cache_entry.h"
 #include "gpu/command_buffer/common/debug_marker_manager.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
@@ -62,6 +63,7 @@
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
 #include "gpu/command_buffer/service/sampler_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
+#include "gpu/command_buffer/service/service_transfer_cache.h"
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/shader_translator.h"
 #include "gpu/command_buffer/service/texture_manager.h"
@@ -1971,6 +1973,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
                              GLint pixel_config);
   void DoEndRasterCHROMIUM();
 
+  void DoUnlockTransferCacheEntryCHROMIUM(GLuint64 id);
+  void DoDeleteTransferCacheEntryCHROMIUM(GLuint64 id);
+
   void DoWindowRectanglesEXT(GLenum mode, GLsizei n, const volatile GLint* box);
 
   // Returns false if textures were replaced.
@@ -2986,13 +2991,13 @@ bool BackRenderbuffer::AllocateStorage(const gfx::Size& size,
     return false;
   }
 
-  // TODO(kainino): This path will not perform RegenerateRenderbufferIfNeeded
-  // on devices where multisample_renderbuffer_resize_emulation is needed.
-  // Thus any code using this path (nacl/ppapi?) could encounter issues on those
+  // TODO(kainino): This path will not perform RegenerateRenderbufferIfNeeded on
+  // devices where multisample_renderbuffer_resize_emulation or
+  // depth_stencil_renderbuffer_resize_emulation is needed.  Thus any code using
+  // this path (nacl/ppapi?) could encounter issues on those
   // devices. RenderbufferStorageMultisampleWithWorkaround should be used
-  // instead, but can only be used if BackRenderbuffer tracks its
-  // renderbuffers in the renderbuffer manager instead of manually.
-  // http://crbug.com/731287
+  // instead, but can only be used if BackRenderbuffer tracks its renderbuffers
+  // in the renderbuffer manager instead of manually.  http://crbug.com/731287
   decoder_->RenderbufferStorageMultisampleHelper(GL_RENDERBUFFER, samples,
                                                  format, size.width(),
                                                  size.height(), kDoNotForce);
@@ -4131,6 +4136,8 @@ bool GLES2DecoderImpl::InitializeShaderTranslator() {
     driver_bug_workarounds |= SH_REMOVE_INVARIANT_AND_CENTROID_FOR_ESSL3;
   if (workarounds().rewrite_float_unary_minus_operator)
     driver_bug_workarounds |= SH_REWRITE_FLOAT_UNARY_MINUS_OPERATOR;
+  if (workarounds().dont_use_loops_to_initialize_variables)
+    driver_bug_workarounds |= SH_DONT_USE_LOOPS_TO_INITIALIZE_VARIABLES;
 
   // Initialize uninitialized locals by default
   if (!workarounds().dont_initialize_uninitialized_locals)
@@ -8661,11 +8668,7 @@ void GLES2DecoderImpl::RenderbufferStorageMultisampleHelper(
 
 bool GLES2DecoderImpl::RegenerateRenderbufferIfNeeded(
     Renderbuffer* renderbuffer) {
-  if (!workarounds().multisample_renderbuffer_resize_emulation) {
-    return false;
-  }
-
-  if (!renderbuffer->RegenerateAndBindBackingObjectIfNeeded()) {
+  if (!renderbuffer->RegenerateAndBindBackingObjectIfNeeded(workarounds())) {
     return false;
   }
 
@@ -12193,6 +12196,15 @@ error::Error GLES2DecoderImpl::HandlePostSubBufferCHROMIUM(
         base::Bind(&GLES2DecoderImpl::FinishAsyncSwapBuffers,
                    weak_ptr_factory_.GetWeakPtr()));
   } else {
+    // TODO(sunnyps): Remove Alias calls after crbug.com/724999 is fixed.
+    gl::GLContext* current = gl::GLContext::GetCurrent();
+    base::debug::Alias(&current);
+    gl::GLContext* real_current = gl::GLContext::GetRealCurrentForDebugging();
+    base::debug::Alias(&real_current);
+    gl::GLContext* context = context_.get();
+    base::debug::Alias(&context);
+    bool is_current = context_->IsCurrent(surface_.get());
+    base::debug::Alias(&is_current);
     FinishSwapBuffers(surface_->PostSubBuffer(c.x, c.y, c.width, c.height));
   }
 
@@ -15992,6 +16004,15 @@ void GLES2DecoderImpl::DoSwapBuffers() {
         base::Bind(&GLES2DecoderImpl::FinishAsyncSwapBuffers,
                    weak_ptr_factory_.GetWeakPtr()));
   } else {
+    // TODO(sunnyps): Remove Alias calls after crbug.com/724999 is fixed.
+    gl::GLContext* current = gl::GLContext::GetCurrent();
+    base::debug::Alias(&current);
+    gl::GLContext* real_current = gl::GLContext::GetRealCurrentForDebugging();
+    base::debug::Alias(&real_current);
+    gl::GLContext* context = context_.get();
+    base::debug::Alias(&context);
+    bool is_current = context_->IsCurrent(surface_.get());
+    base::debug::Alias(&is_current);
     FinishSwapBuffers(surface_->SwapBuffers());
   }
 
@@ -20383,6 +20404,66 @@ void GLES2DecoderImpl::DoWindowRectanglesEXT(GLenum mode,
   }
   state_.SetWindowRectangles(mode, n, box_copy.data());
   state_.UpdateWindowRectangles();
+}
+
+error::Error GLES2DecoderImpl::HandleCreateTransferCacheEntryCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile gles2::cmds::CreateTransferCacheEntryCHROMIUM& c =
+      *static_cast<
+          const volatile gles2::cmds::CreateTransferCacheEntryCHROMIUM*>(
+          cmd_data);
+  TransferCacheEntryId handle_id =
+      TransferCacheEntryId::FromUnsafeValue(c.handle_id());
+  GLuint handle_shm_id = c.handle_shm_id;
+  GLuint handle_shm_offset = c.handle_shm_offset;
+  GLuint data_shm_id = c.data_shm_id;
+  GLuint data_shm_offset = c.data_shm_offset;
+  GLuint data_size = c.data_size;
+
+  // Validate the type we are about to create.
+  cc::TransferCacheEntryType type;
+  if (!cc::ServiceTransferCacheEntry::SafeConvertToType(c.type, &type))
+    return error::kInvalidArguments;
+
+  uint8_t* data_memory =
+      GetSharedMemoryAs<uint8_t*>(data_shm_id, data_shm_offset, data_size);
+  if (!data_memory)
+    return error::kInvalidArguments;
+
+  scoped_refptr<gpu::Buffer> handle_buffer =
+      GetSharedMemoryBuffer(handle_shm_id);
+  if (!DiscardableHandleBase::ValidateParameters(handle_buffer.get(),
+                                                 handle_shm_offset))
+    return error::kInvalidArguments;
+  ServiceDiscardableHandle handle(std::move(handle_buffer), handle_shm_offset,
+                                  handle_shm_id);
+
+  if (!GetContextGroup()->transfer_cache()->CreateLockedEntry(
+          handle_id, handle, type, data_memory, data_size))
+    return error::kInvalidArguments;
+
+  return error::kNoError;
+}
+
+void GLES2DecoderImpl::DoUnlockTransferCacheEntryCHROMIUM(
+    GLuint64 raw_handle_id) {
+  TransferCacheEntryId handle_id =
+      TransferCacheEntryId::FromUnsafeValue(raw_handle_id);
+  if (!GetContextGroup()->transfer_cache()->UnlockEntry(handle_id)) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glUnlockTransferCacheEntryCHROMIUM",
+                       "Attempt to unlock an invalid ID");
+  }
+}
+
+void GLES2DecoderImpl::DoDeleteTransferCacheEntryCHROMIUM(
+    GLuint64 raw_handle_id) {
+  TransferCacheEntryId handle_id =
+      TransferCacheEntryId::FromUnsafeValue(raw_handle_id);
+  if (!GetContextGroup()->transfer_cache()->DeleteEntry(handle_id)) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glDeleteTransferCacheEntryCHROMIUM",
+                       "Attempt to delete an invalid ID");
+  }
 }
 
 // Include the auto-generated part of this file. We split this because it means

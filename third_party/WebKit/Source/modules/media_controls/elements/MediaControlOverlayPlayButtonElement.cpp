@@ -35,7 +35,6 @@ MediaControlOverlayPlayButtonElement::MediaControlOverlayPlayButtonElement(
     MediaControlsImpl& media_controls)
     : MediaControlInputElement(media_controls, kMediaOverlayPlayButton),
       internal_button_(nullptr) {
-  EnsureUserAgentShadowRoot();
   setType(InputTypeNames::button);
   SetShadowPseudoId(AtomicString("-webkit-media-controls-overlay-play-button"));
 
@@ -77,8 +76,10 @@ void MediaControlOverlayPlayButtonElement::DefaultEventHandler(Event* event) {
 
     MediaElement().TogglePlayState();
     UpdateDisplayType();
+    MaybeRecordInteracted();
     event->SetDefaultHandled();
   }
+
   // TODO(mlamouri): should call MediaControlInputElement::DefaultEventHandler.
 }
 

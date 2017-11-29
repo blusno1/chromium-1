@@ -161,8 +161,7 @@ class CHROMEOS_EXPORT NetworkStateHandler
   const NetworkState* DefaultNetwork() const;
 
   // Returns the primary connected network of matching |type|, otherwise NULL.
-  const NetworkState* ConnectedNetworkByType(
-      const NetworkTypePattern& type) const;
+  const NetworkState* ConnectedNetworkByType(const NetworkTypePattern& type);
 
   // Like ConnectedNetworkByType() but returns a connecting network or NULL.
   const NetworkState* ConnectingNetworkByType(
@@ -175,8 +174,7 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // Returns the aa:bb formatted hardware (MAC) address for the first connected
   // network matching |type|, or an empty string if none is connected.
-  std::string FormattedHardwareAddressForType(
-      const NetworkTypePattern& type) const;
+  std::string FormattedHardwareAddressForType(const NetworkTypePattern& type);
 
   // Convenience method to call GetNetworkListByType(visible=true).
   void GetVisibleNetworkListByType(const NetworkTypePattern& type,
@@ -464,7 +462,8 @@ class CHROMEOS_EXPORT NetworkStateHandler
   ManagedStateList* GetManagedList(ManagedState::ManagedType type);
 
   // Helper function to notify observers. Calls CheckDefaultNetworkChanged().
-  void OnNetworkConnectionStateChanged(NetworkState* network);
+  // Returns true if NotifyDefaultNetworkChanged() was called.
+  bool OnNetworkConnectionStateChanged(NetworkState* network);
 
   // Notifies observers when the default network or its properties change.
   void NotifyDefaultNetworkChanged(const NetworkState* default_network);
@@ -480,6 +479,11 @@ class CHROMEOS_EXPORT NetworkStateHandler
 
   // Called whenever Device.Scanning state transitions to false.
   void NotifyScanCompleted(const DeviceState* device);
+
+  // Helper function to log property updated events.
+  void LogPropertyUpdated(const ManagedState* network,
+                          const std::string& key,
+                          const base::Value& value);
 
   // Returns one technology type for |type|. This technology will be the
   // highest priority technology in the type pattern.

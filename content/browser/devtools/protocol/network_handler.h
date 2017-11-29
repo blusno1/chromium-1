@@ -23,12 +23,14 @@ class URLRequest;
 }  // namespace net
 
 namespace network {
-struct URLLoaderStatus;
+struct URLLoaderCompletionStatus;
 }  // namespace network
 
 namespace content {
 class DevToolsAgentHostImpl;
 class RenderFrameHostImpl;
+struct GlobalRequestID;
+class InterceptionHandle;
 class NavigationHandle;
 class NavigationRequest;
 class NavigationThrottle;
@@ -55,7 +57,9 @@ class NetworkHandler : public DevToolsDomainHandler,
                   Maybe<int> max_resource_size) override;
   Response Disable() override;
 
-  Response ClearBrowserCache() override;
+  void ClearBrowserCache(
+      std::unique_ptr<ClearBrowserCacheCallback> callback) override;
+
   void ClearBrowserCookies(
       std::unique_ptr<ClearBrowserCookiesCallback> callback) override;
 
@@ -107,6 +111,11 @@ class NetworkHandler : public DevToolsDomainHandler,
       Maybe<protocol::Network::AuthChallengeResponse> auth_challenge_response,
       std::unique_ptr<ContinueInterceptedRequestCallback> callback) override;
 
+  void GetResponseBodyForInterception(
+      const String& interception_id,
+      std::unique_ptr<GetResponseBodyForInterceptionCallback> callback)
+      override;
+
   void NavigationPreloadRequestSent(int worker_version_id,
                                     const std::string& request_id,
                                     const ResourceRequest& request);
@@ -116,7 +125,7 @@ class NetworkHandler : public DevToolsDomainHandler,
                                          const ResourceResponseHead& head);
   void NavigationPreloadCompleted(
       const std::string& request_id,
-      const network::URLLoaderStatus& completion_status);
+      const network::URLLoaderCompletionStatus& completion_status);
   void NavigationFailed(NavigationRequest* navigation_request);
 
   bool enabled() const { return enabled_; }
@@ -133,19 +142,18 @@ class NetworkHandler : public DevToolsDomainHandler,
   void AppendDevToolsHeaders(net::HttpRequestHeaders* headers);
   bool ShouldBypassServiceWorker() const;
 
-  void RequestIntercepted(std::unique_ptr<InterceptedRequestInfo> request_info);
-
  private:
+  void RequestIntercepted(std::unique_ptr<InterceptedRequestInfo> request_info);
   void SetNetworkConditions(mojom::NetworkConditionsPtr conditions);
 
   std::unique_ptr<Network::Frontend> frontend_;
   RenderProcessHost* process_;
   RenderFrameHostImpl* host_;
   bool enabled_;
-  bool interception_enabled_;
   std::string user_agent_;
   std::vector<std::pair<std::string, std::string>> extra_headers_;
   std::string host_id_;
+  std::unique_ptr<InterceptionHandle> interception_handle_;
   bool bypass_service_worker_;
   base::WeakPtrFactory<NetworkHandler> weak_factory_;
 

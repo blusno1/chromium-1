@@ -39,14 +39,11 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerState,
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerResponseError,
                           blink::mojom::ServiceWorkerResponseError::kLast)
 
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebServiceWorkerClientType,
-                          blink::kWebServiceWorkerClientTypeLast)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerClientType,
+                          blink::mojom::ServiceWorkerClientType::kLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(network::mojom::FetchResponseType,
                           network::mojom::FetchResponseType::kLast)
-
-IPC_ENUM_TRAITS_MAX_VALUE(content::ServiceWorkerProviderType,
-                          content::SERVICE_WORKER_PROVIDER_TYPE_LAST)
 
 IPC_ENUM_TRAITS_MAX_VALUE(content::ServiceWorkerFetchType,
                           content::ServiceWorkerFetchType::LAST)
@@ -94,6 +91,9 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerResponse)
   IPC_STRUCT_TRAITS_MEMBER(is_in_cache_storage)
   IPC_STRUCT_TRAITS_MEMBER(cache_storage_cache_name)
   IPC_STRUCT_TRAITS_MEMBER(cors_exposed_header_names)
+  IPC_STRUCT_TRAITS_MEMBER(side_data_blob_uuid)
+  IPC_STRUCT_TRAITS_MEMBER(side_data_blob_size)
+  IPC_STRUCT_TRAITS_MEMBER(side_data_blob)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::mojom::ServiceWorkerObjectInfo)
@@ -207,14 +207,6 @@ IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_ServiceWorkerStateChanged,
                      int /* thread_id */,
                      int /* handle_id */,
                      blink::mojom::ServiceWorkerState)
-
-// Notifies a client that its controller used a feature, for UseCounter
-// purposes (browser->renderer). |feature| must be one of the values from
-// blink::UseCounter::Feature enum.
-IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_CountFeature,
-                     int /* thread_id */,
-                     int /* provider_id */,
-                     uint32_t /* feature */)
 
 // Sent via EmbeddedWorker to dispatch events.
 IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_DidSkipWaiting,

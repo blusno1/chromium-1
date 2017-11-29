@@ -72,7 +72,7 @@ void CSSSelectorWatch::CallbackSelectorChangeTimerFired(TimerBase*) {
 
   if (timer_expirations_ < 1) {
     timer_expirations_++;
-    callback_selector_change_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    callback_selector_change_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
     return;
   }
   if (GetSupplementable()->GetFrame()) {
@@ -130,8 +130,10 @@ void CSSSelectorWatch::UpdateSelectorMatches(
     }
   } else {
     timer_expirations_ = 0;
-    if (!callback_selector_change_timer_.IsActive())
-      callback_selector_change_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    if (!callback_selector_change_timer_.IsActive()) {
+      callback_selector_change_timer_.StartOneShot(TimeDelta(),
+                                                   BLINK_FROM_HERE);
+    }
   }
 }
 
@@ -150,7 +152,9 @@ void CSSSelectorWatch::WatchCSSSelectors(const Vector<String>& selectors) {
   CSSPropertyValueSet* callback_property_set =
       ImmutableCSSPropertyValueSet::Create(nullptr, 0, kUASheetMode);
 
-  CSSParserContext* context = CSSParserContext::Create(kUASheetMode);
+  // UA stylesheets always parse in the insecure context mode.
+  CSSParserContext* context = CSSParserContext::Create(
+      kUASheetMode, SecureContextMode::kInsecureContext);
   for (const auto& selector : selectors) {
     CSSSelectorList selector_list =
         CSSParser::ParseSelector(context, nullptr, selector);

@@ -410,13 +410,16 @@ String BaseRenderingContext2D::filter() const {
   return GetState().UnparsedFilter();
 }
 
-void BaseRenderingContext2D::setFilter(const String& filter_string) {
+void BaseRenderingContext2D::setFilter(
+    const ExecutionContext* execution_context,
+    const String& filter_string) {
   if (filter_string == GetState().UnparsedFilter())
     return;
 
-  const CSSValue* filter_value =
-      CSSParser::ParseSingleValue(CSSPropertyFilter, filter_string,
-                                  CSSParserContext::Create(kHTMLStandardMode));
+  const CSSValue* filter_value = CSSParser::ParseSingleValue(
+      CSSPropertyFilter, filter_string,
+      CSSParserContext::Create(kHTMLStandardMode,
+                               execution_context->SecureContextMode()));
 
   if (!filter_value || filter_value->IsCSSWideKeyword())
     return;
@@ -541,7 +544,7 @@ void BaseRenderingContext2D::resetTransform() {
 
   // resetTransform() resolves the non-invertible CTM state.
   ModifiableState().ResetTransform();
-  c->setMatrix(AffineTransformToSkMatrix(BaseTransform()));
+  c->setMatrix(AffineTransformToSkMatrix(AffineTransform()));
 
   if (invertible_ctm)
     path_.Transform(ctm);
@@ -1294,7 +1297,7 @@ void BaseRenderingContext2D::drawImage(ScriptState* script_state,
     float src_area = src_rect.Width() * src_rect.Height();
     if (src_area >
         CanvasHeuristicParameters::kDrawImageTextureUploadHardSizeLimit) {
-      buffer->DisableAcceleration();
+      this->DisableAcceleration();
     } else if (src_area > CanvasHeuristicParameters::
                               kDrawImageTextureUploadSoftSizeLimit) {
       SkRect bounds = dst_rect;
@@ -1304,7 +1307,7 @@ void BaseRenderingContext2D::drawImage(ScriptState* script_state,
       if (src_area >
           dst_area * CanvasHeuristicParameters::
                          kDrawImageTextureUploadSoftSizeLimitScaleThreshold) {
-        buffer->DisableAcceleration();
+        this->DisableAcceleration();
       }
     }
   }
@@ -1644,9 +1647,15 @@ ImageData* BaseRenderingContext2D::getImageData(
   }
 
   WTF::ArrayBufferContents contents;
-  if (!buffer->GetImageData(image_data_rect, contents)) {
+  bool is_gpu_readback_invoked = false;
+  if (!buffer->GetImageData(image_data_rect, contents,
+                            &is_gpu_readback_invoked)) {
     exception_state.ThrowRangeError("Out of memory at ImageData creation");
     return nullptr;
+  }
+
+  if (is_gpu_readback_invoked) {
+    DidInvokeGPUReadbackInCurrentFrame();
   }
 
   NeedsFinalizeFrame();
@@ -1757,8 +1766,9 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
     unsigned data_length =
         data->Size().Area() * context_color_params.BytesPerPixel();
     std::unique_ptr<uint8_t[]> converted_pixels(new uint8_t[data_length]);
-    if (data->ImageDataInCanvasColorSettings(
-            ColorSpace(), PixelFormat(), converted_pixels, kRGBAColorType)) {
+    if (data->ImageDataInCanvasColorSettings(ColorSpace(), PixelFormat(),
+                                             converted_pixels.get(),
+                                             kRGBAColorType)) {
       buffer->PutByteArray(converted_pixels.get(),
                            IntSize(data->width(), data->height()), source_rect,
                            IntPoint(dest_offset));

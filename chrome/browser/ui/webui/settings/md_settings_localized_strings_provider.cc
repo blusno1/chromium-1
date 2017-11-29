@@ -35,8 +35,10 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/sys_info.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -49,6 +51,7 @@
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/chromeos/events/keyboard_layout_util.h"
 #include "ui/display/display_switches.h"
+#include "ui/display/manager/chromeos/touch_device_manager.h"
 #else
 #include "chrome/browser/ui/webui/settings/system_handler.h"
 #endif
@@ -324,6 +327,7 @@ void AddAndroidAppStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_MESSAGE},
       {"androidAppsDisableDialogRemove",
        IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_REMOVE},
+      {"androidAppsManageAppLinks", IDS_SETTINGS_ANDROID_APPS_MANAGE_APP_LINKS},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -594,6 +598,7 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
       {"displayArrangementText", IDS_SETTINGS_DISPLAY_ARRANGEMENT_TEXT},
       {"displayArrangementTitle", IDS_SETTINGS_DISPLAY_ARRANGEMENT_TITLE},
       {"displayMirror", IDS_SETTINGS_DISPLAY_MIRROR},
+      {"displayMirrorDisplayName", IDS_SETTINGS_DISPLAY_MIRROR_DISPLAY_NAME},
       {"displayNightLightLabel", IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_LABEL},
       {"displayNightLightScheduleCustom",
        IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_CUSTOM},
@@ -641,11 +646,17 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
   html_source->AddBoolean("unifiedDesktopAvailable",
                           base::CommandLine::ForCurrentProcess()->HasSwitch(
                               ::switches::kEnableUnifiedDesktop));
+  html_source->AddBoolean("multiMirroringAvailable",
+                          base::CommandLine::ForCurrentProcess()->HasSwitch(
+                              ::switches::kEnableMultiMirroring));
 
   html_source->AddBoolean(
       "enableTouchCalibrationSetting",
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kEnableTouchCalibrationSetting));
+
+  html_source->AddBoolean("hasExternalTouchDevice",
+                          display::HasExternalTouchscreenDevice());
 
   html_source->AddBoolean("nightLightFeatureEnabled",
                           ash::switches::IsNightLightEnabled());
@@ -721,11 +732,33 @@ void AddDownloadsStrings(content::WebUIDataSource* html_source) {
 
 #if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
 void AddChromeCleanupStrings(content::WebUIDataSource* html_source) {
+  const wchar_t kUnwantedSoftwareProtectionWhitePaperUrl[] =
+      L"https://www.google.ca/chrome/browser/privacy/"
+      "whitepaper.html#unwantedsoftware";
+
   LocalizedString localized_strings[] = {
-      {"chromeCleanupExplanation",
-       IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_REMOVE},
+      {"chromeCleanupPageTitle",
+       IDS_SETTINGS_RESET_CLEAN_UP_COMPUTER_PAGE_TITLE},
+      {"chromeCleanupDetailsFilesAndPrograms",
+       IDS_SETTINGS_RESET_CLEANUP_DETAILS_FILES_AND_PROGRAMS},
+      {"chromeCleanupDetailsRegistryEntries",
+       IDS_SETTINGS_RESET_CLEANUP_DETAILS_REGISTRY_ENTRIES},
       {"chromeCleanupDoneButtonLabel",
        IDS_SETTINGS_RESET_CLEANUP_DONE_BUTTON_LABEL},
+      {"chromeCleanupExplanationCleanupError",
+       IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_CLEANUP_ERROR},
+      {"chromeCleanupExplanationFindAndRemove",
+       IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_FIND_AND_REMOVE},
+      {"chromeCleanupExplanationNoInternet",
+       IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_NO_INTERNET_CONNECTION},
+      {"chromeCleanupExplanationPermissionsNeeded",
+       IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_PERMISSIONS_NEEDED},
+      {"chromeCleanupExplanationRemove",
+       IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_REMOVE},
+      {"chromeCleanupExplanationScanError",
+       IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_SCAN_ERROR},
+      {"chromeCleanupFindButtonLable",
+       IDS_SETTINGS_RESET_CLEANUP_FIND_BUTTON_LABEL},
       {"chromeCleanupLinkShowFiles",
        IDS_SETTINGS_RESET_CLEANUP_LINK_SHOW_FILES},
       {"chromeCleanupLogsUploadPermission", IDS_CHROME_CLEANUP_LOGS_PERMISSION},
@@ -733,13 +766,30 @@ void AddChromeCleanupStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_RESET_CLEANUP_REMOVE_BUTTON_LABEL},
       {"chromeCleanupRestartButtonLabel",
        IDS_SETTINGS_RESET_CLEANUP_RESTART_BUTTON_LABEL},
+      {"chromeCleanupTitleDone", IDS_SETTINGS_RESET_CLEANUP_TITLE_DONE},
       {"chromeCleanupTitleErrorCantRemove",
        IDS_SETTINGS_RESET_CLEANUP_TITLE_ERROR_CANT_REMOVE},
+      {"chromeCleanupTitleErrorPermissions",
+       IDS_SETTINGS_RESET_CLEANUP_TITLE_ERROR_PERMISSIONS_NEEDED},
+      {"chromeCleanupTitleFindAndRemove",
+       IDS_SETTINGS_RESET_CLEANUP_TITLE_FIND_AND_REMOVE},
+      {"chromeCleanupTitleNoInternet",
+       IDS_SETTINGS_RESET_CLEANUP_TITLE_NO_INTERNET_CONNECTION},
+      {"chromeCleanupTitleNothingFound",
+       IDS_SETTINGS_RESET_CLEANUP_TITLE_NOTHING_FOUND},
       {"chromeCleanupTitleRemove", IDS_SETTINGS_RESET_CLEANUP_TITLE_REMOVE},
       {"chromeCleanupTitleRemoved", IDS_SETTINGS_RESET_CLEANUP_TITLE_REMOVED},
       {"chromeCleanupTitleRemoving", IDS_SETTINGS_RESET_CLEANUP_TITLE_REMOVING},
       {"chromeCleanupTitleRestart", IDS_SETTINGS_RESET_CLEANUP_TITLE_RESTART},
+      {"chromeCleanupTitleScanning", IDS_SETTINGS_RESET_CLEANUP_TITLE_SCANNING},
+      {"chromeCleanupTitleScanningFailed",
+       IDS_SETTINGS_RESET_CLEANUP_TITLE_ERROR_SCANNING_FAILED},
+      {"chromeCleanupTitleTryAgainButtonLabel",
+       IDS_SETTINGS_RESET_CLEANUP_TRY_AGAIN_BUTTON_LABEL},
+      {"chromeCleanupTitleLogsPermissionExplanation",
+       IDS_SETTINGS_RESET_CLEANUP_LOGS_PERMISSION_EXPLANATION},
   };
+
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
   const std::string cleanup_learn_more_url =
@@ -749,15 +799,16 @@ void AddChromeCleanupStrings(content::WebUIDataSource* html_source) {
           .spec();
   html_source->AddString("chromeCleanupLearnMoreUrl", cleanup_learn_more_url);
 
-  // TODO(crbug.com/776538): Localize these strings.
-  html_source->AddString("chromeCleanupPageTitle", "Clean up computer");
-  html_source->AddString("chromeCleanupPageTriggerDescription",
-                         "Find and remove harmful software");
-
-  base::string16 powered_by_html =
+  const base::string16 powered_by_html =
       l10n_util::GetStringFUTF16(IDS_SETTINGS_RESET_CLEANUP_FOOTER_POWERED_BY,
                                  L"<span id='powered-by-logo'></span>");
   html_source->AddString("chromeCleanupPoweredByHtml", powered_by_html);
+
+  const base::string16 cleanup_details_explanation =
+      l10n_util::GetStringFUTF16(IDS_SETTINGS_RESET_CLEANUP_DETAILS_EXPLANATION,
+                                 kUnwantedSoftwareProtectionWhitePaperUrl);
+  html_source->AddString("chromeCleanupDetailsExplanation",
+                         cleanup_details_explanation);
 }
 #endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
 
@@ -782,6 +833,14 @@ void AddResetStrings(content::WebUIDataSource* html_source) {
     {"resetAutomatedDialogTitle", IDS_SETTINGS_RESET_AUTOMATED_DIALOG_TITLE},
     {"resetProfileBannerButton", IDS_SETTINGS_RESET_BANNER_RESET_BUTTON_TEXT},
     {"resetProfileBannerDescription", IDS_SETTINGS_RESET_BANNER_TEXT},
+#if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
+    // The page title to be used if user initiated cleanups are enabled.
+    {"resetAndCleanupPageTitle", IDS_SETTINGS_RESET_AND_CLEANUP},
+    {"resetCleanupComputerTrigger",
+     IDS_SETTINGS_RESET_CLEAN_UP_COMPUTER_TRIGGER},
+    {"resetCleanupComputerTriggerDescription",
+     IDS_SETTINGS_RESET_CLEAN_UP_COMPUTER_TRIGGER_DESCRIPTION},
+#endif
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -824,8 +883,26 @@ void AddImportDataStrings(content::WebUIDataSource* html_source) {
 void AddDateTimeStrings(content::WebUIDataSource* html_source) {
   LocalizedString localized_strings[] = {
       {"dateTimePageTitle", IDS_SETTINGS_DATE_TIME},
-      {"timeZone", IDS_SETTINGS_TIME_ZONE},
+      {"timeZoneColon", IDS_SETTINGS_TIME_ZONE},
       {"timeZoneGeolocation", IDS_SETTINGS_TIME_ZONE_GEOLOCATION},
+      {"timeZoneButton", IDS_SETTINGS_TIME_ZONE_BUTTON},
+      {"timeZoneSubpageTitle", IDS_SETTINGS_TIME_ZONE_SUBPAGE_TITLE},
+      {"setTimeZoneAutomaticallyDisabled",
+       IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_DISABLED},
+      {"setTimeZoneAutomaticallyIpOnlyDefault",
+       IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_IP_ONLY_DEFAULT},
+      {"setTimeZoneAutomaticallyIpOnlyDefaultDescription",
+       IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_IP_ONLY_DESCRIPTION},
+      {"setTimeZoneAutomaticallyWithWiFiAccessPointsData",
+       IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_SEND_WIFI_AP},
+      {"setTimeZoneAutomaticallyWithWiFiAccessPointsDataDescription",
+       IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_SEND_WIFI_AP_DESCRIPTION},
+      {"setTimeZoneAutomaticallyWithAllLocationInfo",
+       IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_SEND_ALL_INFO},
+      {"setTimeZoneAutomaticallyWithAllLocationInfoDescription",
+       IDS_SETTINGS_TIME_ZONE_DETECTION_MODE_SEND_ALL_INFO_DESCRIPTION},
+      {"selectYourTimeZone",
+       IDS_SETTINGS_TIME_ZONE_DETECTION_SELECT_YOUR_TIME_ZONE},
       {"use24HourClock", IDS_SETTINGS_USE_24_HOUR_CLOCK},
       {"setDateTime", IDS_SETTINGS_SET_DATE_TIME},
   };
@@ -1160,12 +1237,16 @@ void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
       {"editPasswordPasswordLabel", IDS_SETTINGS_PASSWORDS_PASSWORD},
       {"noAddressesFound", IDS_SETTINGS_ADDRESS_NONE},
       {"noCreditCardsFound", IDS_SETTINGS_CREDIT_CARD_NONE},
+      {"noCreditCardsPolicy", IDS_SETTINGS_CREDIT_CARD_DISABLED},
       {"noPasswordsFound", IDS_SETTINGS_PASSWORDS_NONE},
       {"noExceptionsFound", IDS_SETTINGS_PASSWORDS_EXCEPTIONS_NONE},
       {"import", IDS_PASSWORD_MANAGER_IMPORT_BUTTON},
       {"export", IDS_PASSWORD_MANAGER_EXPORT_BUTTON},
       {"undoRemovePassword", IDS_SETTINGS_PASSWORD_UNDO},
-      {"passwordDeleted", IDS_SETTINGS_PASSWORD_DELETED_PASSWORD}};
+      {"passwordDeleted", IDS_SETTINGS_PASSWORD_DELETED_PASSWORD},
+      {"exportPasswordsTitle", IDS_SETTINGS_PASSWORDS_EXPORT_TITLE},
+      {"exportPasswordsDescription", IDS_SETTINGS_PASSWORDS_EXPORT_DESCRIPTION},
+      {"exportPasswords", IDS_SETTINGS_PASSWORDS_EXPORT}};
 
   html_source->AddString(
       "managePasswordsLabel",
@@ -1274,7 +1355,8 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
     {"changePicturePageDescription", IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TEXT},
     {"takePhoto", IDS_SETTINGS_CHANGE_PICTURE_TAKE_PHOTO},
     {"discardPhoto", IDS_SETTINGS_CHANGE_PICTURE_DISCARD_PHOTO},
-    {"switchMode", IDS_SETTINGS_CHANGE_PICTURE_SWITCH_MODE},
+    {"switchModeToCamera", IDS_SETTINGS_CHANGE_PICTURE_SWITCH_MODE_TO_CAMERA},
+    {"switchModeToVideo", IDS_SETTINGS_CHANGE_PICTURE_SWITCH_MODE_TO_VIDEO},
     {"chooseFile", IDS_SETTINGS_CHANGE_PICTURE_CHOOSE_FILE},
     {"profilePhoto", IDS_SETTINGS_CHANGE_PICTURE_PROFILE_PHOTO},
     {"oldPhoto", IDS_SETTINGS_CHANGE_PICTURE_OLD_PHOTO},
@@ -1485,6 +1567,8 @@ void AddPrintingStrings(content::WebUIDataSource* html_source) {
     {"editPrinterDialogTitle",
      IDS_SETTINGS_PRINTING_CUPS_EDIT_PRINTER_DIALOG_TITLE},
     {"editPrinterButtonText", IDS_SETTINGS_PRINTING_CUPS_EDIT_PRINTER_BUTTON},
+#else
+    {"localPrintersTitle", IDS_SETTINGS_PRINTING_LOCAL_PRINTERS_TITLE},
 #endif
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
@@ -1583,22 +1667,19 @@ void AddSearchInSettingsStrings(content::WebUIDataSource* html_source) {
 
 void AddSearchStrings(content::WebUIDataSource* html_source, Profile* profile) {
 #if defined(OS_CHROMEOS)
-  const bool is_user_primary =
-      chromeos::ProfileHelper::Get()->GetUserByProfile(profile) ==
-      user_manager::UserManager::Get()->GetPrimaryUser();
+  const bool is_assistant_allowed =
+      arc::IsAssistantAllowedForProfile(profile) ==
+      ash::mojom::AssistantAllowedState::ALLOWED;
 #endif
 
   LocalizedString localized_strings[] = {
 #if defined(OS_CHROMEOS)
-    {"searchPageTitle", !profile->IsSupervised() && is_user_primary &&
-                                chromeos::switches::IsVoiceInteractionEnabled()
-                            ? IDS_SETTINGS_SEARCH_AND_ASSISTANT
-                            : IDS_SETTINGS_SEARCH},
+    {"searchPageTitle", is_assistant_allowed ? IDS_SETTINGS_SEARCH_AND_ASSISTANT
+                                             : IDS_SETTINGS_SEARCH},
 #else
     {"searchPageTitle", IDS_SETTINGS_SEARCH},
 #endif
     {"searchEnginesManage", IDS_SETTINGS_SEARCH_MANAGE_SEARCH_ENGINES},
-    {"searchOkGoogleLabel", IDS_SETTINGS_SEARCH_OK_GOOGLE_LABEL},
 #if defined(OS_CHROMEOS)
     {"searchGoogleAssistant", IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT},
     {"searchGoogleAssistantEnabled",
@@ -1607,33 +1688,15 @@ void AddSearchStrings(content::WebUIDataSource* html_source, Profile* profile) {
      IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_DISABLED},
     {"assistantTurnOn", IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_TURN_ON},
 #endif
-    {"searchOkGoogleSubtextAlwaysOn",
-     IDS_SETTINGS_SEARCH_OK_GOOGLE_SUBTEXT_ALWAYS_ON},
-    {"searchOkGoogleSubtextNoHardware",
-     IDS_SETTINGS_SEARCH_OK_GOOGLE_SUBTEXT_NO_HARDWARE},
-    {"searchOkGoogleAudioHistoryLabel",
-     IDS_SETTINGS_SEARCH_OK_GOOGLE_AUDIO_HISTORY_LABEL},
-    {"searchOkGoogleAudioHistorySubtext",
-     IDS_SETTINGS_SEARCH_OK_GOOGLE_AUDIO_HISTORY_SUBTEXT},
-    {"searchOkGoogleRetrain", IDS_SETTINGS_SEARCH_OK_GOOGLE_RETRAIN},
-#if defined(OS_CHROMEOS)
-    {"searchOkGoogleDisabled", IDS_SETTINGS_SEARCH_OK_GOOGLE_DISABLED},
-#endif
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
-  html_source->AddString("hotwordLearnMoreUrl",
-                         chrome::kHotwordLearnMoreURL);
-  html_source->AddString("manageAudioHistoryUrl",
-                         chrome::kManageAudioHistoryURL);
   base::string16 search_explanation_text = l10n_util::GetStringFUTF16(
       IDS_SETTINGS_SEARCH_EXPLANATION,
       base::ASCIIToUTF16(chrome::kOmniboxLearnMoreURL));
   html_source->AddString("searchExplanation", search_explanation_text);
 #if defined(OS_CHROMEOS)
-  html_source->AddBoolean(
-      "enableVoiceInteraction",
-      chromeos::switches::IsVoiceInteractionEnabled() && is_user_primary);
+  html_source->AddBoolean("enableVoiceInteraction", is_assistant_allowed);
 #endif
 }
 
@@ -1698,6 +1761,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"cookieMediaLicense", IDS_SETTINGS_COOKIES_MEDIA_LICENSE},
     {"cookiePlural", IDS_SETTINGS_COOKIES_PLURAL_COOKIES},
     {"cookieServiceWorker", IDS_SETTINGS_COOKIES_SERVICE_WORKER},
+    {"cookieSharedWorker", IDS_SETTINGS_COOKIES_SHARED_WORKER},
     {"embeddedOnAnyHost", IDS_SETTINGS_EXCEPTIONS_EMBEDDED_ON_ANY_HOST},
     {"embeddedOnHost", IDS_SETTINGS_EXCEPTIONS_EMBEDDED_ON_HOST},
     {"editSiteTitle", IDS_SETTINGS_EDIT_SITE_TITLE},
@@ -1742,6 +1806,8 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"serviceWorkerScopes", IDS_SETTINGS_COOKIES_SERVICE_WORKER_SCOPES_LABEL},
     {"serviceWorkerSize",
      IDS_SETTINGS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
+    {"sharedWorkerWorker", IDS_SETTINGS_COOKIES_SHARED_WORKER_WORKER_LABEL},
+    {"sharedWorkerName", IDS_SETTINGS_COOKIES_COOKIE_NAME_LABEL},
     {"webdbDesc", IDS_SETTINGS_COOKIES_WEB_DATABASE_DESCRIPTION_LABEL},
     {"siteSettingsCategoryPageTitle", IDS_SETTINGS_SITE_SETTINGS_CATEGORY},
     {"siteSettingsCategoryAllSites", IDS_SETTINGS_SITE_SETTINGS_ALL_SITES},
@@ -1763,6 +1829,11 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_AUTOMATIC_DOWNLOADS},
     {"siteSettingsBackgroundSync", IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC},
     {"siteSettingsCamera", IDS_SETTINGS_SITE_SETTINGS_CAMERA},
+    {"siteSettingsClipboard", IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD},
+    {"siteSettingsClipboardAsk", IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD_ASK},
+    {"siteSettingsClipboardAskRecommended",
+     IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD_ASK_RECOMMENDED},
+    {"siteSettingsClipboardBlock", IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD_BLOCK},
     {"siteSettingsCookies", IDS_SETTINGS_SITE_SETTINGS_COOKIES},
     {"siteSettingsHandlers", IDS_SETTINGS_SITE_SETTINGS_HANDLERS},
     {"siteSettingsLocation", IDS_SETTINGS_SITE_SETTINGS_LOCATION},
@@ -1921,7 +1992,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_SITE_RESET_CONFIRMATION},
     {"siteSettingsSiteResetDialogTitle",
      IDS_SETTINGS_SITE_SETTINGS_SITE_RESET_DIALOG_TITLE},
-    {"loadingLocalDataList", IDS_SETTINGS_LOADING_LOCAL_DATA_LIST},
     {"thirdPartyCookie", IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE},
     {"thirdPartyCookieSublabel",
      IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE_SUBLABEL},
@@ -1947,8 +2017,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
   html_source->AddBoolean("enableSiteSettings",
                           base::CommandLine::ForCurrentProcess()->HasSwitch(
                               switches::kEnableSiteSettings));
-  html_source->AddBoolean("enableSiteDetails",
-                          base::FeatureList::IsEnabled(features::kSiteDetails));
   html_source->AddBoolean(
       "enableSafeBrowsingSubresourceFilter",
       base::FeatureList::IsEnabled(
@@ -1957,6 +2025,10 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
   html_source->AddBoolean(
       "enableSoundContentSetting",
       base::FeatureList::IsEnabled(features::kSoundContentSetting));
+
+  html_source->AddBoolean(
+      "enableClipboardContentSetting",
+      base::FeatureList::IsEnabled(features::kClipboardContentSetting));
 
   if (PluginUtils::ShouldPreferHtmlOverPlugins(
           HostContentSettingsMapFactory::GetForProfile(profile))) {

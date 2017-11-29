@@ -50,7 +50,7 @@
 #include "core/layout/TextAutosizer.h"
 #include "core/page/Page.h"
 #include "platform/Timer.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebFloatRect.h"
 #include "public/platform/WebVector.h"
@@ -95,7 +95,7 @@ class TextFinder::DeferredScopeStringMatches
         identifier_(identifier),
         search_text_(search_text),
         options_(options) {
-    timer_.StartOneShot(0.0, BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
   }
 
   void DoTimeout(TimerBase*) {

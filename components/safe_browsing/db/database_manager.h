@@ -170,18 +170,10 @@ class SafeBrowsingDatabaseManager
   // Match*(): Methods to synchronously check if various types are safe.
   //
 
-  // Check if the |url| matches any of the full-length hashes from the client-
-  // side phishing detection whitelist.  Returns true if there was a match and
-  // false otherwise.  To make sure we are conservative we will return true if
-  // an error occurs.  This method must be called on the IO thread.
-  //
-  // DEPRECATED. ref: http://crbug.com/714300
-  virtual bool MatchCsdWhitelistUrl(const GURL& url) = 0;
-
-  // Check if |str| matches any of the full-length hashes from the download
-  // whitelist.  Returns true if there was a match and false otherwise. To make
-  // sure we are conservative we will return true if an error occurs.  This
-  // method must be called on the IO thread.
+  // Check if SHA-256 hash of |str| matches any of the full-length hashes from
+  // the download whitelist.  Returns true if there was a match and false
+  // otherwise. To make sure we are conservative we will return true if an error
+  // occurs.  This method must be called on the IO thread.
   virtual bool MatchDownloadWhitelistString(const std::string& str) = 0;
 
   // Check if the |url| matches any of the full-length hashes from the download
@@ -208,14 +200,8 @@ class SafeBrowsingDatabaseManager
   // Returns the ThreatSource for this implementation.
   virtual ThreatSource GetThreatSource() const = 0;
 
-  // Check if the CSD whitelist kill switch is turned on.
-  virtual bool IsCsdWhitelistKillSwitchOn() = 0;
-
   // Returns whether download protection is enabled.
   virtual bool IsDownloadProtectionEnabled() const = 0;
-
-  // Check if the CSD malware IP matching kill switch is turned on.
-  virtual bool IsMalwareKillSwitchOn() = 0;
 
   // Returns true if URL-checking is supported on this build+device.
   // If false, calls to CheckBrowseUrl may dcheck-fail.

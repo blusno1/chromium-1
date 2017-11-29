@@ -141,6 +141,12 @@ const base::Feature kLazyParseCSS{"LazyParseCSS",
 const base::Feature kLoadingWithMojo{"LoadingWithMojo",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
+// If this feature is enabled, media-device enumerations use a cache that is
+// invalidated upon notifications sent by base::SystemMonitor. If disabled, the
+// cache is considered invalid on every enumeration request.
+const base::Feature kMediaDevicesSystemMonitorCache{
+    "MediaDevicesSystemMonitorCaching", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the memory coordinator.
 // WARNING:
 // The memory coordinator is not ready for use and enabling this may cause
@@ -168,6 +174,10 @@ const base::Feature kMojoBlobs{"MojoBlobs", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kMojoInputMessages{"MojoInputMessages",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Mojo-based Session Storage.
+const base::Feature kMojoSessionStorage{"MojoSessionStorage",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables/disables hardware video encode acceleration using Mojo (falls back).
 const base::Feature kMojoVideoEncodeAccelerator{
     "MojoVideoEncodeAccelerator", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -179,6 +189,10 @@ const base::Feature kModuleScriptsDynamicImport{
 // ES6 Modules import.meta.url.
 const base::Feature kModuleScriptsImportMetaUrl{
     "ModuleScriptsImportMetaUrl", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Use Mojo IPC for notifications.
+const base::Feature kNotificationsWithMojo{"NotificationsWithMojo",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Resource fetch optimizations for workers. See crbug.com/443374
 const base::Feature kOffMainThreadFetch{"OffMainThreadFetch",
@@ -223,10 +237,6 @@ const base::Feature kPurgeAndSuspend {
 #endif
 };
 
-// RAF aligned mouse input events support.
-const base::Feature kRafAlignedMouseInputEvents{
-    "RafAlignedMouseInput", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // If Pepper 3D Image Chromium is allowed, this feature controls whether it is
 // enabled.
 const base::Feature kPepper3DImageChromium {
@@ -241,6 +251,10 @@ const base::Feature kPepper3DImageChromium {
 // Generate V8 full code cache for PWAs.
 const base::Feature kPWAFullCodeCache{"PWAFullCodeCache",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Port some content::ResourceScheduler functionalities to renderer.
+const base::Feature kRendererSideResourceScheduler{
+    "RendererSideResourceSchduler", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Throttle Blink's rendering pipeline based on frame visibility.
 const base::Feature kRenderingPipelineThrottling{
@@ -271,6 +285,10 @@ const base::Feature kServiceWorkerPaymentApps{
 // Streaming installed scripts on starting service workers.
 const base::Feature kServiceWorkerScriptStreaming{
     "ServiceWorkerScriptStreaming", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Generate V8 full code cache of service worker scripts.
+const base::Feature kServiceWorkerScriptFullCodeCache{
+    "ServiceWorkerScriptFullCodeCache", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // An experiment to require process isolation for the sign-in origin,
 // https://accounts.google.com.  Launch bug: https://crbug.com/739418.
@@ -403,9 +421,13 @@ const base::Feature kImageCaptureAPI{"ImageCaptureAPI",
 const base::Feature kKeepAliveRendererForKeepaliveRequests{
     "KeepAliveRendererForKeepaliveRequests", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables WebVR experimental rendering optimizations.
-const base::Feature kWebVRExperimentalRendering{
+// Controls whether WebVR experimental rendering optimizations is enabled.
+const base::Feature kWebVrExperimentalRendering{
     "WebVRExperimentalRendering", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether WebVR VSync-aligned render loop timing is enabled.
+const base::Feature kWebVrVsyncAlign{"WebVrVsyncAlign",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enabled "work stealing" in the script runner.
 const base::Feature kWorkStealingInScriptRunner{
@@ -424,10 +446,6 @@ const base::Feature kHideIncorrectlySizedFullscreenFrames{
 // Controls whether the WebNFC API is enabled:
 // https://w3c.github.io/web-nfc/
 const base::Feature kWebNfc{"WebNFC", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables WebVR VSync-aligned render loop timing.
-const base::Feature kWebVrVsyncAlign{"WebVrVsyncAlign",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_MACOSX)

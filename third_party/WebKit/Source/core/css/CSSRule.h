@@ -34,12 +34,13 @@ class CSSParserContext;
 class CSSRuleList;
 class CSSStyleSheet;
 class StyleRuleBase;
+enum class SecureContextMode;
 
 class CORE_EXPORT CSSRule : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  virtual ~CSSRule() {}
+  virtual ~CSSRule() = default;
 
   enum Type {
     kStyleRule = 1,
@@ -59,7 +60,7 @@ class CORE_EXPORT CSSRule : public ScriptWrappable {
   virtual String cssText() const = 0;
   virtual void Reattach(StyleRuleBase*) = 0;
 
-  virtual CSSRuleList* cssRules() const { return 0; }
+  virtual CSSRuleList* cssRules() const { return nullptr; }
 
   void SetParentStyleSheet(CSSStyleSheet*);
 
@@ -92,7 +93,7 @@ class CORE_EXPORT CSSRule : public ScriptWrappable {
     has_cached_selector_text_ = has_cached_selector_text;
   }
 
-  const CSSParserContext* ParserContext() const;
+  const CSSParserContext* ParserContext(SecureContextMode) const;
 
  private:
   mutable unsigned char has_cached_selector_text_ : 1;

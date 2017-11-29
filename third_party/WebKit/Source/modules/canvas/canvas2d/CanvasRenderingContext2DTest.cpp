@@ -31,12 +31,13 @@
 #include "platform/graphics/test/FakeWebGraphicsContext3DProvider.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
-#include "platform/testing/TestingPlatformSupport.h"
+#include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
 #include "platform/wtf/ByteSwap.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom-blink.h"
 #include "third_party/skia/include/core/SkColorSpaceXform.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -111,13 +112,13 @@ class CanvasRenderingContext2DTest : public ::testing::Test {
         CanvasElement().RenderingContext());
   }
   intptr_t GetGlobalGPUMemoryUsage() const {
-    return ImageBuffer::GetGlobalGPUMemoryUsage();
+    return HTMLCanvasElement::GetGlobalGPUMemoryUsage();
   }
-  unsigned GetGlobalAcceleratedImageBufferCount() const {
-    return ImageBuffer::GetGlobalAcceleratedImageBufferCount();
+  unsigned GetGlobalAcceleratedContextCount() const {
+    return HTMLCanvasElement::GetGlobalAcceleratedContextCount();
   }
   intptr_t GetCurrentGPUMemoryUsage() const {
-    return CanvasElement().GetImageBuffer()->GetGPUMemoryUsage();
+    return CanvasElement().GetGPUMemoryUsage();
   }
 
   void CreateContext(OpacityMode,
@@ -212,7 +213,7 @@ void CanvasRenderingContext2DTest::SetUp() {
       IntSize(800, 600), &page_clients, nullptr, override_settings_function_);
   document_ = &dummy_page_holder_->GetDocument();
   document_->documentElement()->SetInnerHTMLFromString(
-      "<body><canvas id='c'></canvas></body>");
+      "<body><canvas id='c'></canvas><canvas id='d'></canvas></body>");
   document_->View()->UpdateAllLifecyclePhases();
   canvas_element_ = ToHTMLCanvasElement(document_->getElementById("c"));
 
@@ -252,8 +253,10 @@ void CanvasRenderingContext2DTest::TearDown() {
 std::unique_ptr<Canvas2DLayerBridge> CanvasRenderingContext2DTest::MakeBridge(
     const IntSize& size,
     Canvas2DLayerBridge::AccelerationMode acceleration_mode) {
-  return WTF::WrapUnique(
+  std::unique_ptr<Canvas2DLayerBridge> bridge = WTF::WrapUnique(
       new Canvas2DLayerBridge(size, 0, acceleration_mode, CanvasColorParams()));
+  bridge->SetCanvasResourceHost(canvas_element_);
+  return bridge;
 }
 
 //============================================================================
@@ -869,42 +872,46 @@ TEST_F(CanvasRenderingContext2DTest, GPUMemoryUpdateForAcceleratedCanvas) {
   // pixel per buffer, and 2 is an estimate of num of gpu buffers required
   EXPECT_EQ(800, GetCurrentGPUMemoryUsage());
   EXPECT_EQ(800, GetGlobalGPUMemoryUsage());
-  EXPECT_EQ(1u, GetGlobalAcceleratedImageBufferCount());
+  EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
 
   // Switching accelerated mode to non-accelerated mode
   fake_accelerate_surface_ptr->SetIsAccelerated(false);
-  CanvasElement().GetImageBuffer()->UpdateGPUMemoryUsage();
+  CanvasElement().UpdateMemoryUsage();
   EXPECT_EQ(0, GetCurrentGPUMemoryUsage());
   EXPECT_EQ(0, GetGlobalGPUMemoryUsage());
-  EXPECT_EQ(0u, GetGlobalAcceleratedImageBufferCount());
+  EXPECT_EQ(0u, GetGlobalAcceleratedContextCount());
 
   // Switching non-accelerated mode to accelerated mode
   fake_accelerate_surface_ptr->SetIsAccelerated(true);
-  CanvasElement().GetImageBuffer()->UpdateGPUMemoryUsage();
+  CanvasElement().UpdateMemoryUsage();
   EXPECT_EQ(800, GetCurrentGPUMemoryUsage());
   EXPECT_EQ(800, GetGlobalGPUMemoryUsage());
-  EXPECT_EQ(1u, GetGlobalAcceleratedImageBufferCount());
+  EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
 
   // Creating a different accelerated image buffer
+  HTMLCanvasElement* anotherCanvas =
+      ToHTMLCanvasElement(GetDocument().getElementById("d"));
+  CanvasContextCreationAttributes attributes;
+  anotherCanvas->GetCanvasRenderingContext("2d", attributes);
   auto fake_accelerate_surface2 =
       std::make_unique<FakeAcceleratedImageBufferSurface>(IntSize(10, 5),
                                                           CanvasColorParams());
-  std::unique_ptr<ImageBuffer> image_buffer2 =
-      ImageBuffer::Create(std::move(fake_accelerate_surface2));
+  anotherCanvas->CreateImageBufferUsingSurfaceForTesting(
+      std::move(fake_accelerate_surface2));
   EXPECT_EQ(800, GetCurrentGPUMemoryUsage());
   EXPECT_EQ(1200, GetGlobalGPUMemoryUsage());
-  EXPECT_EQ(2u, GetGlobalAcceleratedImageBufferCount());
+  EXPECT_EQ(2u, GetGlobalAcceleratedContextCount());
 
   // Tear down the first image buffer that resides in current canvas element
   CanvasElement().SetSize(IntSize(20, 20));
   Mock::VerifyAndClearExpectations(fake_accelerate_surface_ptr);
   EXPECT_EQ(400, GetGlobalGPUMemoryUsage());
-  EXPECT_EQ(1u, GetGlobalAcceleratedImageBufferCount());
+  EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
 
   // Tear down the second image buffer
-  image_buffer2.reset();
+  anotherCanvas->SetSize(IntSize(20, 20));
   EXPECT_EQ(0, GetGlobalGPUMemoryUsage());
-  EXPECT_EQ(0u, GetGlobalAcceleratedImageBufferCount());
+  EXPECT_EQ(0u, GetGlobalAcceleratedContextCount());
 }
 
 TEST_F(CanvasRenderingContext2DTest, CanvasDisposedBeforeContext) {
@@ -944,7 +951,7 @@ TEST_F(CanvasRenderingContext2DTest, MAYBE_GetImageDataDisablesAcceleration) {
   CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge));
 
   EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
-  EXPECT_EQ(1u, GetGlobalAcceleratedImageBufferCount());
+  EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
   EXPECT_EQ(720000, GetGlobalGPUMemoryUsage());
 
   DummyExceptionStateForTesting exception_state;
@@ -956,7 +963,7 @@ TEST_F(CanvasRenderingContext2DTest, MAYBE_GetImageDataDisablesAcceleration) {
 
     EXPECT_FALSE(exception_state.HadException());
     EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
-    EXPECT_EQ(1u, GetGlobalAcceleratedImageBufferCount());
+    EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
     EXPECT_EQ(720000, GetGlobalGPUMemoryUsage());
   }
 
@@ -966,11 +973,11 @@ TEST_F(CanvasRenderingContext2DTest, MAYBE_GetImageDataDisablesAcceleration) {
   EXPECT_FALSE(exception_state.HadException());
   if (CanvasHeuristicParameters::kGPUReadbackForcesNoAcceleration) {
     EXPECT_FALSE(CanvasElement().GetImageBuffer()->IsAccelerated());
-    EXPECT_EQ(0u, GetGlobalAcceleratedImageBufferCount());
+    EXPECT_EQ(0u, GetGlobalAcceleratedContextCount());
     EXPECT_EQ(0, GetGlobalGPUMemoryUsage());
   } else {
     EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
-    EXPECT_EQ(1u, GetGlobalAcceleratedImageBufferCount());
+    EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
     EXPECT_EQ(720000, GetGlobalGPUMemoryUsage());
   }
 }
@@ -1005,7 +1012,7 @@ TEST_F(CanvasRenderingContext2DTest, TextureUploadHeuristics) {
     CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge));
 
     EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
-    EXPECT_EQ(1u, GetGlobalAcceleratedImageBufferCount());
+    EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
     // 4 bytes per pixel * 2 buffers = 8
     EXPECT_EQ(8 * dst_size * dst_size, GetGlobalGPUMemoryUsage());
     sk_sp<SkSurface> sk_surface =
@@ -1021,11 +1028,11 @@ TEST_F(CanvasRenderingContext2DTest, TextureUploadHeuristics) {
 
     if (test_variant == kLargeTextureDisablesAcceleration) {
       EXPECT_FALSE(CanvasElement().GetImageBuffer()->IsAccelerated());
-      EXPECT_EQ(0u, GetGlobalAcceleratedImageBufferCount());
+      EXPECT_EQ(0u, GetGlobalAcceleratedContextCount());
       EXPECT_EQ(0, GetGlobalGPUMemoryUsage());
     } else {
       EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
-      EXPECT_EQ(1u, GetGlobalAcceleratedImageBufferCount());
+      EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
       EXPECT_EQ(8 * dst_size * dst_size, GetGlobalGPUMemoryUsage());
     }
   }
@@ -1045,19 +1052,19 @@ TEST_F(CanvasRenderingContext2DTest, DisableAcceleration) {
   // pixel per buffer, and 2 is an estimate of num of gpu buffers required
   EXPECT_EQ(800, GetCurrentGPUMemoryUsage());
   EXPECT_EQ(800, GetGlobalGPUMemoryUsage());
-  EXPECT_EQ(1u, GetGlobalAcceleratedImageBufferCount());
+  EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
 
   context->fillRect(10, 10, 100, 100);
   EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
 
-  CanvasElement().GetImageBuffer()->DisableAcceleration();
+  CanvasElement().DisableAcceleration();
   EXPECT_FALSE(CanvasElement().GetImageBuffer()->IsAccelerated());
 
   context->fillRect(10, 10, 100, 100);
 
   EXPECT_EQ(0, GetCurrentGPUMemoryUsage());
   EXPECT_EQ(0, GetGlobalGPUMemoryUsage());
-  EXPECT_EQ(0u, GetGlobalAcceleratedImageBufferCount());
+  EXPECT_EQ(0u, GetGlobalAcceleratedContextCount());
 }
 
 enum class ColorSpaceConversion : uint8_t {
@@ -1407,8 +1414,8 @@ TEST_F(CanvasRenderingContext2DTestWithTestingPlatform,
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   // Hide element to trigger hibernation (if enabled).
-  GetDocument().GetPage()->SetVisibilityState(kPageVisibilityStateHidden,
-                                              false);
+  GetDocument().GetPage()->SetVisibilityState(
+      mojom::PageVisibilityState::kHidden, false);
   RunUntilIdle();  // Run hibernation task.
   // If enabled, hibernation should cause compositing update.
   EXPECT_EQ(!!CANVAS2D_HIBERNATION_ENABLED,
@@ -1418,8 +1425,8 @@ TEST_F(CanvasRenderingContext2DTestWithTestingPlatform,
   EXPECT_FALSE(layer->NeedsCompositingInputsUpdate());
 
   // Wake up again, which should request a compositing update synchronously.
-  GetDocument().GetPage()->SetVisibilityState(kPageVisibilityStateVisible,
-                                              false);
+  GetDocument().GetPage()->SetVisibilityState(
+      mojom::PageVisibilityState::kVisible, false);
   EXPECT_EQ(!!CANVAS2D_HIBERNATION_ENABLED,
             layer->NeedsCompositingInputsUpdate());
   RunUntilIdle();  // Clear task queue.
@@ -1443,8 +1450,8 @@ TEST_F(CanvasRenderingContext2DTestWithTestingPlatform,
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   // Hide element to trigger hibernation (if enabled).
-  GetDocument().GetPage()->SetVisibilityState(kPageVisibilityStateHidden,
-                                              false);
+  GetDocument().GetPage()->SetVisibilityState(
+      mojom::PageVisibilityState::kHidden, false);
   RunUntilIdle();  // Run hibernation task.
   // Never hibernate a canvas with no resource provider
   EXPECT_FALSE(layer->NeedsCompositingInputsUpdate());

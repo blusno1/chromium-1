@@ -5,10 +5,11 @@
 #ifndef ComputedStylePropertyMap_h
 #define ComputedStylePropertyMap_h
 
+#include "base/macros.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
+#include "core/css/CSSSelector.h"
 #include "core/css/cssom/StylePropertyMapReadonly.h"
 #include "core/dom/Node.h"
-#include "core/layout/LayoutObject.h"
 
 namespace blink {
 
@@ -21,8 +22,6 @@ namespace blink {
 // The computed StylePropertyMapReadOnly for an element is accessed via
 // element.computedStyleMap() (see ElementComputedStyleMap.idl/h)
 class CORE_EXPORT ComputedStylePropertyMap : public StylePropertyMapReadonly {
-  WTF_MAKE_NONCOPYABLE(ComputedStylePropertyMap);
-
  public:
   static ComputedStylePropertyMap* Create(Node* node) {
     return new ComputedStylePropertyMap(node);
@@ -41,9 +40,8 @@ class CORE_EXPORT ComputedStylePropertyMap : public StylePropertyMapReadonly {
         pseudo_id_(CSSSelector::ParsePseudoId(pseudo_element)),
         node_(node) {}
 
-  CSSStyleValueVector GetAllInternal(CSSPropertyID) override;
-  CSSStyleValueVector GetAllInternal(
-      AtomicString custom_property_name) override;
+  const CSSValue* GetProperty(CSSPropertyID) override;
+  const CSSValue* GetCustomProperty(AtomicString) override;
 
   HeapVector<StylePropertyMapEntry> GetIterationEntries() override {
     return HeapVector<StylePropertyMapEntry>();
@@ -58,6 +56,7 @@ class CORE_EXPORT ComputedStylePropertyMap : public StylePropertyMapReadonly {
  private:
   Node* StyledNode() const;
   const ComputedStyle* UpdateStyle();
+  DISALLOW_COPY_AND_ASSIGN(ComputedStylePropertyMap);
 };
 
 }  // namespace blink

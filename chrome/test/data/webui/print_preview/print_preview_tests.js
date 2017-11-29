@@ -378,7 +378,9 @@ cr.define('print_preview_test', function() {
             loadTimeData.getBoolean('printPdfAsImageEnabled'));
   }
 
-  suite('PrintPreview', function() {
+  const suiteName = 'PrintPreview';
+
+  suite(suiteName, function() {
     suiteSetup(function() {
       function CloudPrintInterfaceStub() {
         cr.EventTarget.call(this);
@@ -432,26 +434,26 @@ cr.define('print_preview_test', function() {
       return setupSettingsAndDestinationsWithCapabilities().then(function() {
         const recentList =
             $('destination-search').querySelector('.recent-list ul');
-        const localList =
-            $('destination-search').querySelector('.local-list ul');
+        const printList =
+            $('destination-search').querySelector('.print-list ul');
         assertNotEquals(null, recentList);
         assertEquals(1, recentList.childNodes.length);
         assertEquals('FooName',
                      recentList.childNodes.item(0).querySelector(
                          '.destination-list-item-name').textContent);
-        assertNotEquals(null, localList);
-        assertEquals(3, localList.childNodes.length);
+        assertNotEquals(null, printList);
+        assertEquals(3, printList.childNodes.length);
         assertEquals(
             'Save as PDF',
-            localList.childNodes.item(PDF_INDEX).
+            printList.childNodes.item(PDF_INDEX).
             querySelector('.destination-list-item-name').textContent);
         assertEquals(
             'FooName',
-            localList.childNodes.item(FOO_INDEX).
+            printList.childNodes.item(FOO_INDEX).
             querySelector('.destination-list-item-name').textContent);
         assertEquals(
             'BarName',
-            localList.childNodes.item(BAR_INDEX).
+            printList.childNodes.item(BAR_INDEX).
             querySelector('.destination-list-item-name').textContent);
       });
     });
@@ -470,10 +472,8 @@ cr.define('print_preview_test', function() {
 
         const recentList =
             $('destination-search').querySelector('.recent-list ul');
-        const localList =
-            $('destination-search').querySelector('.local-list ul');
-        const cloudList =
-            $('destination-search').querySelector('.cloud-list ul');
+        const printList =
+            $('destination-search').querySelector('.print-list ul');
 
         assertNotEquals(null, recentList);
         assertEquals(1, recentList.childNodes.length);
@@ -482,25 +482,22 @@ cr.define('print_preview_test', function() {
                          querySelector('.destination-list-item-name').
                          textContent);
 
-        assertNotEquals(null, localList);
-        assertEquals(3, localList.childNodes.length);
+        assertNotEquals(null, printList);
+        assertEquals(3, printList.childNodes.length);
         assertEquals('Save as PDF',
-                     localList.childNodes.item(PDF_INDEX).
+            printList.childNodes.item(PDF_INDEX).
                          querySelector('.destination-list-item-name').
                          textContent);
         assertEquals('FooName',
-                     localList.childNodes.
+            printList.childNodes.
                          item(FOO_INDEX).
                          querySelector('.destination-list-item-name').
                          textContent);
         assertEquals('BarName',
-                     localList.childNodes.
+            printList.childNodes.
                          item(BAR_INDEX).
                          querySelector('.destination-list-item-name').
                          textContent);
-
-        assertNotEquals(null, cloudList);
-        assertEquals(0, cloudList.childNodes.length);
       });
     });
 
@@ -1725,4 +1722,8 @@ cr.define('print_preview_test', function() {
       });
     }  // cr.isWindows
   });
+
+  return {
+    suiteName: suiteName,
+  };
 });

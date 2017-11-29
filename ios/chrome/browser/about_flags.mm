@@ -11,6 +11,7 @@
 #include <stdint.h>
 #import <UIKit/UIKit.h>
 
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -29,6 +30,7 @@
 #include "components/flags_ui/flags_ui_switches.h"
 #include "components/ntp_tiles/switches.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/payments/core/features.h"
 #include "components/search_provider_logos/switches.h"
 #include "components/security_state/core/switches.h"
@@ -188,7 +190,16 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      FEATURE_VALUE_TYPE(kPropertyAnimationsToolbar)},
     {"new-fullscreen-controller", flag_descriptions::kNewFullscreenName,
      flag_descriptions::kNewFullscreenDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(fullscreen::features::kNewFullscreen)}};
+     FEATURE_VALUE_TYPE(fullscreen::features::kNewFullscreen)},
+    {"clean-toolbar", flag_descriptions::kCleanToolbarName,
+     flag_descriptions::kCleanToolbarDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kCleanToolbar)},
+    {"bookmark-new-edit-page", flag_descriptions::kBookmarkNewEditPageName,
+     flag_descriptions::kBookmarkNewEditPageDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kBookmarkNewEditPage)},
+    {"password-export", flag_descriptions::kPasswordExportName,
+     flag_descriptions::kPasswordExportDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(password_manager::features::kPasswordExport)}};
 
 // Add all switches from experimental flags to |command_line|.
 void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
@@ -220,25 +231,6 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
 
     command_line->AppendSwitchASCII(switches::kUserAgent,
                                     web::BuildUserAgentFromProduct(product));
-  }
-
-  // Populate command line flag for Suggestions UI display.
-  NSString* enableSuggestions = [defaults stringForKey:@"EnableSuggestions"];
-  if ([enableSuggestions isEqualToString:@"Enabled"]) {
-    command_line->AppendSwitch(switches::kEnableSuggestionsUI);
-  } else if ([enableSuggestions isEqualToString:@"Disabled"]) {
-    command_line->AppendSwitch(switches::kDisableSuggestionsUI);
-  }
-
-  // Populate command line flag for fetching missing favicons for NTP tiles.
-  NSString* enableMostLikelyFaviconsFromServer =
-      [defaults stringForKey:@"EnableNtpMostLikelyFaviconsFromServer"];
-  if ([enableMostLikelyFaviconsFromServer isEqualToString:@"Enabled"]) {
-    command_line->AppendSwitch(
-        ntp_tiles::switches::kEnableNtpMostLikelyFaviconsFromServer);
-  } else if ([enableMostLikelyFaviconsFromServer isEqualToString:@"Disabled"]) {
-    command_line->AppendSwitch(
-        ntp_tiles::switches::kDisableNtpMostLikelyFaviconsFromServer);
   }
 
   // Freeform commandline flags.  These are added last, so that any flags added
@@ -306,7 +298,7 @@ void ConvertFlagsToSwitches(flags_ui::FlagsStorage* flags_storage,
                             base::CommandLine* command_line) {
   FlagsStateSingleton::GetFlagsState()->ConvertFlagsToSwitches(
       flags_storage, command_line, flags_ui::kAddSentinels,
-      switches::kEnableIOSFeatures, switches::kDisableIOSFeatures);
+      switches::kEnableFeatures, switches::kDisableFeatures);
   AppendSwitchesFromExperimentalSettings(command_line);
 }
 

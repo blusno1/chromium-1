@@ -32,6 +32,7 @@
 #define KeyframeEffectModel_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/animation/AnimationEffectReadOnly.h"
 #include "core/animation/EffectModel.h"
@@ -43,7 +44,6 @@
 #include "platform/heap/Handle.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -123,10 +123,7 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
                                       const ComputedStyle& base_style,
                                       const ComputedStyle* parent_style) const;
 
-  static KeyframeVector NormalizedKeyframesForInspector(
-      const KeyframeVector& keyframes) {
-    return NormalizedKeyframes(keyframes);
-  }
+  static Vector<double> GetComputedOffsets(const KeyframeVector& keyframes);
 
   bool Affects(const PropertyHandle& property) const override {
     EnsureKeyframeGroups();
@@ -143,8 +140,6 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
         default_keyframe_easing_(std::move(default_keyframe_easing)),
         has_synthetic_keyframes_(false),
         needs_compositor_keyframes_snapshot_(true) {}
-
-  static KeyframeVector NormalizedKeyframes(const KeyframeVector& keyframes);
 
   // Lazily computes the groups of property-specific keyframes.
   void EnsureKeyframeGroups() const;

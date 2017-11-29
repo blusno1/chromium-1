@@ -47,8 +47,9 @@
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/CachedMetadata.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/Optional.h"
+#include "platform/wtf/Time.h"
+#include "platform/wtf/text/TextEncoding.h"
 #include "public/platform/Platform.h"
 #include "public/web/WebSettings.h"
 
@@ -191,7 +192,7 @@ enum CacheTagKind {
 
 static const int kCacheTagKindSize = 2;
 
-uint32_t CacheTag(CacheTagKind kind, CachedMetadataHandler* cache_handler) {
+uint32_t CacheTag(CacheTagKind kind, const String& encoding) {
   static_assert((1 << kCacheTagKindSize) >= kCacheTagLast,
                 "CacheTagLast must be large enough");
 
@@ -203,15 +204,14 @@ uint32_t CacheTag(CacheTagKind kind, CachedMetadataHandler* cache_handler) {
   // about encodings, but the cached data is specific to one encoding. If we
   // later load the script from the cache and interpret it with a different
   // encoding, the cached data is not valid for that encoding.
-  return (v8_cache_data_version | kind) +
-         StringHash::GetHash(cache_handler->Encoding());
+  return (v8_cache_data_version | kind) + StringHash::GetHash(encoding);
 }
 
 // Check previously stored timestamp.
 bool IsResourceHotForCaching(CachedMetadataHandler* cache_handler,
                              int hot_hours) {
   const double cache_within_seconds = hot_hours * 60 * 60;
-  uint32_t tag = CacheTag(kCacheTagTimeStamp, cache_handler);
+  uint32_t tag = CacheTag(kCacheTagTimeStamp, cache_handler->Encoding());
   scoped_refptr<CachedMetadata> cached_metadata =
       cache_handler->GetCachedMetadata(tag);
   if (!cached_metadata)
@@ -252,7 +252,7 @@ v8::MaybeLocal<v8::Script> PostStreamCompile(
           CachedMetadataHandler::kSendToPlatform;
       cache_handler->ClearCachedMetadata(cache_type);
       cache_handler->SetCachedMetadata(
-          CacheTag(kCacheTagParser, cache_handler),
+          V8ScriptRunner::TagForParserCache(cache_handler),
           reinterpret_cast<const char*>(new_cached_data->data),
           new_cached_data->length, cache_type);
       if (cache_result) {
@@ -269,8 +269,9 @@ v8::MaybeLocal<v8::Script> PostStreamCompile(
       V8ScriptRunner::SetCacheTimeStamp(cache_handler);
       break;
 
-    case kV8CacheOptionsAlways:
-      // Currently V8CacheOptionsAlways doesn't support streaming.
+    case kV8CacheOptionsCodeWithoutHeatCheck:
+    case kV8CacheOptionsFullCodeWithoutHeatCheck:
+      // Currently WithoutHeatCheck doesn't support streaming.
       NOTREACHED();
     case kV8CacheOptionsNone:
       break;
@@ -316,10 +317,9 @@ static CompileFn SelectCompileFunction(
   switch (cache_options) {
     case kV8CacheOptionsParse: {
       // Use parser-cache; in-memory only.
-      uint32_t parser_tag = CacheTag(kCacheTagParser, cache_handler);
+      uint32_t parser_tag = V8ScriptRunner::TagForParserCache(cache_handler);
       scoped_refptr<CachedMetadata> parser_cache(
-          cache_handler ? cache_handler->GetCachedMetadata(parser_tag)
-                        : nullptr);
+          cache_handler->GetCachedMetadata(parser_tag));
       if (parser_cache) {
         return WTF::Bind(CompileAndConsumeCache, WrapPersistent(cache_handler),
                          std::move(parser_cache),
@@ -332,28 +332,31 @@ static CompileFn SelectCompileFunction(
 
     case kV8CacheOptionsDefault:
     case kV8CacheOptionsCode:
-    case kV8CacheOptionsAlways: {
+    case kV8CacheOptionsCodeWithoutHeatCheck:
+    case kV8CacheOptionsFullCodeWithoutHeatCheck: {
+      uint32_t code_cache_tag = V8ScriptRunner::TagForCodeCache(cache_handler);
       // Use code caching for recently seen resources.
       // Use compression depending on the cache option.
-      scoped_refptr<CachedMetadata> code_cache(
-          cache_handler ? cache_handler->GetCachedMetadata(
-                              CacheTag(kCacheTagCode, cache_handler))
-                        : nullptr);
+      scoped_refptr<CachedMetadata> code_cache =
+          cache_handler->GetCachedMetadata(code_cache_tag);
       if (code_cache) {
         return WTF::Bind(CompileAndConsumeCache, WrapPersistent(cache_handler),
                          std::move(code_cache),
                          v8::ScriptCompiler::kConsumeCodeCache);
       }
-      if (cache_options != kV8CacheOptionsAlways &&
+      if (cache_options != kV8CacheOptionsCodeWithoutHeatCheck &&
+          cache_options != kV8CacheOptionsFullCodeWithoutHeatCheck &&
           !IsResourceHotForCaching(cache_handler, kHotHours)) {
         V8ScriptRunner::SetCacheTimeStamp(cache_handler);
         return WTF::Bind(CompileWithoutOptions,
                          v8::ScriptCompiler::kNoCacheBecauseCacheTooCold);
       }
-      uint32_t code_cache_tag = CacheTag(kCacheTagCode, cache_handler);
-      return WTF::Bind(CompileAndProduceCache, WrapPersistent(cache_handler),
-                       code_cache_tag, v8::ScriptCompiler::kProduceCodeCache,
-                       CachedMetadataHandler::kSendToPlatform);
+      return WTF::Bind(
+          CompileAndProduceCache, WrapPersistent(cache_handler), code_cache_tag,
+          (cache_options == kV8CacheOptionsFullCodeWithoutHeatCheck)
+              ? v8::ScriptCompiler::kProduceFullCodeCache
+              : v8::ScriptCompiler::kProduceCodeCache,
+          CachedMetadataHandler::kSendToPlatform);
       break;
     }
 
@@ -405,8 +408,8 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
                                          fetch_options.ParserState());
   return CompileScript(
       script_state, V8String(isolate, source.Source()), source.Url(),
-      source.SourceMapUrl(), source.StartPosition(), source.GetResource(),
-      source.Streamer(),
+      source.SourceMapUrl(), source.StartPosition(),
+      source.SourceLocationType(), source.GetResource(), source.Streamer(),
       source.GetResource() ? source.GetResource()->CacheHandler() : nullptr,
       access_control_status, cache_options, referrer_info);
 }
@@ -417,6 +420,7 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
     const String& file_name,
     const String& source_map_url,
     const TextPosition& text_position,
+    ScriptSourceLocationType source_location_type,
     CachedMetadataHandler* cache_metadata_handler,
     AccessControlStatus access_control_status,
     V8CacheOptions v8_cache_options,
@@ -427,9 +431,9 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
     return v8::Local<v8::Script>();
   }
   return CompileScript(script_state, V8String(isolate, code), file_name,
-                       source_map_url, text_position, nullptr, nullptr,
-                       cache_metadata_handler, access_control_status,
-                       v8_cache_options, referrer_info);
+                       source_map_url, text_position, source_location_type,
+                       nullptr, nullptr, cache_metadata_handler,
+                       access_control_status, v8_cache_options, referrer_info);
 }
 
 v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
@@ -438,6 +442,7 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
     const String& file_name,
     const String& source_map_url,
     const TextPosition& script_start_position,
+    ScriptSourceLocationType source_location_type,
     ScriptResource* resource,
     ScriptStreamer* streamer,
     CachedMetadataHandler* cache_handler,
@@ -453,6 +458,8 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
 
   DCHECK(!streamer || resource);
   DCHECK(!resource || resource->CacheHandler() == cache_handler);
+  DCHECK(!resource ||
+         source_location_type == ScriptSourceLocationType::kExternalFile);
 
   // NOTE: For compatibility with WebCore, ScriptSourceCode's line starts at
   // 1, whereas v8 starts at 0.
@@ -469,12 +476,25 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
       v8::False(isolate),  // is_module
       referrer_info.ToV8HostDefinedOptions(isolate));
 
-  // TODO(leszeks): Determine why there is no resource.
-  v8::ScriptCompiler::NoCacheReason no_handler_reason =
-      v8::ScriptCompiler::kNoCacheBecauseNoResource;
-  if (!cache_handler && (script_start_position.line_.ZeroBasedInt() != 0 ||
-                         script_start_position.column_.ZeroBasedInt() != 0))
-    no_handler_reason = v8::ScriptCompiler::kNoCacheBecauseInlineScript;
+  v8::ScriptCompiler::NoCacheReason no_handler_reason;
+  switch (source_location_type) {
+    case ScriptSourceLocationType::kInline:
+      no_handler_reason = v8::ScriptCompiler::kNoCacheBecauseInlineScript;
+      break;
+    case ScriptSourceLocationType::kInlineInsideDocumentWrite:
+      no_handler_reason = v8::ScriptCompiler::kNoCacheBecauseInDocumentWrite;
+      break;
+    // TODO(leszeks): Possibly differentiate between the other kinds of script
+    // origin also.
+    default:
+      if (resource) {
+        no_handler_reason =
+            v8::ScriptCompiler::kNoCacheBecauseResourceWithNoCacheHandler;
+      } else {
+        no_handler_reason = v8::ScriptCompiler::kNoCacheBecauseNoResource;
+      }
+      break;
+  }
 
   CompileFn compile_fn =
       streamer ? SelectCompileFunction(cache_options, resource, streamer)
@@ -501,7 +521,8 @@ v8::MaybeLocal<v8::Module> V8ScriptRunner::CompileModule(
     AccessControlStatus access_control_status,
     const TextPosition& start_position,
     const ReferrerScriptInfo& referrer_info) {
-  TRACE_EVENT1("v8", "v8.compileModule", "fileName", file_name.Utf8());
+  TRACE_EVENT1("v8,devtools.timeline", "v8.compileModule", "fileName",
+               file_name.Utf8());
 
   v8::ScriptOrigin origin(
       V8String(isolate, file_name),
@@ -566,8 +587,8 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CompileAndRunInternalScript(
   // - parser_state: always "not parser inserted" for internal scripts.
   if (!V8ScriptRunner::CompileScript(
            script_state, source, file_name, String(), script_start_position,
-           nullptr, nullptr, nullptr, kSharableCrossOrigin,
-           kV8CacheOptionsDefault, ReferrerScriptInfo())
+           ScriptSourceLocationType::kInternal, nullptr, nullptr, nullptr,
+           kSharableCrossOrigin, kV8CacheOptionsDefault, ReferrerScriptInfo())
            .ToLocal(&script))
     return v8::MaybeLocal<v8::Value>();
 
@@ -695,7 +716,7 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::EvaluateModule(
     v8::Local<v8::Module> module,
     v8::Local<v8::Context> context,
     v8::Isolate* isolate) {
-  TRACE_EVENT0("v8", "v8.evaluateModule");
+  TRACE_EVENT0("v8,devtools.timeline", "v8.evaluateModule");
   RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
   v8::MicrotasksScope microtasks_scope(isolate,
                                        v8::MicrotasksScope::kRunMicrotasks);
@@ -704,17 +725,17 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::EvaluateModule(
 
 uint32_t V8ScriptRunner::TagForParserCache(
     CachedMetadataHandler* cache_handler) {
-  return CacheTag(kCacheTagParser, cache_handler);
+  return CacheTag(kCacheTagParser, cache_handler->Encoding());
 }
 
 uint32_t V8ScriptRunner::TagForCodeCache(CachedMetadataHandler* cache_handler) {
-  return CacheTag(kCacheTagCode, cache_handler);
+  return CacheTag(kCacheTagCode, cache_handler->Encoding());
 }
 
 // Store a timestamp to the cache as hint.
 void V8ScriptRunner::SetCacheTimeStamp(CachedMetadataHandler* cache_handler) {
   double now = WTF::CurrentTime();
-  uint32_t tag = CacheTag(kCacheTagTimeStamp, cache_handler);
+  uint32_t tag = CacheTag(kCacheTagTimeStamp, cache_handler->Encoding());
   cache_handler->ClearCachedMetadata(CachedMetadataHandler::kCacheLocally);
   cache_handler->SetCachedMetadata(tag, reinterpret_cast<char*>(&now),
                                    sizeof(now),
@@ -749,6 +770,67 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallExtraHelper(
   v8::Local<v8::Function> function = function_value.As<v8::Function>();
   return V8ScriptRunner::CallInternalFunction(function, v8::Undefined(isolate),
                                               num_args, args, isolate);
+}
+
+// static
+scoped_refptr<CachedMetadata> V8ScriptRunner::GenerateFullCodeCache(
+    ScriptState* script_state,
+    const String& script_string,
+    const String& file_name,
+    const WTF::TextEncoding& encoding,
+    OpaqueMode opaque_mode) {
+  constexpr const char* kTraceEventCategoryGroup = "v8,devtools.timeline";
+  TRACE_EVENT_BEGIN1(kTraceEventCategoryGroup, "v8.compile", "fileName",
+                     file_name.Utf8());
+
+  ScriptState::Scope scope(script_state);
+  v8::Isolate* isolate = script_state->GetIsolate();
+  ReferrerScriptInfo referrer_info;
+  v8::ScriptOrigin origin(
+      V8String(isolate, file_name),
+      v8::Integer::New(isolate, 0),  // line_offset
+      v8::Integer::New(isolate, 0),  // column_offset
+      v8::Boolean::New(
+          isolate,
+          opaque_mode == OpaqueMode::kNotOpaque),  // is_shared_cross_origin
+      v8::Local<v8::Integer>(),                    // script_id
+      V8String(isolate, String("")),               // source_map_url
+      v8::Boolean::New(isolate,
+                       opaque_mode == OpaqueMode::kOpaque),  // is_opaque
+      v8::False(isolate),                                    // is_wasm
+      v8::False(isolate),                                    // is_module
+      referrer_info.ToV8HostDefinedOptions(isolate));
+  v8::Local<v8::String> code(V8String(isolate, script_string));
+  v8::ScriptCompiler::Source source(code, origin);
+  scoped_refptr<CachedMetadata> cached_metadata;
+  const v8::ScriptCompiler::CachedData* cached_data = nullptr;
+
+  v8::Local<v8::UnboundScript> unbound_script;
+  if (v8::ScriptCompiler::CompileUnboundScript(
+          isolate, &source, v8::ScriptCompiler::kProduceFullCodeCache)
+          .ToLocal(&unbound_script)) {
+    cached_data = source.GetCachedData();
+    if (cached_data && cached_data->length) {
+      cached_metadata = CachedMetadata::Create(
+          CacheTag(kCacheTagCode, encoding.GetName()),
+          reinterpret_cast<const char*>(cached_data->data),
+          cached_data->length);
+    }
+  }
+
+  TRACE_EVENT_END1(
+      kTraceEventCategoryGroup, "v8.compile", "data",
+      InspectorCompileScriptEvent::Data(
+          file_name, TextPosition(),
+          InspectorCompileScriptEvent::V8CacheResult(
+              InspectorCompileScriptEvent::V8CacheResult::ProduceResult(
+                  v8::ScriptCompiler::kProduceFullCodeCache,
+                  cached_data ? cached_data->length : 0),
+              Optional<
+                  InspectorCompileScriptEvent::V8CacheResult::ConsumeResult>()),
+          false));
+
+  return cached_metadata;
 }
 
 STATIC_ASSERT_ENUM(WebSettings::kV8CacheOptionsDefault, kV8CacheOptionsDefault);

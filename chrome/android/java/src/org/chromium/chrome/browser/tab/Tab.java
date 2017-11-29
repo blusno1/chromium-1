@@ -20,6 +20,7 @@ import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
 import android.view.ViewGroup;
@@ -408,6 +409,10 @@ public class Tab
 
     /** Whether or not the tab closing the tab can send the user back to the app that opened it. */
     private boolean mIsAllowedToReturnToExternalApp;
+
+    private int mTopControlsHeight;
+    private int mBottomControlsHeight;
+    private boolean mControlsResizeView;
 
     private GestureStateListener createGestureStateListener() {
         return new GestureStateListener() {
@@ -1531,10 +1536,6 @@ public class Tab
         mIsTabStateDirty = true;
 
         if (finalizeCallback != null) finalizeCallback.run();
-
-        for (TabObserver observer : mObservers) {
-            observer.onReparentingFinished(this);
-        }
     }
 
     /**
@@ -1767,7 +1768,7 @@ public class Tab
     }
 
     private ContentViewCore createContentViewCore(WebContents webContents) {
-        ContentViewCore cvc = new ContentViewCore(mThemedApplicationContext, PRODUCT_VERSION);
+        ContentViewCore cvc = ContentViewCore.create(mThemedApplicationContext, PRODUCT_VERSION);
         ContentView cv = ContentView.createContentView(mThemedApplicationContext, cvc);
         cv.setContentDescription(mThemedApplicationContext.getResources().getString(
                 R.string.accessibility_content_view));
@@ -1859,6 +1860,9 @@ public class Tab
                     if (getFullscreenManager() == null) return;
                     updateFullscreenEnabledState();
                 }
+
+                @Override
+                public void onBeforeSendKeyEvent(KeyEvent event) {}
             });
 
             setInterceptNavigationDelegate(mDelegateFactory.createInterceptNavigationDelegate(
@@ -2744,10 +2748,8 @@ public class Tab
 
         int constraints = getBrowserControlsStateConstraints();
 
-        // TODO(peconn): Figure out why updating without animations breaks fullscreen activity.
-        boolean animate = constraints != BrowserControlsState.HIDDEN
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.FULLSCREEN_ACTIVITY);
-        updateBrowserControlsState(constraints, BrowserControlsState.BOTH, animate);
+        updateBrowserControlsState(constraints, BrowserControlsState.BOTH,
+                constraints != BrowserControlsState.HIDDEN);
 
         if (getContentViewCore() != null && mFullscreenManager != null) {
             getContentViewCore().updateMultiTouchZoomSupport(
@@ -2838,6 +2840,29 @@ public class Tab
             constraints = BrowserControlsState.SHOWN;
         }
         return constraints;
+    }
+
+    public void setTopControlsHeight(int height, boolean controlsResizeView) {
+        float scale = getWindowAndroid().getDisplay().getDipScale();
+        mTopControlsHeight = (int) (height / scale);
+        mControlsResizeView = controlsResizeView;
+    }
+
+    public void setBottomControlsHeight(int height) {
+        float scale = getWindowAndroid().getDisplay().getDipScale();
+        mBottomControlsHeight = (int) (height / scale);
+    }
+
+    int getTopControlsHeight() {
+        return mTopControlsHeight;
+    }
+
+    int getBottomControlsHeight() {
+        return mBottomControlsHeight;
+    }
+
+    boolean controlsResizeView() {
+        return mControlsResizeView;
     }
 
     /**

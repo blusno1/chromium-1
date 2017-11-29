@@ -33,7 +33,7 @@ class ExtensionLocalizationPeer : public content::RequestPeer {
       std::unique_ptr<content::RequestPeer> peer,
       IPC::Sender* message_sender,
       const std::string& mime_type,
-      const GURL& request_url);
+      const GURL& response_url);
 
   // content::RequestPeer methods.
   void OnUploadProgress(uint64_t position, uint64_t size) override;
@@ -43,7 +43,8 @@ class ExtensionLocalizationPeer : public content::RequestPeer {
   void OnDownloadedData(int len, int encoded_data_length) override {}
   void OnReceivedData(std::unique_ptr<ReceivedData> data) override;
   void OnTransferSizeUpdated(int transfer_size_diff) override;
-  void OnCompletedRequest(const network::URLLoaderStatus& status) override;
+  void OnCompletedRequest(
+      const network::URLLoaderCompletionStatus& status) override;
 
  private:
   friend class ExtensionLocalizationPeerTest;
@@ -51,7 +52,7 @@ class ExtensionLocalizationPeer : public content::RequestPeer {
   // Use CreateExtensionLocalizationPeer to create an instance.
   ExtensionLocalizationPeer(std::unique_ptr<content::RequestPeer> peer,
                             IPC::Sender* message_sender,
-                            const GURL& request_url);
+                            const GURL& response_url);
 
   // Loads message catalogs, and replaces all __MSG_some_name__ templates within
   // loaded file.
@@ -70,8 +71,8 @@ class ExtensionLocalizationPeer : public content::RequestPeer {
   // Buffer for incoming data. We wait until OnCompletedRequest before using it.
   std::string data_;
 
-  // Original request URL.
-  GURL request_url_;
+  // Final response URL.
+  GURL response_url_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ExtensionLocalizationPeer);

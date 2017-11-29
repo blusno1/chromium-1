@@ -144,7 +144,7 @@ public class CustomTabActivityTest {
     private static final String FRAGMENT_TEST_PAGE = "/chrome/test/data/android/fragment.html";
     private static final String TEST_MENU_TITLE = "testMenuTitle";
     private static final String PRIVATE_DATA_DIRECTORY_SUFFIX = "chrome";
-    private static final String WEBLITE_PREFIX = "http://googleweblight.com/?lite_url=";
+    private static final String WEBLITE_PREFIX = "http://googleweblight.com/i?u=";
     private static final String JS_MESSAGE = "from_js";
     private static final String TITLE_FROM_POSTMESSAGE_TO_CHANNEL =
             "<!DOCTYPE html><html><body>"
@@ -2197,7 +2197,7 @@ public class CustomTabActivityTest {
     public void testHiddenTabThirdPartyCookiesBlocked() throws Exception {
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         final CustomTabsSessionToken token =
-                CustomTabsSessionToken.createDummySessionTokenForTesting();
+                CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
         connection.setSpeculationModeForSession(
                 token, CustomTabsConnection.SpeculationParams.HIDDEN_TAB);
@@ -2228,7 +2228,7 @@ public class CustomTabActivityTest {
                                   .getTargetContext()
                                   .getApplicationContext();
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
-        CustomTabsSessionToken token = CustomTabsSessionToken.createDummySessionTokenForTesting();
+        CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
         connection.setSpeculationModeForSession(token, requestedSpeculationMode);
         Assert.assertTrue(connection.mayLaunchUrl(token, Uri.parse(mTestPage), null, null));
@@ -2268,7 +2268,7 @@ public class CustomTabActivityTest {
 
     private void testSpeculateInvalidUrl(int speculationMode) throws Exception {
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
-        CustomTabsSessionToken token = CustomTabsSessionToken.createDummySessionTokenForTesting();
+        CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
         connection.setSpeculationModeForSession(token, speculationMode);
         Assert.assertFalse(
@@ -2287,7 +2287,7 @@ public class CustomTabActivityTest {
                                   .getTargetContext()
                                   .getApplicationContext();
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
-        CustomTabsSessionToken token = CustomTabsSessionToken.createDummySessionTokenForTesting();
+        CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
         try {
             mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
@@ -2316,7 +2316,7 @@ public class CustomTabActivityTest {
                                   .getTargetContext()
                                   .getApplicationContext();
         final CustomTabsConnection connection = CustomTabsConnection.getInstance();
-        CustomTabsSessionToken token = CustomTabsSessionToken.createDummySessionTokenForTesting();
+        CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
 
         try {
@@ -2352,7 +2352,7 @@ public class CustomTabActivityTest {
                                   .getTargetContext()
                                   .getApplicationContext();
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
-        CustomTabsSessionToken token = CustomTabsSessionToken.createDummySessionTokenForTesting();
+        CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
         connection.setSpeculationModeForSession(token, speculationMode);
         Assert.assertTrue(connection.mayLaunchUrl(token, Uri.parse(mTestPage), null, null));
@@ -2575,8 +2575,8 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @CommandLineFlags.Add({"enable-spdy-proxy-auth", "data-reduction-proxy-lo-fi=always-on",
-            "enable-data-reduction-proxy-lite-page"})
+    @CommandLineFlags.
+    Add({"enable-spdy-proxy-auth", "enable-features=DataReductionProxyDecidesTransform"})
     @RetryOnFailure
     public void testLaunchWebLiteURL() throws Exception {
         final String testUrl = WEBLITE_PREFIX + mTestPage;
@@ -2593,29 +2593,10 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @CommandLineFlags.Add({"enable-spdy-proxy-auth",
-            "disable-features=DataReductionProxyDecidesTransform",
-            "data-reduction-proxy-lo-fi=always-on"})
+    @CommandLineFlags.
+    Add({"enable-spdy-proxy-auth", "disable-features=DataReductionProxyDecidesTransform"})
     @RetryOnFailure
     public void testLaunchWebLiteURLNoPreviews() throws Exception {
-        final String testUrl = WEBLITE_PREFIX + mTestPage;
-        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
-                CustomTabsTestUtils.createMinimalCustomTabIntent(
-                        InstrumentationRegistry.getTargetContext(), testUrl));
-        Tab tab = mCustomTabActivityTestRule.getActivity().getActivityTab();
-        Assert.assertEquals(testUrl, tab.getUrl());
-    }
-
-    /**
-     * Tests that a Weblite URL from an external app does not use the lite_url param when Data
-     * Reduction Proxy is not using Lo-Fi.
-     */
-    @Test
-    @SmallTest
-    @CommandLineFlags.Add({"enable-spdy-proxy-auth",
-            "disable-features=DataReductionProxyDecidesTransform"})
-    @RetryOnFailure
-    public void testLaunchWebLiteURLNoLoFi() throws Exception {
         final String testUrl = WEBLITE_PREFIX + mTestPage;
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
                 CustomTabsTestUtils.createMinimalCustomTabIntent(
@@ -2630,8 +2611,7 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @CommandLineFlags.Add({"data-reduction-proxy-lo-fi=always-on",
-            "enable-data-reduction-proxy-lite-page"})
+    @CommandLineFlags.Add({"enable-features=DataReductionProxyDecidesTransform"})
     @RetryOnFailure
     public void testLaunchWebLiteURLNoDataReductionProxy() throws Exception {
         final String testUrl = WEBLITE_PREFIX + mTestPage;
@@ -2648,8 +2628,8 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @CommandLineFlags.Add({"enable-spdy-proxy-auth", "data-reduction-proxy-lo-fi=always-on",
-            "enable-data-reduction-proxy-lite-page"})
+    @CommandLineFlags.
+    Add({"enable-spdy-proxy-auth", "enable-features=DataReductionProxyDecidesTransform"})
     @RetryOnFailure
     public void testLaunchHttpsWebLiteURL() throws Exception {
         final String testUrl = WEBLITE_PREFIX + mTestPage.replaceFirst("http", "https");
@@ -2666,8 +2646,8 @@ public class CustomTabActivityTest {
      */
     @Test
     @SmallTest
-    @CommandLineFlags.Add({"enable-spdy-proxy-auth", "data-reduction-proxy-lo-fi=always-on",
-            "enable-data-reduction-proxy-lite-page"})
+    @CommandLineFlags.
+    Add({"enable-spdy-proxy-auth", "enable-features=DataReductionProxyDecidesTransform"})
     @RetryOnFailure
     public void testLaunchNonWebLiteURL() throws Exception {
         final String testUrl = mTestPage2 + "/?lite_url=" + mTestPage;
@@ -2808,7 +2788,7 @@ public class CustomTabActivityTest {
                                   .getTargetContext()
                                   .getApplicationContext();
         CustomTabsConnection connection = CustomTabsTestUtils.setUpConnection();
-        CustomTabsSessionToken token = CustomTabsSessionToken.createDummySessionTokenForTesting();
+        CustomTabsSessionToken token = CustomTabsSessionToken.createMockSessionTokenForTesting();
         connection.newSession(token);
         Bundle extras = null;
         if (speculationMode == CustomTabsConnection.SpeculationParams.NO_SPECULATION) {

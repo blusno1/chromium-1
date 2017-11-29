@@ -7,17 +7,50 @@
 body {
   font-family: 'DejaVu Sans', Arial, sans-serif;
   font-size: 75%;
+  user-select: none;
+}
+
+.section-header {
+  color: rgb(43, 96, 222);
+  font-size: 120%;
+  font-weight: bold;
+  margin-top: 20px;
+}
+
+.previews-status-value {
+  margin-top: 5px;
+}
+
+.previews-flag-container {
+  margin-top: 5px;
+}
+
+.previews-flag-value {
+  margin-left: 10px;
 }
 
 button {
   background: rgb(53, 106, 222);
   border-radius: 5px;
-  box-shadow: 2px silver;
   color: white;
   font-size: 65%;
   font-weight: bold;
   margin: 5px 0;
   padding: 5px;
+  text-align: center;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.copy-to-clipboard-button {
+  background: rgb(53, 106, 222);
+  border-radius: 2px;
+  color: white;
+  float: right;
+  font-size: 60%;
+  font-weight: bold;
+  margin: 2px;
+  padding: 2px;
   text-align: center;
   text-decoration: none;
   text-transform: uppercase;
@@ -89,6 +122,10 @@ table {
   max-height: 100px;
   table-layout: fixed;
   width: 100%;
+}
+
+.nqe-value-column {
+  text-align: center;
 }
 
 td {
@@ -168,6 +205,18 @@ td.log-url .url-tooltip::after {
     font-size: 85%;
   }
 
+  #nqe-logs-table {
+    width: 60%;
+  }
+
+  #blacklisted-hosts-table {
+    width: 60%;
+  }
+
+  #previews-flags-table {
+    width: 30%;
+  }
+
   .log-time {
     width: 15%;
   }
@@ -190,9 +239,21 @@ td.log-url .url-tooltip::after {
     font-size: 100%;
   }
 
+  .copy-to-clipboard-button {
+    font-size: 80%;
+  }
+
   .log-time {
     font-size: 100%;
     width: 8%;
+  }
+
+  #nqe-logs-table {
+    width: 30%;
+  }
+
+  #previews-flags-table {
+    width: 30%;
   }
 
   td.log-description {

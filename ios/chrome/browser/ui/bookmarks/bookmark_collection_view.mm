@@ -21,12 +21,10 @@
 #include "components/favicon/core/large_icon_service.h"
 #include "components/favicon_base/fallback_icon_style.h"
 #include "components/favicon_base/favicon_types.h"
-#include "components/pref_registry/pref_registry_syncable.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
-#include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/sync/synced_sessions_bridge.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_configurator.h"
@@ -153,11 +151,6 @@ CGFloat minFaviconSizePt = 16;
 @synthesize browserState = _browserState;
 @synthesize shadow = _shadow;
 @synthesize presenter = _presenter;
-
-+ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
-  registry->RegisterIntegerPref(prefs::kIosBookmarkSigninPromoDisplayedCount,
-                                0);
-}
 
 #pragma mark - Initialization
 
@@ -345,9 +338,7 @@ CGFloat minFaviconSizePt = 16;
       (!self.editing && self.folder &&
        self.folder->type() == BookmarkNode::MOBILE &&
        [self.delegate bookmarkCollectionViewShouldShowPromoCell:self]) ||
-      (_signinPromoViewMediator &&
-       _signinPromoViewMediator.signinPromoViewState ==
-           ios::SigninPromoViewState::SigninStarted);
+      (_signinPromoViewMediator && _signinPromoViewMediator.signinInProgress);
   if (shouldShowPromo == _promoVisible)
     return;
   // This is awful, but until the old code to do the refresh when switching
@@ -801,10 +792,6 @@ CGFloat minFaviconSizePt = 16;
     signinPromoCell.signinPromoView.delegate = _signinPromoViewMediator;
     [[_signinPromoViewMediator createConfigurator]
         configureSigninPromoView:signinPromoCell.signinPromoView];
-    __weak BookmarkCollectionView* weakSelf = self;
-    signinPromoCell.signinPromoView.closeButtonAction = ^() {
-      [weakSelf signinPromoCloseButtonAction];
-    };
     return signinPromoCell;
   }
   const BookmarkNode* node = [self nodeAtIndexPath:indexPath];
@@ -814,12 +801,6 @@ CGFloat minFaviconSizePt = 16;
 
   BookmarkItemCell* cell = [self cellForBookmark:node indexPath:indexPath];
   return cell;
-}
-
-// Removes the sign-in promo view.
-- (void)signinPromoCloseButtonAction {
-  [_signinPromoViewMediator signinPromoViewClosed];
-  [_delegate bookmarkCollectionViewDismissPromo:self];
 }
 
 // Create a header view for the element at |indexPath|.
@@ -879,6 +860,11 @@ CGFloat minFaviconSizePt = 16;
 
 - (void)signinDidFinish {
   [self promoStateChangedAnimated:NO];
+}
+
+- (void)signinPromoViewMediatorCloseButtonWasTapped:
+    (SigninPromoViewMediator*)mediator {
+  [_delegate bookmarkCollectionViewDismissPromo:self];
 }
 
 #pragma mark - UIScrollViewDelegate

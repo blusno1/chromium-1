@@ -55,11 +55,11 @@
 #include "platform/json/JSONValues.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/text/TextStream.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/StringUTF8Adaptor.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
@@ -72,7 +72,7 @@
 #include "public/platform/WebSize.h"
 
 #ifndef NDEBUG
-#include <stdio.h>
+#include "platform/graphics/LoggingCanvas.h"
 #endif
 
 namespace blink {
@@ -365,6 +365,10 @@ bool GraphicsLayer::PaintWithoutCommit(
   }
 
   GraphicsContext context(GetPaintController(), disabled_mode, nullptr);
+  if (layer_state_) {
+    GetPaintController().UpdateCurrentPaintChunkProperties(WTF::nullopt,
+                                                           layer_state_->state);
+  }
 
   previous_interest_rect_ = *interest_rect;
   client_->PaintContents(this, context, painting_phase_, *interest_rect);
@@ -830,6 +834,11 @@ std::unique_ptr<JSONObject> GraphicsLayer::LayerAsJSONInternal(
     json->SetArray("contentsClippingMaskLayer",
                    std::move(contents_clipping_mask_layer_json));
   }
+
+#ifndef NDEBUG
+  if (DrawsContent() && (flags & kLayerTreeIncludesPaintRecords))
+    json->SetValue("paintRecord", RecordAsJSON(*CapturePaintRecord()));
+#endif
 
   return json;
 }

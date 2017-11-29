@@ -32,6 +32,7 @@
 #include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_clock.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
@@ -48,6 +49,9 @@
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 
+using autofill::features::kAutofillEnforceMinRequiredFieldsForHeuristics;
+using autofill::features::kAutofillEnforceMinRequiredFieldsForQuery;
+using autofill::features::kAutofillEnforceMinRequiredFieldsForUpload;
 using base::ASCIIToUTF16;
 using base::Bucket;
 using base::TimeTicks;
@@ -306,7 +310,8 @@ class TestAutofillManager : public AutofillManager {
     form_structure->set_form_parsed_timestamp(TimeTicks::Now());
     form_structures()->push_back(std::move(form_structure));
 
-    form_interactions_ukm_logger()->OnFormsParsed(form.origin);
+    form_interactions_ukm_logger()->OnFormsParsed(
+        form.main_frame_origin.GetURL());
   }
 
   // Calls AutofillManager::OnWillSubmitForm and waits for it to complete.
@@ -366,7 +371,7 @@ void VerifyDeveloperEngagementUkm(
   const ukm::UkmSource* source =
       ukm_recorder.GetSourceForSourceId(entry->source_id);
   ASSERT_NE(nullptr, source);
-  EXPECT_EQ(form.origin, source->url());
+  EXPECT_EQ(form.main_frame_origin.GetURL(), source->url());
 
   int expected_metric_value = 0;
   for (const auto it : expected_metric_values)
@@ -403,7 +408,7 @@ void VerifyFormInteractionUkm(const ukm::TestAutoSetUkmRecorder& ukm_recorder,
     const ukm::UkmSource* source =
         ukm_recorder.GetSourceForSourceId(entry->source_id);
     ASSERT_NE(nullptr, source);
-    EXPECT_EQ(form.origin, source->url());
+    EXPECT_EQ(form.main_frame_origin.GetURL(), source->url());
 
     ASSERT_LT(expected_metrics_index, expected_metrics.size());
     EXPECT_THAT(
@@ -572,6 +577,8 @@ TEST_F(AutofillMetricsTest, QualityMetrics) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   std::vector<ServerFieldType> heuristic_types, server_types;
   FormFieldData field;
@@ -881,6 +888,8 @@ TEST_P(QualityMetricsTest, Classification) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   std::vector<ServerFieldType> heuristic_types, server_types, actual_types;
   AutofillField field;
@@ -1049,6 +1058,8 @@ TEST_F(AutofillMetricsTest, TimingMetrics) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   test::CreateTestFormField("Autofilled", "autofilled", "Elvis Aaron Presley",
@@ -1088,6 +1099,8 @@ TEST_F(AutofillMetricsTest, QualityMetrics_NoSubmission) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   std::vector<ServerFieldType> heuristic_types, server_types;
   FormFieldData field;
@@ -1275,6 +1288,8 @@ TEST_F(AutofillMetricsTest, QualityMetrics_BasedOnAutocomplete) {
   form.name = ASCIIToUTF16("MyForm");
   form.origin = GURL("http://myform.com/form.html");
   form.action = GURL("http://myform.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   // Heuristic value will match with Autocomplete attribute.
@@ -1385,6 +1400,8 @@ TEST_F(AutofillMetricsTest, UpiVirtualPaymentAddress) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   std::vector<ServerFieldType> heuristic_types, server_types;
   FormFieldData field;
@@ -1428,27 +1445,31 @@ TEST_F(AutofillMetricsTest, UpiVirtualPaymentAddress) {
 // Verify that when a field is annotated with the autocomplete attribute, its
 // predicted type is remembered when quality metrics are logged.
 TEST_F(AutofillMetricsTest, PredictedMetricsWithAutocomplete) {
-  // Set up our form data.
+  // Allow heuristics to run (and be accepted) for small forms.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      kAutofillEnforceMinRequiredFieldsForHeuristics);
+
+  // Set up our form data. Note that the fields have default values not found
+  // in the user profiles. They will be changed between the time the form is
+  // seen/parsed, and the time it is submitted.
   FormData form;
+  FormFieldData field;
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
-  FormFieldData field1;
-  test::CreateTestFormField("Select", "select", "USA", "select-one", &field1);
-  field1.autocomplete_attribute = "country";
-  form.fields.push_back(field1);
+  test::CreateTestFormField("Select", "select", "USA", "select-one", &field);
+  form.fields.push_back(field);
+  form.fields.back().autocomplete_attribute = "country";
 
-  // Two other fields to have the minimum of 3 to be parsed by autofill. Note
-  // that they have default values not found in the user profiles. They will be
-  // changed between the time the form is seen/parsed, and the time it is
-  // submitted.
-  FormFieldData field2;
-  test::CreateTestFormField("Unknown", "Unknown", "", "text", &field2);
-  form.fields.push_back(field2);
-  FormFieldData field3;
-  test::CreateTestFormField("Phone", "phone", "", "tel", &field3);
-  form.fields.push_back(field3);
+  test::CreateTestFormField("Unknown", "Unknown", "", "text", &field);
+  form.fields.push_back(field);
+
+  test::CreateTestFormField("Phone", "phone", "", "tel", &field);
+  form.fields.push_back(field);
 
   std::vector<FormData> forms(1, form);
 
@@ -1466,26 +1487,39 @@ TEST_F(AutofillMetricsTest, PredictedMetricsWithAutocomplete) {
     std::string histogram_name =
         "Autofill.FieldPredictionQuality.ByFieldType." + source;
     // First verify that country was not predicted by client or server.
-    histogram_tester.ExpectBucketCount(
-        histogram_name,
-        GetFieldTypeGroupMetric(ADDRESS_HOME_COUNTRY,
-                                source == "Overall"
-                                    ? AutofillMetrics::TRUE_POSITIVE
-                                    : AutofillMetrics::FALSE_NEGATIVE_UNKNOWN),
-        1);
+    {
+      SCOPED_TRACE("ADDRESS_HOME_COUNTRY");
+      histogram_tester.ExpectBucketCount(
+          histogram_name,
+          GetFieldTypeGroupMetric(
+              ADDRESS_HOME_COUNTRY,
+              source == "Overall" ? AutofillMetrics::TRUE_POSITIVE
+                                  : AutofillMetrics::FALSE_NEGATIVE_UNKNOWN),
+          1);
+    }
 
-    // We did not predict zip code or phone number, because they did not have
-    // |autocomplete_attribute|, nor client or server predictions.
-    histogram_tester.ExpectBucketCount(
-        histogram_name,
-        GetFieldTypeGroupMetric(ADDRESS_HOME_ZIP,
-                                AutofillMetrics::FALSE_NEGATIVE_UNKNOWN),
-        1);
-    histogram_tester.ExpectBucketCount(
-        histogram_name,
-        GetFieldTypeGroupMetric(PHONE_HOME_WHOLE_NUMBER,
-                                AutofillMetrics::FALSE_NEGATIVE_UNKNOWN),
-        1);
+    // We did not predict zip code because it did not have an autocomplete
+    // attribute, nor client or server predictions.
+    {
+      SCOPED_TRACE("ADDRESS_HOME_ZIP");
+      histogram_tester.ExpectBucketCount(
+          histogram_name,
+          GetFieldTypeGroupMetric(ADDRESS_HOME_ZIP,
+                                  AutofillMetrics::FALSE_NEGATIVE_UNKNOWN),
+          1);
+    }
+
+    // Phone should have been predicted by the heuristics but not the server.
+    {
+      SCOPED_TRACE("PHONE_HOME_WHOLE_NUMBER");
+      histogram_tester.ExpectBucketCount(
+          histogram_name,
+          GetFieldTypeGroupMetric(PHONE_HOME_WHOLE_NUMBER,
+                                  source == "Server"
+                                      ? AutofillMetrics::FALSE_NEGATIVE_UNKNOWN
+                                      : AutofillMetrics::TRUE_POSITIVE),
+          1);
+    }
 
     // Sanity check.
     histogram_tester.ExpectTotalCount(histogram_name, 3);
@@ -1500,6 +1534,8 @@ TEST_F(AutofillMetricsTest, SaneMetricsWithCacheMismatch) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   std::vector<ServerFieldType> heuristic_types, server_types;
 
@@ -1596,6 +1632,8 @@ TEST_F(AutofillMetricsTest, StoredProfileCountAutofillableFormSubmission) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   // Three fields is enough to make it an autofillable form.
   FormFieldData field;
@@ -1622,11 +1660,15 @@ TEST_F(AutofillMetricsTest, StoredProfileCountAutofillableFormSubmission) {
 // Verify that when submitting a non-autofillable form, the stored profile
 // metric is not logged.
 TEST_F(AutofillMetricsTest, StoredProfileCountNonAutofillableFormSubmission) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(kAutofillEnforceMinRequiredFieldsForHeuristics);
   // Construct a non-fillable form.
   FormData form;
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   // Two fields is not enough to make it an autofillable form.
   FormFieldData field;
@@ -1656,6 +1698,8 @@ TEST_F(AutofillMetricsTest, NumberOfEditedAutofilledFields) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   std::vector<ServerFieldType> heuristic_types, server_types;
 
@@ -1707,6 +1751,8 @@ TEST_F(AutofillMetricsTest, NumberOfEditedAutofilledFields_NoSubmission) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   std::vector<ServerFieldType> heuristic_types, server_types;
 
@@ -1757,6 +1803,8 @@ TEST_F(AutofillMetricsTest, DeveloperEngagement) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   test::CreateTestFormField("Name", "name", "", "text", &field);
@@ -1766,12 +1814,26 @@ TEST_F(AutofillMetricsTest, DeveloperEngagement) {
 
   std::vector<FormData> forms(1, form);
 
-  // Ensure no metrics are logged when loading a non-fillable form.
+  // Ensure no metrics are logged when small form support is disabled (min
+  // number of fields enforced).
   {
     base::HistogramTester histogram_tester;
     autofill_manager_->OnFormsSeen(forms, TimeTicks());
     autofill_manager_->Reset();
     histogram_tester.ExpectTotalCount("Autofill.DeveloperEngagement", 0);
+  }
+
+  // Otherwise, log developer engagement for all forms.
+  {
+    base::test::ScopedFeatureList features;
+    features.InitAndDisableFeature(
+        kAutofillEnforceMinRequiredFieldsForHeuristics);
+    base::HistogramTester histogram_tester;
+    autofill_manager_->OnFormsSeen(forms, TimeTicks());
+    autofill_manager_->Reset();
+    histogram_tester.ExpectUniqueSample(
+        "Autofill.DeveloperEngagement",
+        AutofillMetrics::FILLABLE_FORM_PARSED_WITHOUT_TYPE_HINTS, 1);
   }
 
   // Add another field to the form, so that it becomes fillable.
@@ -1846,6 +1908,8 @@ TEST_F(AutofillMetricsTest,
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   test::CreateTestFormField("Name", "name", "", "text", &field);
@@ -1857,6 +1921,9 @@ TEST_F(AutofillMetricsTest,
 
   // Ensure no metrics are logged when loading a non-fillable form.
   {
+    base::test::ScopedFeatureList features;
+    features.InitAndEnableFeature(
+        kAutofillEnforceMinRequiredFieldsForHeuristics);
     autofill_manager_->OnFormsSeen(forms, TimeTicks::Now());
     autofill_manager_->Reset();
 
@@ -1890,6 +1957,8 @@ TEST_F(AutofillMetricsTest,
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   test::CreateTestFormField("Name", "name", "", "text", &field);
@@ -1935,10 +2004,20 @@ TEST_F(AutofillMetricsTest,
 // Verify that we correctly log UKM for form parsed with type hints regarding
 // developer engagement.
 TEST_F(AutofillMetricsTest, UkmDeveloperEngagement_LogUpiVpaTypeHint) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      // Enabled.
+      {kAutofillEnforceMinRequiredFieldsForHeuristics,
+       kAutofillEnforceMinRequiredFieldsForQuery,
+       kAutofillEnforceMinRequiredFieldsForUpload},
+      // Disabled.
+      {});
   FormData form;
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   test::CreateTestFormField("Name", "name", "", "text", &field);
@@ -1954,6 +2033,7 @@ TEST_F(AutofillMetricsTest, UkmDeveloperEngagement_LogUpiVpaTypeHint) {
   // Expect the "upi-vpa hint" metric to be logged and the "form loaded" form
   // interaction event to be logged.
   {
+    SCOPED_TRACE("VPA is the only hint");
     autofill_manager_->OnFormsSeen(forms, TimeTicks::Now());
     autofill_manager_->Reset();
 
@@ -1970,6 +2050,7 @@ TEST_F(AutofillMetricsTest, UkmDeveloperEngagement_LogUpiVpaTypeHint) {
   forms.back().fields.push_back(field);
 
   {
+    SCOPED_TRACE("VPA and other autocomplete hint present");
     autofill_manager_->OnFormsSeen(forms, TimeTicks::Now());
     autofill_manager_->Reset();
 
@@ -2218,6 +2299,8 @@ TEST_F(AutofillMetricsTest, AddressSuggestionsCount) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -2289,6 +2372,8 @@ TEST_F(AutofillMetricsTest, CreditCardCheckoutFlowUserActions) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -2401,6 +2486,8 @@ TEST_F(AutofillMetricsTest, ProfileCheckoutFlowUserActions) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -2573,6 +2660,8 @@ TEST_F(AutofillMetricsTest, QueriedCreditCardFormIsSecure) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
   autofill_client_.set_form_origin(form.origin);
 
   FormFieldData field;
@@ -2591,6 +2680,8 @@ TEST_F(AutofillMetricsTest, QueriedCreditCardFormIsSecure) {
     // Simulate having seen this insecure form on page load.
     form.origin = GURL("http://example.com/form.html");
     form.action = GURL("http://example.com/submit.html");
+    form.main_frame_origin =
+        url::Origin::Create(GURL("http://example_root.com/form.html"));
     autofill_manager_->AddSeenForm(form, field_types, field_types);
 
     // Simulate an Autofill query on a credit card field (HTTP, non-secure
@@ -2607,6 +2698,8 @@ TEST_F(AutofillMetricsTest, QueriedCreditCardFormIsSecure) {
     autofill_manager_->Reset();
     form.origin = GURL("https://example.com/form.html");
     form.action = GURL("https://example.com/submit.html");
+    form.main_frame_origin =
+        url::Origin::Create(GURL("https://example_root.com/form.html"));
     autofill_client_.set_form_origin(form.origin);
     autofill_manager_->AddSeenForm(form, field_types, field_types);
 
@@ -2629,6 +2722,8 @@ TEST_F(AutofillMetricsTest, PolledProfileSuggestions_DebounceLogs) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -2681,6 +2776,8 @@ TEST_F(AutofillMetricsTest, CreditCardInteractedFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -2729,6 +2826,8 @@ TEST_F(AutofillMetricsTest, CreditCardShownFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -2869,6 +2968,8 @@ TEST_F(AutofillMetricsTest, CreditCardSelectedFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -2940,6 +3041,8 @@ TEST_F(AutofillMetricsTest, CreditCardFilledFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -3110,6 +3213,8 @@ TEST_F(AutofillMetricsTest, CreditCardGetRealPanDuration) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -3183,6 +3288,8 @@ TEST_F(AutofillMetricsTest,
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -3212,6 +3319,93 @@ TEST_F(AutofillMetricsTest,
 }
 
 TEST_F(AutofillMetricsTest,
+       CreditCardSubmittedWithoutSelectingSuggestionsWrongSizeCard) {
+  EnableWalletSync();
+  // Create a local card for testing, card number is 4111111111111111.
+  personal_data_->RecreateCreditCards(
+      true /* include_local_credit_card */,
+      false /* include_masked_server_credit_card */,
+      false /* include_full_server_credit_card */);
+
+  // Set up our form data.
+  FormData form;
+  form.name = ASCIIToUTF16("TestForm");
+  form.origin = GURL("http://example.com/form.html");
+  form.action = GURL("http://example.com/submit.html");
+
+  FormFieldData field;
+  std::vector<ServerFieldType> field_types;
+  test::CreateTestFormField("Month", "card_month", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_MONTH);
+  test::CreateTestFormField("Year", "card_year", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_2_DIGIT_YEAR);
+  test::CreateTestFormField("Credit card", "card", "411111111", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_NUMBER);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  // Simulating submission with suggestion shown, but not selected.
+  base::HistogramTester histogram_tester;
+  autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+  autofill_manager_->OnQueryFormFieldAutofill(0, form, field, gfx::RectF());
+  autofill_manager_->SubmitForm(form, TimeTicks::Now());
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_WRONG_SIZE_CARD,
+      1);
+}
+
+TEST_F(AutofillMetricsTest,
+       CreditCardSubmittedWithoutSelectingSuggestionsFailLuhnCheckCard) {
+  EnableWalletSync();
+  // Create a local card for testing, card number is 4111111111111111.
+  personal_data_->RecreateCreditCards(
+      true /* include_local_credit_card */,
+      false /* include_masked_server_credit_card */,
+      false /* include_full_server_credit_card */);
+
+  // Set up our form data.
+  FormData form;
+  form.name = ASCIIToUTF16("TestForm");
+  form.origin = GURL("http://example.com/form.html");
+  form.action = GURL("http://example.com/submit.html");
+
+  FormFieldData field;
+  std::vector<ServerFieldType> field_types;
+  test::CreateTestFormField("Month", "card_month", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_MONTH);
+  test::CreateTestFormField("Year", "card_year", "", "text", &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_EXP_2_DIGIT_YEAR);
+  test::CreateTestFormField("Credit card", "card", "4444444444444444", "text",
+                            &field);
+  form.fields.push_back(field);
+  field_types.push_back(CREDIT_CARD_NUMBER);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  autofill_manager_->AddSeenForm(form, field_types, field_types);
+
+  // Simulating submission with suggestion shown, but not selected.
+  base::HistogramTester histogram_tester;
+  autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
+  autofill_manager_->OnQueryFormFieldAutofill(0, form, field, gfx::RectF());
+  autofill_manager_->SubmitForm(form, TimeTicks::Now());
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      AutofillMetrics::
+          FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_FAIL_LUHN_CHECK_CARD,
+      1);
+}
+
+TEST_F(AutofillMetricsTest,
        CreditCardSubmittedWithoutSelectingSuggestionsUnknownCard) {
   EnableWalletSync();
   // Create a local card for testing, card number is 4111111111111111.
@@ -3225,6 +3419,8 @@ TEST_F(AutofillMetricsTest,
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -3269,6 +3465,8 @@ TEST_F(AutofillMetricsTest,
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -3313,6 +3511,8 @@ TEST_F(AutofillMetricsTest,
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -3366,6 +3566,8 @@ TEST_F(AutofillMetricsTest, ShouldNotLogFormEventNoCardForAddressForm) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -3407,6 +3609,8 @@ TEST_F(AutofillMetricsTest, CreditCardSubmittedFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -3754,6 +3958,8 @@ TEST_F(AutofillMetricsTest, CreditCardWillSubmitFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -3975,6 +4181,8 @@ TEST_F(AutofillMetricsTest, AddressInteractedFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -4026,6 +4234,8 @@ TEST_F(AutofillMetricsTest, AddressShownFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -4115,6 +4325,8 @@ TEST_F(AutofillMetricsTest, AddressFilledFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -4180,6 +4392,8 @@ TEST_F(AutofillMetricsTest, AddressSubmittedFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -4380,6 +4594,8 @@ TEST_F(AutofillMetricsTest, AddressWillSubmitFormEvents) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -4551,6 +4767,8 @@ TEST_F(AutofillMetricsTest, CreditCardFormEventsAreSegmented) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -4659,6 +4877,8 @@ TEST_F(AutofillMetricsTest, AddressFormEventsAreSegmented) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
@@ -4744,6 +4964,8 @@ TEST_F(AutofillMetricsTest, AutofillFormSubmittedState) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   test::CreateTestFormField("Name", "name", "", "text", &field);
@@ -4799,8 +5021,8 @@ TEST_F(AutofillMetricsTest, AutofillFormSubmittedState) {
   }
 
   // Non fillable form.
-  form.fields[0].value = ASCIIToUTF16("Elvis Aaron Presley");
-  form.fields[1].value = ASCIIToUTF16("theking@gmail.com");
+  form.fields[0].value = ASCIIToUTF16("Unknown Person");
+  form.fields[1].value = ASCIIToUTF16("unknown.person@gmail.com");
   forms.front() = form;
 
   {
@@ -4827,7 +5049,9 @@ TEST_F(AutofillMetricsTest, AutofillFormSubmittedState) {
                              expected_field_fill_status_ukm_metrics);
   }
 
-  // Fill in the third field.
+  // Fillable form.
+  form.fields[0].value = ASCIIToUTF16("Elvis Aaron Presley");
+  form.fields[1].value = ASCIIToUTF16("theking@gmail.com");
   form.fields[2].value = ASCIIToUTF16("12345678901");
   forms.front() = form;
 
@@ -4957,8 +5181,12 @@ TEST_F(AutofillMetricsTest, AutofillFormSubmittedState) {
   form.fields[2].value = base::string16();
   forms.front() = form;
 
-  // Non fillable form.
+  // This form is non-fillable if small form support is disabled (min number
+  // of fields enforced.)
   {
+    base::test::ScopedFeatureList features;
+    features.InitAndEnableFeature(
+        kAutofillEnforceMinRequiredFieldsForHeuristics);
     base::HistogramTester histogram_tester;
     base::UserActionTester user_action_tester;
     autofill_manager_->SubmitForm(form, TimeTicks::Now());
@@ -4992,6 +5220,8 @@ TEST_F(
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   test::CreateTestFormField("Name", "name", "", "text", &field);
@@ -5114,6 +5344,8 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_EmptyForm) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   std::vector<FormData> forms(1, form);
 
@@ -5140,8 +5372,10 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("https://example.com/form.html");
   form.action = GURL("https://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
-  // Construct a valid credit card form with minimal fields.
+  // Construct a valid credit card form.
   FormFieldData field;
   std::vector<ServerFieldType> field_types;
   test::CreateTestFormField("Card Number", "card_number", "", "text", &field);
@@ -5158,6 +5392,7 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
 
   // Expect a notification when the form is first seen.
   {
+    SCOPED_TRACE("First seen");
     base::HistogramTester histogram_tester;
     autofill_manager_->OnFormsSeen(forms, TimeTicks());
     histogram_tester.ExpectUniqueSample("Autofill.UserHappiness",
@@ -5168,6 +5403,7 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
 
   // Simulate typing.
   {
+    SCOPED_TRACE("Initial typing");
     base::HistogramTester histogram_tester;
     autofill_manager_->OnTextFieldDidChange(form, form.fields.front(),
                                             gfx::RectF(), TimeTicks());
@@ -5182,6 +5418,7 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
 
   // Simulate suggestions shown twice with separate popups.
   {
+    SCOPED_TRACE("Separate pop-ups");
     base::HistogramTester histogram_tester;
     autofill_manager_->DidShowSuggestions(true, form, field);
     autofill_manager_->DidShowSuggestions(true, form, field);
@@ -5202,6 +5439,7 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
   // Simulate suggestions shown twice for a single edit (i.e. multiple
   // keystrokes in a single field).
   {
+    SCOPED_TRACE("Multiple keystrokes");
     base::HistogramTester histogram_tester;
     autofill_manager_->DidShowSuggestions(true, form, field);
     autofill_manager_->DidShowSuggestions(false, form, field);
@@ -5218,6 +5456,7 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
 
   // Simulate suggestions shown for a different field.
   {
+    SCOPED_TRACE("Different field");
     base::HistogramTester histogram_tester;
     autofill_manager_->DidShowSuggestions(true, form, form.fields[1]);
     histogram_tester.ExpectUniqueSample("Autofill.UserHappiness",
@@ -5228,6 +5467,7 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
 
   // Simulate invoking autofill.
   {
+    SCOPED_TRACE("Invoke autofill");
     base::HistogramTester histogram_tester;
     autofill_manager_->OnDidFillAutofillFormData(form, TimeTicks());
     histogram_tester.ExpectBucketCount("Autofill.UserHappiness",
@@ -5243,6 +5483,7 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
 
   // Simulate editing an autofilled field.
   {
+    SCOPED_TRACE("Edit autofilled field");
     base::HistogramTester histogram_tester;
     std::string guid("10000000-0000-0000-0000-000000000001");
     autofill_manager_->FillOrPreviewForm(
@@ -5269,6 +5510,7 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
 
   // Simulate invoking autofill again.
   {
+    SCOPED_TRACE("Invoke autofill again");
     base::HistogramTester histogram_tester;
     autofill_manager_->OnDidFillAutofillFormData(form, TimeTicks());
     histogram_tester.ExpectUniqueSample("Autofill.UserHappiness",
@@ -5279,6 +5521,7 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_CreditCardForm) {
 
   // Simulate editing another autofilled field.
   {
+    SCOPED_TRACE("Edit another autofilled field");
     base::HistogramTester histogram_tester;
     autofill_manager_->OnTextFieldDidChange(form, form.fields[1], gfx::RectF(),
                                             TimeTicks());
@@ -5299,6 +5542,8 @@ TEST_F(AutofillMetricsTest, UserHappinessFormInteraction_AddressForm) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   test::CreateTestFormField("Name", "name", "", "text", &field);
@@ -5511,6 +5756,8 @@ TEST_F(AutofillMetricsTest, FormFillDuration) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   test::CreateTestFormField("Name", "name", "", "text", &field);
@@ -5902,6 +6149,8 @@ TEST_F(AutofillMetricsTest, ProfileActionOnFormSubmitted) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   // Create the form's fields.
   FormFieldData field;
@@ -6021,6 +6270,7 @@ class AutofillMetricsParseQueryResponseTest : public testing::Test {
   void SetUp() override {
     FormData form;
     form.origin = GURL("http://foo.com");
+    form.main_frame_origin = url::Origin::Create(GURL("http://foo_root.com"));
     FormFieldData field;
     field.form_control_type = "text";
 
@@ -6154,6 +6404,8 @@ TEST_F(AutofillMetricsTest, NonsecureCreditCardForm) {
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("http://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
   autofill_client_.set_form_origin(form.origin);
 
   FormFieldData field;
@@ -6210,6 +6462,8 @@ TEST_F(AutofillMetricsTest,
   form.name = ASCIIToUTF16("TestForm");
   form.origin = GURL("https://example.com/form.html");
   form.action = GURL("http://example.com/submit.html");
+  form.main_frame_origin =
+      url::Origin::Create(GURL("http://example_root.com/form.html"));
 
   FormFieldData field;
   std::vector<ServerFieldType> field_types;

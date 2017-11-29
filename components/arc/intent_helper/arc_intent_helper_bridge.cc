@@ -12,6 +12,7 @@
 #include "ash/wallpaper/wallpaper_controller.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/string_util.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_service_manager.h"
@@ -114,32 +115,23 @@ KeyedServiceBaseFactory* ArcIntentHelperBridge::GetFactory() {
   return ArcIntentHelperBridgeFactory::GetInstance();
 }
 
+// static
+std::string ArcIntentHelperBridge::AppendStringToIntentHelperPackageName(
+    const std::string& to_append) {
+  return base::JoinString({kArcIntentHelperPackageName, to_append}, ".");
+}
+
 ArcIntentHelperBridge::ArcIntentHelperBridge(content::BrowserContext* context,
                                              ArcBridgeService* bridge_service)
     : context_(context),
       arc_bridge_service_(bridge_service),
-      binding_(this),
       open_url_delegate_(std::make_unique<OpenUrlDelegateImpl>()) {
-  arc_bridge_service_->intent_helper()->AddObserver(this);
+  arc_bridge_service_->intent_helper()->SetHost(this);
 }
 
 ArcIntentHelperBridge::~ArcIntentHelperBridge() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  arc_bridge_service_->intent_helper()->RemoveObserver(this);
-}
-
-void ArcIntentHelperBridge::OnInstanceReady() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  auto* instance =
-      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->intent_helper(), Init);
-  DCHECK(instance);
-  mojom::IntentHelperHostPtr host_proxy;
-  binding_.Bind(mojo::MakeRequest(&host_proxy));
-  instance->Init(std::move(host_proxy));
-}
-
-void ArcIntentHelperBridge::OnInstanceClosed() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  arc_bridge_service_->intent_helper()->SetHost(nullptr);
 }
 
 void ArcIntentHelperBridge::OnIconInvalidated(const std::string& package_name) {

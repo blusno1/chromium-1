@@ -37,6 +37,9 @@ source_set("exo") {
     "pointer.cc",
     "pointer.h",
     "pointer_delegate.h",
+    "seat.cc",
+    "seat.h",
+    "seat_observer.h",
     "shared_memory.cc",
     "shared_memory.h",
     "shell_surface.cc",
@@ -57,8 +60,7 @@ source_set("exo") {
   ]
 
   deps = [
-    "//ash",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//cc",
     "//components/viz/service",
@@ -101,7 +103,7 @@ source_set("test_support") {
   deps = [
     ":exo",
     "//ash:test_support_without_content",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//gpu",
     "//skia",
@@ -126,6 +128,7 @@ source_set("unit_tests") {
     "gaming_seat_unittest.cc",
     "keyboard_unittest.cc",
     "pointer_unittest.cc",
+    "seat_unittest.cc",
     "shared_memory_unittest.cc",
     "shell_surface_unittest.cc",
     "sub_surface_unittest.cc",
@@ -138,7 +141,7 @@ source_set("unit_tests") {
     ":test_support",
     "//ash",
     "//ash:test_support_without_content",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//base/test:test_support",
     "//cc",
@@ -178,7 +181,7 @@ test("exo_unittests") {
   deps = [
     ":unit_tests",
     "//ash:test_support_without_content",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//base/test:test_support",
     "//cc:test_support",
@@ -187,6 +190,7 @@ test("exo_unittests") {
     "//mojo/edk/embedder:headers",
     "//testing/gtest",
     "//ui/aura",
+    "//ui/aura:test_support",
     "//ui/base",
     "//ui/compositor:test_support",
     "//ui/gl:test_support",

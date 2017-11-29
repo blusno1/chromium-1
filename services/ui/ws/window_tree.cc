@@ -12,6 +12,7 @@
 #include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/map.h"
 #include "services/ui/display/screen_manager.h"
 #include "services/ui/ws/cursor_location_manager.h"
@@ -180,6 +181,14 @@ void WindowTree::Init(std::unique_ptr<WindowTreeBinding> binding,
                     drawn, root->current_local_surface_id());
 }
 
+void WindowTree::OnAcceleratedWidgetAvailableForDisplay(Display* display) {
+  DCHECK(window_manager_internal_);
+  // TODO(sad): Use GpuSurfaceTracker on platforms where a gpu::SurfaceHandle is
+  // not the same as a gfx::AcceleratedWidget.
+  window_manager_internal_->WmOnAcceleratedWidgetForDisplay(
+      display->GetId(), display->platform_display()->GetAcceleratedWidget());
+}
+
 void WindowTree::ConfigureWindowManager(
     bool automatically_create_display_roots) {
   // ConfigureWindowManager() should be called early on, before anything
@@ -192,7 +201,7 @@ void WindowTree::ConfigureWindowManager(
   automatically_create_display_roots_ = automatically_create_display_roots;
   window_manager_internal_ = binding_->GetWindowManager();
   window_manager_internal_->OnConnect();
-  window_manager_state_ = base::MakeUnique<WindowManagerState>(this);
+  window_manager_state_ = std::make_unique<WindowManagerState>(this);
 }
 
 const ServerWindow* WindowTree::GetWindow(const WindowId& id) const {
@@ -313,11 +322,6 @@ ServerWindow* WindowTree::ProcessSetDisplayRoot(
   DCHECK(window_manager_state_);  // Only called for window manager.
   DVLOG(3) << "SetDisplayRoot client=" << id_
            << " global window_id=" << client_window_id.ToString();
-  if (display_manager()->GetDisplayById(display_to_create.id())) {
-    DVLOG(1) << "SetDisplayRoot called with existing display "
-             << display_to_create.id();
-    return nullptr;
-  }
 
   if (automatically_create_display_roots_) {
     DVLOG(1) << "SetDisplayRoot is only applicable when "
@@ -339,13 +343,20 @@ ServerWindow* WindowTree::ProcessSetDisplayRoot(
     return nullptr;
   }
 
-  if (!mirrors.empty()) {
-    NOTIMPLEMENTED() << "TODO(crbug.com/764472): Mus unified/mirroring modes.";
-    return nullptr;
+  Display* display = display_manager()->GetDisplayById(display_to_create.id());
+  if (!display) {
+    // Create a display if the window manager is extending onto a new display.
+    display = display_manager()->AddDisplayForWindowManager(
+        is_primary_display, display_to_create, viewport_metrics);
+  } else if (!display->GetWindowManagerDisplayRootForUser(
+                 window_manager_state_->user_id())) {
+    // Init the root if the display already existed as a mirroring destination.
+    display->InitWindowManagerDisplayRoots();
   }
 
-  Display* display = display_manager()->AddDisplayForWindowManager(
-      is_primary_display, display_to_create, viewport_metrics);
+  if (!mirrors.empty())
+    NOTIMPLEMENTED() << "TODO(crbug.com/764472): Mus unified mode support.";
+
   DCHECK(display);
   WindowManagerDisplayRoot* display_root =
       display->GetWindowManagerDisplayRootForUser(
@@ -712,7 +723,7 @@ void WindowTree::DispatchInputEvent(ServerWindow* target,
                                     DispatchEventCallback callback) {
   if (event_ack_id_) {
     // This is currently waiting for an event ack. Add it to the queue.
-    event_queue_.push(base::MakeUnique<TargetedEvent>(
+    event_queue_.push(std::make_unique<TargetedEvent>(
         target, event, event_location, std::move(callback)));
     // TODO(sad): If the |event_queue_| grows too large, then this should notify
     // Display, so that it can stop sending events.
@@ -723,7 +734,7 @@ void WindowTree::DispatchInputEvent(ServerWindow* target,
   // and dispatch the latest event from the queue instead that still has a live
   // target.
   if (!event_queue_.empty()) {
-    event_queue_.push(base::MakeUnique<TargetedEvent>(
+    event_queue_.push(std::make_unique<TargetedEvent>(
         target, event, event_location, std::move(callback)));
     return;
   }
@@ -2724,7 +2735,7 @@ void WindowTree::OnDragMoved(const gfx::Point& location) {
     drag_move_state_->queued_cursor_location = location;
   } else {
     WindowManagerState* wms = display_root->window_manager_state();
-    drag_move_state_ = base::MakeUnique<DragMoveState>();
+    drag_move_state_ = std::make_unique<DragMoveState>();
     wms->window_tree()->window_manager_internal_->WmMoveDragImage(
         location, base::Bind(&WindowTree::OnWmMoveDragImageAck,
                              drag_weak_factory_.GetWeakPtr()));

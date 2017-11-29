@@ -5,6 +5,8 @@
 #ifndef Keyframe_h
 #define Keyframe_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/animation/AnimationEffectReadOnly.h"
 #include "core/animation/EffectModel.h"
@@ -13,7 +15,6 @@
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -21,14 +22,15 @@ using PropertyHandleSet = HashSet<PropertyHandle>;
 
 class Element;
 class ComputedStyle;
+class V8ObjectBuilder;
 
 // A base class representing an animation keyframe.
 //
 // Generically a keyframe is a set of (property, value) pairs. In the
 // web-animations spec keyframes have a few additional properties:
 //
-//   * A possibly-null offset, which represents the keyframe's position relative
-//     to other keyframes in the same effect.
+//   * A possibly-null keyframe offset, which represents the keyframe's position
+//     relative to other keyframes in the same effect.
 //   * A possibly-null composite operation, which specifies the operation used
 //     to combine values in this keyframe with an underlying value.
 //   * A non-null timing function, which applies to the period of time between
@@ -38,13 +40,11 @@ class ComputedStyle;
 // For spec details, refer to: http://w3c.github.io/web-animations/#keyframe
 //
 // Implementation-wise the base Keyframe class captures the offset, composite
-// operation, and timing functions. It is left to subclasses to define and store
+// operation, and timing function. It is left to subclasses to define and store
 // the set of (property, value) pairs.
 //
 // TODO(smcgruer): Our implementation does not allow for a null composite
 // operation; by the spec we should allow this and use the effect operation.
-// TODO(smcgruer): Our implementation confuses offset and computed offset; the
-// former is user-specified whilst the latter is a computed value.
 //
 // === PropertySpecificKeyframes ===
 //
@@ -62,13 +62,11 @@ class ComputedStyle;
 // FIXME: Make Keyframe immutable
 class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
   USING_FAST_MALLOC(Keyframe);
-  WTF_MAKE_NONCOPYABLE(Keyframe);
 
  public:
   virtual ~Keyframe() {}
 
-  // TODO(smcgruer): Once we properly distinguish between offset and computed
-  // offset, the keyframe offset should be immutable.
+  // TODO(smcgruer): The keyframe offset should be immutable.
   void SetOffset(double offset) { offset_ = offset; }
   double Offset() const { return offset_; }
 
@@ -104,6 +102,12 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
     return the_clone;
   }
 
+  // Add the properties represented by this keyframe to the given V8 object.
+  //
+  // Subclasses should override this to add the (property, value) pairs they
+  // store, and call into the base version to add the basic Keyframe properties.
+  virtual void AddKeyframePropertiesToV8Object(V8ObjectBuilder&) const;
+
   virtual bool IsStringKeyframe() const { return false; }
   virtual bool IsTransitionKeyframe() const { return false; }
 
@@ -111,7 +115,6 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
   // the Keyframe class-level documentation for more details.
   class PropertySpecificKeyframe : public RefCounted<PropertySpecificKeyframe> {
     USING_FAST_MALLOC(PropertySpecificKeyframe);
-    WTF_MAKE_NONCOPYABLE(PropertySpecificKeyframe);
 
    public:
     virtual ~PropertySpecificKeyframe() {}
@@ -128,7 +131,7 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
     // FIXME: Remove this once CompositorAnimations no longer depends on
     // AnimatableValues
     virtual bool PopulateAnimatableValue(
-        CSSPropertyID,
+        const CSSProperty&,
         Element&,
         const ComputedStyle& base_style,
         const ComputedStyle* parent_style) const {
@@ -158,12 +161,19 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
     double offset_;
     scoped_refptr<TimingFunction> easing_;
     EffectModel::CompositeOperation composite_;
+
+    DISALLOW_COPY_AND_ASSIGN(PropertySpecificKeyframe);
   };
 
-  // Construct and return a property-specific keyframe for this keyframe, for
-  // the given property.
+  // Construct and return a property-specific keyframe for this keyframe.
+  //
+  // The 'offset' parameter is the offset to use in the resultant
+  // PropertySpecificKeyframe. For CSS Transitions and CSS Animations, this is
+  // the normal offset from the keyframe itself. However in web-animations this
+  // will be a computed offset value which may differ from the keyframe offset.
   virtual scoped_refptr<PropertySpecificKeyframe>
-  CreatePropertySpecificKeyframe(const PropertyHandle&) const = 0;
+  CreatePropertySpecificKeyframe(const PropertyHandle&,
+                                 double offset) const = 0;
 
   // Comparator function for sorting Keyframes based on their offsets.
   static bool CompareOffsets(const scoped_refptr<Keyframe>&,
@@ -185,6 +195,7 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
   double offset_;
   EffectModel::CompositeOperation composite_;
   scoped_refptr<TimingFunction> easing_;
+  DISALLOW_COPY_AND_ASSIGN(Keyframe);
 };
 
 using PropertySpecificKeyframe = Keyframe::PropertySpecificKeyframe;

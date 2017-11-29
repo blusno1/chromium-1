@@ -242,6 +242,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void EnsureCaretNotInRect(const gfx::Rect& rect) override;
   bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
   void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
+  const std::string& GetClientSourceInfo() const override;
 
   // Overridden from display::DisplayObserver:
   void OnDisplayAdded(const display::Display& new_display) override;
@@ -337,7 +338,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void ForwardKeyboardEventWithLatencyInfo(const NativeWebKeyboardEvent& event,
                                            const ui::LatencyInfo& latency,
                                            bool* update_event) override;
-  RenderFrameHostImpl* GetFocusedFrame();
+  RenderFrameHostImpl* GetFocusedFrame() const;
   bool NeedsMouseCapture() override;
   void SetTooltipsEnabled(bool enable) override;
   void ShowContextMenu(const ContextMenuParams& params) override;
@@ -444,6 +445,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 #endif
 
   ui::InputMethod* GetInputMethod() const;
+
+  // Get the focused view that should be used for retrieving the text selection.
+  RenderWidgetHostViewBase* GetFocusedViewForTextSelection();
 
   // Returns whether the widget needs an input grab to work properly.
   bool NeedsInputGrab();
@@ -612,8 +616,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   gfx::SelectionBound selection_end_;
 
   gfx::Insets insets_;
-
-  std::vector<ui::LatencyInfo> software_latency_info_;
 
   std::unique_ptr<wm::ScopedTooltipDisabler> tooltip_disabler_;
 

@@ -14,6 +14,7 @@
 #include "chrome/browser/vr/elements/grid.h"
 #include "chrome/browser/vr/elements/laser.h"
 #include "chrome/browser/vr/elements/reticle.h"
+#include "chrome/browser/vr/elements/shadow.h"
 #include "chrome/browser/vr/macros.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -79,17 +80,30 @@ class UiElementRenderer {
       float opacity);
 
   // TODO(crbug/779108) This presumes a Daydream controller.
-  VIRTUAL_FOR_MOCKS void DrawController(ControllerMesh::State state,
-                                        float opacity,
-                                        const gfx::Transform& view_proj_matrix);
+  VIRTUAL_FOR_MOCKS void DrawController(
+      ControllerMesh::State state,
+      float opacity,
+      const gfx::Transform& model_view_proj_matrix);
 
-  VIRTUAL_FOR_MOCKS void DrawLaser(float opacity,
-                                   const gfx::Transform& view_proj_matrix);
+  VIRTUAL_FOR_MOCKS void DrawLaser(
+      float opacity,
+      const gfx::Transform& model_view_proj_matrix);
 
-  VIRTUAL_FOR_MOCKS void DrawReticle(float opacity,
-                                     const gfx::Transform& view_proj_matrix);
+  VIRTUAL_FOR_MOCKS void DrawReticle(
+      float opacity,
+      const gfx::Transform& model_view_proj_matrix);
 
   VIRTUAL_FOR_MOCKS void DrawWebVr(int texture_data_handle);
+
+  VIRTUAL_FOR_MOCKS void DrawShadow(
+      const gfx::Transform& model_view_proj_matrix,
+      const gfx::SizeF& element_size,
+      float x_padding,
+      float y_padding,
+      float y_offset,
+      SkColor color,
+      float opacity,
+      float corner_radius);
 
   void Flush();
   void SetUpController(std::unique_ptr<ControllerMesh> mesh);
@@ -112,6 +126,7 @@ class UiElementRenderer {
   std::unique_ptr<Laser::Renderer> laser_renderer_;
   std::unique_ptr<Controller::Renderer> controller_renderer_;
   std::unique_ptr<Grid::Renderer> gradient_grid_renderer_;
+  std::unique_ptr<Shadow::Renderer> shadow_renderer_;
 
   DISALLOW_COPY_AND_ASSIGN(UiElementRenderer);
 };

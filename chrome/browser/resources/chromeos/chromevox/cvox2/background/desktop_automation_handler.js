@@ -59,6 +59,7 @@ DesktopAutomationHandler = function(node) {
   this.addListener_(EventType.HOVER, this.onHover);
   this.addListener_(EventType.INVALID_STATUS_CHANGED, this.onEventIfInRange);
   this.addListener_(EventType.LOAD_COMPLETE, this.onLoadComplete);
+  this.addListener_(EventType.LOCATION_CHANGED, this.onLocationChanged);
   this.addListener_(EventType.MENU_END, this.onMenuEnd);
   this.addListener_(EventType.MENU_LIST_ITEM_SELECTED, this.onEventIfSelected);
   this.addListener_(EventType.MENU_START, this.onMenuStart);
@@ -298,11 +299,9 @@ DesktopAutomationHandler.prototype = {
 
     var node = evt.target;
 
-    // Discard focus events on embeddedObject.
-    if (node.role == RoleType.EMBEDDED_OBJECT)
+    // Discard focus events on embeddedObject and webView.
+    if (node.role == RoleType.EMBEDDED_OBJECT || node.role == RoleType.WEB_VIEW)
       return;
-
-    this.createTextEditHandlerIfNeeded_(evt.target);
 
     // Category flush speech triggered by events with no source. This includes
     // views.
@@ -329,6 +328,9 @@ DesktopAutomationHandler.prototype = {
     }
     var event = new CustomAutomationEvent(EventType.FOCUS, node, evt.eventFrom);
     this.onEventDefault(event);
+
+    // Refresh the handler, if needed, now that ChromeVox focus is up to date.
+    this.createTextEditHandlerIfNeeded_(node);
   },
 
   /**
@@ -384,6 +386,19 @@ DesktopAutomationHandler.prototype = {
            ChromeVoxState.instance.currentRange, null, evt.type)
           .go();
     }.bind(this));
+  },
+
+  /**
+   * Updates the focus ring if the location of the current range, or
+   * an ancestor of the current range, changes.
+   * @param {!AutomationEvent} evt
+   */
+  onLocationChanged: function(evt) {
+    var cur = ChromeVoxState.instance.currentRange;
+    if (AutomationUtil.isDescendantOf(cur.start.node, evt.target) ||
+        AutomationUtil.isDescendantOf(cur.end.node, evt.target)) {
+      new Output().withLocation(cur, null, evt.type).go();
+    }
   },
 
   /**
@@ -550,6 +565,9 @@ DesktopAutomationHandler.prototype = {
          voxTarget.root.role != RoleType.DESKTOP &&
          voxTarget.root.url.indexOf(DesktopAutomationHandler.KEYBOARD_URL) !=
              0))
+      return false;
+
+    if (target.restriction == chrome.automation.Restriction.READ_ONLY)
       return false;
 
     if (!this.textEditHandler_ || this.textEditHandler_.node !== target) {

@@ -72,7 +72,7 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
   BOOL selected_;
   std::unique_ptr<ui::SimpleMenuModel> contextMenuModel_;
   std::unique_ptr<MenuDelegate> contextMenuDelegate_;
-  base::scoped_nsobject<MenuController> contextMenuController_;
+  base::scoped_nsobject<MenuControllerCocoa> contextMenuController_;
 
   enum AttentionType : int {
     kPinnedTabTitleChange = 1 << 0,     // The title of a pinned tab changed.
@@ -82,6 +82,9 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
 }
 
 @property(nonatomic) int currentAttentionTypes;  // Bitmask of AttentionType.
+
+// Recomputes the iconView's frame and updates it with or without animation.
+- (void)updateIconViewFrameWithAnimation:(BOOL)shouldAnimate;
 
 @end
 
@@ -101,11 +104,14 @@ static const CGFloat kCloseButtonSize = 16;
 static const CGFloat kInitialTabWidth = 160;
 static const CGFloat kTitleLeadingPadding = 4;
 static const CGFloat kInitialTitleWidth = 92;
+static const CGFloat kTitleHeight = 17;
 static const CGFloat kTabElementYOrigin = 6;
+static const CGFloat kDefaultTabHeight = 29;
+static const CGFloat kPinnedTabWidth = kDefaultTabHeight * 2;
 }  // namespace
 
 + (CGFloat)defaultTabHeight {
-  return 29;
+  return kDefaultTabHeight;
 }
 
 // The min widths is the smallest number at which the right edge of the right
@@ -116,7 +122,9 @@ static const CGFloat kTabElementYOrigin = 6;
 + (CGFloat)minActiveTabWidth { return 52; }
 + (CGFloat)maxTabWidth { return 246; }
 
-+ (CGFloat)pinnedTabWidth { return 58; }
++ (CGFloat)pinnedTabWidth {
+  return kPinnedTabWidth;
+}
 
 - (TabView*)tabView {
   DCHECK([[self view] isKindOfClass:[TabView class]]);
@@ -126,51 +134,51 @@ static const CGFloat kTabElementYOrigin = 6;
 - (id)init {
   if ((self = [super init])) {
     BOOL isRTL = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
-    // Icon.
-    const CGFloat iconOrigin =
-        isRTL ? kInitialTabWidth - kTabLeadingPadding - gfx::kFaviconSize
-              : kTabLeadingPadding;
-    NSRect iconFrame = NSMakeRect(iconOrigin, kTabElementYOrigin,
-                                  gfx::kFaviconSize, gfx::kFaviconSize);
-    iconView_.reset([[SpriteView alloc] initWithFrame:iconFrame]);
-    [iconView_ setAutoresizingMask:isRTL ? NSViewMinXMargin | NSViewMinYMargin
-                                         : NSViewMaxXMargin | NSViewMinYMargin];
 
-    const CGFloat titleOrigin =
-        isRTL
-            ? NSMinX([iconView_ frame]) - kTitleLeadingPadding -
-                  kInitialTitleWidth
-            : NSMaxX([iconView_ frame]) + kTitleLeadingPadding;
-    NSRect titleFrame =
-        NSMakeRect(titleOrigin, kTabElementYOrigin, kInitialTitleWidth, 17);
-
-    // Close button.
-    const CGFloat closeButtonOrigin =
+    // Create the close button.
+    const CGFloat closeButtonXOrigin =
         isRTL ? kTabTrailingPadding
               : kInitialTabWidth - kCloseButtonSize - kTabTrailingPadding;
-    NSRect closeButtonFrame = NSMakeRect(closeButtonOrigin, kTabElementYOrigin,
+    NSRect closeButtonFrame = NSMakeRect(closeButtonXOrigin, kTabElementYOrigin,
                                          kCloseButtonSize, kCloseButtonSize);
-    closeButton_.reset([[HoverCloseButton alloc] initWithFrame:
-        closeButtonFrame]);
+    closeButton_.reset(
+        [[HoverCloseButton alloc] initWithFrame:closeButtonFrame]);
     [closeButton_
         setAutoresizingMask:isRTL ? NSViewMaxXMargin : NSViewMinXMargin];
     [closeButton_ setTarget:self];
     [closeButton_ setAction:@selector(closeTab:)];
 
-    base::scoped_nsobject<TabView> view([[TabView alloc]
+    // Create the TabView. The TabView works directly with the closeButton so
+    // here (the TabView handles adding it as a subview).
+    base::scoped_nsobject<TabView> tabView([[TabView alloc]
         initWithFrame:NSMakeRect(0, 0, kInitialTabWidth,
                                  [TabController defaultTabHeight])
            controller:self
           closeButton:closeButton_]);
-    [view setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
-    [view setPostsFrameChangedNotifications:NO];
-    [view setPostsBoundsChangedNotifications:NO];
-    [view addSubview:iconView_];
-    [view addSubview:closeButton_];
-    [view setTitleFrame:titleFrame];
-    [super setView:view];
+    [tabView setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
+    [tabView setPostsFrameChangedNotifications:NO];
+    [tabView setPostsBoundsChangedNotifications:NO];
+    [super setView:tabView];
 
+    // Add the favicon view.
+    NSRect iconViewFrame =
+        NSMakeRect(0, kTabElementYOrigin, gfx::kFaviconSize, gfx::kFaviconSize);
+    iconView_.reset([[SpriteView alloc] initWithFrame:iconViewFrame]);
+    [iconView_ setAutoresizingMask:isRTL ? NSViewMinXMargin | NSViewMinYMargin
+                                         : NSViewMaxXMargin | NSViewMinYMargin];
+    [self updateIconViewFrameWithAnimation:NO];
+    [tabView addSubview:iconView_];
     isIconShowing_ = YES;
+
+    // Set up the title.
+    const CGFloat titleXOrigin =
+        isRTL ? NSMinX([iconView_ frame]) - kTitleLeadingPadding -
+                    kInitialTitleWidth
+              : NSMaxX([iconView_ frame]) + kTitleLeadingPadding;
+    NSRect titleFrame = NSMakeRect(titleXOrigin, kTabElementYOrigin,
+                                   kInitialTitleWidth, kTitleHeight);
+    [tabView setTitleFrame:titleFrame];
+
     NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
     [defaultCenter addObserver:self
                       selector:@selector(themeChangedNotification:)
@@ -202,8 +210,8 @@ static const CGFloat kTabElementYOrigin = 6;
     [tabView setState:selected ? NSMixedState : NSOffState];
   }
   // The attention indicator must always be updated, as it needs to disappear
-  // if a tab is blocked and is brought forward.
-  [self updateAttentionIndicator];
+  // if a tab is blocked and is brought forward. It is updated at the end of
+  // -updateVisibility.
   [self updateVisibility];
   [self updateTitleColor];
 }
@@ -225,9 +233,9 @@ static const CGFloat kTabElementYOrigin = 6;
   contextMenuModel_.reset(
       [target_ contextMenuModelForController:self
                                 menuDelegate:contextMenuDelegate_.get()]);
-  contextMenuController_.reset(
-      [[MenuController alloc] initWithModel:contextMenuModel_.get()
-                     useWithPopUpButtonCell:NO]);
+  contextMenuController_.reset([[MenuControllerCocoa alloc]
+               initWithModel:contextMenuModel_.get()
+      useWithPopUpButtonCell:NO]);
   return [contextMenuController_ menu];
 }
 
@@ -299,6 +307,34 @@ static const CGFloat kTabElementYOrigin = 6;
 
 - (BOOL)selected {
   return selected_ || active_;
+}
+
+- (void)setPinned:(BOOL)pinned {
+  if (pinned_ != pinned) {
+    pinned_ = pinned;
+    [self updateIconViewFrameWithAnimation:YES];
+  }
+}
+
+- (void)updateIconViewFrameWithAnimation:(BOOL)shouldAnimate {
+  NSRect iconViewFrame = [iconView_ frame];
+
+  if ([self pinned]) {
+    // Center the icon.
+    iconViewFrame.origin.x =
+        std::floor(([TabController pinnedTabWidth] - gfx::kFaviconSize) / 2.0);
+  } else {
+    BOOL isRTL = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
+    iconViewFrame.origin.x =
+        isRTL ? kInitialTabWidth - kTabLeadingPadding - gfx::kFaviconSize
+              : kTabLeadingPadding;
+  }
+
+  if (shouldAnimate) {
+    [[iconView_ animator] setFrame:iconViewFrame];
+  } else {
+    [iconView_ setFrame:iconViewFrame];
+  }
 }
 
 - (SpriteView*)iconView {
@@ -448,6 +484,8 @@ static const CGFloat kTabElementYOrigin = 6;
       [iconView_ setFrame:iconFrame];
     }
   }
+
+  [self updateAttentionIndicator];
 }
 
 - (void)updateAttentionIndicator {
@@ -457,7 +495,7 @@ static const CGFloat kTabElementYOrigin = 6;
   if ([self active])
     actualAttentionTypes &= ~AttentionType::kBlockedWebContents;
 
-  if (actualAttentionTypes != 0) {
+  if (actualAttentionTypes != 0 && iconView_ && isIconShowing_) {
     // The attention indicator consists of two parts:
     // . a wedge cut out of the bottom right (or left in rtl) of the favicon.
     // . a circle in the bottom right (or left in rtl) of the favicon.
@@ -601,6 +639,8 @@ static const CGFloat kTabElementYOrigin = 6;
   newTitleFrame.origin.x = titleLeft;
 
   [tabView setTitleFrame:newTitleFrame];
+
+  [self updateAttentionIndicator];
 }
 
 - (void)updateTitleColor {

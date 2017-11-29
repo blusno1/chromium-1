@@ -9,40 +9,33 @@
 #include <utility>
 #include <vector>
 
-#include "base/files/file_util.h"
-#include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
+#include "chrome/browser/ui/passwords/destination_file_system.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/password_manager/core/browser/export/password_csv_writer.h"
+#include "components/password_manager/core/browser/export/password_manager_exporter.h"
 #include "components/password_manager/core/browser/password_store.h"
-#include "components/password_manager/core/browser/ui/credential_provider_interface.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/filename_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
-namespace {
+#if defined(OS_WIN)
+#include "base/strings/string16.h"
+#endif
 
-// Wrapper for writing an std::string to a file.
-void WriteToFile(const base::FilePath& path, std::string data) {
-  base::WriteFile(path, data.c_str(), data.size());
-}
+namespace {
 
 // The following are not used on Android due to the |SelectFileDialog| being
 // unused.
 #if !defined(OS_ANDROID)
 const base::FilePath::CharType kFileExtension[] = FILE_PATH_LITERAL("csv");
-
-// The default name of the password file when exporting.
-constexpr base::FilePath::CharType kDefaultFileName[] =
-    FILE_PATH_LITERAL("chrome_passwords");
 
 // Returns the file extensions corresponding to supported formats.
 // Inner vector indicates equivalent extensions. For example:
@@ -58,7 +51,14 @@ base::FilePath GetDefaultFilepathForPasswordFile(
     const base::FilePath::StringType& default_extension) {
   base::FilePath default_path;
   PathService::Get(chrome::DIR_USER_DOCUMENTS, &default_path);
-  return default_path.Append(kDefaultFileName).AddExtension(default_extension);
+#if defined(OS_WIN)
+  base::string16 file_name =
+      l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_DEFAULT_EXPORT_FILENAME);
+#else
+  std::string file_name =
+      l10n_util::GetStringUTF8(IDS_PASSWORD_MANAGER_DEFAULT_EXPORT_FILENAME);
+#endif
+  return default_path.Append(file_name).AddExtension(default_extension);
 }
 #endif
 
@@ -107,7 +107,13 @@ void PasswordImportConsumer::ConsumePassword(
 PasswordManagerPorter::PasswordManagerPorter(
     password_manager::CredentialProviderInterface*
         credential_provider_interface)
-    : credential_provider_interface_(credential_provider_interface) {}
+    : PasswordManagerPorter(
+          std::make_unique<password_manager::PasswordManagerExporter>(
+              credential_provider_interface)) {}
+
+PasswordManagerPorter::PasswordManagerPorter(
+    std::unique_ptr<password_manager::PasswordManagerExporter> exporter)
+    : exporter_(std::move(exporter)) {}
 
 PasswordManagerPorter::~PasswordManagerPorter() {}
 
@@ -194,14 +200,10 @@ void PasswordManagerPorter::ImportPasswordsFromPath(
 }
 
 void PasswordManagerPorter::ExportPasswordsToPath(const base::FilePath& path) {
-  std::vector<std::unique_ptr<autofill::PasswordForm>> password_list =
-      credential_provider_interface_->GetAllPasswords();
-  UMA_HISTOGRAM_COUNTS("PasswordManager.ExportedPasswordsPerUserInCSV",
-                       password_list.size());
-  base::PostTaskWithTraits(
-      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::Bind(
-          &WriteToFile, path,
-          base::Passed(password_manager::PasswordCSVWriter::SerializePasswords(
-              password_list))));
+  std::unique_ptr<DestinationFileSystem> destination(
+      new DestinationFileSystem(path));
+  exporter_->SetDestination(std::move(destination));
+
+  // TODO(crbug.com/785237) Do this independently from setting the destination.
+  exporter_->PreparePasswordsForExport();
 }

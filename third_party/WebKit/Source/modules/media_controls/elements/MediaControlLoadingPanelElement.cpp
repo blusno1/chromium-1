@@ -4,6 +4,7 @@
 
 #include "modules/media_controls/elements/MediaControlLoadingPanelElement.h"
 
+#include "core/css/CSSStyleDeclaration.h"
 #include "core/dom/ElementShadow.h"
 #include "core/dom/events/Event.h"
 #include "core/dom/events/EventListener.h"
@@ -132,9 +133,11 @@ void MediaControlLoadingPanelElement::CleanupShadowDOM() {
 
 void MediaControlLoadingPanelElement::SetAnimationIterationCount(
     const String& count_value) {
-  mask1_background_->style()->setProperty(kAnimationIterationCountName,
+  mask1_background_->style()->setProperty(&GetDocument(),
+                                          kAnimationIterationCountName,
                                           count_value, "", ASSERT_NO_EXCEPTION);
-  mask2_background_->style()->setProperty(kAnimationIterationCountName,
+  mask2_background_->style()->setProperty(&GetDocument(),
+                                          kAnimationIterationCountName,
                                           count_value, "", ASSERT_NO_EXCEPTION);
 }
 

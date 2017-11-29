@@ -409,6 +409,7 @@ interface AuthenticatorAssertionResponse : AuthenticatorResponse
     attribute @@toStringTag
     getter authenticatorData
     getter signature
+    getter userHandle
     method constructor
 interface AuthenticatorAttestationResponse : AuthenticatorResponse
     attribute @@toStringTag
@@ -432,7 +433,6 @@ interface BackgroundFetchRegistration : EventTarget
     attribute @@toStringTag
     getter downloadTotal
     getter downloaded
-    getter icons
     getter id
     getter onprogress
     getter title
@@ -697,6 +697,9 @@ interface CSSNumericValue : CSSStyleValue
     method add
     method constructor
     method div
+    method equals
+    method max
+    method min
     method mul
     method sub
     method to
@@ -1075,7 +1078,6 @@ interface CredentialsContainer
     method create
     method get
     method preventSilentAccess
-    method requireUserMediation
     method store
 interface Crypto
     attribute @@toStringTag
@@ -1562,6 +1564,7 @@ interface Document : Node
     getter origin
     getter plugins
     getter pointerLockElement
+    getter policy
     getter preferredStylesheetSet
     getter readyState
     getter referrer
@@ -2789,11 +2792,11 @@ interface HTMLImageElement : HTMLElement
     attribute @@toStringTag
     getter align
     getter alt
-    getter async
     getter border
     getter complete
     getter crossOrigin
     getter currentSrc
+    getter decoding
     getter height
     getter hspace
     getter isMap
@@ -2815,9 +2818,9 @@ interface HTMLImageElement : HTMLElement
     method decode
     setter align
     setter alt
-    setter async
     setter border
     setter crossOrigin
+    setter decoding
     setter height
     setter hspace
     setter isMap
@@ -2970,7 +2973,6 @@ interface HTMLLinkElement : HTMLElement
     getter rel
     getter relList
     getter rev
-    getter scope
     getter sheet
     getter sizes
     getter target
@@ -2988,7 +2990,6 @@ interface HTMLLinkElement : HTMLElement
     setter rel
     setter relList
     setter rev
-    setter scope
     setter sizes
     setter target
     setter type
@@ -3813,11 +3814,11 @@ interface Image
     attribute @@toStringTag
     getter align
     getter alt
-    getter async
     getter border
     getter complete
     getter crossOrigin
     getter currentSrc
+    getter decoding
     getter height
     getter hspace
     getter isMap
@@ -3839,9 +3840,9 @@ interface Image
     method decode
     setter align
     setter alt
-    setter async
     setter border
     setter crossOrigin
+    setter decoding
     setter height
     setter hspace
     setter isMap
@@ -3941,6 +3942,7 @@ interface KeyframeEffect : KeyframeEffectReadOnly
 interface KeyframeEffectReadOnly : AnimationEffectReadOnly
     attribute @@toStringTag
     method constructor
+    method getKeyframes
 interface LinearAccelerationSensor : Accelerometer
     attribute @@toStringTag
     method constructor
@@ -4480,7 +4482,6 @@ interface Navigator
     method getInstalledRelatedApps
     method getUserMedia
     method getVRDisplays
-    method isProtocolHandlerRegistered
     method javaEnabled
     method registerProtocolHandler
     method requestKeyboardLock
@@ -4780,16 +4781,10 @@ interface PannerNode : AudioNode
     setter rolloffFactor
 interface PasswordCredential : Credential
     attribute @@toStringTag
-    getter additionalData
     getter iconURL
-    getter idName
     getter name
     getter password
-    getter passwordName
     method constructor
-    setter additionalData
-    setter idName
-    setter passwordName
 interface Path2D
     attribute @@toStringTag
     method addPath
@@ -6062,7 +6057,7 @@ interface SVGGraphicsElement : SVGElement
     method getScreenCTM
 interface SVGImageElement : SVGGraphicsElement
     attribute @@toStringTag
-    getter async
+    getter decoding
     getter height
     getter href
     getter preserveAspectRatio
@@ -6071,7 +6066,7 @@ interface SVGImageElement : SVGGraphicsElement
     getter y
     method constructor
     method decode
-    setter async
+    setter decoding
 interface SVGLength
     attribute @@toStringTag
     attribute SVG_LENGTHTYPE_CM
@@ -6625,6 +6620,7 @@ interface ServiceWorkerRegistration : EventTarget
     getter pushManager
     getter scope
     getter sync
+    getter updateViaCache
     getter waiting
     method constructor
     method getNotifications
@@ -6775,6 +6771,7 @@ interface StylePropertyMap : StylePropertyMapReadonly
     method constructor
     method delete
     method set
+    method update
 interface StylePropertyMapReadonly
     attribute @@toStringTag
     method @@iterator
@@ -7335,6 +7332,7 @@ interface VRWebGLLayer : VRLayer
     getter antialias
     getter context
     getter depth
+    getter framebuffer
     getter framebufferHeight
     getter framebufferWidth
     getter multiview
@@ -9142,7 +9140,6 @@ interface webkitURL
     attribute frames
     attribute gamepadController
     attribute internals
-    attribute layoutTestController
     attribute length
     attribute location
     attribute opener

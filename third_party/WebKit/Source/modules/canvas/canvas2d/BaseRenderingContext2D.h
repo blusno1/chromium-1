@@ -82,7 +82,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   void setGlobalCompositeOperation(const String&);
 
   String filter() const;
-  void setFilter(const String&);
+  void setFilter(const ExecutionContext*, const String&);
 
   void save();
   void restore();
@@ -234,12 +234,10 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   virtual PaintCanvas* ExistingDrawingCanvas() const = 0;
   virtual void DisableDeferral(DisableDeferralReason) = 0;
 
-  virtual AffineTransform BaseTransform() const = 0;
-
   virtual void DidDraw(const SkIRect& dirty_rect) = 0;
 
   virtual bool StateHasFilter() = 0;
-  virtual sk_sp<SkImageFilter> StateGetFilter() = 0;
+  virtual sk_sp<PaintFilter> StateGetFilter() = 0;
   virtual void SnapshotStateForFilter() = 0;
 
   virtual void ValidateStateStack() const = 0;
@@ -367,6 +365,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   // Canvas is device independent
   static const double kCDeviceScaleFactor;
 
+  virtual void DisableAcceleration() {}
+  virtual void DidInvokeGPUReadbackInCurrentFrame() {}
+
  private:
   void RealizeSaves();
 
@@ -456,7 +457,7 @@ void BaseRenderingContext2D::CompositedDraw(
     PaintCanvas* c,
     CanvasRenderingContext2DState::PaintType paint_type,
     CanvasRenderingContext2DState::ImageType image_type) {
-  sk_sp<SkImageFilter> filter = StateGetFilter();
+  sk_sp<PaintFilter> filter = StateGetFilter();
   DCHECK(IsFullCanvasCompositeMode(GetState().GlobalComposite()) || filter);
   SkMatrix ctm = c->getTotalMatrix();
   c->setMatrix(SkMatrix::I());
@@ -470,9 +471,9 @@ void BaseRenderingContext2D::CompositedDraw(
     if (filter) {
       PaintFlags foreground_flags =
           *GetState().GetFlags(paint_type, kDrawForegroundOnly, image_type);
-      foreground_flags.setImageFilter(SkComposeImageFilter::Make(
-          SkComposeImageFilter::Make(foreground_flags.getImageFilter(),
-                                     shadow_flags.getImageFilter()),
+      foreground_flags.setImageFilter(sk_make_sp<ComposePaintFilter>(
+          sk_make_sp<ComposePaintFilter>(foreground_flags.getImageFilter(),
+                                         shadow_flags.getImageFilter()),
           filter));
       c->setMatrix(ctm);
       draw_func(c, &foreground_flags);

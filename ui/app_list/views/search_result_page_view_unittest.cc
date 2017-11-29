@@ -8,12 +8,12 @@
 #include <utility>
 #include <vector>
 
+#include "ash/app_list/model/app_list_model.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/test/app_list_test_view_delegate.h"
 #include "ui/app_list/test/test_search_result.h"
 #include "ui/app_list/views/app_list_main_view.h"
@@ -167,7 +167,7 @@ class SearchResultPageViewTest
   DISALLOW_COPY_AND_ASSIGN(SearchResultPageViewTest);
 };
 
-// Instantiate the Boolean which is used to toggle the Fullscreen app list in
+// Instantiate the Boolean which is used to toggle answer cards in
 // the parameterized tests.
 INSTANTIATE_TEST_CASE_P(
     ,

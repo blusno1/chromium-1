@@ -26,8 +26,6 @@ std::string PermissionUtil::GetPermissionString(
       return "Notifications";
     case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       return "MidiSysEx";
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
-      return "PushMessaging";
     case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
       return "DurableStorage";
     case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
@@ -46,6 +44,8 @@ std::string PermissionUtil::GetPermissionString(
       return "Sensors";
     case CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS:
       return "AccessibilityEvents";
+    case CONTENT_SETTINGS_TYPE_CLIPBOARD_READ:
+      return "ClipboardRead";
     default:
       break;
   }
@@ -62,8 +62,6 @@ std::string PermissionUtil::ConvertContentSettingsTypeToSafeBrowsingName(
       return "NOTIFICATIONS";
     case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       return "MIDI_SYSEX";
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
-      return "PUSH_MESSAGING";
     case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
       return "DURABLE_STORAGE";
     case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
@@ -80,6 +78,8 @@ std::string PermissionUtil::ConvertContentSettingsTypeToSafeBrowsingName(
       return "SENSORS";
     case CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS:
       return "ACCESSIBILITY_EVENTS";
+    case CONTENT_SETTINGS_TYPE_CLIPBOARD_READ:
+      return "CLIPBOARD_READ";
     default:
       break;
   }
@@ -95,8 +95,6 @@ PermissionRequestType PermissionUtil::GetRequestType(ContentSettingsType type) {
       return PermissionRequestType::PERMISSION_NOTIFICATIONS;
     case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       return PermissionRequestType::PERMISSION_MIDI_SYSEX;
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
-      return PermissionRequestType::PERMISSION_PUSH_MESSAGING;
     case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
       return PermissionRequestType::PERMISSION_PROTECTED_MEDIA_IDENTIFIER;
     case CONTENT_SETTINGS_TYPE_PLUGINS:
@@ -107,6 +105,8 @@ PermissionRequestType PermissionUtil::GetRequestType(ContentSettingsType type) {
       return PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA;
     case CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS:
       return PermissionRequestType::PERMISSION_ACCESSIBILITY_EVENTS;
+    case CONTENT_SETTINGS_TYPE_CLIPBOARD_READ:
+      return PermissionRequestType::PERMISSION_CLIPBOARD_READ;
     default:
       NOTREACHED();
       return PermissionRequestType::UNKNOWN;
@@ -124,8 +124,6 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     *out = PermissionType::GEOLOCATION;
   } else if (type == CONTENT_SETTINGS_TYPE_NOTIFICATIONS) {
     *out = PermissionType::NOTIFICATIONS;
-  } else if (type == CONTENT_SETTINGS_TYPE_PUSH_MESSAGING) {
-    *out = PermissionType::PUSH_MESSAGING;
   } else if (type == CONTENT_SETTINGS_TYPE_MIDI) {
     *out = PermissionType::MIDI;
   } else if (type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX) {
@@ -148,24 +146,18 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     *out = PermissionType::SENSORS;
   } else if (type == CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS) {
     *out = PermissionType::ACCESSIBILITY_EVENTS;
+  } else if (type == CONTENT_SETTINGS_TYPE_CLIPBOARD_READ) {
+    *out = PermissionType::CLIPBOARD_READ;
   } else {
     return false;
   }
   return true;
 }
 
-ContentSettingsType PermissionUtil::GetContentSettingsStorageType(
-    ContentSettingsType type) {
-  if (type == CONTENT_SETTINGS_TYPE_PUSH_MESSAGING)
-    return CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
-  return type;
-}
-
 bool PermissionUtil::IsPermission(ContentSettingsType type) {
   switch (type) {
     case CONTENT_SETTINGS_TYPE_GEOLOCATION:
     case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
     case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
     case CONTENT_SETTINGS_TYPE_DURABLE_STORAGE:
     case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
@@ -177,18 +169,11 @@ bool PermissionUtil::IsPermission(ContentSettingsType type) {
 #endif
     case CONTENT_SETTINGS_TYPE_SENSORS:
     case CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS:
+    case CONTENT_SETTINGS_TYPE_CLIPBOARD_READ:
       return true;
     default:
       return false;
   }
-}
-
-bool PermissionUtil::ShouldShowPersistenceToggle(ContentSettingsType type) {
-  return (type == CONTENT_SETTINGS_TYPE_GEOLOCATION ||
-          type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC ||
-          type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA) &&
-         base::FeatureList::IsEnabled(
-             features::kDisplayPersistenceToggleInPermissionPrompts);
 }
 
 PermissionUtil::ScopedRevocationReporter::ScopedRevocationReporter(

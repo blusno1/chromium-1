@@ -5,6 +5,7 @@
 #ifndef CSSMathProduct_h
 #define CSSMathProduct_h
 
+#include "base/macros.h"
 #include "core/css/cssom/CSSMathVariadic.h"
 
 namespace blink {
@@ -12,23 +13,14 @@ namespace blink {
 // Represents the product of one or more CSSNumericValues.
 // See CSSMathProduct.idl for more information about this class.
 class CORE_EXPORT CSSMathProduct final : public CSSMathVariadic {
-  WTF_MAKE_NONCOPYABLE(CSSMathProduct);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   // The constructor defined in the IDL.
   static CSSMathProduct* Create(const HeapVector<CSSNumberish>& args,
-                                ExceptionState& exception_state) {
-    if (args.IsEmpty()) {
-      exception_state.ThrowDOMException(kSyntaxError,
-                                        "Arguments can't be empty");
-      return nullptr;
-    }
-
-    // TODO(crbug.com/776173): Implement multiply typing.
-    CSSNumericValueType type(CSSPrimitiveValue::UnitType::kNumber);
-    return new CSSMathProduct(CSSNumericArray::FromNumberishes(args), type);
-  }
+                                ExceptionState&);
+  // Blink internal-constructor.
+  static CSSMathProduct* Create(CSSNumericValueVector);
 
   String getOperator() const final { return "product"; }
 
@@ -38,6 +30,7 @@ class CORE_EXPORT CSSMathProduct final : public CSSMathVariadic {
  private:
   CSSMathProduct(CSSNumericArray* values, const CSSNumericValueType& type)
       : CSSMathVariadic(values, type) {}
+  DISALLOW_COPY_AND_ASSIGN(CSSMathProduct);
 };
 
 }  // namespace blink

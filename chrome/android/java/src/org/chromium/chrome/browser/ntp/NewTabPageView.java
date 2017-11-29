@@ -94,7 +94,7 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
     /**
      * Default experiment parameter value for the logo height in dp in the condensed layout.
      */
-    private static final int PARAM_DEFAULT_VALUE_CONDENSED_LAYOUT_LOGO_HEIGHT_DP = 50;
+    private static final int PARAM_DEFAULT_VALUE_CONDENSED_LAYOUT_LOGO_HEIGHT_DP = 100;
 
     private NewTabPageRecyclerView mRecyclerView;
 
@@ -286,6 +286,9 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
                 mManager.getNavigationDelegate(), mSearchProviderLogoView, profile);
 
         mSearchBoxView = mNewTabPageLayout.findViewById(R.id.search_box);
+        if (SuggestionsConfig.useModernLayout()) {
+            ViewUtils.setNinePatchBackgroundResource(mSearchBoxView, R.drawable.card_modern);
+        }
         mNoSearchLogoSpacer = mNewTabPageLayout.findViewById(R.id.no_search_logo_spacer);
 
         mSnapScrollRunnable = new SnapScrollRunnable();
@@ -303,9 +306,10 @@ public class NewTabPageView extends FrameLayout implements TileGroup.Observer {
         mRecyclerView.init(mUiConfig, mContextMenuManager);
 
         // Set up snippets
-        NewTabPageAdapter newTabPageAdapter = new NewTabPageAdapter(mManager, mNewTabPageLayout,
-                mUiConfig, offlinePageBridge, mContextMenuManager, /* tileGroupDelegate = */ null,
-                /* suggestionsCarousel = */ null);
+        NewTabPageAdapter newTabPageAdapter =
+                new NewTabPageAdapter(mManager, mNewTabPageLayout, /* logoView = */ null, mUiConfig,
+                        offlinePageBridge, mContextMenuManager, /* tileGroupDelegate = */ null,
+                        /* suggestionsCarousel = */ null);
         newTabPageAdapter.refreshSuggestions();
         mRecyclerView.setAdapter(newTabPageAdapter);
         mRecyclerView.getLinearLayoutManager().scrollToPosition(scrollPosition);

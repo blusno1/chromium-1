@@ -22,11 +22,9 @@
 #include "content/browser/service_worker/service_worker_handle.h"
 #include "content/browser/service_worker/service_worker_navigation_handle_core.h"
 #include "content/browser/service_worker/service_worker_registration.h"
-#include "content/browser/service_worker/service_worker_registration_handle.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_messages.h"
-#include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
@@ -36,9 +34,11 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/origin_util.h"
 #include "ipc/ipc_message_macros.h"
+#include "third_party/WebKit/common/service_worker/service_worker_provider_type.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
+#include "third_party/WebKit/public/platform/web_feature.mojom.h"
 #include "url/gurl.h"
 
 using blink::MessagePortChannel;
@@ -170,17 +170,6 @@ void ServiceWorkerDispatcherHost::RegisterServiceWorkerHandle(
   handles_.AddWithID(std::move(handle), handle_id);
 }
 
-void ServiceWorkerDispatcherHost::RegisterServiceWorkerRegistrationHandle(
-    ServiceWorkerRegistrationHandle* handle) {
-  int handle_id = handle->handle_id();
-  registration_handles_.AddWithID(base::WrapUnique(handle), handle_id);
-}
-
-void ServiceWorkerDispatcherHost::UnregisterServiceWorkerRegistrationHandle(
-    int handle_id) {
-  registration_handles_.Remove(handle_id);
-}
-
 ServiceWorkerHandle* ServiceWorkerDispatcherHost::FindServiceWorkerHandle(
     int provider_id,
     int64_t version_id) {
@@ -242,9 +231,8 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
     ServiceWorkerProviderHost* sender_provider_host,
     const StatusCallback& callback) {
   switch (sender_provider_host->provider_type()) {
-    case SERVICE_WORKER_PROVIDER_FOR_WINDOW:
-    case SERVICE_WORKER_PROVIDER_FOR_WORKER:
-    case SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER:
+    case blink::mojom::ServiceWorkerProviderType::kForWindow:
+    case blink::mojom::ServiceWorkerProviderType::kForSharedWorker:
       service_worker_client_utils::GetClient(
           sender_provider_host,
           base::Bind(&ServiceWorkerDispatcherHost::
@@ -253,7 +241,7 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
                      this, worker, message, source_origin, sent_message_ports,
                      base::nullopt, callback));
       break;
-    case SERVICE_WORKER_PROVIDER_FOR_CONTROLLER: {
+    case blink::mojom::ServiceWorkerProviderType::kForServiceWorker: {
       // Clamp timeout to the sending worker's remaining timeout, to prevent
       // postMessage from keeping workers alive forever.
       base::TimeDelta timeout =
@@ -272,7 +260,7 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
                          callback, *worker_info));
       break;
     }
-    case SERVICE_WORKER_PROVIDER_UNKNOWN:
+    case blink::mojom::ServiceWorkerProviderType::kUnknown:
     default:
       NOTREACHED() << sender_provider_host->provider_type();
       break;
@@ -310,7 +298,7 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
     }
 
     // Otherwise, completed the initialization of the pre-created host.
-    if (info.type != SERVICE_WORKER_PROVIDER_FOR_WINDOW) {
+    if (info.type != blink::mojom::ServiceWorkerProviderType::kForWindow) {
       bad_message::ReceivedBadMessage(
           this, bad_message::SWDH_PROVIDER_CREATED_ILLEGAL_TYPE_NOT_WINDOW);
       return;
@@ -319,9 +307,10 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
                                                  std::move(info), AsWeakPtr());
     GetContext()->AddProviderHost(std::move(provider_host));
   } else {
-    // Provider host for controller should be pre-created on StartWorker in
-    // ServiceWorkerVersion.
-    if (info.type == SERVICE_WORKER_PROVIDER_FOR_CONTROLLER) {
+    // Provider hosts for service workers should be pre-created in StartWorker
+    // in ServiceWorkerVersion.
+    if (info.type ==
+        blink::mojom::ServiceWorkerProviderType::kForServiceWorker) {
       bad_message::ReceivedBadMessage(
           this, bad_message::SWDH_PROVIDER_CREATED_ILLEGAL_TYPE_CONTROLLER);
       return;
@@ -448,21 +437,6 @@ void ServiceWorkerDispatcherHost::ReleaseSourceInfo(
     handles_.Remove(source_info.handle_id);
 }
 
-ServiceWorkerRegistrationHandle*
-ServiceWorkerDispatcherHost::FindServiceWorkerRegistrationHandle(
-    int provider_id,
-    int64_t registration_id) {
-  for (RegistrationHandleMap::iterator iter(&registration_handles_);
-       !iter.IsAtEnd(); iter.Advance()) {
-    ServiceWorkerRegistrationHandle* handle = iter.GetCurrentValue();
-    if (handle->provider_id() == provider_id &&
-        handle->registration()->id() == registration_id) {
-      return handle;
-    }
-  }
-  return nullptr;
-}
-
 void ServiceWorkerDispatcherHost::OnCountFeature(int64_t version_id,
                                                  uint32_t feature) {
   if (!GetContext())
@@ -470,6 +444,14 @@ void ServiceWorkerDispatcherHost::OnCountFeature(int64_t version_id,
   ServiceWorkerVersion* version = GetContext()->GetLiveVersion(version_id);
   if (!version)
     return;
+  if (feature >=
+      static_cast<uint32_t>(blink::mojom::WebFeature::kNumberOfFeatures)) {
+    // We don't use BadMessageReceived here since this IPC will be converted to
+    // a Mojo method call soon, which will validate inputs for us.
+    // TODO(xiaofeng.zhang): Convert the OnCountFeature IPC into a Mojo method
+    // call.
+    return;
+  }
   version->CountFeature(feature);
 }
 
@@ -507,36 +489,6 @@ ServiceWorkerContextCore* ServiceWorkerDispatcherHost::GetContext() {
   if (!context_wrapper_.get())
     return nullptr;
   return context_wrapper_->context();
-}
-
-ServiceWorkerProviderHost*
-ServiceWorkerDispatcherHost::GetProviderHostForRequest(ProviderStatus* status,
-                                                       int provider_id) {
-  if (!GetContext()) {
-    *status = ProviderStatus::NO_CONTEXT;
-    return nullptr;
-  }
-
-  ServiceWorkerProviderHost* provider_host =
-      GetContext()->GetProviderHost(render_process_id_, provider_id);
-  if (!provider_host) {
-    *status = ProviderStatus::NO_HOST;
-    return nullptr;
-  }
-
-  if (!provider_host->IsContextAlive()) {
-    *status = ProviderStatus::DEAD_HOST;
-    return nullptr;
-  }
-
-  // TODO(falken): This check can be removed once crbug.com/439697 is fixed.
-  if (provider_host->document_url().is_empty()) {
-    *status = ProviderStatus::NO_URL;
-    return nullptr;
-  }
-
-  *status = ProviderStatus::OK;
-  return provider_host;
 }
 
 void ServiceWorkerDispatcherHost::OnTerminateWorker(int handle_id) {

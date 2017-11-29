@@ -13,18 +13,9 @@
 #include "base/memory/ref_counted.h"
 #include "ui/gfx/color_space.h"
 
-#if defined(OS_MACOSX)
-#include <CoreGraphics/CGColorSpace.h>
-#endif
-
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size);
 
-namespace mojo {
-template <typename, typename> struct StructTraits;
-}
-
 namespace gfx {
-
 
 // Used to represent a full ICC profile, usually retrieved from a monitor. It
 // can be lossily compressed into a ColorSpace object. This structure should
@@ -45,12 +36,20 @@ class COLOR_SPACE_EXPORT ICCProfile {
   // return a valid ColorSpace.
   bool IsValid() const;
 
-#if defined(OS_MACOSX)
-  static ICCProfile FromCGColorSpace(CGColorSpaceRef cg_color_space);
-#endif
-
-  // Create directly from profile data.
+  // Create directly from profile data. This function should be called only
+  // in the browser process (and the results from there sent to other
+  // processes).
   static ICCProfile FromData(const void* icc_profile, size_t size);
+
+  // Create a profile for a parametric color space. Returns an invalid profile
+  // if the specified space is not parametric.
+  static ICCProfile FromParametricColorSpace(
+      const gfx::ColorSpace& color_space);
+
+  // Return the ICCProfile that was used to create the specified ColorSpace, if
+  // available. Otherwise, return an invalid profile. This is used on macOS for
+  // power reasons.
+  static ICCProfile FromCacheMac(const gfx::ColorSpace& color_space);
 
   // Return a ColorSpace that references this ICCProfile. ColorTransforms
   // created using this ColorSpace will match this ICCProfile precisely.
@@ -61,32 +60,20 @@ class COLOR_SPACE_EXPORT ICCProfile {
   // if the parametric approximation is almost exact.
   ColorSpace GetParametricColorSpace() const;
 
+  // Return the data for the profile.
+  std::vector<char> GetData() const;
+
   // Histogram how we this was approximated by a gfx::ColorSpace. Only
   // histogram a given profile once per display.
   void HistogramDisplay(int64_t display_id) const;
 
  private:
-  friend ICCProfile ICCProfileForTestingAdobeRGB();
-  friend ICCProfile ICCProfileForTestingColorSpin();
-  friend ICCProfile ICCProfileForTestingGenericRGB();
-  friend ICCProfile ICCProfileForTestingSRGB();
-  friend ICCProfile ICCProfileForLayoutTests();
-  static const uint64_t test_id_adobe_rgb_;
-  static const uint64_t test_id_color_spin_;
-  static const uint64_t test_id_generic_rgb_;
-  static const uint64_t test_id_srgb_;
-
-  // Populate |icc_profile| with the ICCProfile corresponding to id |id|. Return
-  // false if |id| is not in the cache.
-  static bool FromId(uint64_t id, ICCProfile* icc_profile);
-
-  // This method is used to hard-code the |id_| to a specific value, and is
-  // used by layout test methods to ensure that they don't conflict with the
-  // values generated in the browser.
+  // This method is used to hard-code the |id_| to a specific value. It is used
+  // only when a profile is received via IPC.
   static ICCProfile FromDataWithId(const void* data, size_t size, uint64_t id);
 
-  // Move the cache entry for this profile to the most recently used place.
-  void TouchCacheEntry() const;
+  // This method is used by ColorTransform to construct LUT based transforms.
+  static sk_sp<SkColorSpace> GetSkColorSpaceFromId(uint64_t id);
 
   class Internals : public base::RefCountedThreadSafe<ICCProfile::Internals> {
    public:
@@ -105,17 +92,14 @@ class COLOR_SPACE_EXPORT ICCProfile {
       kICCFailedToCreateXform = 7,
       kICCFailedToApproximateTrFnAccurately = 8,
       kICCExtractedSRGBColorSpace = 9,
-      kICCProfileAnalyzeLast = kICCExtractedSRGBColorSpace,
+      kICCNoProfile = 10,
+      kICCProfileAnalyzeLast = kICCNoProfile,
     };
 
-    // This globally identifies this ICC profile. It is used to look up this ICC
-    // profile from a ColorSpace object created from it. The object is invalid
-    // if |id_| is zero.
-    const uint64_t id_ = 0;
     const std::vector<char> data_;
 
     // The result of attepting to extract a color space from the color profile.
-    AnalyzeResult analyze_result_ = kICCFailedToParse;
+    AnalyzeResult analyze_result_ = kICCNoProfile;
 
     // True iff we can create a valid ColorSpace (and ColorTransform) from this
     // object. The transform may be LUT-based (using an SkColorSpaceXform to
@@ -126,6 +110,11 @@ class COLOR_SPACE_EXPORT ICCProfile {
     // the data in this profile. In this case ColorTransforms created from this
     // profile will be analytic and not LUT-based.
     bool is_parametric_ = false;
+
+    // If |is_valid_| but not |is_parametric_|, then |id_| is assigned a
+    // non-zero value that can be used to look up this ICCProfile from a
+    // ColorSpace for the purpose of creating a LUT based ColorTransform.
+    uint64_t id_ = 0;
 
     // Results of Skia parsing the ICC profile data.
     sk_sp<SkColorSpace> sk_color_space_;

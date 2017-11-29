@@ -20,7 +20,7 @@
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/text/BidiTextRun.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 
 namespace blink {
 
@@ -197,12 +197,6 @@ PaintCanvas* OffscreenCanvasRenderingContext2D::ExistingDrawingCanvas() const {
 void OffscreenCanvasRenderingContext2D::DisableDeferral(DisableDeferralReason) {
 }
 
-AffineTransform OffscreenCanvasRenderingContext2D::BaseTransform() const {
-  if (!HasImageBuffer())
-    return AffineTransform();  // identity
-  return GetImageBuffer()->BaseTransform();
-}
-
 void OffscreenCanvasRenderingContext2D::DidDraw(const SkIRect& dirty_rect) {
   dirty_rect_for_commit_.join(dirty_rect);
 }
@@ -211,7 +205,7 @@ bool OffscreenCanvasRenderingContext2D::StateHasFilter() {
   return GetState().HasFilterForOffscreenCanvas(Host()->Size());
 }
 
-sk_sp<SkImageFilter> OffscreenCanvasRenderingContext2D::StateGetFilter() {
+sk_sp<PaintFilter> OffscreenCanvasRenderingContext2D::StateGetFilter() {
   return GetState().GetFilterForOffscreenCanvas(Host()->Size());
 }
 
@@ -300,7 +294,8 @@ void OffscreenCanvasRenderingContext2D::setFont(const String& new_font) {
     return;
   }
 
-  CSSParser::ParseValue(style, CSSPropertyFont, new_font, true);
+  CSSParser::ParseValue(style, CSSPropertyFont, new_font, true,
+                        Host()->GetTopExecutionContext()->SecureContextMode());
 
   FontDescription desc =
       FontStyleResolver::ComputeFont(*style, Host()->GetFontSelector());

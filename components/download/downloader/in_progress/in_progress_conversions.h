@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "components/download/downloader/in_progress/download_entry.h"
 #include "components/download/downloader/in_progress/proto/download_entry.pb.h"
+#include "components/download/downloader/in_progress/proto/download_source.pb.h"
 
 namespace download {
 
@@ -19,14 +20,17 @@ class InProgressConversions {
   static metadata_pb::DownloadEntry DownloadEntryToProto(
       const DownloadEntry& entry);
 
+  static DownloadSource DownloadSourceFromProto(
+      metadata_pb::DownloadSource download_source);
+
+  static metadata_pb::DownloadSource DownloadSourceToProto(
+      DownloadSource download_source);
+
   static std::vector<DownloadEntry> DownloadEntriesFromProto(
       const metadata_pb::DownloadEntries& proto);
 
   static metadata_pb::DownloadEntries DownloadEntriesToProto(
       const std::vector<DownloadEntry>& entries);
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(InProgressConversions);
 };
 
 }  // namespace download

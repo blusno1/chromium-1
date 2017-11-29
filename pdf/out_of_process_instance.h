@@ -53,6 +53,7 @@ class OutOfProcessInstance : public pp::Instance,
   void HandleMessage(const pp::Var& message) override;
   bool HandleInputEvent(const pp::InputEvent& event) override;
   void DidChangeView(const pp::View& view) override;
+  void DidChangeFocus(bool has_focus) override;
 
   // pp::Find_Private implementation.
   bool StartFind(const std::string& text, bool case_sensitive) override;
@@ -143,6 +144,7 @@ class OutOfProcessInstance : public pp::Instance,
   void CancelBrowserDownload() override;
   void IsSelectingChanged(bool is_selecting) override;
   void SelectionChanged(const pp::Rect& left, const pp::Rect& right) override;
+  void IsEditModeChanged(bool is_edit_mode) override;
 
   // PreviewModeClient::Client implementation.
   void PreviewDocumentLoadComplete() override;

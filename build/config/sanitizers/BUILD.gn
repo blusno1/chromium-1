@@ -226,9 +226,8 @@ config("default_sanitizer_ldflags") {
     # and dlls, see link_executable and link_shared_library below.
     # This here handles only the component build.
     if (target_cpu == "x64") {
-      # Windows 64-bit. TODO(etienneb): Remove the assert when this is ready.
+      # Windows 64-bit.
       if (is_component_build) {
-        assert(false, "win/asan does not work in 64-bit yet")
         libs = [
           "clang_rt.asan_dynamic-x86_64.lib",
           "clang_rt.asan_dynamic_runtime_thunk-x86_64.lib",
@@ -267,12 +266,7 @@ config("common_sanitizer_flags") {
       "-gcolumn-info",
     ]
 
-    # Disable frame pointer elimination for better stack traces.
-    if (is_posix) {
-      cflags += [ "-fno-omit-frame-pointer" ]
-    } else {
-      cflags += [ "/Oy-" ]
-    }
+    # Frame pointers are controlled in //build/config/compiler:default_stack_frames
   }
 }
 
@@ -312,8 +306,6 @@ config("asan_flags") {
 config("link_executable") {
   if (is_asan && is_win && !is_component_build) {
     if (target_cpu == "x64") {
-      # Windows 64-bit. TODO(etienneb): Remove the assert when this is ready.
-      assert(false, "win/asan does not work in 64-bit yet")
       libs = [ "clang_rt.asan-x86_64.lib" ]
       ldflags = [
         "-wholearchive:clang_rt.asan-x86_64.lib",
@@ -337,8 +329,6 @@ config("link_executable") {
 config("link_shared_library") {
   if (is_asan && is_win && !is_component_build) {
     if (target_cpu == "x64") {
-      # Windows 64-bit. TODO(etienneb): Remove the assert when this is ready.
-      assert(false, "win/asan does not work in 64-bit yet")
       libs = [ "clang_rt.asan_dll_thunk-x86_64.lib" ]
     } else {
       assert(target_cpu == "x86", "WinASan unsupported architecture")
@@ -353,6 +343,11 @@ config("cfi_flags") {
     if (!defined(cfi_blacklist_path)) {
       cfi_blacklist_path =
           rebase_path("//tools/cfi/blacklist.txt", root_build_dir)
+      if (is_android) {
+        cflags +=
+            [ "-fsanitize-blacklist=" +
+              rebase_path("//tools/cfi/blacklist_android.txt", root_build_dir) ]
+      }
     }
     cflags += [
       "-fsanitize=cfi-vcall",
@@ -389,6 +384,14 @@ config("cfi_flags") {
         cflags += [ "-fsanitize-recover=cfi" ]
       }
     }
+  }
+}
+
+# crbug.com/785442: Fix cfi-icall failures for code that casts pointer argument
+# types in function pointer type signatures.
+config("cfi_icall_generalize_pointers") {
+  if (is_clang && is_cfi && use_cfi_icall) {
+    cflags = [ "-fsanitize-cfi-icall-generalize-pointers" ]
   }
 }
 

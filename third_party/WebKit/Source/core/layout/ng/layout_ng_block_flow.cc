@@ -64,7 +64,7 @@ void LayoutNGBlockFlow::UpdateBlockLayout(bool relayout_children) {
                                          containing_block->Size().Height());
     NGLogicalOffset logical_offset(LogicalLeft(), LogicalTop());
     physical_offset = logical_offset.ConvertToPhysical(
-        constraint_space->WritingMode(), constraint_space->Direction(),
+        constraint_space->GetWritingMode(), constraint_space->Direction(),
         containing_block_size, fragment->Size());
   }
   fragment->SetOffset(physical_offset);
@@ -78,8 +78,7 @@ void LayoutNGBlockFlow::UpdateOutOfFlowBlockLayout() {
       NGConstraintSpace::CreateFromLayoutObject(*this);
   NGFragmentBuilder container_builder(
       container, scoped_refptr<const ComputedStyle>(container_style),
-      FromPlatformWritingMode(container_style->GetWritingMode()),
-      container_style->Direction());
+      container_style->GetWritingMode(), container_style->Direction());
 
   // Compute ContainingBlock logical size.
   // OverrideContainingBlockLogicalWidth/Height are used by grid layout.
@@ -161,9 +160,9 @@ void LayoutNGBlockFlow::UpdateOutOfFlowBlockLayout() {
       container_style->IsHorizontalWritingMode()
           ? NGPhysicalOffset(static_inline, static_block)
           : NGPhysicalOffset(static_block, static_inline);
-  NGStaticPosition static_position = NGStaticPosition::Create(
-      FromPlatformWritingMode(parent_style->GetWritingMode()),
-      parent_style->Direction(), static_location);
+  NGStaticPosition static_position =
+      NGStaticPosition::Create(parent_style->GetWritingMode(),
+                               parent_style->Direction(), static_location);
 
   container_builder.AddOutOfFlowLegacyCandidate(NGBlockNode(this),
                                                 static_position);
@@ -223,7 +222,7 @@ bool LayoutNGBlockFlow::LocalVisualRectFor(const LayoutObject* layout_object,
     return false;
   NGInlineFragmentIterator children(*box_fragment, layout_object);
   for (const auto& child : children) {
-    NGPhysicalOffsetRect child_visual_rect = child.fragment->LocalVisualRect();
+    NGPhysicalOffsetRect child_visual_rect = child.fragment->SelfVisualRect();
     visual_rect->Unite(child_visual_rect + child.offset_to_container_box);
   }
   return true;

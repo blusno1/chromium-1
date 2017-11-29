@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/sys_info.h"
+#include "base/test/icu_test_util.h"
 #include "base/test/scoped_command_line.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
@@ -133,6 +134,11 @@ class FakeUserManagerWithLocalState : public chromeos::FakeChromeUserManager {
   DISALLOW_COPY_AND_ASSIGN(FakeUserManagerWithLocalState);
 };
 
+bool IsArcAllowedForProfileOnFirstCall(const Profile* profile) {
+  ResetArcAllowedCheckForTesting(profile);
+  return IsArcAllowedForProfile(profile);
+}
+
 }  // namespace
 
 class ChromeArcUtilTest : public testing::Test {
@@ -186,17 +192,18 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile) {
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmailGaiaId(
                         profile()->GetProfileUserName(), kTestGaiaId));
-  EXPECT_TRUE(IsArcAllowedForProfile(profile()));
+  EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 
   // false for nullptr.
-  EXPECT_FALSE(IsArcAllowedForProfile(nullptr));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(nullptr));
 
   // false for incognito mode profile.
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()->GetOffTheRecordProfile()));
+  EXPECT_FALSE(
+      IsArcAllowedForProfileOnFirstCall(profile()->GetOffTheRecordProfile()));
 
   // false for Legacy supervised user.
   profile()->SetSupervisedUserId("foo");
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfileLegacy) {
@@ -204,17 +211,18 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfileLegacy) {
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmailGaiaId(
                         profile()->GetProfileUserName(), kTestGaiaId));
-  EXPECT_TRUE(IsArcAllowedForProfile(profile()));
+  EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 
   // false for nullptr.
-  EXPECT_FALSE(IsArcAllowedForProfile(nullptr));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(nullptr));
 
   // false for incognito mode profile.
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()->GetOffTheRecordProfile()));
+  EXPECT_FALSE(
+      IsArcAllowedForProfileOnFirstCall(profile()->GetOffTheRecordProfile()));
 
   // false for Legacy supervised user.
   profile()->SetSupervisedUserId("foo");
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_DisableArc) {
@@ -222,7 +230,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_DisableArc) {
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmailGaiaId(
                         profile()->GetProfileUserName(), kTestGaiaId));
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_NonPrimaryProfile) {
@@ -234,7 +242,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_NonPrimaryProfile) {
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmailGaiaId(
                         profile()->GetProfileUserName(), kTestGaiaId));
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 // User without GAIA account.
@@ -244,7 +252,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_PublicAccount) {
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmail("public_user@gmail.com"),
                     user_manager::USER_TYPE_PUBLIC_ACCOUNT);
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ActiveDirectoryEnabled) {
@@ -257,7 +265,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ActiveDirectoryEnabled) {
   EXPECT_FALSE(chromeos::ProfileHelper::Get()
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
-  EXPECT_TRUE(IsArcAllowedForProfile(profile()));
+  EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ActiveDirectoryDisabled) {
@@ -269,7 +277,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ActiveDirectoryDisabled) {
   EXPECT_FALSE(chromeos::ProfileHelper::Get()
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcNotAvailable) {
@@ -280,7 +288,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcNotAvailable) {
   EXPECT_FALSE(chromeos::ProfileHelper::Get()
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcInstalled) {
@@ -292,7 +300,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcInstalled) {
   EXPECT_FALSE(chromeos::ProfileHelper::Get()
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
-  EXPECT_TRUE(IsArcAllowedForProfile(profile()));
+  EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcSupported) {
@@ -304,7 +312,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_KioskArcSupported) {
   EXPECT_FALSE(chromeos::ProfileHelper::Get()
                    ->GetUserByProfile(profile())
                    ->HasGaiaAccount());
-  EXPECT_TRUE(IsArcAllowedForProfile(profile()));
+  EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_SupervisedUserFlow) {
@@ -315,7 +323,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_SupervisedUserFlow) {
   ScopedLogIn login(GetFakeUserManager(), manager_id);
   GetFakeUserManager()->SetUserFlow(
       manager_id, new chromeos::SupervisedUserCreationFlow(manager_id));
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
   GetFakeUserManager()->ResetUserFlow(manager_id);
 }
 
@@ -325,7 +333,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_GuestAccount) {
       {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(GetFakeUserManager(),
                     GetFakeUserManager()->GetGuestAccountId());
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 // Demo account is interpreted as EphemeralDataUser.
@@ -333,7 +341,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_DemoAccount) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(GetFakeUserManager(), user_manager::DemoAccountId());
-  EXPECT_FALSE(IsArcAllowedForProfile(profile()));
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcCompatibleFileSystemUsedForProfile) {
@@ -399,7 +407,7 @@ TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile) {
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmailGaiaId(
                         profile()->GetProfileUserName(), kTestGaiaId));
-  ASSERT_TRUE(IsArcAllowedForProfile(profile()));
+  ASSERT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 
   // By default, Google Play Store is disabled.
   EXPECT_FALSE(IsArcPlayStoreEnabledForProfile(profile()));
@@ -416,7 +424,7 @@ TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile) {
 TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile_NotAllowed) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--arc-availability=officially-supported"});
-  ASSERT_FALSE(IsArcAllowedForProfile(profile()));
+  ASSERT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
 
   // If ARC is not allowed for the profile, always return false.
   EXPECT_FALSE(IsArcPlayStoreEnabledForProfile(profile()));
@@ -434,7 +442,7 @@ TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile_Managed) {
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmailGaiaId(
                         profile()->GetProfileUserName(), kTestGaiaId));
-  ASSERT_TRUE(IsArcAllowedForProfile(profile()));
+  ASSERT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 
   // By default it is not managed.
   EXPECT_FALSE(IsArcPlayStoreEnabledPreferenceManagedForProfile(profile()));
@@ -467,6 +475,85 @@ TEST_F(ChromeArcUtilTest, ArcPlayStoreEnabledForProfile_Managed) {
   // Remove managed state.
   profile()->GetTestingPrefService()->RemoveManagedPref(prefs::kArcEnabled);
   EXPECT_FALSE(IsArcPlayStoreEnabledPreferenceManagedForProfile(profile()));
+}
+
+TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_Flag) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv({
+      "", "--arc-availability=officially-supported",
+  });
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmailGaiaId(
+                        profile()->GetProfileUserName(), kTestGaiaId));
+  EXPECT_EQ(ash::mojom::AssistantAllowedState::DISALLOWED_BY_FLAG,
+            IsAssistantAllowedForProfile(profile()));
+}
+
+TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_SecondaryUser) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported",
+       "--enable-voice-interaction"});
+  ScopedLogIn login2(
+      GetFakeUserManager(),
+      AccountId::FromUserEmailGaiaId("user2@gmail.com", "0123456789"));
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmailGaiaId(
+                        profile()->GetProfileUserName(), kTestGaiaId));
+
+  EXPECT_EQ(ash::mojom::AssistantAllowedState::DISALLOWED_BY_NONPRIMARY_USER,
+            IsAssistantAllowedForProfile(profile()));
+}
+
+TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_SupervisedUser) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported",
+       "--enable-voice-interaction"});
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmailGaiaId(
+                        profile()->GetProfileUserName(), kTestGaiaId));
+  profile()->SetSupervisedUserId("foo");
+  EXPECT_EQ(ash::mojom::AssistantAllowedState::DISALLOWED_BY_SUPERVISED_USER,
+            IsAssistantAllowedForProfile(profile()));
+}
+
+TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_Locale) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported",
+       "--enable-voice-interaction"});
+  base::test::ScopedRestoreICUDefaultLocale scoped_locale("he");
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmailGaiaId(
+                        profile()->GetProfileUserName(), kTestGaiaId));
+
+  EXPECT_EQ(ash::mojom::AssistantAllowedState::DISALLOWED_BY_LOCALE,
+            IsAssistantAllowedForProfile(profile()));
+}
+
+TEST_F(ChromeArcUtilTest, IsAssistantAllowedForProfile_Managed) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported",
+       "--enable-voice-interaction"});
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmailGaiaId(
+                        profile()->GetProfileUserName(), kTestGaiaId));
+  ASSERT_EQ(ash::mojom::AssistantAllowedState::ALLOWED,
+            IsAssistantAllowedForProfile(profile()));
+
+  profile()->GetTestingPrefService()->SetManagedPref(
+      prefs::kArcEnabled, std::make_unique<base::Value>(false));
+
+  EXPECT_EQ(ash::mojom::AssistantAllowedState::DISALLOWED_BY_ARC_POLICY,
+            IsAssistantAllowedForProfile(profile()));
+
+  profile()->GetTestingPrefService()->SetManagedPref(
+      prefs::kArcEnabled, std::make_unique<base::Value>(true));
+
+  EXPECT_EQ(ash::mojom::AssistantAllowedState::ALLOWED,
+            IsAssistantAllowedForProfile(profile()));
+
+  profile()->GetTestingPrefService()->RemoveManagedPref(prefs::kArcEnabled);
+
+  EXPECT_EQ(ash::mojom::AssistantAllowedState::ALLOWED,
+            IsAssistantAllowedForProfile(profile()));
 }
 
 // Test the AreArcAllOptInPreferencesIgnorableForProfile() function.

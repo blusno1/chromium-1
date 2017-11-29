@@ -21,8 +21,8 @@ import android.support.customtabs.CustomTabsSessionToken;
 import android.text.TextUtils;
 import android.util.SparseBooleanArray;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeVersionInfo;
@@ -39,12 +39,13 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /** Manages the clients' state for Custom Tabs. This class is threadsafe. */
-@SuppressFBWarnings("CHROMIUM_SYNCHRONIZED_METHOD")
 class ClientManager {
     // Values for the "CustomTabs.MayLaunchUrlType" UMA histogram. Append-only.
     @VisibleForTesting static final int NO_MAY_LAUNCH_URL = 0;
@@ -131,6 +132,7 @@ class ClientManager {
         public final int uid;
         public final DisconnectCallback disconnectCallback;
         public final PostMessageHandler postMessageHandler;
+        public final Set<Uri> mLinkedUrls = new HashSet<>();
         public OriginVerifier originVerifier;
         public boolean mIgnoreFragments;
         public boolean lowConfidencePrediction;
@@ -379,6 +381,9 @@ class ClientManager {
         validateRelationshipInternal(session, relation, origin, true);
     }
 
+    /**
+     * Can't be called on UI Thread.
+     */
     private synchronized boolean validateRelationshipInternal(CustomTabsSessionToken session,
             int relation, Uri origin, boolean initializePostMessageChannel) {
         SessionParams params = mSessionParams.get(session);
@@ -386,7 +391,13 @@ class ClientManager {
         OriginVerificationListener listener = null;
         if (initializePostMessageChannel) listener = params.postMessageHandler;
         params.originVerifier = new OriginVerifier(listener, params.getPackageName(), relation);
-        params.originVerifier.start(origin);
+        ThreadUtils.runOnUiThread(() -> { params.originVerifier.start(origin); });
+        if (relation == CustomTabsService.RELATION_HANDLE_ALL_URLS
+                && InstalledAppProviderImpl.isAppInstalledAndAssociatedWithOrigin(
+                           params.getPackageName(), URI.create(origin.toString()),
+                           mContext.getPackageManager())) {
+            params.mLinkedUrls.add(origin);
+        }
         return true;
     }
 
@@ -409,9 +420,7 @@ class ClientManager {
         if (params == null) return false;
         String packageName = params.getPackageName();
         if (TextUtils.isEmpty(packageName)) return false;
-        boolean isAppAssociatedWithOrigin =
-                InstalledAppProviderImpl.isAppInstalledAndAssociatedWithOrigin(
-                        packageName, URI.create(origin.toString()), mContext.getPackageManager());
+        boolean isAppAssociatedWithOrigin = params.mLinkedUrls.contains(origin);
         if (!isAppAssociatedWithOrigin) return false;
         if (OriginVerifier.isValidOrigin(
                     packageName, origin, CustomTabsService.RELATION_HANDLE_ALL_URLS)) {

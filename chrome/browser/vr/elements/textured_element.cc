@@ -21,6 +21,12 @@ static bool g_rerender_if_not_dirty_for_testing_ = false;
 TexturedElement::TexturedElement(int maximum_width)
     : maximum_width_(maximum_width) {}
 
+TexturedElement::TexturedElement(int maximum_width, ResizeVertically unused)
+    : maximum_width_(maximum_width), resize_vertically_(true) {}
+
+TexturedElement::TexturedElement(int maximum_width, ResizeHorizontally unused)
+    : maximum_width_(maximum_width), resize_vertically_(false) {}
+
 TexturedElement::~TexturedElement() = default;
 
 void TexturedElement::Initialize(SkiaSurfaceProvider* provider) {
@@ -57,17 +63,31 @@ bool TexturedElement::UpdateTexture() {
   return true;
 }
 
-void TexturedElement::UpdateElementSize() {
-  // Updating the height according to width is a hack.  This may be overridden.
-  gfx::SizeF drawn_size = GetTexture()->GetDrawnSize();
-  float height =
-      drawn_size.height() / drawn_size.width() * stale_size().width();
-  SetSize(stale_size().width(), height);
+void TexturedElement::SetForegroundColor(SkColor color) {
+  GetTexture()->SetForegroundColor(color);
 }
 
-void TexturedElement::Render(
-    UiElementRenderer* renderer,
-    const gfx::Transform& model_view_proj_matrix) const {
+void TexturedElement::SetBackgroundColor(SkColor color) {
+  GetTexture()->SetBackgroundColor(color);
+}
+
+void TexturedElement::UpdateElementSize() {
+  // Adjust the width/height of this element according to the texture. Size in
+  // the other direction is determined by the associated texture.
+  gfx::SizeF drawn_size = GetTexture()->GetDrawnSize();
+  if (resize_vertically_) {
+    float height =
+        drawn_size.height() / drawn_size.width() * stale_size().width();
+    SetSize(stale_size().width(), height);
+  } else {
+    float width =
+        drawn_size.width() / drawn_size.height() * stale_size().height();
+    SetSize(width, stale_size().height());
+  }
+}
+
+void TexturedElement::Render(UiElementRenderer* renderer,
+                             const CameraModel& model) const {
   if (!g_initialized_for_testing_) {
     if (!initialized_)
       return;
@@ -76,14 +96,10 @@ void TexturedElement::Render(
   gfx::SizeF drawn_size = GetTexture()->GetDrawnSize();
   gfx::RectF copy_rect(0, 0, drawn_size.width() / texture_size_.width(),
                        drawn_size.height() / texture_size_.height());
-  renderer->DrawTexturedQuad(texture_handle_,
-                             UiElementRenderer::kTextureLocationLocal,
-                             model_view_proj_matrix, copy_rect,
-                             computed_opacity(), size(), corner_radius());
-}
-
-void TexturedElement::OnSetMode() {
-  GetTexture()->SetMode(mode());
+  renderer->DrawTexturedQuad(
+      texture_handle_, UiElementRenderer::kTextureLocationLocal,
+      model.view_proj_matrix * world_space_transform(), copy_rect,
+      computed_opacity(), size(), corner_radius());
 }
 
 bool TexturedElement::PrepareToDraw() {

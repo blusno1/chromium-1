@@ -42,7 +42,6 @@
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/NavigationPolicy.h"
-#include "platform/ScopedVirtualTimePauser.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/ResourceLoadPriority.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
@@ -54,6 +53,7 @@
 #include "public/platform/WebEffectiveConnectionType.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
+#include "public/platform/WebScopedVirtualTimePauser.h"
 #include "public/platform/WebSuddenTerminationDisablerType.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/web/WebTriggeringEventInfo.h"
@@ -69,6 +69,7 @@ namespace mojom {
 enum class WebFeature : int32_t;
 }  // namespace mojom
 
+class AssociatedInterfaceProvider;
 class Document;
 class DocumentLoader;
 class HTMLFormElement;
@@ -85,7 +86,6 @@ class ResourceResponse;
 class SecurityOrigin;
 class SharedWorkerRepositoryClient;
 class SubstituteData;
-class TextCheckerClient;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 class WebCookieJar;
@@ -99,6 +99,7 @@ class WebRTCPeerConnectionHandler;
 class WebServiceWorkerProvider;
 class WebSpellCheckPanelHostClient;
 struct WebRemoteScrollProperties;
+class WebTextCheckClient;
 
 class CORE_EXPORT LocalFrameClient : public FrameClient {
  public:
@@ -194,9 +195,12 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   // propogates renderer loading behavior to the browser process for histograms.
   virtual void DidObserveLoadingBehavior(WebLoadingBehaviorFlag) {}
 
-  // Will be called when a new useCounter feature has been observed in a frame.
+  // Will be called when a new UseCounter feature has been observed in a frame.
   // This propogates feature usage to the browser process for histograms.
   virtual void DidObserveNewFeatureUsage(mojom::WebFeature) {}
+  // Will be called by a Page upon DidCommitLoad, deciding whether to track
+  // UseCounter usage or not based on its url.
+  virtual bool ShouldTrackUseCounter(const KURL&) { return true; }
 
   // Transmits the change in the set of watched CSS selectors property that
   // match any element on the frame.
@@ -204,10 +208,12 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       const Vector<String>& added_selectors,
       const Vector<String>& removed_selectors) = 0;
 
-  virtual DocumentLoader* CreateDocumentLoader(LocalFrame*,
-                                               const ResourceRequest&,
-                                               const SubstituteData&,
-                                               ClientRedirectPolicy) = 0;
+  virtual DocumentLoader* CreateDocumentLoader(
+      LocalFrame*,
+      const ResourceRequest&,
+      const SubstituteData&,
+      ClientRedirectPolicy,
+      const base::UnguessableToken& devtools_navigation_token) = 0;
 
   virtual String UserAgent() = 0;
 
@@ -275,7 +281,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
                                     SandboxFlags,
                                     const ParsedFeaturePolicy&) {}
 
-  virtual void DidSetFeaturePolicyHeader(
+  virtual void DidSetFramePolicyHeaders(
+      SandboxFlags,
       const ParsedFeaturePolicy& parsed_header) {}
 
   // Called when a set of new Content Security Policies is added to the frame's
@@ -302,7 +309,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual ContentSettingsClient& GetContentSettingsClient() = 0;
 
   virtual SharedWorkerRepositoryClient* GetSharedWorkerRepositoryClient() {
-    return 0;
+    return nullptr;
   }
 
   virtual std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
@@ -346,13 +353,18 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
     return nullptr;
   }
 
+  virtual AssociatedInterfaceProvider*
+  GetRemoteNavigationAssociatedInterfaces() {
+    return nullptr;
+  }
+
   virtual void SetHasReceivedUserGesture(bool received_previously) {}
 
   virtual void AbortClientNavigation() {}
 
   virtual WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const = 0;
 
-  virtual TextCheckerClient& GetTextCheckerClient() const = 0;
+  virtual WebTextCheckClient* GetTextCheckerClient() const = 0;
 
   virtual std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() = 0;
 
@@ -369,7 +381,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       const WebRemoteScrollProperties&) {}
 
   virtual void SetVirtualTimePauser(
-      ScopedVirtualTimePauser virtual_time_pauser) {}
+      WebScopedVirtualTimePauser virtual_time_pauser) {}
 };
 
 }  // namespace blink

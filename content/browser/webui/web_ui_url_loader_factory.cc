@@ -48,7 +48,7 @@ void CallOnError(mojom::URLLoaderClientPtrInfo client_info, int error_code) {
   mojom::URLLoaderClientPtr client;
   client.Bind(std::move(client_info));
 
-  network::URLLoaderStatus status;
+  network::URLLoaderCompletionStatus status;
   status.error_code = error_code;
   client->OnComplete(status);
 }
@@ -100,19 +100,19 @@ void ReadData(scoped_refptr<ResourceResponse> headers,
   MojoResult result = data_pipe.producer_handle->BeginWriteData(
       &buffer, &num_bytes, MOJO_WRITE_DATA_FLAG_NONE);
   CHECK_EQ(result, MOJO_RESULT_OK);
-  CHECK_EQ(num_bytes, output_size);
+  CHECK_GE(num_bytes, output_size);
 
   if (gzipped) {
-    base::StringPiece output(static_cast<char*>(buffer), num_bytes);
+    base::StringPiece output(static_cast<char*>(buffer), output_size);
     CHECK(compression::GzipUncompress(input, output));
   } else {
     memcpy(buffer, bytes->front(), output_size);
   }
-  result = data_pipe.producer_handle->EndWriteData(num_bytes);
+  result = data_pipe.producer_handle->EndWriteData(output_size);
   CHECK_EQ(result, MOJO_RESULT_OK);
 
   client->OnStartLoadingResponseBody(std::move(data_pipe.consumer_handle));
-  network::URLLoaderStatus status(net::OK);
+  network::URLLoaderCompletionStatus status(net::OK);
   status.encoded_data_length = output_size;
   status.encoded_body_length = output_size;
   client->OnComplete(status);
@@ -237,7 +237,7 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
     if (request.url.scheme() != scheme_) {
       ReceivedBadMessage(render_frame_host_->GetProcess(),
                          bad_message::WEBUI_BAD_SCHEME_ACCESS);
-      client->OnComplete(network::URLLoaderStatus(net::ERR_FAILED));
+      client->OnComplete(network::URLLoaderCompletionStatus(net::ERR_FAILED));
       return;
     }
 

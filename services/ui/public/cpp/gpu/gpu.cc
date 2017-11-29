@@ -210,7 +210,7 @@ scoped_refptr<viz::ContextProvider> Gpu::CreateContextProvider(
 }
 
 void Gpu::CreateJpegDecodeAccelerator(
-    media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) {
+    media::mojom::JpegDecodeAcceleratorRequest jda_request) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   (*gpu_)->CreateJpegDecodeAccelerator(std::move(jda_request));
 }
@@ -328,7 +328,7 @@ std::unique_ptr<base::SharedMemory> Gpu::AllocateSharedMemory(size_t size) {
     return nullptr;
   DCHECK_EQ(shared_memory_size, size);
 
-  return base::MakeUnique<base::SharedMemory>(platform_handle, readonly);
+  return std::make_unique<base::SharedMemory>(platform_handle, readonly);
 }
 
 }  // namespace ui

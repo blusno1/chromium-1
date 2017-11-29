@@ -6,11 +6,11 @@ package org.chromium.chrome.browser;
 
 import android.app.Notification;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.annotation.Nullable;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
@@ -19,7 +19,6 @@ import org.chromium.chrome.browser.banners.AppDetailsDelegate;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.datausage.ExternalDataUseObserver;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
-import org.chromium.chrome.browser.feedback.EmptyFeedbackReporter;
 import org.chromium.chrome.browser.feedback.FeedbackReporter;
 import org.chromium.chrome.browser.gsa.GSAHelper;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
@@ -161,7 +160,7 @@ public abstract class AppHooks {
      * @return An instance of {@link FeedbackReporter} to report feedback.
      */
     public FeedbackReporter createFeedbackReporter() {
-        return new EmptyFeedbackReporter();
+        return new FeedbackReporter() {};
     }
 
     /**
@@ -283,7 +282,6 @@ public abstract class AppHooks {
      *
      * @param intent The {@link Intent} to fire to start the service.
      */
-    @SuppressWarnings("Unused")
     public void startForegroundService(Intent intent) {
         // TODO(crbug.com/758280): Remove this whole method once the downstream override is gone and
         // all overrides have been ported over.
@@ -297,7 +295,7 @@ public abstract class AppHooks {
      */
     @CalledByNative
     public boolean shouldDetectVideoFullscreen() {
-        return BuildInfo.isAtLeastO();
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
     }
 
     /**

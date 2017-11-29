@@ -62,16 +62,44 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
     NOTREACHED();
   }
 
+  void DidGenerateCacheableMetadata(const GURL& url,
+                                    base::Time expected_response_time,
+                                    const std::vector<uint8_t>& data) override {
+    NOTREACHED();
+  }
+
+  void DidGenerateCacheableMetadataInCacheStorage(
+      const GURL& url,
+      base::Time expected_response_time,
+      const std::vector<uint8_t>& data,
+      const url::Origin& cache_storage_origin,
+      const std::string& cache_storage_cache_name) override {
+    NOTREACHED();
+  }
+
+  void HasGpuProcess(HasGpuProcessCallback callback) override {
+    std::move(callback).Run(false);
+  }
+
+  void SetThreadPriority(int32_t platform_thread_id,
+                         base::ThreadPriority thread_priority) override {}
+
+  void LoadFont(const base::string16& font_name,
+                const float font_size_point,
+                LoadFontCallback callback) override {
+    NOTREACHED();
+  }
+
  private:
   MockRenderThread* const thread_;
 };
 
 // Returns an InterfaceProvider that is safe to call into, but will not actually
 // service any interface requests.
-service_manager::mojom::InterfaceProviderPtr CreateStubInterfaceProvider() {
-  ::service_manager::mojom::InterfaceProviderPtr stub_interface_provider_proxy;
-  mojo::MakeRequest(&stub_interface_provider_proxy);
-  return stub_interface_provider_proxy;
+service_manager::mojom::InterfaceProviderPtrInfo CreateStubInterfaceProvider() {
+  ::service_manager::mojom::InterfaceProviderPtrInfo info;
+  mojo::MakeRequest(&info);
+  return info;
 }
 
 }  // namespace
@@ -281,7 +309,7 @@ void MockRenderThread::OnCreateChildFrame(
     base::UnguessableToken* devtools_frame_token) {
   *new_render_frame_id = new_frame_routing_id_++;
   *new_interface_provider =
-      CreateStubInterfaceProvider().PassInterface().PassHandle().release();
+      CreateStubInterfaceProvider().PassHandle().release();
   *devtools_frame_token = base::UnguessableToken::Create();
 }
 

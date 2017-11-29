@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "ash/app_list/model/app_list_view_state.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
@@ -14,7 +15,6 @@
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_export.h"
 #include "ui/app_list/app_list_view_delegate_observer.h"
-#include "ui/app_list/app_list_view_state.h"
 #include "ui/app_list/speech_ui_model_observer.h"
 #include "ui/display/display_observer.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
@@ -320,6 +320,10 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   void GetWallpaperProminentColors(std::vector<SkColor>* colors);
   void SetBackgroundShieldColor();
+
+  // Records the number of folders, and the number of items in folders for UMA
+  // histograms.
+  void RecordFolderMetrics();
 
   AppListViewDelegate* delegate_;  // Weak. Owned by AppListService.
   AppListModel* const model_;      // Not Owned.

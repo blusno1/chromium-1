@@ -258,6 +258,9 @@ scoped_refptr<blink::WebTaskRunner> WebFrameSchedulerImpl::GetTaskRunner(
       return WebTaskRunnerImpl::Create(PausableTaskQueue(), type);
     case TaskType::kUnthrottled:
       return WebTaskRunnerImpl::Create(UnpausableTaskQueue(), type);
+    case TaskType::kCount:
+      NOTREACHED();
+      break;
   }
   NOTREACHED();
   return nullptr;
@@ -386,8 +389,9 @@ void WebFrameSchedulerImpl::DidCommitProvisionalLoad(
                                                 is_reload, is_main_frame);
 }
 
-ScopedVirtualTimePauser WebFrameSchedulerImpl::CreateScopedVirtualTimePauser() {
-  return ScopedVirtualTimePauser(renderer_scheduler_);
+WebScopedVirtualTimePauser
+WebFrameSchedulerImpl::CreateWebScopedVirtualTimePauser() {
+  return WebScopedVirtualTimePauser(renderer_scheduler_);
 }
 
 void WebFrameSchedulerImpl::DidOpenActiveConnection() {

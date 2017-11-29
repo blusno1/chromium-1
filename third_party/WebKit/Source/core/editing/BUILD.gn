@@ -278,8 +278,7 @@ blink_core_sources("editing") {
     "spellcheck/SpellCheckRequester.h",
     "spellcheck/SpellChecker.cpp",
     "spellcheck/SpellChecker.h",
-    "spellcheck/TextCheckerClientImpl.cpp",
-    "spellcheck/TextCheckerClientImpl.h",
+    "spellcheck/TextChecking.h",
     "spellcheck/TextCheckingParagraph.cpp",
     "spellcheck/TextCheckingParagraph.h",
     "state_machines/BackspaceStateMachine.cpp",
@@ -316,7 +315,6 @@ blink_core_sources("editing") {
 jumbo_source_set("unit_tests") {
   testonly = true
   sources = [
-    "EditingCommandTest.cpp",
     "EditingStrategyTest.cpp",
     "EditingStyleTest.cpp",
     "EditingUtilitiesTest.cpp",
@@ -344,6 +342,7 @@ jumbo_source_set("unit_tests") {
     "commands/ApplyStyleCommandTest.cpp",
     "commands/CompositeEditCommandTest.cpp",
     "commands/DeleteSelectionCommandTest.cpp",
+    "commands/EditingCommandTest.cpp",
     "commands/InsertIncrementalTextCommandTest.cpp",
     "commands/InsertListCommandTest.cpp",
     "commands/InsertTextCommandTest.cpp",
@@ -392,6 +391,7 @@ jumbo_source_set("unit_tests") {
     "suggestion/TextSuggestionControllerTest.cpp",
     "testing/EditingTestBase.cpp",
     "testing/EditingTestBase.h",
+    "testing/EditingTestBaseTest.cpp",
     "testing/SelectionSample.cpp",
     "testing/SelectionSample.h",
     "testing/SelectionSampleTest.cpp",

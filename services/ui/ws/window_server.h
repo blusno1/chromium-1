@@ -14,6 +14,7 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -41,6 +42,7 @@ class GpuHost;
 class ServerWindow;
 class ThreadedImageCursorsFactory;
 class UserActivityMonitor;
+class WindowManagerDisplayRoot;
 class WindowManagerState;
 class WindowServerDelegate;
 class WindowTree;
@@ -56,7 +58,7 @@ class WindowServer : public ServerWindowDelegate,
                      public UserDisplayManagerDelegate,
                      public UserIdTrackerObserver {
  public:
-  explicit WindowServer(WindowServerDelegate* delegate);
+  WindowServer(WindowServerDelegate* delegate, bool should_host_viz);
   ~WindowServer() override;
 
   WindowServerDelegate* delegate() { return delegate_; }
@@ -69,14 +71,15 @@ class WindowServer : public ServerWindowDelegate,
     return display_manager_.get();
   }
 
-  GpuHost* gpu_host() { return gpu_host_.get(); }
-
   void SetDisplayCreationConfig(DisplayCreationConfig config);
   DisplayCreationConfig display_creation_config() const {
     return display_creation_config_;
   }
 
   void SetGpuHost(std::unique_ptr<GpuHost> gpu_host);
+  GpuHost* gpu_host() { return gpu_host_.get(); }
+
+  bool is_hosting_viz() const { return !!host_frame_sink_manager_; }
 
   ThreadedImageCursorsFactory* GetThreadedImageCursorsFactory();
 
@@ -250,7 +253,7 @@ class WindowServer : public ServerWindowDelegate,
   VideoDetectorImpl* video_detector() { return &video_detector_; }
 
   // ServerWindowDelegate:
-  viz::HostFrameSinkManager* GetHostFrameSinkManager() override;
+  VizHostProxy* GetVizHostProxy() override;
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info,
                                 ServerWindow* window) override;
 
@@ -300,6 +303,8 @@ class WindowServer : public ServerWindowDelegate,
   // cursor. This is run in response to events that change the bounds or window
   // hierarchy.
   void UpdateNativeCursorFromMouseLocation(ServerWindow* window);
+  void UpdateNativeCursorFromMouseLocation(
+      WindowManagerDisplayRoot* display_root);
 
   // Updates the native cursor if the cursor is currently inside |window|. This
   // is run in response to events that change the mouse cursor properties of
@@ -410,8 +415,12 @@ class WindowServer : public ServerWindowDelegate,
 
   viz::SurfaceId root_surface_id_;
 
+  // Incremented when the viz process is restarted.
+  uint32_t viz_restart_id_ = viz::BeginFrameSource::kNotRestartableId + 1;
+
   // Provides interfaces to create and manage FrameSinks.
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
+  std::unique_ptr<VizHostProxy> viz_host_proxy_;
 
   VideoDetectorImpl video_detector_;
 

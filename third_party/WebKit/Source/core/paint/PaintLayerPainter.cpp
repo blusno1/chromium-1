@@ -416,8 +416,7 @@ PaintResult PaintLayerPainter::PaintLayerContents(
   PaintLayerPaintingInfo local_painting_info(painting_info);
   local_painting_info.sub_pixel_accumulation = subpixel_accumulation;
 
-  sk_sp<SkImageFilter> image_filter =
-      FilterPainter::GetImageFilter(paint_layer_);
+  sk_sp<PaintFilter> image_filter = FilterPainter::GetImageFilter(paint_layer_);
 
   bool should_paint_content = paint_layer_.HasVisibleContent() &&
                               is_self_painting_layer &&
@@ -536,14 +535,13 @@ PaintResult PaintLayerPainter::PaintLayerContents(
   if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     const auto* local_border_box_properties = paint_layer_.GetLayoutObject()
                                                   .FirstFragment()
-                                                  .GetRarePaintData()
-                                                  ->LocalBorderBoxProperties();
+                                                  .LocalBorderBoxProperties();
     DCHECK(local_border_box_properties);
     PaintChunkProperties properties(*local_border_box_properties);
     properties.backface_hidden =
         paint_layer_.GetLayoutObject().HasHiddenBackface();
     scoped_paint_chunk_properties.emplace(context.GetPaintController(),
-                                          paint_layer_, properties);
+                                          properties, paint_layer_);
   }
 
   bool selection_only =
@@ -586,9 +584,10 @@ PaintResult PaintLayerPainter::PaintLayerContents(
       Optional<ScopedPaintChunkProperties> background_chunk_properties;
       if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
         background_chunk_properties.emplace(
-            context.GetPaintController(), paint_layer_,
-            DisplayItem::PaintPhaseToDrawingType(PaintPhase::kBlockBackground),
-            context.GetPaintController().CurrentPaintChunkProperties());
+            context.GetPaintController(),
+            context.GetPaintController().CurrentPaintChunkProperties(),
+            paint_layer_,
+            DisplayItem::PaintPhaseToDrawingType(PaintPhase::kBlockBackground));
       }
       PaintBackgroundForFragments(layer_fragments, context,
                                   local_painting_info, paint_flags);
@@ -604,9 +603,10 @@ PaintResult PaintLayerPainter::PaintLayerContents(
       Optional<ScopedPaintChunkProperties> foreground_chunk_properties;
       if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
         foreground_chunk_properties.emplace(
-            context.GetPaintController(), paint_layer_,
-            DisplayItem::PaintPhaseToDrawingType(PaintPhase::kForeground),
-            context.GetPaintController().CurrentPaintChunkProperties());
+            context.GetPaintController(),
+            context.GetPaintController().CurrentPaintChunkProperties(),
+            paint_layer_,
+            DisplayItem::PaintPhaseToDrawingType(PaintPhase::kForeground));
       }
 
       if (should_paint_own_contents) {
@@ -982,6 +982,24 @@ void PaintLayerPainter::PaintFragmentWithPhase(
     ClipState clip_state) {
   DCHECK(paint_layer_.IsSelfPaintingLayer());
 
+  Optional<ScopedPaintChunkProperties> fragment_paint_chunk_properties;
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
+      // We have already created paint chunk properties for the first fragment
+      // in PaintLayerContents().
+      fragment.fragment_data !=
+          &paint_layer_.GetLayoutObject().FirstFragment()) {
+    auto properties =
+        *fragment.fragment_data->GetRarePaintData()->LocalBorderBoxProperties();
+    // Keep the current effect which might have been set by
+    // PaintMaskForFragments().
+    properties.SetEffect(context.GetPaintController()
+                             .CurrentPaintChunkProperties()
+                             .property_tree_state.Effect());
+    fragment_paint_chunk_properties.emplace(
+        context.GetPaintController(), properties, paint_layer_,
+        DisplayItem::PaintPhaseToDrawingType(phase));
+  }
+
   DisplayItemClient* client = &paint_layer_.GetLayoutObject();
   Optional<LayerClipRecorder> clip_recorder;
   if (clip_state != kHasClipped &&
@@ -1213,15 +1231,12 @@ void PaintLayerPainter::PaintMaskForFragments(
 
   Optional<ScopedPaintChunkProperties> scoped_paint_chunk_properties;
   if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
-    const auto* object_paint_properties =
+    const auto* properties =
         paint_layer_.GetLayoutObject().FirstFragment().PaintProperties();
-    DCHECK(object_paint_properties && object_paint_properties->Mask());
-    PaintChunkProperties properties(
-        context.GetPaintController().CurrentPaintChunkProperties());
-    properties.property_tree_state.SetEffect(object_paint_properties->Mask());
+    DCHECK(properties && properties->Mask());
     scoped_paint_chunk_properties.emplace(
-        context.GetPaintController(), paint_layer_,
-        DisplayItem::PaintPhaseToDrawingType(PaintPhase::kMask), properties);
+        context.GetPaintController(), properties->Mask(), paint_layer_,
+        DisplayItem::PaintPhaseToDrawingType(PaintPhase::kMask));
   }
 
   for (auto& fragment : layer_fragments) {

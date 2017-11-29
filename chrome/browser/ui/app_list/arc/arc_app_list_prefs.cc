@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <string>
+#include <utility>
 
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
@@ -29,6 +30,7 @@
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_util.h"
+#include "components/arc/connection_holder.h"
 #include "components/crx_file/id_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -75,12 +77,12 @@ class ScopedArcPrefUpdate : public DictionaryPrefUpdate {
   // DictionaryPrefUpdate overrides:
   base::DictionaryValue* Get() override {
     base::DictionaryValue* dict = DictionaryPrefUpdate::Get();
-    base::DictionaryValue* dict_item = nullptr;
-    if (!dict->GetDictionaryWithoutPathExpansion(id_, &dict_item)) {
-      dict_item = dict->SetDictionaryWithoutPathExpansion(
-          id_, base::MakeUnique<base::DictionaryValue>());
+    base::Value* dict_item =
+        dict->FindKeyOfType(id_, base::Value::Type::DICTIONARY);
+    if (!dict_item) {
+      dict_item = dict->SetKey(id_, base::Value(base::Value::Type::DICTIONARY));
     }
-    return dict_item;
+    return static_cast<base::DictionaryValue*>(dict_item);
   }
 
  private:
@@ -236,8 +238,9 @@ void UpdatePlayStoreDictionary(PrefService* service) {
 // static
 ArcAppListPrefs* ArcAppListPrefs::Create(
     Profile* profile,
-    arc::InstanceHolder<arc::mojom::AppInstance>* app_instance_holder) {
-  return new ArcAppListPrefs(profile, app_instance_holder);
+    arc::ConnectionHolder<arc::mojom::AppInstance, arc::mojom::AppHost>*
+        app_connection_holder) {
+  return new ArcAppListPrefs(profile, app_connection_holder);
 }
 
 // static
@@ -269,15 +272,15 @@ std::string ArcAppListPrefs::GetAppId(const std::string& package_name,
 
 ArcAppListPrefs::ArcAppListPrefs(
     Profile* profile,
-    arc::InstanceHolder<arc::mojom::AppInstance>* app_instance_holder)
+    arc::ConnectionHolder<arc::mojom::AppInstance, arc::mojom::AppHost>*
+        app_connection_holder)
     : profile_(profile),
       prefs_(profile->GetPrefs()),
-      app_instance_holder_(app_instance_holder),
-      binding_(this),
+      app_connection_holder_(app_connection_holder),
       default_apps_(this, profile),
       weak_ptr_factory_(this) {
   DCHECK(profile);
-  DCHECK(app_instance_holder);
+  DCHECK(app_connection_holder);
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   const base::FilePath& base_path = profile->GetPath();
   base_path_ = base_path.AppendASCII(arc::prefs::kArcApps);
@@ -304,7 +307,7 @@ ArcAppListPrefs::~ArcAppListPrefs() {
     return;
   DCHECK(arc::ArcServiceManager::Get());
   arc_session_manager->RemoveObserver(this);
-  app_instance_holder_->RemoveObserver(this);
+  app_connection_holder_->RemoveObserver(this);
 }
 
 void ArcAppListPrefs::StartPrefs() {
@@ -326,9 +329,10 @@ void ArcAppListPrefs::StartPrefs() {
     arc_session_manager->AddObserver(this);
   }
 
-  app_instance_holder_->AddObserver(this);
-  if (!app_instance_holder_->has_instance())
-    OnInstanceClosed();
+  app_connection_holder_->SetHost(this);
+  app_connection_holder_->AddObserver(this);
+  if (!app_connection_holder_->IsConnected())
+    OnConnectionClosed();
 }
 
 base::FilePath ArcAppListPrefs::GetAppPath(const std::string& app_id) const {
@@ -392,7 +396,7 @@ void ArcAppListPrefs::RequestIcon(const std::string& app_id,
   if (!ready_apps_.count(app_id))
     return;
 
-  if (!app_instance_holder_->has_instance()) {
+  if (!app_connection_holder_->IsConnected()) {
     // AppInstance should be ready since we have app_id in ready_apps_. This
     // can happen in browser_tests.
     return;
@@ -406,8 +410,8 @@ void ArcAppListPrefs::RequestIcon(const std::string& app_id,
 
   if (app_info->icon_resource_id.empty()) {
     auto* app_instance =
-        ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_, RequestAppIcon);
-    // Version 0 instance should always be available here because has_instance()
+        ARC_GET_INSTANCE_FOR_METHOD(app_connection_holder_, RequestAppIcon);
+    // Version 0 instance should always be available here because IsConnected()
     // returned true above.
     DCHECK(app_instance);
     app_instance->RequestAppIcon(
@@ -415,7 +419,7 @@ void ArcAppListPrefs::RequestIcon(const std::string& app_id,
         static_cast<arc::mojom::ScaleFactor>(scale_factor));
   } else {
     auto* app_instance =
-        ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_, RequestIcon);
+        ARC_GET_INSTANCE_FOR_METHOD(app_connection_holder_, RequestIcon);
     if (!app_instance)
       return;  // The instance version on ARC side was too old.
     app_instance->RequestIcon(
@@ -454,7 +458,7 @@ void ArcAppListPrefs::SetNotificationsEnabled(const std::string& app_id,
     return;
   }
 
-  auto* app_instance = ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_,
+  auto* app_instance = ARC_GET_INSTANCE_FOR_METHOD(app_connection_holder_,
                                                    SetNotificationsEnabled);
   if (!app_instance)
     return;
@@ -810,30 +814,17 @@ void ArcAppListPrefs::SimulateDefaultAppAvailabilityTimeoutForTesting() {
   DetectDefaultAppAvailability();
 }
 
-void ArcAppListPrefs::OnInstanceReady() {
-  arc::mojom::AppInstance* app_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_, Init);
-
+void ArcAppListPrefs::OnConnectionReady() {
   // Note, sync_service_ may be nullptr in testing.
   sync_service_ = arc::ArcPackageSyncableService::Get(profile_);
-
-  // In some tests app_instance may not be set.
-  if (!app_instance)
-    return;
-
   is_initialized_ = false;
-
-  arc::mojom::AppHostPtr host_proxy;
-  binding_.Bind(mojo::MakeRequest(&host_proxy));
-  app_instance->Init(std::move(host_proxy));
 }
 
-void ArcAppListPrefs::OnInstanceClosed() {
+void ArcAppListPrefs::OnConnectionClosed() {
   DisableAllApps();
   installing_packages_count_ = 0;
   default_apps_installations_.clear();
   detect_default_app_availability_timeout_.Stop();
-  binding_.Close();
   ClearIconRequestRecord();
 
   if (sync_service_) {

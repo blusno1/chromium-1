@@ -13,11 +13,11 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/url_database.h"
@@ -171,9 +171,10 @@ struct TestURLInfo {
     {"https://www.wytih/file", "What you typed in history www file", 7, 7, 80},
 };
 
-class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
+class AnonFakeAutocompleteProviderClient
+    : public MockAutocompleteProviderClient {
  public:
-  explicit FakeAutocompleteProviderClient(bool create_history_db) {
+  explicit AnonFakeAutocompleteProviderClient(bool create_history_db) {
     set_template_url_service(base::MakeUnique<TemplateURLService>(nullptr, 0));
     if (history_dir_.CreateUniqueTempDir()) {
       history_service_ = history::CreateHistoryService(history_dir_.GetPath(),
@@ -199,7 +200,7 @@ class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
   base::ScopedTempDir history_dir_;
   std::unique_ptr<history::HistoryService> history_service_;
 
-  DISALLOW_COPY_AND_ASSIGN(FakeAutocompleteProviderClient);
+  DISALLOW_COPY_AND_ASSIGN(AnonFakeAutocompleteProviderClient);
 };
 
 }  // namespace
@@ -264,9 +265,9 @@ class HistoryURLProviderTest : public testing::Test,
                                 size_t expected_match_location,
                                 size_t expected_match_length);
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   ACMatches matches_;
-  std::unique_ptr<FakeAutocompleteProviderClient> client_;
+  std::unique_ptr<AnonFakeAutocompleteProviderClient> client_;
   scoped_refptr<HistoryURLProvider> autocomplete_;
   // Should the matches be sorted and duplicates removed?
   bool sort_matches_;
@@ -299,7 +300,8 @@ void HistoryURLProviderTest::OnProviderUpdate(bool updated_matches) {
 }
 
 bool HistoryURLProviderTest::SetUpImpl(bool create_history_db) {
-  client_.reset(new FakeAutocompleteProviderClient(create_history_db));
+  client_ =
+      std::make_unique<AnonFakeAutocompleteProviderClient>(create_history_db);
   if (!client_->GetHistoryService())
     return false;
   autocomplete_ = new HistoryURLProvider(client_.get(), this);

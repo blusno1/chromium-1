@@ -104,17 +104,6 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
     ash::Shell::Get()->RemoveShellObserver(AccessibilityManager::Get());
   }
 
-  bool IsSpokenFeedbackEnabled() const override {
-    DCHECK(AccessibilityManager::Get());
-    return AccessibilityManager::Get()->IsSpokenFeedbackEnabled();
-  }
-
-  void ToggleSpokenFeedback(
-      ash::AccessibilityNotificationVisibility notify) override {
-    DCHECK(AccessibilityManager::Get());
-    AccessibilityManager::Get()->ToggleSpokenFeedback(notify);
-  }
-
   void SetMagnifierEnabled(bool enabled) override {
     DCHECK(chromeos::MagnificationManager::Get());
     return chromeos::MagnificationManager::Get()->SetMagnifierEnabled(enabled);
@@ -143,16 +132,6 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
   bool IsVirtualKeyboardEnabled() const override {
     DCHECK(AccessibilityManager::Get());
     return AccessibilityManager::Get()->IsVirtualKeyboardEnabled();
-  }
-
-  void SetMonoAudioEnabled(bool enabled) override {
-    DCHECK(AccessibilityManager::Get());
-    return AccessibilityManager::Get()->EnableMonoAudio(enabled);
-  }
-
-  bool IsMonoAudioEnabled() const override {
-    DCHECK(AccessibilityManager::Get());
-    return AccessibilityManager::Get()->IsMonoAudioEnabled();
   }
 
   void SetCaretHighlightEnabled(bool enabled) override {

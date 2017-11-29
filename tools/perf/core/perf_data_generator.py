@@ -30,7 +30,8 @@ from core.sharding_map_generator import load_benchmark_sharding_map
 
 
 _UNSCHEDULED_TELEMETRY_BENCHMARKS = set([
-  'dromaeo'
+  'experimental.startup.android.coldish',
+  'wasm'
   ])
 
 
@@ -275,7 +276,7 @@ def get_waterfall_config():
           ],
        'perf_tests': [
          ('tracing_perftests', 'build17-b1--device2'),
-         ('gpu_perftests', 'build18-b1--device2'),
+         # ('gpu_perftests', 'build18-b1--device2'), https://crbug.com/775219
          # ('cc_perftests', 'build47-b1--device2'), https://crbug.com/736150
         ]
       }
@@ -422,7 +423,8 @@ def get_waterfall_config():
            'build103-m1', 'build104-m1', 'build105-m1'
           ],
        'perf_tests': [
-         ('angle_perftests', 'build103-m1'),
+         # crbug.com/785291
+         # ('angle_perftests', 'build103-m1'),
          ('load_library_perf_tests', 'build103-m1'),
          ('performance_browser_tests', 'build103-m1'),
          ('media_perftests', 'build104-m1')]
@@ -811,7 +813,7 @@ def generate_telemetry_tests(name, tester_config, benchmarks,
                          'add the benchmark to '
                          '_UNSCHEDULED_TELEMETRY_BENCHMARKS list, '
                          'then file a bug with Speed>Benchmarks>Waterfall '
-                         'component and assign to eyaich@ or martiniss@ to '
+                         'component and assign to eyaich@ or ashleymarie@ to '
                          'schedule the benchmark on the perf waterfall.' % (
                              benchmark.Name()))
       swarming_dimensions.append(get_swarming_dimension(

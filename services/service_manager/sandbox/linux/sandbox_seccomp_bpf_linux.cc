@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl.h"
+#include "sandbox/linux/bpf_dsl/trap_registry.h"
 #include "sandbox/sandbox_features.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 #include "services/service_manager/sandbox/switches.h"
@@ -36,6 +37,7 @@
 #include "services/service_manager/sandbox/linux/bpf_cros_amd_gpu_policy_linux.h"
 #include "services/service_manager/sandbox/linux/bpf_cros_arm_gpu_policy_linux.h"
 #include "services/service_manager/sandbox/linux/bpf_gpu_policy_linux.h"
+#include "services/service_manager/sandbox/linux/bpf_network_policy_linux.h"
 #include "services/service_manager/sandbox/linux/bpf_pdf_compositor_policy_linux.h"
 #include "services/service_manager/sandbox/linux/bpf_ppapi_policy_linux.h"
 #include "services/service_manager/sandbox/linux/bpf_renderer_policy_linux.h"
@@ -63,42 +65,6 @@ namespace service_manager {
 namespace {
 
 #if !defined(OS_NACL_NONSFI)
-
-class BlacklistDebugAndNumaPolicy : public BPFBasePolicy {
- public:
-  BlacklistDebugAndNumaPolicy() {}
-  ~BlacklistDebugAndNumaPolicy() override {}
-
-  ResultExpr EvaluateSyscall(int system_call_number) const override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BlacklistDebugAndNumaPolicy);
-};
-
-ResultExpr BlacklistDebugAndNumaPolicy::EvaluateSyscall(int sysno) const {
-  if (SyscallSets::IsDebug(sysno) || SyscallSets::IsNuma(sysno))
-    return sandbox::CrashSIGSYS();
-
-  return Allow();
-}
-
-class AllowAllPolicy : public BPFBasePolicy {
- public:
-  AllowAllPolicy() {}
-  ~AllowAllPolicy() override {}
-
-  ResultExpr EvaluateSyscall(int system_call_number) const override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AllowAllPolicy);
-};
-
-// Allow all syscalls.
-// This will still deny x32 or IA32 calls in 64 bits mode or
-// 64 bits system calls in compatibility mode.
-ResultExpr AllowAllPolicy::EvaluateSyscall(int sysno) const {
-  return Allow();
-}
 
 // nacl_helper needs to be tiny and includes only part of content/
 // in its dependencies. Make sure to not link things that are not needed.
@@ -185,10 +151,12 @@ std::unique_ptr<BPFBasePolicy> SandboxSeccompBPF::PolicyForSandboxType(
       return std::make_unique<CdmProcessPolicy>();
     case SANDBOX_TYPE_PDF_COMPOSITOR:
       return std::make_unique<PdfCompositorProcessPolicy>();
+    case SANDBOX_TYPE_NETWORK:
+      return std::make_unique<NetworkProcessPolicy>();
     case SANDBOX_TYPE_NO_SANDBOX:
     default:
       NOTREACHED();
-      return std::make_unique<AllowAllPolicy>();
+      return nullptr;
   }
 }
 

@@ -1,7 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
 <link rel="import" href="input_css.html">
-<link rel="import" href="input_settings_behavior.html">
 <link rel="import" href="print_preview_shared_css.html">
 <link rel="import" href="settings_section.html">
 
@@ -14,13 +13,21 @@
         margin-top: 2.5px;
       }
 
+      :host(.multirow-controls) [slot='title'] {
+        --settings-section-title-style: {
+          padding-top: 7px;
+          align-self: flex-start;
+        }
+      }
+
       :host .input-wrapper {
         align-items: center;
         display: flex;
         width: 100%;
       }
     </style>
-    <print-preview-settings-section class="input-settings-section">
+    <print-preview-settings-section
+        class="input-settings-section multirow-controls">
       <span slot="title" id="section-title">[[inputLabel]]</span>
       <div slot="controls">
         <slot name="opt-outside-content"></slot>

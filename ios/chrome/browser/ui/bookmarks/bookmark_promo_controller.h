@@ -7,15 +7,11 @@
 
 #import <UIKit/UIKit.h>
 
-@protocol ApplicationCommands;
+@protocol SigninPresenter;
 
 namespace ios {
 class ChromeBrowserState;
 }  // namespace ios
-
-namespace user_prefs {
-class PrefRegistrySyncable;
-}  // namespace user_prefs
 
 @protocol BookmarkPromoControllerDelegate
 
@@ -34,13 +30,10 @@ class PrefRegistrySyncable;
 // call the promoStateChanged: selector on the delegate.
 @property(nonatomic, assign) BOOL promoState;
 
-// Registers the feature preferences.
-+ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry;
-
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                             delegate:
                                 (id<BookmarkPromoControllerDelegate>)delegate
-                          dispatcher:(id<ApplicationCommands>)dispatcher;
+                           presenter:(id<SigninPresenter>)presenter;
 
 // Presents the sign-in UI, presenting from |baseViewController|.
 - (void)showSignInFromViewController:(UIViewController*)baseViewController;

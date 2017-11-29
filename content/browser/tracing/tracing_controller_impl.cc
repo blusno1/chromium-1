@@ -283,6 +283,10 @@ bool TracingControllerImpl::StartTracing(
     const base::trace_event::TraceConfig& trace_config,
     const StartTracingDoneCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // TODO(chiniforooshan): The actual value should be received by callback and
+  // this function should return void.
+  if (IsTracing())
+    return false;
   trace_config_ =
       std::make_unique<base::trace_event::TraceConfig>(trace_config);
   coordinator_->StartTracing(
@@ -377,6 +381,7 @@ void TracingControllerImpl::CompleteFlush() {
     trace_data_endpoint_->ReceiveTraceFinalContents(
         std::move(filtered_metadata_));
   }
+  filtered_metadata_.reset(nullptr);
   trace_data_endpoint_ = nullptr;
   trace_config_ = nullptr;
 }

@@ -5,13 +5,13 @@
 #ifndef CSSNumericArray_h
 #define CSSNumericArray_h
 
+#include "base/macros.h"
 #include "core/css/cssom/CSSNumericValue.h"
 
 namespace blink {
 
 // See CSSNumericArray.idl for more information about this class.
 class CORE_EXPORT CSSNumericArray final : public ScriptWrappable {
-  WTF_MAKE_NONCOPYABLE(CSSNumericArray);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -21,14 +21,10 @@ class CORE_EXPORT CSSNumericArray final : public ScriptWrappable {
   }
   static CSSNumericArray* FromNumberishes(
       const HeapVector<CSSNumberish>& values) {
-    CSSNumericValueVector result;
-    for (const CSSNumberish& value : values) {
-      result.push_back(CSSNumericValue::FromNumberish(value));
-    }
-    return new CSSNumericArray(result);
+    return new CSSNumericArray(CSSNumberishesToNumericValues(values));
   }
 
-  void Trace(Visitor* visitor) {
+  void Trace(blink::Visitor* visitor) {
     visitor->Trace(values_);
     ScriptWrappable::Trace(visitor);
   }
@@ -40,11 +36,14 @@ class CORE_EXPORT CSSNumericArray final : public ScriptWrappable {
     return nullptr;
   }
 
+  const CSSNumericValueVector& Values() const { return values_; }
+
  private:
   explicit CSSNumericArray(CSSNumericValueVector values)
       : values_(std::move(values)) {}
 
   CSSNumericValueVector values_;
+  DISALLOW_COPY_AND_ASSIGN(CSSNumericArray);
 };
 
 }  // namespace blink

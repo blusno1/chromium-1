@@ -27,6 +27,7 @@
 
 #include "core/svg/graphics/SVGImage.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/animation/DocumentAnimations.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/dom/DocumentParser.h"
@@ -63,7 +64,6 @@
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -805,7 +805,7 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
       return kSizeAvailableAndLoadingAsynchronously;
 
     case kLoadCompleted:
-      return kSizeAvailable;
+      return SvgRootElement(page_.Get()) ? kSizeAvailable : kSizeUnavailable;
 
     case kDataChangedNotStarted:
     case kWaitingForAsyncLoadCompletion:

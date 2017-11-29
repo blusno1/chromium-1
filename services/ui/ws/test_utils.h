@@ -196,6 +196,7 @@ class EventDispatcherTestApi {
   }
   ServerWindow* capture_window() { return ed_->capture_window_; }
   EventTargeter* event_targeter() { return ed_->event_targeter_.get(); }
+  bool IsObservingWindow(ServerWindow* window);
 
  private:
   EventDispatcher* ed_;
@@ -393,6 +394,9 @@ class TestWindowManager : public mojom::WindowManager {
  private:
   // WindowManager:
   void OnConnect() override;
+  void WmOnAcceleratedWidgetForDisplay(
+      int64_t display,
+      gpu::SurfaceHandle surface_handle) override;
   void WmNewDisplayAdded(
       const display::Display& display,
       ui::mojom::WindowDataPtr root,
@@ -589,7 +593,7 @@ class TestWindowTreeBinding : public WindowTreeBinding {
  public:
   TestWindowTreeBinding(WindowTree* tree,
                         std::unique_ptr<TestWindowTreeClient> client =
-                            base::MakeUnique<TestWindowTreeClient>());
+                            std::make_unique<TestWindowTreeClient>());
   ~TestWindowTreeBinding() override;
 
   std::unique_ptr<TestWindowTreeClient> ReleaseClient() {

@@ -7,6 +7,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -82,8 +83,8 @@ void FakeOAuthTokenGetter::InvalidateCache() {
 
 class OAuthTokenGetterProxyTest : public testing::Test {
  public:
-  OAuthTokenGetterProxyTest() {}
-  ~OAuthTokenGetterProxyTest() override {}
+  OAuthTokenGetterProxyTest() = default;
+  ~OAuthTokenGetterProxyTest() override = default;
 
   // testing::Test overrides.
   void SetUp() override;

@@ -29,6 +29,41 @@ function getTimeFormat(time) {
 }
 
 /**
+ * Insert a log message row to the top of the log message table.
+ *
+ * @param {number!} time Millisecond since Unix Epoch representation of time.
+ * @param {string!} type The message event type.
+ * @param {string!} description The event message description.
+ * @param {string} url The URL associated with the event.
+ */
+function insertMessageRowToMessageLogTable(time, type, description, url) {
+  let tableRow =
+      $('message-logs-table').insertRow(1);  // Index 0 belongs to header row.
+  tableRow.setAttribute('class', 'log-message');
+
+  let timeTd = document.createElement('td');
+  timeTd.textContent = getTimeFormat(time);
+  timeTd.setAttribute('class', 'log-time');
+  tableRow.appendChild(timeTd);
+
+  let typeTd = document.createElement('td');
+  typeTd.setAttribute('class', 'log-type');
+  typeTd.textContent = type;
+  tableRow.appendChild(typeTd);
+
+  let descriptionTd = document.createElement('td');
+  descriptionTd.setAttribute('class', 'log-description');
+  descriptionTd.textContent = description;
+  tableRow.appendChild(descriptionTd);
+
+  if (url.length > 0) {
+    let urlTd = createUrlElement(url);
+    urlTd.setAttribute('class', 'log-url');
+    tableRow.appendChild(urlTd);
+  }
+}
+
+/**
  * Switch the selected tab to 'selected-tab' class.
  */
 function setSelectedTab() {
@@ -96,27 +131,67 @@ function setupLogSearch() {
 }
 
 /**
+ * Create and add a copy to clipboard button to a given node.
+ *
+ * @param {string} text The text that will be copied to the clipboard.
+ * @param {element!} node The node that will have the button appended to.
+ */
+function appendCopyToClipBoardButton(text, node) {
+  if (!document.queryCommandSupported ||
+      !document.queryCommandSupported('copy')) {
+    // Don't add copy to clipboard button if not supported.
+    return;
+  }
+  let copyButton = document.createElement('div');
+  copyButton.setAttribute('class', 'copy-to-clipboard-button');
+  copyButton.textContent = 'Copy';
+
+  copyButton.addEventListener('click', () => {
+    var textarea = document.createElement('textarea');
+    textarea.textContent = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      return document.execCommand('copy');  // Security exception may be thrown.
+    } catch (ex) {
+      console.warn('Copy to clipboard failed.', ex);
+      return false;
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  });
+  node.appendChild(copyButton);
+}
+
+/**
  * Shorten long URL string so that it can be displayed nicely on mobile devices.
  * If |url| is longer than URL_THRESHOLD, then it will be shorten, and a tooltip
  * element will be added so that user can see the original URL.
+ *
+ * Add copy to clipboard button to it.
  *
  * @param {string} url The given URL string.
  * @return An DOM node with the original URL if the length is within THRESHOLD,
  * or the shorten URL with a tooltip element at the end of the string.
  */
 function createUrlElement(url) {
+  let urlCell = document.createElement('div');
+  urlCell.setAttribute('class', 'log-url-value');
   let urlTd = document.createElement('td');
-  urlTd.setAttribute('class', 'log-url');
+  urlTd.appendChild(urlCell);
 
   if (url.length <= URL_THRESHOLD) {
-    urlTd.textContent = url;
+    urlCell.textContent = url;
   } else {
-    urlTd.textContent = url.substring(0, URL_THRESHOLD - 3) + '...';
+    urlCell.textContent = url.substring(0, URL_THRESHOLD - 3) + '...';
     let tooltip = document.createElement('span');
     tooltip.setAttribute('class', 'url-tooltip');
     tooltip.textContent = url;
     urlTd.appendChild(tooltip);
   }
+
+  // Append copy to clipboard button.
+  appendCopyToClipBoardButton(url, urlTd);
   return urlTd;
 }
 
@@ -149,28 +224,8 @@ InterventionsInternalPageImpl.prototype = {
    * PreviewsLogger.
    */
   logNewMessage: function(log) {
-    let logsTable = $('message-logs-table');
-
-    let tableRow = logsTable.insertRow(1);  // Index 0 belongs to header row.
-    tableRow.setAttribute('class', 'log-message');
-
-    let timeTd = document.createElement('td');
-    timeTd.textContent = getTimeFormat(log.time);
-    timeTd.setAttribute('class', 'log-time');
-    tableRow.appendChild(timeTd);
-
-    let typeTd = document.createElement('td');
-    typeTd.setAttribute('class', 'log-type');
-    typeTd.textContent = log.type;
-    tableRow.appendChild(typeTd);
-
-    let descriptionTd = document.createElement('td');
-    descriptionTd.setAttribute('class', 'log-description');
-    descriptionTd.textContent = log.description;
-    tableRow.appendChild(descriptionTd);
-
-    let urlTd = createUrlElement(log.url.url);
-    tableRow.appendChild(urlTd);
+    insertMessageRowToMessageLogTable(
+        log.time, log.type, log.description, log.url.url);
   },
 
   /**
@@ -248,14 +303,36 @@ InterventionsInternalPageImpl.prototype = {
   },
 
   /**
-   * Update the page with the new value of estimated effective connection type.
+   * Update the page with the new value of estimated Effective Connection Type
+   * (ECT). Log the ECT to the ECT logs table.
    *
    * @override
    * @param {string} type The string representation of estimated ECT.
    */
   onEffectiveConnectionTypeChanged: function(type) {
+    // Change the current ECT.
     let ectType = $('nqe-type');
     ectType.textContent = type;
+
+    let now = getTimeFormat(Date.now());
+
+    // Log ECT changed event to ECT change log.
+    let nqeRow =
+        $('nqe-logs-table').insertRow(1);  // Index 0 belongs to header row.
+
+    let timeCol = document.createElement('td');
+    timeCol.textContent = now;
+    timeCol.setAttribute('class', 'nqe-time-column');
+    nqeRow.appendChild((timeCol));
+
+    let nqeCol = document.createElement('td');
+    nqeCol.setAttribute('class', 'nqe-value-column');
+    nqeCol.textContent = type;
+    nqeRow.appendChild(nqeCol);
+
+    // Insert ECT changed message to message-logs-table.
+    insertMessageRowToMessageLogTable(
+        now, 'ECT Changed', 'Effective Connection Type changed to ' + type, '');
   },
 };
 
@@ -265,6 +342,7 @@ cr.define('interventions_internals', () => {
   function init(handler) {
     pageHandler = handler;
     getPreviewsEnabled();
+    getPreviewsFlagsDetails();
 
     let ignoreButton = $('ignore-blacklist-button');
     ignoreButton.addEventListener('click', () => {
@@ -276,33 +354,77 @@ cr.define('interventions_internals', () => {
   }
 
   /**
+   * Sort keys by the value of each value by its description attribute of a
+   * |mapObject|.
+   *
+   * @param mapObject {!Map<string, Object} A map where all values have a
+   * description attribute.
+   * @return A list of keys sorted by their descriptions.
+   */
+  function getSortedKeysByDescription(mapObject) {
+    let sortedKeys = Array.from(mapObject.keys());
+    sortedKeys.sort((a, b) => {
+      return mapObject.get(a).description > mapObject.get(b).description;
+    });
+    return sortedKeys;
+  }
+
+  /**
    * Retrieves the statuses of previews (i.e. Offline, LoFi, AMP Redirection),
    * and posts them on chrome://intervention-internals.
    */
   function getPreviewsEnabled() {
     pageHandler.getPreviewsEnabled()
         .then((response) => {
-          let statuses = $('previews-statuses');
+          let statuses = $('previews-enabled-status');
 
-          // Sorting the keys by the status's description.
-          let sortedKeys = Array.from(response.statuses.keys());
-          sortedKeys.sort((a, b) => {
-            return response.statuses.get(a).description >
-                response.statuses.get(b).description;
-          });
-
-          sortedKeys.forEach((key) => {
+          getSortedKeysByDescription(response.statuses).forEach((key) => {
             let value = response.statuses.get(key);
             let message = value.description + ': ';
             message += value.enabled ? 'Enabled' : 'Disabled';
 
             assert(!$(key), 'Component ' + key + ' already existed!');
 
-            let node = document.createElement('p');
+            let node = document.createElement('div');
             node.setAttribute('class', 'previews-status-value');
             node.setAttribute('id', key);
             node.textContent = message;
             statuses.appendChild(node);
+          });
+        })
+        .catch((error) => {
+          console.error(error.message);
+        });
+  }
+
+  function getPreviewsFlagsDetails() {
+    pageHandler.getPreviewsFlagsDetails()
+        .then((response) => {
+          let flags = $('previews-flags-table');
+
+          getSortedKeysByDescription(response.flags).forEach((key) => {
+            let value = response.flags.get(key);
+            assert(!$(key), 'Component ' + key + ' already existed!');
+
+            let flagDescription = document.createElement('a');
+            flagDescription.setAttribute('class', 'previews-flag-description');
+            flagDescription.setAttribute('id', key + 'Description');
+            flagDescription.setAttribute('href', value.link);
+            flagDescription.textContent = value.description;
+
+            let flagNameTd = document.createElement('td');
+            flagNameTd.appendChild(flagDescription);
+
+            let flagValueTd = document.createElement('td');
+            flagValueTd.setAttribute('class', 'previews-flag-value');
+            flagValueTd.setAttribute('id', key + 'Value');
+            flagValueTd.textContent = value.value;
+
+            let node = document.createElement('tr');
+            node.setAttribute('class', 'previews-flag-container');
+            node.appendChild(flagNameTd);
+            node.appendChild(flagValueTd);
+            flags.appendChild(node);
           });
         })
         .catch((error) => {

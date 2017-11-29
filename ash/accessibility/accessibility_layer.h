@@ -56,7 +56,7 @@ class AccessibilityLayer : public ui::LayerDelegate,
 
   // Gets the inset for this layer in DIPs. This is used to increase
   // the bounding box to provide space for any margins or padding.
-  virtual int GetInset() = 0;
+  virtual int GetInset() const = 0;
 
   ui::Layer* layer() { return layer_.get(); }
   aura::Window* root_window() { return root_window_; }
@@ -84,7 +84,6 @@ class AccessibilityLayer : public ui::LayerDelegate,
 
  private:
   // ui::LayerDelegate overrides:
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override;
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                   float new_device_scale_factor) override;
 

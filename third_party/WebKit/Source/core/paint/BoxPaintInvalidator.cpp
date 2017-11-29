@@ -184,12 +184,27 @@ bool BoxPaintInvalidator::BackgroundPaintsOntoScrollingContentsLayer() {
 
 bool BoxPaintInvalidator::ShouldFullyInvalidateBackgroundOnLayoutOverflowChange(
     const LayoutRect& old_layout_overflow,
-    const LayoutRect& new_layout_overflow) {
-  DCHECK(old_layout_overflow != new_layout_overflow);
+    const LayoutRect& new_layout_overflow) const {
+  if (new_layout_overflow == old_layout_overflow)
+    return false;
+
+  // TODO(pdr): This check can likely be removed because size changes are
+  // caught below.
   if (new_layout_overflow.IsEmpty() || old_layout_overflow.IsEmpty())
     return true;
-  if (new_layout_overflow.Location() != old_layout_overflow.Location())
-    return true;
+
+  if (new_layout_overflow.Location() != old_layout_overflow.Location()) {
+    auto& layers = box_.StyleRef().BackgroundLayers();
+    // The background should invalidate on most location changes but we can
+    // avoid invalidation in a common case if the background is a single color
+    // that fully covers the overflow area.
+    // TODO(pdr): Check all background layers instead of skipping this if there
+    // are multiple backgrounds.
+    if (layers.Next() || layers.GetImage() || layers.RepeatX() != kRepeatFill ||
+        layers.RepeatY() != kRepeatFill)
+      return true;
+  }
+
   if (new_layout_overflow.Width() != old_layout_overflow.Width() &&
       box_.MustInvalidateFillLayersPaintOnWidthChange(
           box_.StyleRef().BackgroundLayers()))
@@ -198,6 +213,7 @@ bool BoxPaintInvalidator::ShouldFullyInvalidateBackgroundOnLayoutOverflowChange(
       box_.MustInvalidateFillLayersPaintOnHeightChange(
           box_.StyleRef().BackgroundLayers()))
     return true;
+
   return false;
 }
 
@@ -217,17 +233,10 @@ bool BoxPaintInvalidator::ViewBackgroundShouldFullyInvalidate() const {
     if (document_element) {
       const auto* document_background = document_element->GetLayoutObject();
       if (document_background && document_background->IsBox()) {
-        // TODO(pdr): Change this to use layout overflow instead of size because
-        // the background size actually depends on the layout overflow.
-        LayoutSize old_size = ToLayoutBox(document_background)->PreviousSize();
-        LayoutSize new_size = ToLayoutBox(document_background)->Size();
-        const auto& layers = box_.StyleRef().BackgroundLayers();
-        if (old_size.Width() != new_size.Width() &&
-            LayoutBox::MustInvalidateFillLayersPaintOnWidthChange(layers)) {
-          return true;
-        }
-        if (old_size.Height() != new_size.Height() &&
-            LayoutBox::MustInvalidateFillLayersPaintOnHeightChange(layers)) {
+        const auto* document_background_box = ToLayoutBox(document_background);
+        if (ShouldFullyInvalidateBackgroundOnLayoutOverflowChange(
+                document_background_box->PreviousLayoutOverflowRect(),
+                document_background_box->LayoutOverflowRect())) {
           return true;
         }
       }
@@ -253,16 +262,17 @@ BoxPaintInvalidator::ComputeBackgroundInvalidation() {
 
   const LayoutRect& old_layout_overflow = box_.PreviousLayoutOverflowRect();
   LayoutRect new_layout_overflow = box_.LayoutOverflowRect();
-
-  if (new_layout_overflow == old_layout_overflow)
-    return BackgroundInvalidationType::kNone;
-
-  // Layout overflow changed; decide full vs. incremental invalidation.
   if (ShouldFullyInvalidateBackgroundOnLayoutOverflowChange(
-          old_layout_overflow, new_layout_overflow)) {
+          old_layout_overflow, new_layout_overflow))
+    return BackgroundInvalidationType::kFull;
+
+  if (new_layout_overflow != old_layout_overflow) {
+    // Do incremental invalidation if possible.
+    if (old_layout_overflow.Location() == new_layout_overflow.Location())
+      return BackgroundInvalidationType::kIncremental;
     return BackgroundInvalidationType::kFull;
   }
-  return BackgroundInvalidationType::kIncremental;
+  return BackgroundInvalidationType::kNone;
 }
 
 void BoxPaintInvalidator::InvalidateScrollingContentsBackground(
@@ -362,6 +372,14 @@ PaintInvalidationReason BoxPaintInvalidator::InvalidatePaint() {
 
 bool BoxPaintInvalidator::
     NeedsToSavePreviousContentBoxSizeOrLayoutOverflowRect() {
+  // The LayoutView depends on the document element's layout overflow rect (see:
+  // ViewBackgroundShouldFullyInvalidate) and needs to invalidate before the
+  // document element invalidates. There are few document elements so the
+  // previous layout overflow rect is always saved, rather than duplicating the
+  // logic save-if-needed logic for this special case.
+  if (box_.IsDocumentElement())
+    return true;
+
   // Don't save old box geometries if the paint rect is empty because we'll
   // fully invalidate once the paint rect becomes non-empty.
   if (context_.fragment_data->VisualRect().IsEmpty())

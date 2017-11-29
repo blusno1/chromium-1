@@ -11,13 +11,9 @@
 
 namespace ash {
 
-DefaultAccessibilityDelegate::DefaultAccessibilityDelegate() {}
+DefaultAccessibilityDelegate::DefaultAccessibilityDelegate() = default;
 
-DefaultAccessibilityDelegate::~DefaultAccessibilityDelegate() {}
-
-bool DefaultAccessibilityDelegate::IsSpokenFeedbackEnabled() const {
-  return spoken_feedback_enabled_;
-}
+DefaultAccessibilityDelegate::~DefaultAccessibilityDelegate() = default;
 
 void DefaultAccessibilityDelegate::SetMagnifierEnabled(bool enabled) {
   screen_magnifier_enabled_ = enabled;
@@ -41,14 +37,6 @@ void DefaultAccessibilityDelegate::SetVirtualKeyboardEnabled(bool enabled) {
 
 bool DefaultAccessibilityDelegate::IsVirtualKeyboardEnabled() const {
   return virtual_keyboard_enabled_;
-}
-
-void DefaultAccessibilityDelegate::SetMonoAudioEnabled(bool enabled) {
-  mono_audio_enabled_ = enabled;
-}
-
-bool DefaultAccessibilityDelegate::IsMonoAudioEnabled() const {
-  return mono_audio_enabled_;
 }
 
 void DefaultAccessibilityDelegate::SetCaretHighlightEnabled(bool enabled) {
@@ -110,9 +98,10 @@ bool DefaultAccessibilityDelegate::IsSwitchAccessEnabled() const {
 bool DefaultAccessibilityDelegate::ShouldShowAccessibilityMenu() const {
   AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
-  return spoken_feedback_enabled_ || screen_magnifier_enabled_ ||
+  return controller->IsSpokenFeedbackEnabled() || screen_magnifier_enabled_ ||
          autoclick_enabled_ || virtual_keyboard_enabled_ ||
-         mono_audio_enabled_ || controller->IsLargeCursorEnabled() ||
+         controller->IsMonoAudioEnabled() ||
+         controller->IsLargeCursorEnabled() ||
          controller->IsHighContrastEnabled();
 }
 
@@ -121,11 +110,6 @@ bool DefaultAccessibilityDelegate::IsBrailleDisplayConnected() const {
 }
 
 void DefaultAccessibilityDelegate::SilenceSpokenFeedback() const {}
-
-void DefaultAccessibilityDelegate::ToggleSpokenFeedback(
-    AccessibilityNotificationVisibility notify) {
-  spoken_feedback_enabled_ = !spoken_feedback_enabled_;
-}
 
 void DefaultAccessibilityDelegate::SaveScreenMagnifierScale(double scale) {}
 

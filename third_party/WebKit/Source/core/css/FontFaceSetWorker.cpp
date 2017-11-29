@@ -26,7 +26,7 @@ FontFaceSetWorker::FontFaceSetWorker(WorkerGlobalScope& worker)
   PauseIfNeeded();
 }
 
-FontFaceSetWorker::~FontFaceSetWorker() {}
+FontFaceSetWorker::~FontFaceSetWorker() = default;
 
 WorkerGlobalScope* FontFaceSetWorker::GetWorker() const {
   return ToWorkerGlobalScope(GetExecutionContext());
@@ -74,7 +74,8 @@ bool FontFaceSetWorker::ResolveFontStyle(const String& font_string,
   // CanvasRenderingContext2D.
   MutableCSSPropertyValueSet* parsed_style =
       MutableCSSPropertyValueSet::Create(kHTMLStandardMode);
-  CSSParser::ParseValue(parsed_style, CSSPropertyFont, font_string, true);
+  CSSParser::ParseValue(parsed_style, CSSPropertyFont, font_string, true,
+                        GetExecutionContext()->SecureContextMode());
   if (parsed_style->IsEmpty())
     return false;
 

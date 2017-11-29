@@ -80,7 +80,7 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info,
     context.DrawImage(
         layout_list_marker_.GetImage()
             ->GetImage(layout_list_marker_, layout_list_marker_.GetDocument(),
-                       layout_list_marker_.StyleRef(), marker.Size(), nullptr)
+                       layout_list_marker_.StyleRef(), marker.Size())
             .get(),
         Image::kSyncDecode, marker);
     if (layout_list_marker_.GetSelectionState() != SelectionState::kNone) {
@@ -178,6 +178,9 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info,
     context.DrawText(font, text_run_paint_info,
                      text_origin + IntSize(font.Width(suffix_run), 0));
   }
+  // TODO(npm): Check that there are non-whitespace characters. See
+  // crbug.com/788444.
+  context.GetPaintController().SetTextPainted();
 }
 
 }  // namespace blink

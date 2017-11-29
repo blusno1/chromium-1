@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -41,6 +42,7 @@
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/browser/ui/views/hover_button.h"
+#include "chrome/browser/ui/views/profiles/badged_profile_photo.h"
 #include "chrome/browser/ui/views/profiles/signin_view_controller_delegate_views.h"
 #include "chrome/browser/ui/views/profiles/user_manager_view.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
@@ -100,14 +102,7 @@ namespace {
 
 const int kButtonHeight = 32;
 const int kFixedAccountRemovalViewWidth = 280;
-const int kImageSide = 40;
-const int kProfileBadgeSize = 24;
 const int kFixedMenuWidth = 240;
-const int kSupervisedIconBadgeSize = 22;
-
-// The space between the right/bottom edge of the profile badge and the
-// right/bottom edge of the profile icon.
-const int kBadgeSpacing = 4;
 
 // Spacing between the edge of the material design user menu and the
 // top/bottom or left/right of the menu items.
@@ -172,109 +167,14 @@ views::ImageButton* CreateBackButton(views::ButtonListener* listener) {
   return back_button;
 }
 
+BadgedProfilePhoto::BadgeType GetProfileBadgeType(const Profile* profile) {
+  if (!profile->IsSupervised())
+    return BadgedProfilePhoto::BADGE_TYPE_NONE;
+  return profile->IsChild() ? BadgedProfilePhoto::BADGE_TYPE_CHILD
+                            : BadgedProfilePhoto::BADGE_TYPE_SUPERVISOR;
+}
+
 }  // namespace
-
-// EditableProfilePhoto -------------------------------------------------
-
-// A custom Image control that shows a "change" button when moused over.
-class EditableProfilePhoto : public views::LabelButton {
- public:
-  EditableProfilePhoto(views::ButtonListener* listener,
-                       const gfx::Image& icon,
-                       bool is_editing_allowed,
-                       Profile* profile)
-      : views::LabelButton(listener, base::string16()),
-        photo_overlay_(nullptr),
-        profile_(profile) {
-    set_can_process_events_within_subtree(false);
-    gfx::Image image =
-        profiles::GetSizedAvatarIcon(icon, true, kImageSide, kImageSide);
-    SetImage(views::LabelButton::STATE_NORMAL, *image.ToImageSkia());
-    SetBorder(views::NullBorder());
-    // Supervised users have a special badge, so add extra space for it.
-    const int extra_space = profile_->IsSupervised() ? kBadgeSpacing : 0;
-    SetMinSize(gfx::Size(GetPreferredSize().width() + extra_space,
-                         GetPreferredSize().height() + extra_space));
-
-    SetEnabled(false);
-  }
-
-  void PaintChildren(const views::PaintInfo& paint_info) override {
-    {
-      // Display any children (the "change photo" overlay) as a circle.
-      ui::ClipRecorder clip_recorder(paint_info.context());
-      gfx::Rect clip_bounds = image()->GetMirroredBounds();
-      gfx::Path clip_mask;
-      clip_mask.addCircle(
-          clip_bounds.x() + clip_bounds.width() / 2,
-          clip_bounds.y() + clip_bounds.height() / 2,
-          clip_bounds.width() / 2);
-      clip_recorder.ClipPathWithAntiAliasing(clip_mask);
-      View::PaintChildren(paint_info);
-    }
-
-    if (profile_->IsSupervised()) {
-      ui::PaintRecorder paint_recorder(
-          paint_info.context(),
-          gfx::Size(kProfileBadgeSize, kProfileBadgeSize));
-      gfx::Canvas* canvas = paint_recorder.canvas();
-      gfx::Rect bounds(0, 0, kProfileBadgeSize, kProfileBadgeSize);
-      int badge_offset = kImageSide + kBadgeSpacing - kProfileBadgeSize;
-      gfx::Vector2d badge_offset_vector = gfx::Vector2d(
-          GetMirroredXWithWidthInView(badge_offset, kProfileBadgeSize),
-          badge_offset);
-
-      gfx::Point center_point = bounds.CenterPoint() + badge_offset_vector;
-
-      // Paint the circular background.
-      cc::PaintFlags flags;
-      flags.setAntiAlias(true);
-      flags.setColor(GetNativeTheme()->GetSystemColor(
-          ui::NativeTheme::kColorId_BubbleBackground));
-      canvas->DrawCircle(center_point, kProfileBadgeSize / 2, flags);
-
-      const gfx::VectorIcon* icon = profile_->IsChild()
-                                        ? &kAccountChildCircleIcon
-                                        : &kSupervisorAccountCircleIcon;
-
-      // Paint the badge icon.
-      int offset = (kProfileBadgeSize - kSupervisedIconBadgeSize) / 2;
-      canvas->Translate(badge_offset_vector + gfx::Vector2d(offset, offset));
-      gfx::PaintVectorIcon(canvas, *icon, kSupervisedIconBadgeSize,
-                           gfx::kChromeIconGrey);
-    }
-  }
-
- private:
-  // views::Button:
-  void StateChanged(ButtonState old_state) override {
-    if (photo_overlay_) {
-      photo_overlay_->SetVisible(
-          state() == STATE_PRESSED || state() == STATE_HOVERED || HasFocus());
-    }
-  }
-
-  void OnFocus() override {
-    views::LabelButton::OnFocus();
-    if (photo_overlay_)
-      photo_overlay_->SetVisible(true);
-  }
-
-  void OnBlur() override {
-    views::LabelButton::OnBlur();
-    // Don't hide the overlay if it's being shown as a result of a mouseover.
-    if (photo_overlay_ && state() != STATE_HOVERED)
-      photo_overlay_->SetVisible(false);
-  }
-
-  // Image that is shown when hovering over the image button. Can be NULL if
-  // the photo isn't allowed to be edited (e.g. for guest profiles).
-  views::ImageView* photo_overlay_;
-
-  Profile* profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(EditableProfilePhoto);
-};
 
 // A title card with one back button left aligned and one label center aligned.
 class TitleCard : public views::View {
@@ -625,6 +525,15 @@ bool ProfileChooserView::AcceleratorPressed(
 }
 
 views::View* ProfileChooserView::GetInitiallyFocusedView() {
+#if defined(OS_MACOSX)
+  // On Mac, buttons are not focusable when full keyboard access is turned off,
+  // causing views::Widget to fall back to focusing the first focusable View.
+  // This behavior is not desired in the |ProfileChooserView| because of its
+  // menu-like design using |HoverButtons|. Avoid this by returning null when
+  // full keyboard access is off.
+  if (!GetFocusManager() || !GetFocusManager()->keyboard_accessible())
+    return nullptr;
+#endif
   return signin_current_profile_button_;
 }
 
@@ -948,8 +857,8 @@ views::View* ProfileChooserView::CreateCurrentProfileView(
       new views::BoxLayout(views::BoxLayout::kVertical,
                            gfx::Insets(content_list_vert_spacing, 0), 0));
 
-  auto current_profile_photo = std::make_unique<EditableProfilePhoto>(
-      this, avatar_item.icon, !is_guest, browser_->profile());
+  auto current_profile_photo = std::make_unique<BadgedProfilePhoto>(
+      GetProfileBadgeType(browser_->profile()), avatar_item.icon);
   const base::string16 profile_name =
       profiles::GetAvatarNameForProfile(browser_->profile()->GetPath());
 
@@ -998,8 +907,6 @@ views::View* ProfileChooserView::CreateCurrentProfileView(
                         views::DISTANCE_RELATED_CONTROL_VERTICAL),
                     kMenuEdgeMargin),
         kMenuEdgeMargin);
-    extra_links_layout->set_cross_axis_alignment(
-        views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
     extra_links_view->SetLayoutManager(extra_links_layout);
     views::Label* promo =
         new views::Label(l10n_util::GetStringUTF16(IDS_PROFILES_SIGNIN_PROMO));

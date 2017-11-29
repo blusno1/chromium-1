@@ -111,6 +111,7 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
   int Request(const HostPortPair& destination,
               QuicTransportVersion quic_version,
               PrivacyMode privacy_mode,
+              RequestPriority priority,
               int cert_verify_flags,
               const GURL& url,
               const NetLogWithSource& net_log,
@@ -199,11 +200,15 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       size_t max_packet_length,
       const std::string& user_agent_id,
       bool store_server_configs_in_properties,
+      bool close_sessions_on_ip_change,
       bool mark_quic_broken_when_network_blackholes,
       int idle_connection_timeout_seconds,
       int reduced_ping_timeout_seconds,
+      int max_time_before_crypto_handshake_seconds,
+      int max_idle_time_before_crypto_handshake_seconds,
       bool connect_using_default_network,
       bool migrate_sessions_on_network_change,
+      bool migrate_sessions_on_network_change_v2,
       bool migrate_sessions_early,
       bool allow_server_migration,
       bool race_cert_verification,
@@ -227,6 +232,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   int Create(const QuicServerId& server_id,
              const HostPortPair& destination,
              QuicTransportVersion quic_version,
+             RequestPriority priority,
              int cert_verify_flags,
              const GURL& url,
              const NetLogWithSource& net_log,
@@ -291,8 +297,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   // NetworkChangeNotifier::IPAddressObserver methods:
 
-  // Called when local IP address changes. Must not be called if
-  // |migrate_sessions_on_network_change_| is true.
+  // Until the servers support roaming, close all connections when the local
+  // IP address changes.
   void OnIPAddressChanged() override;
 
   // NetworkChangeNotifier::NetworkObserver methods:
@@ -333,7 +339,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   }
 
   bool migrate_sessions_on_network_change() const {
-    return migrate_sessions_on_network_change_;
+    return migrate_sessions_on_network_change_ ||
+           migrate_sessions_on_network_change_v2_;
   }
 
   bool mark_quic_broken_when_network_blackholes() const {
@@ -488,6 +495,12 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // NetworkHandle is supported.
   const bool connect_using_default_network_;
 
+  // Set if all sessions should be closed when any local IP address changes.
+  const bool close_sessions_on_ip_change_;
+
+  // Set if migration should be attempted after probing.
+  const bool migrate_sessions_on_network_change_v2_;
+
   // Set if migration should be attempted on active sessions when primary
   // interface changes.
   const bool migrate_sessions_on_network_change_;
@@ -518,7 +531,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   QuicClientPushPromiseIndex push_promise_index_;
 
-  base::TaskRunner* task_runner_;
+  base::SequencedTaskRunner* task_runner_;
 
   const scoped_refptr<SSLConfigService> ssl_config_service_;
 

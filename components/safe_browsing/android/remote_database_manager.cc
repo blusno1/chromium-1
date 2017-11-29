@@ -31,11 +31,6 @@ namespace {
 const char kAndroidFieldExperiment[] = "SafeBrowsingAndroid";
 const char kAndroidTypesToCheckParam[] = "types_to_check";
 
-void LogPendingChecks(size_t current_requests_size) {
-  UMA_HISTOGRAM_COUNTS_10000("SB2.RemoteCall.ChecksPending",
-                             current_requests_size);
-}
-
 }  // namespace
 
 //
@@ -212,7 +207,6 @@ bool RemoteSafeBrowsingDatabaseManager::CheckBrowseUrl(
       base::Bind(&ClientRequest::OnRequestDoneWeak, req->GetWeakPtr()), url,
       threat_types);
 
-  LogPendingChecks(current_requests_.size());
   current_requests_.push_back(req.release());
 
   // Defer the resource load.
@@ -261,7 +255,6 @@ bool RemoteSafeBrowsingDatabaseManager::CheckUrlForSubresourceFilter(
       CreateSBThreatTypeSet(
           {SB_THREAT_TYPE_SUBRESOURCE_FILTER, SB_THREAT_TYPE_URL_PHISHING}));
 
-  LogPendingChecks(current_requests_.size());
   current_requests_.push_back(req.release());
 
   // Defer the resource load.
@@ -273,11 +266,6 @@ AsyncMatch RemoteSafeBrowsingDatabaseManager::CheckCsdWhitelistUrl(
     Client* client) {
   NOTREACHED();
   return AsyncMatch::MATCH;
-}
-
-bool RemoteSafeBrowsingDatabaseManager::MatchCsdWhitelistUrl(const GURL& url) {
-  NOTREACHED();
-  return true;
 }
 
 bool RemoteSafeBrowsingDatabaseManager::MatchDownloadWhitelistString(
@@ -303,18 +291,8 @@ safe_browsing::ThreatSource RemoteSafeBrowsingDatabaseManager::GetThreatSource()
   return safe_browsing::ThreatSource::REMOTE;
 }
 
-bool RemoteSafeBrowsingDatabaseManager::IsCsdWhitelistKillSwitchOn() {
-  NOTREACHED();
-  return true;
-}
-
 bool RemoteSafeBrowsingDatabaseManager::IsDownloadProtectionEnabled() const {
   return false;
-}
-
-bool RemoteSafeBrowsingDatabaseManager::IsMalwareKillSwitchOn() {
-  NOTREACHED();
-  return true;
 }
 
 bool RemoteSafeBrowsingDatabaseManager::IsSupported() const {

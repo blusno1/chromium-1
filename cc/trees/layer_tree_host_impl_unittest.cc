@@ -603,6 +603,60 @@ class LayerTreeHostImplTest : public testing::Test,
     host_impl_ = nullptr;
   }
 
+  void WhiteListedTouchActionTestHelper(float device_scale_factor,
+                                        float page_scale_factor) {
+    LayerImpl* scroll = SetupScrollAndContentsLayers(gfx::Size(200, 200));
+    host_impl_->SetViewportSize(gfx::Size(100, 100));
+    DrawFrame();
+    LayerImpl* root = host_impl_->active_tree()->root_layer_for_testing();
+
+    // Just hard code some random number, we care about the actual page scale
+    // factor on the active tree.
+    float min_page_scale_factor = 0.1f;
+    float max_page_scale_factor = 5.0f;
+    host_impl_->active_tree()->PushPageScaleFromMainThread(
+        page_scale_factor, min_page_scale_factor, max_page_scale_factor);
+    host_impl_->active_tree()->SetDeviceScaleFactor(device_scale_factor);
+
+    std::unique_ptr<LayerImpl> child_layer =
+        LayerImpl::Create(host_impl_->active_tree(), 6);
+    LayerImpl* child = child_layer.get();
+    child_layer->SetDrawsContent(true);
+    child_layer->SetPosition(gfx::PointF(0, 0));
+    child_layer->SetBounds(gfx::Size(25, 25));
+    scroll->test_properties()->AddChild(std::move(child_layer));
+    host_impl_->active_tree()->BuildPropertyTreesForTesting();
+
+    TouchActionRegion root_touch_action_region;
+    root_touch_action_region.Union(kTouchActionPanX, gfx::Rect(0, 0, 50, 50));
+    root->SetTouchActionRegion(root_touch_action_region);
+    TouchActionRegion child_touch_action_region;
+    child_touch_action_region.Union(kTouchActionPanLeft,
+                                    gfx::Rect(0, 0, 25, 25));
+    child->SetTouchActionRegion(child_touch_action_region);
+
+    TouchAction touch_action = kTouchActionAuto;
+    host_impl_->EventListenerTypeForTouchStartOrMoveAt(gfx::Point(10, 10),
+                                                       &touch_action);
+    EXPECT_EQ(kTouchActionPanLeft, touch_action);
+    touch_action = kTouchActionAuto;
+    host_impl_->EventListenerTypeForTouchStartOrMoveAt(gfx::Point(30, 30),
+                                                       &touch_action);
+    EXPECT_EQ(kTouchActionPanX, touch_action);
+
+    TouchActionRegion new_child_region;
+    new_child_region.Union(kTouchActionPanY, gfx::Rect(0, 0, 25, 25));
+    child->SetTouchActionRegion(new_child_region);
+    touch_action = kTouchActionAuto;
+    host_impl_->EventListenerTypeForTouchStartOrMoveAt(gfx::Point(10, 10),
+                                                       &touch_action);
+    EXPECT_EQ(kTouchActionPanY, touch_action);
+    touch_action = kTouchActionAuto;
+    host_impl_->EventListenerTypeForTouchStartOrMoveAt(gfx::Point(30, 30),
+                                                       &touch_action);
+    EXPECT_EQ(kTouchActionPanX, touch_action);
+  }
+
   void pinch_zoom_pan_viewport_forces_commit_redraw(float device_scale_factor);
   void pinch_zoom_pan_viewport_test(float device_scale_factor);
   void pinch_zoom_pan_viewport_and_scroll_test(float device_scale_factor);
@@ -3873,9 +3927,7 @@ TEST_F(LayerTreeHostImplTest, ActivationDependenciesInMetadata) {
     child->SetPosition(gfx::PointF(25.f * i, 0.f));
     child->SetBounds(gfx::Size(1, 1));
     child->SetDrawsContent(true);
-    child->SetPrimarySurfaceInfo(
-        viz::SurfaceInfo(primary_surfaces[i], 1.f /* device_scale_factor */,
-                         gfx::Size(10, 10) /* size_in_pixels */));
+    child->SetPrimarySurfaceId(primary_surfaces[i]);
     child->SetFallbackSurfaceId(fallback_surfaces[i]);
     root->test_properties()->AddChild(std::move(child));
   }
@@ -9102,6 +9154,43 @@ TEST_F(LayerTreeHostImplTest, CreateETC1UIResource) {
   EXPECT_NE(0u, id1);
 }
 
+TEST_F(LayerTreeHostImplTest,
+       GpuRasterizationStatusChangeDoesNotEvictUIResources) {
+  // Create a host impl with MSAA support and a forced sample count of 4.
+  LayerTreeSettings msaaSettings = DefaultSettings();
+  msaaSettings.gpu_rasterization_msaa_sample_count = 4;
+  EXPECT_TRUE(CreateHostImpl(
+      msaaSettings, FakeLayerTreeFrameSink::Create3dForGpuRasterization(
+                        msaaSettings.gpu_rasterization_msaa_sample_count)));
+
+  host_impl_->SetHasGpuRasterizationTrigger(true);
+  host_impl_->SetContentHasSlowPaths(false);
+  host_impl_->CommitComplete();
+  EXPECT_EQ(GpuRasterizationStatus::ON, host_impl_->gpu_rasterization_status());
+  EXPECT_TRUE(host_impl_->use_gpu_rasterization());
+  EXPECT_FALSE(host_impl_->use_msaa());
+
+  UIResourceId ui_resource_id = 1;
+  UIResourceBitmap bitmap(gfx::Size(1, 1), false /* is_opaque */);
+  host_impl_->CreateUIResource(ui_resource_id, bitmap);
+  viz::ResourceId resource_id =
+      host_impl_->ResourceIdForUIResource(ui_resource_id);
+  EXPECT_NE(viz::kInvalidResourceId, resource_id);
+  EXPECT_FALSE(host_impl_->EvictedUIResourcesExist());
+
+  host_impl_->SetHasGpuRasterizationTrigger(true);
+  host_impl_->SetContentHasSlowPaths(true);
+  host_impl_->CommitComplete();
+  EXPECT_EQ(GpuRasterizationStatus::MSAA_CONTENT,
+            host_impl_->gpu_rasterization_status());
+  EXPECT_TRUE(host_impl_->use_gpu_rasterization());
+  EXPECT_TRUE(host_impl_->use_msaa());
+
+  resource_id = host_impl_->ResourceIdForUIResource(ui_resource_id);
+  EXPECT_NE(viz::kInvalidResourceId, resource_id);
+  EXPECT_FALSE(host_impl_->EvictedUIResourcesExist());
+}
+
 class FrameSinkClient : public viz::TestLayerTreeFrameSinkClient {
  public:
   explicit FrameSinkClient(
@@ -11253,6 +11342,77 @@ TEST_F(LayerTreeHostImplTest, ScrollAnimated) {
   host_impl_->DidFinishImplFrame();
 }
 
+// Test to ensure that animated scrolls correctly account for the page scale
+// factor. That is, if you zoom into the page, a wheel scroll should scroll the
+// content *less* than before so that it appears to move the same distance when
+// zoomed in.
+TEST_F(LayerTreeHostImplTest, ScrollAnimatedWhileZoomed) {
+  const gfx::Size content_size(1000, 1000);
+  const gfx::Size viewport_size(50, 100);
+  CreateBasicVirtualViewportLayers(viewport_size, content_size);
+  LayerImpl* scrolling_layer = host_impl_->InnerViewportScrollLayer();
+
+  DrawFrame();
+
+  // Zoom in to 2X
+  {
+    float min_page_scale = 1.f, max_page_scale = 4.f;
+    float page_scale_factor = 2.f;
+    host_impl_->active_tree()->PushPageScaleFromMainThread(
+        page_scale_factor, min_page_scale, max_page_scale);
+    host_impl_->active_tree()->SetPageScaleOnActiveTree(page_scale_factor);
+  }
+
+  // Start an animated scroll then do another animated scroll immediately
+  // afterwards. This will ensure we test both the starting animation and
+  // animation update code.
+  {
+    EXPECT_EQ(
+        InputHandler::SCROLL_ON_IMPL_THREAD,
+        host_impl_->ScrollAnimated(gfx::Point(10, 10), gfx::Vector2d(0, 10))
+            .thread);
+    EXPECT_EQ(
+        InputHandler::SCROLL_ON_IMPL_THREAD,
+        host_impl_->ScrollAnimated(gfx::Point(10, 10), gfx::Vector2d(0, 20))
+            .thread);
+
+    EXPECT_EQ(scrolling_layer->scroll_tree_index(),
+              host_impl_->CurrentlyScrollingNode()->id);
+  }
+
+  base::TimeTicks start_time =
+      base::TimeTicks() + base::TimeDelta::FromMilliseconds(100);
+
+  viz::BeginFrameArgs begin_frame_args =
+      viz::CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 0, 1);
+
+  // Tick a frame to get the animation started.
+  {
+    begin_frame_args.frame_time = start_time;
+    begin_frame_args.sequence_number++;
+    host_impl_->WillBeginImplFrame(begin_frame_args);
+    host_impl_->Animate();
+    host_impl_->UpdateAnimationState(true);
+
+    EXPECT_NE(0, scrolling_layer->CurrentScrollOffset().y());
+    host_impl_->DidFinishImplFrame();
+  }
+
+  // Tick ahead to the end of the animation. We scrolled 30 viewport pixels but
+  // since we're zoomed in to 2x we should have scrolled 15 content pixels.
+  {
+    begin_frame_args.frame_time =
+        start_time + base::TimeDelta::FromMilliseconds(1000);
+    begin_frame_args.sequence_number++;
+    host_impl_->WillBeginImplFrame(begin_frame_args);
+    host_impl_->Animate();
+    host_impl_->UpdateAnimationState(true);
+
+    EXPECT_EQ(15, scrolling_layer->CurrentScrollOffset().y());
+    host_impl_->DidFinishImplFrame();
+  }
+}
+
 TEST_F(LayerTreeHostImplTest, SecondScrollAnimatedBeginNotIgnored) {
   const gfx::Size content_size(1000, 1000);
   const gfx::Size viewport_size(50, 100);
@@ -13134,6 +13294,22 @@ TEST_F(LayerTreeHostImplTest, NeedUpdateGpuRasterization) {
   EXPECT_TRUE(host_impl_->NeedUpdateGpuRasterizationStatusForTesting());
   host_impl_->CommitComplete();
   EXPECT_FALSE(host_impl_->NeedUpdateGpuRasterizationStatusForTesting());
+}
+
+TEST_F(LayerTreeHostImplTest, WhiteListedTouchActionTest1) {
+  WhiteListedTouchActionTestHelper(1.0f, 1.0f);
+}
+
+TEST_F(LayerTreeHostImplTest, WhiteListedTouchActionTest2) {
+  WhiteListedTouchActionTestHelper(1.0f, 0.789f);
+}
+
+TEST_F(LayerTreeHostImplTest, WhiteListedTouchActionTest3) {
+  WhiteListedTouchActionTestHelper(2.345f, 1.0f);
+}
+
+TEST_F(LayerTreeHostImplTest, WhiteListedTouchActionTest4) {
+  WhiteListedTouchActionTestHelper(2.654f, 0.678f);
 }
 
 }  // namespace

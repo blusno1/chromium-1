@@ -32,6 +32,9 @@
 #define Animation_h
 
 #include <memory>
+
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
@@ -48,7 +51,6 @@
 #include "platform/animation/CompositorAnimationPlayerClient.h"
 #include "platform/graphics/CompositorElementId.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -187,7 +189,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
     return compositor_player_ ? compositor_player_->Player() : nullptr;
   }
 
-  bool Affects(const Element&, CSSPropertyID) const;
+  bool Affects(const Element&, const CSSProperty&) const;
 
   // Returns whether we should continue with the commit for this animation or
   // wait until next commit.
@@ -296,10 +298,9 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
 
   class CompositorState {
     USING_FAST_MALLOC(CompositorState);
-    WTF_MAKE_NONCOPYABLE(CompositorState);
 
    public:
-    CompositorState(Animation& animation)
+    explicit CompositorState(Animation& animation)
         : start_time(animation.start_time_),
           hold_time(animation.hold_time_),
           playback_rate(animation.playback_rate_),
@@ -310,6 +311,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
     double playback_rate;
     bool effect_changed;
     CompositorAction pending_action;
+    DISALLOW_COPY_AND_ASSIGN(CompositorState);
   };
 
   enum CompositorPendingChange {

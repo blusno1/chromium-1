@@ -230,7 +230,7 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
   pending_resize_params_.screen_info = render_widget_->screen_info();
 
 #if defined(USE_AURA)
-  if (IsRunningInMash()) {
+  if (IsRunningWithMus()) {
     RendererWindowTreeClient* renderer_window_tree_client =
         RendererWindowTreeClient::Get(render_widget_->routing_id());
     // It's possible a MusEmbeddedFrame has already been scheduled for creation
@@ -271,7 +271,7 @@ void RenderFrameProxy::OnScreenInfoChanged(const ScreenInfo& screen_info) {
 void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
   DCHECK(web_frame_);
   web_frame_->SetReplicatedOrigin(state.origin);
-  web_frame_->SetReplicatedSandboxFlags(state.frame_policy.sandbox_flags);
+  web_frame_->SetReplicatedSandboxFlags(state.active_sandbox_flags);
   web_frame_->SetReplicatedName(blink::WebString::FromUTF8(state.name));
   web_frame_->SetReplicatedInsecureRequestPolicy(state.insecure_request_policy);
   web_frame_->SetReplicatedPotentiallyTrustworthyUniqueOrigin(
@@ -284,8 +284,8 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
   OnAddContentSecurityPolicies(state.accumulated_csp_headers);
 }
 
-// Update the proxy's SecurityContext and FrameOwner with new sandbox flags
-// and container policy that were set by its parent in another process.
+// Update the proxy's FrameOwner with new sandbox flags and container policy
+// that were set by its parent in another process.
 //
 // Normally, when a frame's sandbox attribute is changed dynamically, the
 // frame's FrameOwner is updated with the new sandbox flags right away, while
@@ -294,17 +294,28 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
 //
 // Currently, there is no use case for a proxy's pending FrameOwner sandbox
 // flags, so there's no message sent to proxies when the sandbox attribute is
-// first updated.  Instead, the update message is sent and this function is
-// called when the new flags take effect, so that the proxy updates its
-// SecurityContext. This is needed to ensure that sandbox flags are inherited
-// properly if this proxy ever parents a local frame.  The proxy's FrameOwner
-// flags are also updated here with the caveat that the FrameOwner won't learn
-// about updates to its flags until they take effect.
+// first updated.  Instead, the active flags are updated when they take effect,
+// by OnDidSetActiveSandboxFlags. The proxy's FrameOwner flags are updated here
+// with the caveat that the FrameOwner won't learn about updates to its flags
+// until they take effect.
 void RenderFrameProxy::OnDidUpdateFramePolicy(
     const blink::FramePolicy& frame_policy) {
-  web_frame_->SetReplicatedSandboxFlags(frame_policy.sandbox_flags);
+  DCHECK(web_frame()->Parent());
   web_frame_->SetFrameOwnerPolicy(frame_policy.sandbox_flags,
                                   frame_policy.container_policy);
+}
+
+// Update the proxy's SecurityContext with new sandbox flags that were set
+// during navigation. Unlike changes to the FrameOwner, which are handled by
+// OnDidUpdateFramePolicy, these flags should be considered effective
+// immediately.
+//
+// These flags are needed on the remote frame's SecurityContext to ensure that
+// sandbox flags are inherited properly if this proxy ever parents a local
+// frame.
+void RenderFrameProxy::OnDidSetActiveSandboxFlags(
+    blink::WebSandboxFlags active_sandbox_flags) {
+  web_frame_->SetReplicatedSandboxFlags(active_sandbox_flags);
 }
 
 void RenderFrameProxy::SetChildFrameSurface(
@@ -317,9 +328,12 @@ void RenderFrameProxy::SetChildFrameSurface(
   if (!web_frame()->Parent())
     return;
 
-  if (!enable_surface_synchronization_)
-    compositing_helper_->SetPrimarySurfaceInfo(surface_info);
-  compositing_helper_->SetFallbackSurfaceInfo(surface_info, sequence);
+  if (!enable_surface_synchronization_) {
+    compositing_helper_->SetPrimarySurfaceId(surface_info.id(),
+                                             frame_rect().size());
+  }
+  compositing_helper_->SetFallbackSurfaceId(surface_info.id(),
+                                            frame_rect().size(), sequence);
 }
 
 bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
@@ -341,6 +355,8 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameMsg_DidStartLoading, OnDidStartLoading)
     IPC_MESSAGE_HANDLER(FrameMsg_DidStopLoading, OnDidStopLoading)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateFramePolicy, OnDidUpdateFramePolicy)
+    IPC_MESSAGE_HANDLER(FrameMsg_DidSetActiveSandboxFlags,
+                        OnDidSetActiveSandboxFlags)
     IPC_MESSAGE_HANDLER(FrameMsg_DispatchLoad, OnDispatchLoad)
     IPC_MESSAGE_HANDLER(FrameMsg_Collapse, OnCollapse)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateName, OnDidUpdateName)
@@ -397,7 +413,7 @@ void RenderFrameProxy::OnDidStartLoading() {
 
 void RenderFrameProxy::OnViewChanged(const viz::FrameSinkId& frame_sink_id) {
   // In mash the FrameSinkId comes from RendererWindowTreeClient.
-  if (!IsRunningInMash())
+  if (!IsRunningWithMus())
     frame_sink_id_ = frame_sink_id;
 
   // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
@@ -492,6 +508,9 @@ void RenderFrameProxy::SetMusEmbeddedFrame(
 #endif
 
 void RenderFrameProxy::WasResized() {
+  if (!frame_sink_id_.is_valid())
+    return;
+
   bool synchronized_params_changed =
       !sent_resize_params_ ||
       sent_resize_params_->frame_rect.size() !=
@@ -503,13 +522,9 @@ void RenderFrameProxy::WasResized() {
   if (synchronized_params_changed)
     local_surface_id_ = local_surface_id_allocator_.GenerateId();
 
-  if (enable_surface_synchronization_ && frame_sink_id_.is_valid()) {
-    float device_scale_factor = screen_info().device_scale_factor;
-    viz::SurfaceInfo surface_info(
-        viz::SurfaceId(frame_sink_id_, local_surface_id_), device_scale_factor,
-        gfx::ScaleToCeiledSize(frame_rect().size(), device_scale_factor));
-    compositing_helper_->SetPrimarySurfaceInfo(surface_info);
-  }
+  viz::SurfaceId surface_id(frame_sink_id_, local_surface_id_);
+  if (enable_surface_synchronization_)
+    compositing_helper_->SetPrimarySurfaceId(surface_id, frame_rect().size());
 
   bool rect_changed =
       !sent_resize_params_ ||
@@ -525,7 +540,7 @@ void RenderFrameProxy::WasResized() {
     // Let the browser know about the updated view rect.
     Send(new FrameHostMsg_UpdateResizeParams(
         routing_id_, frame_rect(), screen_info(), auto_size_sequence_number(),
-        local_surface_id_));
+        surface_id));
     sent_resize_params_ = pending_resize_params_;
   }
 }
@@ -618,6 +633,7 @@ void RenderFrameProxy::Navigate(const blink::WebURLRequest& request,
 
 void RenderFrameProxy::FrameRectsChanged(const blink::WebRect& frame_rect) {
   pending_resize_params_.frame_rect = gfx::Rect(frame_rect);
+  pending_resize_params_.screen_info = render_widget_->screen_info();
   WasResized();
 }
 
@@ -633,6 +649,12 @@ void RenderFrameProxy::VisibilityChanged(bool visible) {
 
 void RenderFrameProxy::SetIsInert(bool inert) {
   Send(new FrameHostMsg_SetIsInert(routing_id_, inert));
+}
+
+void RenderFrameProxy::UpdateRenderThrottlingStatus(bool is_throttled,
+                                                    bool subtree_throttled) {
+  Send(new FrameHostMsg_UpdateRenderThrottlingStatus(routing_id_, is_throttled,
+                                                     subtree_throttled));
 }
 
 void RenderFrameProxy::DidChangeOpener(blink::WebFrame* opener) {

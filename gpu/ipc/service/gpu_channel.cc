@@ -251,7 +251,7 @@ bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
     for (auto& flush_info : flush_list) {
       GpuCommandBufferMsg_AsyncFlush flush_message(
           flush_info.route_id, flush_info.put_offset, flush_info.flush_id,
-          std::move(flush_info.latency_info));
+          flush_info.snapshot_requested);
 
       auto it = route_sequences_.find(flush_info.route_id);
       if (it == route_sequences_.end()) {
@@ -616,6 +616,10 @@ void GpuChannel::OnCreateCommandBuffer(
     sequence_id = scheduler_->CreateSequence(stream_priority);
     stream_sequences_[stream_id] = sequence_id;
   }
+
+  DVLOG(1) << "Should use raster decoder: "
+           << (gpu_channel_manager_->gpu_preferences().enable_raster_decoder &&
+               init_params.attribs.enable_oop_rasterization);
 
   auto stub = std::make_unique<GpuCommandBufferStub>(
       this, init_params, command_buffer_id, sequence_id, stream_id, route_id);

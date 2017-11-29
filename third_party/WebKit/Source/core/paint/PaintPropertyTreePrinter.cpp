@@ -80,10 +80,12 @@ class PropertyTreePrinter {
   }
 
   void CollectPropertyNodes(const LayoutObject& object) {
-    if (const ObjectPaintProperties* properties =
-            object.FirstFragment().PaintProperties())
-      Traits::AddObjectPaintProperties(object, *properties, *this);
-    for (LayoutObject* child = object.SlowFirstChild(); child;
+    for (const auto* fragment = &object.FirstFragment(); fragment;
+         fragment = fragment->NextFragment()) {
+      if (const auto* properties = fragment->PaintProperties())
+        Traits::AddObjectPaintProperties(object, *properties, *this);
+    }
+    for (const auto* child = object.SlowFirstChild(); child;
          child = child->NextSibling())
       CollectPropertyNodes(*child);
   }
@@ -150,8 +152,6 @@ class PropertyTreePrinterTraits<TransformPaintPropertyNode> {
       printer.AddPropertyNode(t, "SvgLocalToBorderBoxTransform", object);
     if (const auto* t = properties.ScrollTranslation())
       printer.AddPropertyNode(t, "ScrollTranslation", object);
-    if (const auto* t = properties.ScrollbarPaintOffset())
-      printer.AddPropertyNode(t, "ScrollbarPaintOffset", object);
   }
 };
 
@@ -395,11 +395,6 @@ class PaintPropertyTreeGraphBuilder {
         properties->ScrollTranslation();
     if (scroll_translation)
       WritePaintPropertyNode(*scroll_translation, &object, "scrollTranslation");
-    const TransformPaintPropertyNode* scrollbar_paint_offset =
-        properties->ScrollbarPaintOffset();
-    if (scrollbar_paint_offset)
-      WritePaintPropertyNode(*scrollbar_paint_offset, &object,
-                             "scrollbarPaintOffset");
     const EffectPaintPropertyNode* effect = properties->Effect();
     if (effect)
       WritePaintPropertyNode(*effect, &object, "effect");

@@ -1158,6 +1158,23 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   // tasks.
   SetupFieldTrials();
 
+  // Add Site Isolation switches as dictated by policy.
+  // TODO(https://crbug.com/760761): Could clean this up by saving
+  // `g_browser_process->local_state()` as a local.
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (g_browser_process->local_state()->GetBoolean(prefs::kSitePerProcess) &&
+      !command_line->HasSwitch(switches::kSitePerProcess)) {
+    command_line->AppendSwitch(switches::kSitePerProcess);
+  }
+  // We don't check for `HasSwitch` here, because don't want the command-line
+  // switch to take precedence over enterprise policy. (This behavior is in
+  // harmony with other enterprise policy settings.)
+  if (g_browser_process->local_state()->HasPrefPath(prefs::kIsolateOrigins)) {
+    command_line->AppendSwitchASCII(
+        switches::kIsolateOrigins,
+        g_browser_process->local_state()->GetString(prefs::kIsolateOrigins));
+  }
+
   // ChromeOS needs ui::ResourceBundle::InitSharedInstance to be called before
   // this.
   browser_process_->PreCreateThreads(parsed_command_line());
@@ -1621,7 +1638,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 
     if (!master_prefs_->suppress_first_run_default_browser_prompt) {
       browser_creator_->set_show_main_browser_window(
-          !chrome::ShowFirstRunDefaultBrowserPrompt(profile_));
+          !ShowFirstRunDefaultBrowserPrompt(profile_));
     } else {
       browser_creator_->set_is_default_browser_dialog_suppressed(true);
     }

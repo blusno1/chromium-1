@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -23,6 +24,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -33,6 +35,43 @@
 using content::BrowserThread;
 
 namespace extensions {
+
+namespace {
+
+bool IsWindowedBookmarkApp(const Extension* app,
+                           content::BrowserContext* context) {
+  if (!app || !app->from_bookmark())
+    return false;
+
+  if (GetLaunchContainer(extensions::ExtensionPrefs::Get(context), app) !=
+      LAUNCH_CONTAINER_WINDOW) {
+    return false;
+  }
+
+  return true;
+}
+
+scoped_refptr<const Extension> GetAppForURL(
+    const GURL& url,
+    const content::WebContents* web_contents) {
+  content::BrowserContext* context = web_contents->GetBrowserContext();
+  for (scoped_refptr<const extensions::Extension> app :
+       ExtensionRegistry::Get(context)->enabled_extensions()) {
+    if (!IsWindowedBookmarkApp(app.get(), context))
+      continue;
+
+    const UrlHandlerInfo* url_handler =
+        UrlHandlers::FindMatchingUrlHandler(app.get(), url);
+    if (!url_handler)
+      continue;
+
+    return app;
+  }
+
+  return nullptr;
+}
+
+}  // namespace
 
 // static
 std::unique_ptr<content::NavigationThrottle>
@@ -103,14 +142,15 @@ BookmarkAppNavigationThrottle::ProcessNavigation() {
     return content::NavigationThrottle::PROCEED;
   }
 
-  // This results in a navigation from google.com/ to google.com/maps to just
-  // navigate the tab.
-  // TODO(crbug.com/783487): Get the app that corresponds to the current URL
-  // and, if there is none or it's not the same as the target app, then open
-  // a new app window for the target app.
-  if (!app_for_window_ref &&
-      HasSameOriginAsCurrentSite(navigation_handle()->GetURL())) {
-    DVLOG(1) << "Don't intercept: Keep same origin navigations in the browser.";
+  // If this is a browser tab, and the current and target URL are within-scope
+  // of the same app, don't intercept the navigation.
+  // This ensures that navigating from
+  // https://www.youtube.com/ to https://www.youtube.com/some_video doesn't
+  // open a new app window if the Youtube app is installed, but navigating from
+  // https://www.google.com/ to https://www.google.com/maps does open a new
+  // app window if only the Maps app is installed.
+  if (!app_for_window_ref && target_app_ref == GetAppForCurrentURL()) {
+    DVLOG(1) << "Don't intercept: Keep same-app navigations in the browser.";
     return content::NavigationThrottle::PROCEED;
   }
 
@@ -142,16 +182,6 @@ BookmarkAppNavigationThrottle::ProcessNavigation() {
   DVLOG(1) << "No matching Bookmark App for URL: "
            << navigation_handle()->GetURL();
   return content::NavigationThrottle::PROCEED;
-}
-
-bool BookmarkAppNavigationThrottle::HasSameOriginAsCurrentSite(
-    const GURL& target_url) {
-  DCHECK(navigation_handle()->IsInMainFrame());
-  return url::Origin::Create(target_url)
-      .IsSameOriginWith(navigation_handle()
-                            ->GetWebContents()
-                            ->GetMainFrame()
-                            ->GetLastCommittedOrigin());
 }
 
 content::NavigationThrottle::ThrottleCheckResult
@@ -227,16 +257,16 @@ void BookmarkAppNavigationThrottle::OpenInNewTab() {
 scoped_refptr<const Extension>
 BookmarkAppNavigationThrottle::GetAppForWindow() {
   content::WebContents* source = navigation_handle()->GetWebContents();
+  content::BrowserContext* context = source->GetBrowserContext();
   Browser* browser = chrome::FindBrowserWithWebContents(source);
   if (!browser || !browser->is_app())
     return nullptr;
 
-  const Extension* app =
-      ExtensionRegistry::Get(source->GetBrowserContext())
-          ->GetExtensionById(
-              web_app::GetExtensionIdFromApplicationName(browser->app_name()),
-              extensions::ExtensionRegistry::ENABLED);
-  if (!app || !app->from_bookmark())
+  const Extension* app = ExtensionRegistry::Get(context)->GetExtensionById(
+      web_app::GetExtensionIdFromApplicationName(browser->app_name()),
+      extensions::ExtensionRegistry::ENABLED);
+
+  if (!IsWindowedBookmarkApp(app, context))
     return nullptr;
 
   // Bookmark Apps for installable websites have scope.
@@ -249,24 +279,17 @@ BookmarkAppNavigationThrottle::GetAppForWindow() {
 }
 
 scoped_refptr<const Extension> BookmarkAppNavigationThrottle::GetTargetApp() {
-  const GURL& target_url = navigation_handle()->GetURL();
+  return GetAppForURL(navigation_handle()->GetURL(),
+                      navigation_handle()->GetWebContents());
+}
 
-  content::BrowserContext* browser_context =
-      navigation_handle()->GetWebContents()->GetBrowserContext();
-  for (scoped_refptr<const extensions::Extension> app :
-       ExtensionRegistry::Get(browser_context)->enabled_extensions()) {
-    if (!app->from_bookmark())
-      continue;
-
-    const UrlHandlerInfo* url_handler =
-        UrlHandlers::FindMatchingUrlHandler(app.get(), target_url);
-    if (!url_handler)
-      continue;
-
-    return app;
-  }
-
-  return nullptr;
+scoped_refptr<const Extension>
+BookmarkAppNavigationThrottle::GetAppForCurrentURL() {
+  return GetAppForURL(navigation_handle()
+                          ->GetWebContents()
+                          ->GetMainFrame()
+                          ->GetLastCommittedURL(),
+                      navigation_handle()->GetWebContents());
 }
 
 }  // namespace extensions

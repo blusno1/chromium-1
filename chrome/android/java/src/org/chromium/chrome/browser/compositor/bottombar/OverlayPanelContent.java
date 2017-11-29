@@ -180,6 +180,22 @@ public class OverlayPanelContent {
             public ContentVideoViewEmbedder getContentVideoViewEmbedder() {
                 return null;  // Have a no-op embedder be used.
             }
+
+            @Override
+            public int getTopControlsHeight() {
+                return (int) (mBarHeightPx
+                        / mActivity.getWindowAndroid().getDisplay().getDipScale());
+            }
+
+            @Override
+            public int getBottomControlsHeight() {
+                return 0;
+            }
+
+            @Override
+            public boolean controlsResizeView() {
+                return false;
+            }
         };
     }
 
@@ -243,7 +259,7 @@ public class OverlayPanelContent {
      * @return The newly created ContentViewCore.
      */
     protected ContentViewCore createContentViewCore(ChromeActivity activity) {
-        return new ContentViewCore(activity, ChromeVersionInfo.getProductVersion());
+        return ContentViewCore.create(activity, ChromeVersionInfo.getProductVersion());
     }
 
     /**
@@ -349,9 +365,7 @@ public class OverlayPanelContent {
         if (mContentViewWidth != 0 && mContentViewHeight != 0) {
             onPhysicalBackingSizeChanged(mContentViewWidth, mContentViewHeight);
         }
-
-        mContentViewCore.setTopControlsHeight(mBarHeightPx, false);
-        mContentViewCore.setBottomControlsHeight(0);
+        panelWebContents.setSize(cv.getWidth(), cv.getHeight());
     }
 
     /**
@@ -496,7 +510,8 @@ public class OverlayPanelContent {
     }
 
     void onSizeChanged(int width, int height) {
-        if (mContentViewCore == null) return;
+        if (mContentViewCore == null || getWebContents() == null) return;
+        getWebContents().setSize(width, height);
         mContentViewCore.onSizeChanged(width, height, mContentViewCore.getViewportWidthPix(),
                 mContentViewCore.getViewportHeightPix());
     }

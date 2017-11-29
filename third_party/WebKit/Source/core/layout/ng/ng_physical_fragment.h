@@ -5,12 +5,12 @@
 #ifndef NGPhysicalFragment_h
 #define NGPhysicalFragment_h
 
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/layout/ng/geometry/ng_physical_offset.h"
 #include "core/layout/ng/geometry/ng_physical_size.h"
 #include "core/layout/ng/ng_break_token.h"
 #include "platform/geometry/LayoutRect.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -118,7 +118,10 @@ class CORE_EXPORT NGPhysicalFragment
   LayoutObject* GetLayoutObject() const { return layout_object_; }
 
   // VisualRect of itself, not including contents, in the local coordinate.
-  NGPhysicalOffsetRect LocalVisualRect() const;
+  NGPhysicalOffsetRect SelfVisualRect() const;
+
+  // VisualRect of itself including contents, in the local coordinate.
+  NGPhysicalOffsetRect VisualRectWithContents() const;
 
   // Unite visual rect to propagate to parent's ContentsVisualRect.
   void PropagateContentsVisualRect(NGPhysicalOffsetRect*) const;

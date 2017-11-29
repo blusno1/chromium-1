@@ -28,24 +28,23 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "cc/layers/texture_layer_client.h"
-#include "components/viz/common/quads/texture_mailbox.h"
 #include "platform/PlatformExport.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/graphics/CanvasResourceHost.h"
 #include "platform/graphics/ImageBufferSurface.h"
 #include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/WeakPtr.h"
 #include "public/platform/WebExternalTextureLayer.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/color_space.h"
-
 
 struct SkImageInfo;
 
@@ -81,15 +80,14 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
   Canvas2DLayerBridge(const IntSize&,
                       int msaa_sample_count,
                       AccelerationMode,
-                      const CanvasColorParams&,
-                      bool is_unit_test = false);
+                      const CanvasColorParams&);
 
   ~Canvas2DLayerBridge() override;
 
   // cc::TextureLayerClient implementation.
-  bool PrepareTextureMailbox(viz::TextureMailbox* out_mailbox,
-                             std::unique_ptr<viz::SingleReleaseCallback>*
-                                 out_release_callback) override;
+  bool PrepareTransferableResource(viz::TransferableResource* out_resource,
+                                   std::unique_ptr<viz::SingleReleaseCallback>*
+                                       out_release_callback) override;
 
   // ImageBufferSurface implementation
   void FinalizeFrame() override;
@@ -112,6 +110,9 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
                    int y) override;
   void DontUseIdleSchedulingForTesting() {
     dont_use_idle_scheduling_for_testing_ = true;
+  }
+  void SetCanvasResourceHost(CanvasResourceHost* host) {
+    resource_host_ = host;
   }
 
   void BeginDestruction();
@@ -195,6 +196,8 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
   AccelerationMode acceleration_mode_;
   CanvasColorParams color_params_;
   CheckedNumeric<int> recording_pixel_count_;
+
+  CanvasResourceHost* resource_host_;
 };
 
 }  // namespace blink

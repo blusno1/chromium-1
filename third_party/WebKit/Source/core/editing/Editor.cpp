@@ -111,8 +111,6 @@ void DispatchInputEvent(Element* target,
                         InputEvent::InputType input_type,
                         const String& data,
                         InputEvent::EventIsComposing is_composing) {
-  if (!RuntimeEnabledFeatures::InputEventEnabled())
-    return;
   if (!target)
     return;
   // TODO(chongz): Pass appreciate |ranges| after it's defined on spec.
@@ -870,20 +868,28 @@ void Editor::ApplyParagraphStyleToSelection(CSSPropertyValueSet* style,
 
 bool Editor::SelectionStartHasStyle(CSSPropertyID property_id,
                                     const String& value) const {
-  EditingStyle* style_to_check = EditingStyle::Create(property_id, value);
+  const SecureContextMode secure_context_mode =
+      frame_->GetDocument()->SecureContextMode();
+
+  EditingStyle* style_to_check =
+      EditingStyle::Create(property_id, value, secure_context_mode);
   EditingStyle* style_at_start =
       EditingStyleUtilities::CreateStyleAtSelectionStart(
           GetFrameSelection().ComputeVisibleSelectionInDOMTreeDeprecated(),
           property_id == CSSPropertyBackgroundColor, style_to_check->Style());
-  return style_to_check->TriStateOfStyle(style_at_start) !=
+  return style_to_check->TriStateOfStyle(style_at_start, secure_context_mode) !=
          EditingTriState::kFalse;
 }
 
 EditingTriState Editor::SelectionHasStyle(CSSPropertyID property_id,
                                           const String& value) const {
-  return EditingStyle::Create(property_id, value)
+  const SecureContextMode secure_context_mode =
+      frame_->GetDocument()->SecureContextMode();
+
+  return EditingStyle::Create(property_id, value, secure_context_mode)
       ->TriStateOfStyle(
-          GetFrameSelection().ComputeVisibleSelectionInDOMTreeDeprecated());
+          GetFrameSelection().ComputeVisibleSelectionInDOMTreeDeprecated(),
+          secure_context_mode);
 }
 
 String Editor::SelectionStartCSSPropertyValue(CSSPropertyID property_id) {
@@ -1387,7 +1393,7 @@ void Editor::SetBaseWritingDirection(WritingDirection direction) {
       direction == LeftToRightWritingDirection
           ? "ltr"
           : direction == RightToLeftWritingDirection ? "rtl" : "inherit",
-      false);
+      /* important */ false, GetFrame().GetDocument()->SecureContextMode());
   ApplyParagraphStyleToSelection(
       style, InputEvent::InputType::kFormatSetBlockTextDirection);
 }
@@ -1761,6 +1767,10 @@ SpellChecker& Editor::GetSpellChecker() const {
 
 FrameSelection& Editor::GetFrameSelection() const {
   return GetFrame().Selection();
+}
+
+void Editor::SetMark() {
+  mark_ = GetFrameSelection().ComputeVisibleSelectionInDOMTree();
 }
 
 void Editor::ToggleOverwriteModeEnabled() {

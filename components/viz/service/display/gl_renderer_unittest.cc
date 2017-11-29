@@ -30,16 +30,14 @@
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
+#include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/service/display/overlay_strategy_single_on_top.h"
 #include "components/viz/service/display/overlay_strategy_underlay.h"
-#include "components/viz/service/display/texture_mailbox_deleter.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/skia/include/core/SkImageFilter.h"
 #include "third_party/skia/include/core/SkMatrix.h"
-#include "third_party/skia/include/effects/SkColorFilterImageFilter.h"
 #include "third_party/skia/include/effects/SkColorMatrixFilter.h"
 #include "ui/gfx/transform.h"
 #include "ui/latency/latency_info.h"
@@ -378,14 +376,15 @@ class FakeRendererGL : public GLRenderer {
                  cc::DisplayResourceProvider* resource_provider)
       : GLRenderer(settings, output_surface, resource_provider, nullptr) {}
 
-  FakeRendererGL(const RendererSettings* settings,
-                 OutputSurface* output_surface,
-                 cc::DisplayResourceProvider* resource_provider,
-                 TextureMailboxDeleter* texture_mailbox_deleter)
+  FakeRendererGL(
+      const RendererSettings* settings,
+      OutputSurface* output_surface,
+      cc::DisplayResourceProvider* resource_provider,
+      scoped_refptr<base::SingleThreadTaskRunner> current_task_runner)
       : GLRenderer(settings,
                    output_surface,
                    resource_provider,
-                   texture_mailbox_deleter) {}
+                   std::move(current_task_runner)) {}
 
   void SetOverlayProcessor(OverlayProcessor* processor) {
     overlay_processor_.reset(processor);
@@ -1538,8 +1537,8 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
   matrix[15] = matrix[16] = matrix[17] = matrix[19] = 0;
   matrix[18] = 1;
   cc::FilterOperations filters;
-  filters.Append(
-      cc::FilterOperation::CreateReferenceFilter(SkColorFilterImageFilter::Make(
+  filters.Append(cc::FilterOperation::CreateReferenceFilter(
+      sk_make_sp<cc::ColorFilterPaintFilter>(
           SkColorFilter::MakeMatrixFilterRowMajor255(matrix), nullptr)));
 
   gfx::Transform transform_causing_aa;
@@ -1949,8 +1948,6 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   auto parent_resource_provider =
       cc::FakeResourceProvider::CreateDisplayResourceProvider(
           output_surface->context_provider(), shared_bitmap_manager.get());
-  std::unique_ptr<TextureMailboxDeleter> mailbox_deleter(
-      new TextureMailboxDeleter(base::ThreadTaskRunnerHandle::Get()));
 
   auto child_context_provider = cc::TestContextProvider::Create();
   child_context_provider->BindToCurrentThread();
@@ -1958,13 +1955,13 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       cc::FakeResourceProvider::CreateLayerTreeResourceProvider(
           child_context_provider.get(), shared_bitmap_manager.get());
 
-  TextureMailbox mailbox(gpu::Mailbox::Generate(), gpu::SyncToken(),
-                         GL_TEXTURE_2D, gfx::Size(256, 256), true);
+  auto transfer_resource = TransferableResource::MakeGLOverlay(
+      gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
+      gfx::Size(256, 256), true);
   auto release_callback =
       SingleReleaseCallback::Create(base::Bind(&MailboxReleased));
-  ResourceId resource_id =
-      child_resource_provider->CreateResourceFromTextureMailbox(
-          mailbox, std::move(release_callback));
+  ResourceId resource_id = child_resource_provider->ImportResource(
+      transfer_resource, std::move(release_callback));
 
   std::vector<ReturnedResource> returned_to_child;
   int child_id = parent_resource_provider->CreateChild(
@@ -1985,7 +1982,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   RendererSettings settings;
   FakeRendererGL renderer(&settings, output_surface.get(),
                           parent_resource_provider.get(),
-                          mailbox_deleter.get());
+                          base::ThreadTaskRunnerHandle::Get());
   renderer.Initialize();
   renderer.SetVisible(true);
 
@@ -2143,8 +2140,6 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
   auto parent_resource_provider =
       cc::FakeResourceProvider::CreateDisplayResourceProvider(
           output_surface->context_provider(), shared_bitmap_manager.get());
-  std::unique_ptr<TextureMailboxDeleter> mailbox_deleter(
-      new TextureMailboxDeleter(base::ThreadTaskRunnerHandle::Get()));
 
   auto child_context_provider = cc::TestContextProvider::Create();
   child_context_provider->BindToCurrentThread();
@@ -2154,13 +2149,13 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
 
   gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
                             gpu::CommandBufferId::FromUnsafeValue(0x123), 29);
-  TextureMailbox mailbox(gpu::Mailbox::Generate(), sync_token, GL_TEXTURE_2D,
-                         gfx::Size(256, 256), true);
+  auto transfer_resource = TransferableResource::MakeGLOverlay(
+      gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, sync_token,
+      gfx::Size(256, 256), true);
   auto release_callback =
       SingleReleaseCallback::Create(base::Bind(&MailboxReleased));
-  ResourceId resource_id =
-      child_resource_provider->CreateResourceFromTextureMailbox(
-          mailbox, std::move(release_callback));
+  ResourceId resource_id = child_resource_provider->ImportResource(
+      transfer_resource, std::move(release_callback));
 
   std::vector<ReturnedResource> returned_to_child;
   int child_id = parent_resource_provider->CreateChild(
@@ -2181,7 +2176,7 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
   RendererSettings settings;
   FakeRendererGL renderer(&settings, output_surface.get(),
                           parent_resource_provider.get(),
-                          mailbox_deleter.get());
+                          base::ThreadTaskRunnerHandle::Get());
   renderer.Initialize();
   renderer.SetVisible(true);
 
@@ -2396,13 +2391,13 @@ TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
       cc::FakeResourceProvider::CreateLayerTreeResourceProvider(
           child_context_provider.get(), nullptr);
 
-  TextureMailbox mailbox(gpu::Mailbox::Generate(), gpu::SyncToken(),
-                         GL_TEXTURE_2D, gfx::Size(256, 256), true);
+  auto transfer_resource = TransferableResource::MakeGLOverlay(
+      gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
+      gfx::Size(256, 256), true);
   auto release_callback =
       SingleReleaseCallback::Create(base::Bind(&MailboxReleased));
-  ResourceId resource_id =
-      child_resource_provider->CreateResourceFromTextureMailbox(
-          mailbox, std::move(release_callback));
+  ResourceId resource_id = child_resource_provider->ImportResource(
+      transfer_resource, std::move(release_callback));
 
   std::vector<ReturnedResource> returned_to_child;
   int child_id = parent_resource_provider->CreateChild(
@@ -2452,7 +2447,7 @@ TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
       quad->SetNew(shared_state, rect, rect, needs_blending, tex_coord_rect,
                    tex_coord_rect, rect.size(), rect.size(), parent_resource_id,
                    parent_resource_id, parent_resource_id, parent_resource_id,
-                   YUVVideoDrawQuad::REC_601, gfx::ColorSpace(), 0, 1.0, 8);
+                   gfx::ColorSpace::CreateREC601(), 0, 1.0, 8);
     }
 
     // A bunch of initialization that happens.
@@ -2688,7 +2683,8 @@ TEST_F(GLRendererTest, CALayerOverlaysWithAllQuadsPromoted) {
 
   RendererSettings settings;
   FakeRendererGL renderer(&settings, output_surface.get(),
-                          parent_resource_provider.get());
+                          parent_resource_provider.get(),
+                          base::ThreadTaskRunnerHandle::Get());
   renderer.Initialize();
   renderer.SetVisible(true);
 

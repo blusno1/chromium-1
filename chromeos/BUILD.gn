@@ -26,6 +26,7 @@ component("chromeos") {
     ":login_manager_proto",
     ":media_perception_proto",
     ":power_manager_proto",
+    ":smbprovider_proto",
     "//base",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
@@ -63,8 +64,6 @@ component("chromeos") {
     "attestation/attestation_constants.h",
     "attestation/attestation_flow.cc",
     "attestation/attestation_flow.h",
-    "audio/audio_a11y_controller.cc",
-    "audio/audio_a11y_controller.h",
     "audio/audio_device.cc",
     "audio/audio_device.h",
     "audio/audio_devices_pref_handler.h",
@@ -208,6 +207,8 @@ component("chromeos") {
     "dbus/fake_shill_service_client.h",
     "dbus/fake_shill_third_party_vpn_driver_client.cc",
     "dbus/fake_shill_third_party_vpn_driver_client.h",
+    "dbus/fake_smb_provider_client.cc",
+    "dbus/fake_smb_provider_client.h",
     "dbus/fake_sms_client.cc",
     "dbus/fake_sms_client.h",
     "dbus/fake_system_clock_client.cc",
@@ -266,6 +267,8 @@ component("chromeos") {
     "dbus/shill_service_client.h",
     "dbus/shill_third_party_vpn_driver_client.cc",
     "dbus/shill_third_party_vpn_driver_client.h",
+    "dbus/smb_provider_client.cc",
+    "dbus/smb_provider_client.h",
     "dbus/sms_client.cc",
     "dbus/sms_client.h",
     "dbus/system_clock_client.cc",
@@ -449,6 +452,8 @@ component("chromeos") {
     "network/tether_constants.h",
     "printing/ppd_cache.cc",
     "printing/ppd_cache.h",
+    "printing/ppd_line_reader.cc",
+    "printing/ppd_line_reader.h",
     "printing/ppd_provider.cc",
     "printing/ppd_provider.h",
     "printing/printer_configuration.cc",
@@ -620,6 +625,7 @@ test("chromeos_unittests") {
   ]
   deps = [
     ":attestation_proto",
+    ":authpolicy_proto",
     ":biod_proto",
     ":cryptohome_proto",
     ":power_manager_proto",
@@ -709,6 +715,7 @@ test("chromeos_unittests") {
     "network/proxy/proxy_config_service_impl_unittest.cc",
     "network/shill_property_handler_unittest.cc",
     "printing/ppd_cache_unittest.cc",
+    "printing/ppd_line_reader_unittest.cc",
     "printing/ppd_provider_unittest.cc",
     "printing/printer_translator_unittest.cc",
     "process_proxy/process_output_watcher_unittest.cc",
@@ -813,4 +820,12 @@ proto_library("media_perception_proto") {
   ]
 
   proto_out_dir = "chromeos/media_perception"
+}
+
+proto_library("smbprovider_proto") {
+  sources = [
+    "//third_party/cros_system_api/dbus/smbprovider/directory_entry.proto",
+  ]
+
+  proto_out_dir = "chromeos/dbus/smbprovider"
 }

@@ -203,6 +203,12 @@ void FakePowerManagerClient::SendKeyboardBrightnessChanged(
     observer.KeyboardBrightnessChanged(level, user_initiated);
 }
 
+void FakePowerManagerClient::SendScreenIdleStateChanged(
+    const power_manager::ScreenIdleState& proto) {
+  for (auto& observer : observers_)
+    observer.ScreenIdleStateChanged(proto);
+}
+
 void FakePowerManagerClient::SendPowerButtonEvent(
     bool down,
     const base::TimeTicks& timestamp) {
@@ -215,6 +221,13 @@ void FakePowerManagerClient::SetLidState(LidState state,
   lid_state_ = state;
   for (auto& observer : observers_)
     observer.LidEventReceived(state, timestamp);
+}
+
+void FakePowerManagerClient::SetTabletMode(TabletMode mode,
+                                           const base::TimeTicks& timestamp) {
+  tablet_mode_ = mode;
+  for (auto& observer : observers_)
+    observer.TabletModeEventReceived(mode, timestamp);
 }
 
 void FakePowerManagerClient::UpdatePowerProperties(

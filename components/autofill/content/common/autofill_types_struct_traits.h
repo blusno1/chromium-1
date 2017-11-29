@@ -19,6 +19,7 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/password_form_generation_data.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
+#include "url/origin.h"
 
 namespace mojo {
 
@@ -190,6 +191,10 @@ struct StructTraits<autofill::mojom::FormDataDataView, autofill::FormData> {
   static const GURL& origin(const autofill::FormData& r) { return r.origin; }
 
   static const GURL& action(const autofill::FormData& r) { return r.action; }
+
+  static const url::Origin& main_frame_origin(const autofill::FormData& r) {
+    return r.main_frame_origin;
+  }
 
   static bool is_form_tag(const autofill::FormData& r) { return r.is_form_tag; }
 

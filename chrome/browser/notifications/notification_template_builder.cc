@@ -4,10 +4,13 @@
 
 #include "chrome/browser/notifications/notification_template_builder.h"
 
+#include <algorithm>
+
 #include "base/files/file_path.h"
 #include "base/i18n/time_formatting.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -44,21 +47,22 @@ const char kImageUri[] = "imageUri";
 const char kInputElement[] = "input";
 const char kInputId[] = "id";
 const char kInputType[] = "type";
+const char kStatus[] = "status";
 const char kNotificationSettings[] = "notificationSettings";
 const char kPlaceholderContent[] = "placeHolderContent";
 const char kPlacement[] = "placement";
 const char kPlacementAppLogoOverride[] = "appLogoOverride";
+const char kProgress[] = "progress";
 const char kReminder[] = "reminder";
 const char kScenario[] = "scenario";
 const char kSilent[] = "silent";
 const char kSrc[] = "src";
 const char kText[] = "text";
 const char kTextElement[] = "text";
-const char kToastElement[] = "toast";
 const char kToastElementDisplayTimestamp[] = "displayTimestamp";
-const char kToastElementLaunchAttribute[] = "launch";
 const char kTrue[] = "true";
 const char kUserResponse[] = "userResponse";
+const char kValue[] = "value";
 const char kVisualElement[] = "visual";
 
 // Name of the template used for default Chrome notifications.
@@ -69,18 +73,22 @@ const char kXmlVersionHeader[] = "<?xml version=\"1.0\"?>\n";
 
 }  // namespace
 
+const char kNotificationToastElement[] = "toast";
+const char kNotificationLaunchAttribute[] = "launch";
+
 // static
 const char* NotificationTemplateBuilder::context_menu_label_override_ = nullptr;
 
 // static
 std::unique_ptr<NotificationTemplateBuilder> NotificationTemplateBuilder::Build(
     NotificationImageRetainer* notification_image_retainer,
+    const std::string& launch_attribute,
     const std::string& profile_id,
     const message_center::Notification& notification) {
   std::unique_ptr<NotificationTemplateBuilder> builder = base::WrapUnique(
       new NotificationTemplateBuilder(notification_image_retainer, profile_id));
 
-  builder->StartToastElement(notification.id(), notification);
+  builder->StartToastElement(launch_attribute, notification);
   builder->StartVisualElement();
 
   builder->StartBindingElement(kDefaultTemplate);
@@ -88,16 +96,33 @@ std::unique_ptr<NotificationTemplateBuilder> NotificationTemplateBuilder::Build(
   // Content for the toast template.
   builder->WriteTextElement(base::UTF16ToUTF8(notification.title()),
                             TextType::NORMAL);
-  builder->WriteTextElement(base::UTF16ToUTF8(notification.message()),
-                            TextType::NORMAL);
-  builder->WriteTextElement(builder->FormatOrigin(notification.origin_url()),
-                            TextType::ATTRIBUTION);
+
+  // Message has historically not been shown for list-style notifications.
+  if (notification.type() == message_center::NOTIFICATION_TYPE_MULTIPLE &&
+      !notification.items().empty()) {
+    builder->WriteItems(notification.items());
+  } else {
+    builder->WriteTextElement(base::UTF16ToUTF8(notification.message()),
+                              TextType::NORMAL);
+  }
+
+  std::string attribution;
+  if (notification.UseOriginAsContextMessage())
+    attribution = builder->FormatOrigin(notification.origin_url());
+  else if (!notification.context_message().empty())
+    attribution = base::UTF16ToUTF8(notification.context_message());
+
+  if (!attribution.empty())
+    builder->WriteTextElement(attribution, TextType::ATTRIBUTION);
 
   if (!notification.icon().IsEmpty())
     builder->WriteIconElement(notification);
 
   if (!notification.image().IsEmpty())
     builder->WriteLargeImageElement(notification);
+
+  if (notification.type() == message_center::NOTIFICATION_TYPE_PROGRESS)
+    builder->WriteProgressElement(notification);
 
   builder->EndBindingElement();
   builder->EndVisualElement();
@@ -148,10 +173,11 @@ std::string NotificationTemplateBuilder::FormatOrigin(
 }
 
 void NotificationTemplateBuilder::StartToastElement(
-    const std::string& notification_id,
+    const std::string& launch_attribute,
     const message_center::Notification& notification) {
-  xml_writer_->StartElement(kToastElement);
-  xml_writer_->AddAttribute(kToastElementLaunchAttribute, notification_id);
+  xml_writer_->StartElement(kNotificationToastElement);
+  xml_writer_->AddAttribute(kNotificationLaunchAttribute, launch_attribute);
+
   // Note: If the notification doesn't include a button, then Windows will
   // ignore the Reminder flag.
   if (notification.never_timeout())
@@ -201,6 +227,25 @@ void NotificationTemplateBuilder::WriteTextElement(const std::string& content,
   xml_writer_->EndElement();
 }
 
+void NotificationTemplateBuilder::WriteItems(
+    const std::vector<message_center::NotificationItem>& items) {
+  // A toast can have a maximum of three text items, of which one is reserved
+  // for the title. The remaining two can each handle up to four lines of text,
+  // but the toast can only show four lines total, so there's no point in having
+  // more than one text item. Therefore, we show them all in one and hope there
+  // is no truncation at the bottom. There will never be room for items 5 and up
+  // so we don't make an attempt to show them.
+  constexpr size_t kMaxEntries = 4;
+  size_t entries = std::min(kMaxEntries, items.size());
+  std::string item_list;
+  for (size_t i = 0; i < entries; ++i) {
+    const auto& item = items[i];
+    item_list += base::UTF16ToUTF8(item.title) + " - " +
+                 base::UTF16ToUTF8(item.message) + "\n";
+  }
+  WriteTextElement(item_list, TextType::NORMAL);
+}
+
 void NotificationTemplateBuilder::WriteIconElement(
     const message_center::Notification& notification) {
   WriteImageElement(notification.icon(), notification.origin_url(),
@@ -228,6 +273,19 @@ void NotificationTemplateBuilder::WriteImageElement(
       xml_writer_->AddAttribute(kHintCrop, hint_crop);
     xml_writer_->EndElement();
   }
+}
+
+void NotificationTemplateBuilder::WriteProgressElement(
+    const message_center::Notification& notification) {
+  // Two other attributes are supported by Microsoft:
+  // title: A string shown on the left side of the toast, just above the bar.
+  // valueStringOverride: A string that replaces the percentage on the right.
+  xml_writer_->StartElement(kProgress);
+  // Status is mandatory, without it the progress bar is not shown.
+  xml_writer_->AddAttribute(kStatus, std::string());
+  xml_writer_->AddAttribute(
+      kValue, base::StringPrintf("%3.2f", 1.0 * notification.progress() / 100));
+  xml_writer_->EndElement();
 }
 
 void NotificationTemplateBuilder::AddActions(
