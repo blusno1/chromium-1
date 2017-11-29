@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/webui/bluetooth_internals/bluetooth_internals.mojom.h"
 #include "chrome/browser/ui/webui/mojo_web_ui_handler.h"
+#include "device/bluetooth/bluetooth_adapter.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 // Handles API requests from chrome://bluetooth-internals page by implementing
@@ -23,7 +24,11 @@ class BluetoothInternalsHandler : public mojom::BluetoothInternalsHandler,
   void GetAdapter(GetAdapterCallback callback) override;
 
  private:
+  void OnGetAdapter(GetAdapterCallback callback,
+                    scoped_refptr<device::BluetoothAdapter> adapter);
+
   mojo::Binding<mojom::BluetoothInternalsHandler> binding_;
+  base::WeakPtrFactory<BluetoothInternalsHandler> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BluetoothInternalsHandler);
 };

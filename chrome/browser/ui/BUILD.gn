@@ -475,7 +475,10 @@ split_static_library("ui") {
     "//device/base",
 
     # TODO(scheib) before landing:  Is this needed still?
-    #"//device/bluetooth/public/interfaces:experimental_interfaces",
+
+    # bluetooth_internals webui uses the experimental interfaces.
+    "//device/bluetooth:experimental_mojo",
+
     "//device/usb",
     "//extensions/features",
     "//media",

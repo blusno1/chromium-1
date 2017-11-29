@@ -47,6 +47,7 @@ mojom("experimental_interfaces") {
     "//chrome/browser/ui/webui/bluetooth_internals:*",
 
     # TODO(scheib) Before Landing, is this needed?
+    # Required to link? No.
     #"//chrome/browser/ui:*",
   ]
 }
