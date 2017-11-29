@@ -1029,6 +1029,8 @@
     "script": "//testing/scripts/run_gtest_perf_test.py",
     "args": [
       "media_perftests",
+      "--single-process-tests",
+      "--test-launcher-retry-limit=0",
     ],
   },
   "load_library_perf_tests": {
@@ -1166,6 +1168,10 @@
   },
   "vr_common_unittests": {
     "label": "//chrome/browser/vr:vr_common_unittests",
+    "type": "console_test_launcher",
+  },
+  "vr_pixeltests": {
+    "label": "//chrome/browser/vr:vr_pixeltests",
     "type": "console_test_launcher",
   },
   "vr_testapp": {

@@ -113,7 +113,6 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/associated_interface_provider.h"
 #include "content/public/common/menu_item.h"
 #include "content/public/common/url_utils.h"
 #include "extensions/features/features.h"
@@ -122,6 +121,7 @@
 #include "ppapi/features/features.h"
 #include "printing/features/features.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/WebKit/public/public_features.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 #include "third_party/WebKit/public/web/WebMediaPlayerAction.h"
@@ -169,7 +169,10 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "ash/public/cpp/window_properties.h"
+#include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "chrome/browser/chromeos/arc/intent_helper/open_with_menu.h"
+#include "ui/aura/window.h"
 #endif
 
 using base::UserMetricsAction;
@@ -1285,15 +1288,21 @@ void RenderViewContextMenu::AppendPageItems() {
   AppendMediaRouterItem();
 
   if (TranslateService::IsTranslatableURL(params_.page_url)) {
-    // TODO(crbug.com/711217): We should not allow to use the translate when the
-    // feature is disabled by the PolicyList.
-    std::string locale = GetTargetLanguage();
-    base::string16 language =
-        l10n_util::GetDisplayNameForLocale(locale, locale, true);
-    menu_model_.AddItem(
-        IDC_CONTENT_CONTEXT_TRANSLATE,
-        l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_TRANSLATE, language));
-    AddGoogleIconToLastMenuItem(&menu_model_);
+    std::unique_ptr<translate::TranslatePrefs> prefs(
+        ChromeTranslateClient::CreateTranslatePrefs(
+            GetPrefs(browser_context_)));
+    if (prefs->IsTranslateAllowedByPolicy()) {
+      language::LanguageModel* language_model =
+          LanguageModelFactory::GetForBrowserContext(browser_context_);
+      std::string locale = translate::TranslateManager::GetTargetLanguage(
+          prefs.get(), language_model);
+      base::string16 language =
+          l10n_util::GetDisplayNameForLocale(locale, locale, true);
+      menu_model_.AddItem(
+          IDC_CONTENT_CONTEXT_TRANSLATE,
+          l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_TRANSLATE, language));
+      AddGoogleIconToLastMenuItem(&menu_model_);
+    }
   }
 }
 
@@ -1539,6 +1548,20 @@ void RenderViewContextMenu::AppendPictureInPictureItem() {
 // Menu delegate functions -----------------------------------------------------
 
 bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
+#if defined(OS_CHROMEOS)
+  // Disable context menu in locked fullscreen mode (the menu is not really
+  // disabled as the user can still open it, but all the individual context menu
+  // entries are disabled / greyed out).
+  if (GetBrowser()) {
+    aura::Window* window = GetBrowser()->window()->GetNativeWindow();
+    ash::mojom::WindowPinType type =
+        window->GetProperty(ash::kWindowPinTypeKey);
+    if (type == ash::mojom::WindowPinType::TRUSTED_PINNED) {
+      return false;
+    }
+  }
+#endif
+
   {
     bool enabled = false;
     if (RenderViewContextMenuBase::IsCommandIdKnown(id, &enabled))

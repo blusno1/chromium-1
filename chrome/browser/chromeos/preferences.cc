@@ -109,34 +109,17 @@ void TryMigrateToResolveTimezoneByGeolocationMethod(PrefService* prefs) {
 }  // namespace
 
 Preferences::Preferences()
-    : prefs_(NULL),
-      input_method_manager_(input_method::InputMethodManager::Get()),
-      user_(NULL),
-      user_is_primary_(false) {
-  // Do not observe shell, if there is no shell instance; e.g., in some unit
-  // tests.
-  if (ash::Shell::HasInstance())
-    ash::Shell::Get()->AddShellObserver(this);
-}
+    : Preferences(input_method::InputMethodManager::Get()) {}
 
 Preferences::Preferences(input_method::InputMethodManager* input_method_manager)
     : prefs_(NULL),
       input_method_manager_(input_method_manager),
       user_(NULL),
-      user_is_primary_(false) {
-  // Do not observe shell, if there is no shell instance; e.g., in some unit
-  // tests.
-  if (ash::Shell::HasInstance())
-    ash::Shell::Get()->AddShellObserver(this);
-}
+      user_is_primary_(false) {}
 
 Preferences::~Preferences() {
   prefs_->RemoveObserver(this);
   user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
-  // If shell instance is destoryed before this preferences instance, there is
-  // no need to remove this shell observer.
-  if (ash::Shell::HasInstance())
-    ash::Shell::Get()->RemoveShellObserver(this);
 }
 
 // static
@@ -146,8 +129,6 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   // TODO(jamescook): Move ownership and registration into ash.
   registry->RegisterBooleanPref(
       ash::prefs::kAccessibilityVirtualKeyboardEnabled, false);
-  registry->RegisterBooleanPref(ash::prefs::kAccessibilityMonoAudioEnabled,
-                                false);
   registry->RegisterStringPref(prefs::kLogoutStartedLast, std::string());
   registry->RegisterStringPref(prefs::kSigninScreenTimezone, std::string());
   registry->RegisterBooleanPref(prefs::kResolveDeviceTimezoneByGeolocation,
@@ -222,7 +203,7 @@ void Preferences::RegisterProfilePrefs(
                                 ash::kDefaultLargeCursorSize,
                                 PrefRegistry::PUBLIC);
   registry->RegisterBooleanPref(ash::prefs::kAccessibilitySpokenFeedbackEnabled,
-                                false);
+                                false, PrefRegistry::PUBLIC);
   registry->RegisterBooleanPref(
       ash::prefs::kAccessibilityHighContrastEnabled, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
@@ -247,7 +228,7 @@ void Preferences::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
       ash::prefs::kAccessibilityMonoAudioEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
   registry->RegisterBooleanPref(
       ash::prefs::kAccessibilityCaretHighlightEnabled, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
@@ -377,8 +358,6 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterStringPref(prefs::kTermsOfServiceURL, "");
 
-  registry->RegisterBooleanPref(prefs::kTouchHudProjectionEnabled, false);
-
   registry->RegisterBooleanPref(prefs::kTouchVirtualKeyboardEnabled, false);
 
   input_method::InputMethodSyncer::RegisterProfilePrefs(registry);
@@ -457,8 +436,6 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   mouse_reverse_scroll_.Init(prefs::kMouseReverseScroll, prefs, callback);
   download_default_directory_.Init(prefs::kDownloadDefaultDirectory,
                                    prefs, callback);
-  touch_hud_projection_enabled_.Init(prefs::kTouchHudProjectionEnabled,
-                                     prefs, callback);
   preload_engines_.Init(prefs::kLanguagePreloadEngines, prefs, callback);
   enabled_extension_imes_.Init(prefs::kLanguageEnabledExtensionImes,
                                prefs, callback);
@@ -710,15 +687,6 @@ void Preferences::ApplyPreferences(ApplyReason reason,
           "FileBrowser.DownloadDestination.IsGoogleDrive.Started",
           default_download_to_drive);
   }
-  if (reason != REASON_PREF_CHANGED ||
-      pref_name == prefs::kTouchHudProjectionEnabled) {
-    if (user_is_active) {
-      const bool enabled = touch_hud_projection_enabled_.GetValue();
-      // There may not be a shell, e.g., in some unit tests.
-      if (ash::Shell::HasInstance())
-        ash::Shell::Get()->SetTouchHudProjectionEnabled(enabled);
-    }
-  }
 
   if (reason != REASON_PREF_CHANGED ||
       pref_name == prefs::kLanguageXkbAutoRepeatEnabled) {
@@ -931,14 +899,6 @@ void Preferences::UpdateAutoRepeatRate() {
   user_manager::known_user::SetIntegerPref(
       user_->GetAccountId(), prefs::kLanguageXkbAutoRepeatInterval,
       rate.repeat_interval_in_ms);
-}
-
-void Preferences::OnTouchHudProjectionToggled(bool enabled) {
-  if (touch_hud_projection_enabled_.GetValue() == enabled)
-    return;
-  if (!user_->is_active())
-    return;
-  touch_hud_projection_enabled_.SetValue(enabled);
 }
 
 void Preferences::ActiveUserChanged(const user_manager::User* active_user) {

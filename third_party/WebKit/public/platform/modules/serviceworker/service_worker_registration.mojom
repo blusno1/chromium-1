@@ -9,8 +9,15 @@ import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_
 import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom";
 import "url/mojo/url.mojom";
 
-const int32 kInvalidServiceWorkerRegistrationHandleId = -1;
 const int64 kInvalidServiceWorkerRegistrationId = -1;
+
+// Represents ServiceWorkerUpdateViaCache enum for ServiceWorkerRegistrationOptions:
+// https://w3c.github.io/ServiceWorker/#enumdef-serviceworkerupdateviacache
+enum ServiceWorkerUpdateViaCache {
+  kImports,
+  kAll,
+  kNone,
+};
 
 // Represents options for register():
 // https://w3c.github.io/ServiceWorker/#dictdef-registrationoptions
@@ -24,16 +31,6 @@ struct ServiceWorkerRegistrationOptions {
 struct ServiceWorkerRegistrationObjectInfo {
   // The globally unique identifier of a service worker registration entity.
   int64 registration_id = kInvalidServiceWorkerRegistrationId;
-
-  // The id to differentiate a service worker registration entity against
-  // multiple JavaScript execution contexts for service worker clients or
-  // service worker itself, it is also unique globally.
-  // Blink either mints a new ServiceWorkerRegistration object or reuses an
-  // existing one based on |handle_id|. This allows ServiceWorkerRegistration
-  // objects in different execution contexts to be different, even if they
-  // represent the same registration entity (registration_id is equal). They
-  // must be different since they should have different prototypes.
-  int32 handle_id = kInvalidServiceWorkerRegistrationHandleId;
 
   // The registration options attached with this registration object, including
   // some information such as scope of this registration.

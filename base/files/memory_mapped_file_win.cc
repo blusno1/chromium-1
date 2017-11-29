@@ -53,8 +53,7 @@ bool MemoryMappedFile::MapFileRegionToMemory(
   if (region == MemoryMappedFile::Region::kWholeFile) {
     DCHECK_NE(READ_WRITE_EXTEND, access);
     int64_t file_len = file_.GetLength();
-    if (file_len <= 0 ||
-        !IsValueInRangeForNumericType<size_t>(static_cast<uint64_t>(file_len)))
+    if (file_len <= 0 || !IsValueInRangeForNumericType<size_t>(file_len))
       return false;
     length_ = static_cast<size_t>(file_len);
   } else {
@@ -69,16 +68,17 @@ bool MemoryMappedFile::MapFileRegionToMemory(
     size_t ignored = 0U;
     CalculateVMAlignedBoundaries(
         region.offset, region.size, &aligned_start, &ignored, &data_offset);
-    int64_t size = region.size + data_offset;
+    int64_t full_map_size = region.size + data_offset;
 
     // Ensure that the casts below in the MapViewOfFile call are sane.
-    if (aligned_start < 0 || size < 0 ||
-        !IsValueInRangeForNumericType<SIZE_T>(static_cast<uint64_t>(size))) {
+    if (aligned_start < 0 || full_map_size < 0 ||
+        !IsValueInRangeForNumericType<SIZE_T>(
+            static_cast<uint64_t>(full_map_size))) {
       DLOG(ERROR) << "Region bounds are not valid for MapViewOfFile";
       return false;
     }
     map_start.QuadPart = aligned_start;
-    map_size = static_cast<SIZE_T>(size);
+    map_size = static_cast<SIZE_T>(full_map_size);
     length_ = region.size;
   }
 

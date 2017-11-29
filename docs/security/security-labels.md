@@ -32,7 +32,9 @@ that.)
 * **Security_Impact-**{**Head**, **Beta**, **Stable**, **None**}: Designates
 which branch(es) were impacted by the bug. Only apply the label corresponding
 with the earliest affected branch. **None** means that a security bug is in a
-disabled feature, or otherwise doesn't impact Chrome.
+disabled feature, or otherwise doesn't impact Chrome. Note that **Security_Severity**
+should still be set on **Security_Impact-None** issues, as if the feature were enabled or
+the code reachable.
 * **Restrict-View-SecurityTeam** or **Restrict-View-SecurityNotify**: Labels
 that restrict access to the bug for members of security@chromium.org or
 security-notify@chromium.org, respectively. Should a bug ever contain
@@ -56,6 +58,28 @@ This is more fine-grained than the **M-** label. **Release-0-M50** denotes the
 initial release of a M50 to Stable.
 * **CVE-####-####**: For security bugs that get assigned a CVE, we tag the
 appropriate bug(s) with the label for easy searching.
+
+**Type-Bug-Security** bugs should always have **Security_Severity**, 
+**Security_Impact**, **OS**, **Pri**, **M**, **Component**, and an
+**owner** set.
+
+### OS Labels
+
+It can be hard to know which OS(s) a bug applies to. Here are some guidelines:
+
+* Blink is used on all platforms except iOS. A (say) UAF in Blink is probably
+not particular to whatever platform it was found on; it's probably applicable
+to all.
+* The same is true of Skia, and the net/ code.
+* If the bug is in a file named `foo_{win,linux,mac,...}.cc`, it's specific to
+the named platform.
+* Java code is particular to Android.
+* Objective-C++ (`foo.mm`) is particular to macOS and iOS. (But note that most
+of our Objective-C++ is particular to macOS *or* iOS. You can usually tell by
+the pathname.)
+* Views code (e.g. `ui/message_center/views`) is used on Windows, Linux, Chrome
+OS, and perhaps Fuchsia (?). Views for macOS is increasingly a thing, but Cocoa
+code (e.g. `ui/message_center/cocoa`) is particular to macOS.
 
 ## An Example
 

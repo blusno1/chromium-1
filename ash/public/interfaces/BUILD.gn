@@ -4,10 +4,10 @@
 
 import("//mojo/public/tools/bindings/mojom.gni")
 
-# Depend upon //ash/public/cpp:ash_public_cpp, which has a public_dep on this.
-# The two targets must be bundled together as the typemaps depend upon
-# //ash/public/cpp, and //ash/public/cpp needs to depend on this for generated
-# code (such as enums and constants).
+# Depend upon //ash/public/cpp, which has a public_dep on this. The two targets
+# must be bundled together as the typemaps depend upon //ash/public/cpp,
+# and //ash/public/cpp needs to depend on this for generated code (such as
+# enums and constants).
 mojom("interfaces_internal") {
   visibility = [ "//ash/public/cpp:*" ]
 
@@ -23,7 +23,7 @@ mojom("interfaces_internal") {
     "ime_controller.mojom",
     "ime_info.mojom",
     "locale.mojom",
-    "lock_screen.mojom",
+    "login_screen.mojom",
     "login_user_info.mojom",
     "media.mojom",
     "new_window.mojom",

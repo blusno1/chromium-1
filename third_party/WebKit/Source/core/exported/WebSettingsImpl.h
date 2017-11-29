@@ -133,7 +133,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetPictographFontFamily(const WebString&,
                                UScriptCode = USCRIPT_COMMON) override;
   void SetPluginsEnabled(bool) override;
-  void SetEncryptedMediaEnabled(bool) override;
   void SetAvailablePointerTypes(int) override;
   void SetPrimaryPointerType(PointerType) override;
   void SetAvailableHoverTypes(int) override;
@@ -188,8 +187,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetUseSolidColorScrollbars(bool) override;
   void SetUseWideViewport(bool) override;
   void SetV8CacheOptions(V8CacheOptions) override;
-  void SetV8CacheStrategiesForCacheStorage(
-      V8CacheStrategiesForCacheStorage) override;
   void SetValidationMessageTimerMagnification(int) override;
   void SetViewportEnabled(bool) override;
   void SetViewportMetaEnabled(bool) override;

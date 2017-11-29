@@ -186,14 +186,15 @@ ServiceWorkerNetworkProvider::CreateForNavigation(
 
     if (service_worker_provider_id == kInvalidServiceWorkerProviderId) {
       network_provider = base::WrapUnique(new ServiceWorkerNetworkProvider(
-          route_id, SERVICE_WORKER_PROVIDER_FOR_WINDOW, GetNextProviderId(),
-          is_parent_frame_secure, std::move(default_loader_factory_getter)));
+          route_id, blink::mojom::ServiceWorkerProviderType::kForWindow,
+          GetNextProviderId(), is_parent_frame_secure,
+          std::move(default_loader_factory_getter)));
     } else {
       CHECK(browser_side_navigation);
       DCHECK(ServiceWorkerUtils::IsBrowserAssignedProviderId(
           service_worker_provider_id));
       network_provider = base::WrapUnique(new ServiceWorkerNetworkProvider(
-          route_id, SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+          route_id, blink::mojom::ServiceWorkerProviderType::kForWindow,
           service_worker_provider_id, is_parent_frame_secure,
           std::move(default_loader_factory_getter)));
     }
@@ -210,8 +211,8 @@ ServiceWorkerNetworkProvider::CreateForSharedWorker(int route_id) {
   // TODO(kinuko): Provide ChildURLLoaderFactoryGetter associated with
   // the SharedWorker.
   return base::WrapUnique(new ServiceWorkerNetworkProvider(
-      route_id, SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER, GetNextProviderId(),
-      true /* is_parent_frame_secure */,
+      route_id, blink::mojom::ServiceWorkerProviderType::kForSharedWorker,
+      GetNextProviderId(), true /* is_parent_frame_secure */,
       nullptr /* default_loader_factory_getter */));
 }
 
@@ -258,7 +259,7 @@ ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider() {}
 // Constructor for service worker clients.
 ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
     int route_id,
-    ServiceWorkerProviderType provider_type,
+    blink::mojom::ServiceWorkerProviderType provider_type,
     int browser_provider_id,
     bool is_parent_frame_secure,
     scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter) {
@@ -267,8 +268,9 @@ ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
 
   // We don't support dedicated worker (WORKER) as an independent service
   // worker client yet.
-  DCHECK(provider_type == SERVICE_WORKER_PROVIDER_FOR_WINDOW ||
-         provider_type == SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER);
+  DCHECK(provider_type == blink::mojom::ServiceWorkerProviderType::kForWindow ||
+         provider_type ==
+             blink::mojom::ServiceWorkerProviderType::kForSharedWorker);
 
   ServiceWorkerProviderHostInfo host_info(
       browser_provider_id, route_id, provider_type, is_parent_frame_secure);
@@ -281,21 +283,19 @@ ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
 
   // current() may be null in tests.
   if (ChildThreadImpl::current()) {
-    ServiceWorkerDispatcher* dispatcher =
-        ServiceWorkerDispatcher::GetOrCreateThreadSpecificInstance(
-            ChildThreadImpl::current()->thread_safe_sender(),
-            base::ThreadTaskRunnerHandle::Get().get());
+    ServiceWorkerDispatcher::GetOrCreateThreadSpecificInstance(
+        ChildThreadImpl::current()->thread_safe_sender(),
+        base::ThreadTaskRunnerHandle::Get().get());
     context_ = base::MakeRefCounted<ServiceWorkerProviderContext>(
         browser_provider_id, provider_type, std::move(client_request),
-        std::move(host_ptr_info), dispatcher, default_loader_factory_getter);
+        std::move(host_ptr_info), default_loader_factory_getter);
     ChildThreadImpl::current()->channel()->GetRemoteAssociatedInterface(
         &dispatcher_host_);
     dispatcher_host_->OnProviderCreated(std::move(host_info));
   } else {
     context_ = base::MakeRefCounted<ServiceWorkerProviderContext>(
         browser_provider_id, provider_type, std::move(client_request),
-        std::move(host_ptr_info), nullptr /* dispatcher */,
-        default_loader_factory_getter);
+        std::move(host_ptr_info), default_loader_factory_getter);
   }
 }
 
@@ -305,15 +305,15 @@ ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
   // Initialize the provider context with info for
   // ServiceWorkerGlobalScope#registration.
   ThreadSafeSender* sender = ChildThreadImpl::current()->thread_safe_sender();
-  ServiceWorkerDispatcher* dispatcher =
-      ServiceWorkerDispatcher::GetOrCreateThreadSpecificInstance(
-          sender, base::ThreadTaskRunnerHandle::Get().get());
+  ServiceWorkerDispatcher::GetOrCreateThreadSpecificInstance(
+      sender, base::ThreadTaskRunnerHandle::Get().get());
   // TODO(kinuko): Split ServiceWorkerProviderContext ctor for
   // controller and controllee.
   context_ = base::MakeRefCounted<ServiceWorkerProviderContext>(
-      info->provider_id, SERVICE_WORKER_PROVIDER_FOR_CONTROLLER,
+      info->provider_id,
+      blink::mojom::ServiceWorkerProviderType::kForServiceWorker,
       std::move(info->client_request), std::move(info->host_ptr_info),
-      dispatcher, nullptr /* loader_factory_getter */);
+      nullptr /* loader_factory_getter */);
   context_->SetRegistrationForServiceWorkerGlobalScope(
       std::move(info->registration), sender);
 

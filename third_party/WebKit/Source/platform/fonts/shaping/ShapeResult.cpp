@@ -32,11 +32,14 @@
 #include "platform/fonts/shaping/ShapeResult.h"
 
 #include <hb.h>
+#include <algorithm>
+#include <limits>
 #include <memory>
+#include <utility>
+
 #include "platform/fonts/Font.h"
 #include "platform/fonts/shaping/ShapeResultInlineHeaders.h"
 #include "platform/fonts/shaping/ShapeResultSpacing.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -389,9 +392,7 @@ void ShapeResult::FallbackFonts(
   DCHECK(primary_font_);
   for (unsigned i = 0; i < runs_.size(); ++i) {
     if (runs_[i] && runs_[i]->font_data_ &&
-        runs_[i]->font_data_ != primary_font_ &&
-        !runs_[i]->font_data_->IsTextOrientationFallbackOf(
-            primary_font_.get())) {
+        runs_[i]->font_data_ != primary_font_) {
       fallback->insert(runs_[i]->font_data_.get());
     }
   }
@@ -678,9 +679,10 @@ ShapeResult::RunInfo* ShapeResult::InsertRunForTesting(
     unsigned num_characters,
     TextDirection direction,
     Vector<uint16_t> safe_break_offsets) {
-  std::unique_ptr<RunInfo> run = WTF::MakeUnique<ShapeResult::RunInfo>(
+  std::unique_ptr<RunInfo> run = std::make_unique<ShapeResult::RunInfo>(
       nullptr, IsLtr(direction) ? HB_DIRECTION_LTR : HB_DIRECTION_RTL,
-      HB_SCRIPT_COMMON, start_index, 0, num_characters);
+      CanvasRotationInVertical::kRegular, HB_SCRIPT_COMMON, start_index, 0,
+      num_characters);
   run->safe_break_offsets_.AppendVector(safe_break_offsets);
   RunInfo* run_ptr = run.get();
   InsertRun(std::move(run));
@@ -830,7 +832,7 @@ scoped_refptr<ShapeResult> ShapeResult::CreateForTabulationCharacters(
   // isVerticalAnyUpright().
   std::unique_ptr<ShapeResult::RunInfo> run = std::make_unique<RunInfo>(
       font_data, text_run.Rtl() ? HB_DIRECTION_RTL : HB_DIRECTION_LTR,
-      HB_SCRIPT_COMMON, 0, count, count);
+      CanvasRotationInVertical::kRegular, HB_SCRIPT_COMMON, 0, count, count);
   float position = text_run.XPos() + position_offset;
   float start_position = position;
   for (unsigned i = 0; i < count; i++) {

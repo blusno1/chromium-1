@@ -374,6 +374,8 @@ TEST_F(ChromeContentRendererClientTest, AllowPepperMediaStreamAPI) {
 #endif
 }
 
+// SearchBouncer doesn't exist on Android.
+#if !defined(OS_ANDROID)
 TEST_F(ChromeContentRendererClientTest, ShouldSuppressErrorPage) {
   ChromeContentRendererClient client;
   SearchBouncer::GetInstance()->SetNewTabPageURL(GURL("http://example.com/n"));
@@ -383,6 +385,15 @@ TEST_F(ChromeContentRendererClientTest, ShouldSuppressErrorPage) {
                                              GURL("http://example.com/n")));
   SearchBouncer::GetInstance()->SetNewTabPageURL(GURL::EmptyGURL());
 }
+
+TEST_F(ChromeContentRendererClientTest, ShouldTrackUseCounter) {
+  ChromeContentRendererClient client;
+  SearchBouncer::GetInstance()->SetNewTabPageURL(GURL("http://example.com/n"));
+  EXPECT_TRUE(client.ShouldTrackUseCounter(GURL("http://example.com")));
+  EXPECT_FALSE(client.ShouldTrackUseCounter(GURL("http://example.com/n")));
+  SearchBouncer::GetInstance()->SetNewTabPageURL(GURL::EmptyGURL());
+}
+#endif
 
 TEST_F(ChromeContentRendererClientTest, AddImageContextMenuPropertiesForLoFi) {
   ChromeContentRendererClient client;

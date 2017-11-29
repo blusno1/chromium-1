@@ -12,6 +12,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "cc/input/browser_controls_state.h"
+#include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "cc/trees/layer_tree_settings.h"
@@ -185,7 +186,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
                                 bool shrink) override;
   void SetBrowserControlsShownRatio(float) override;
   void RequestDecode(const PaintImage& image,
-                     const base::Callback<void(bool)>& callback) override;
+                     base::OnceCallback<void(bool)> callback) override;
 
   void SetScrollBoundaryBehavior(
       const blink::WebScrollBoundaryBehavior&) override;
@@ -219,6 +220,10 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void DidSubmitCompositorFrame() override;
   void DidLoseLayerTreeFrameSink() override;
   void RequestBeginMainFrameNotExpected(bool new_state) override;
+
+  const cc::LayerTreeSettings& GetLayerTreeSettings() const {
+    return layer_tree_host_->GetSettings();
+  }
 
  protected:
   friend class RenderViewImplScaleFactorTest;

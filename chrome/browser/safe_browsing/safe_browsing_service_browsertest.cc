@@ -59,7 +59,6 @@
 #include "components/bookmarks/browser/startup_task_runner_service.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/common/safebrowsing_switches.h"
 #include "components/safe_browsing/db/database_manager.h"
 #include "components/safe_browsing/db/metadata.pb.h"
 #include "components/safe_browsing/db/notification_types.h"
@@ -108,9 +107,11 @@ namespace safe_browsing {
 
 namespace {
 
+#if defined(GOOGLE_CHROME_BUILD) || defined(ENABLE_FLAKY_PVER3_TESTS)
 const char kBlacklistResource[] = "/blacklisted/script.js";
-const char kEmptyPage[] = "/empty.html";
 const char kMaliciousResource[] = "/malware/script.js";
+#endif  // defined(GOOGLE_CHROME_BUILD) || defined(ENABLE_FLAKY_PVER3_TESTS)
+const char kEmptyPage[] = "/empty.html";
 const char kMalwareFile[] = "/downloads/dangerous/dangerous.exe";
 const char kMalwarePage[] = "/safe_browsing/malware.html";
 const char kMalwareDelayedLoadsPage[] =
@@ -356,8 +357,6 @@ class TestSafeBrowsingDatabase : public SafeBrowsingDatabase {
                         const base::TimeDelta& cache_lifetime) override {
     // Do nothing for the cache.
   }
-  bool IsMalwareIPMatchKillSwitchOn() override { return false; }
-  bool IsCsdWhitelistKillSwitchOn() override { return false; }
 
   // Fill up the database with test URL.
   void AddUrl(const GURL& url,
@@ -615,10 +614,6 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    // Makes sure the auto update is not triggered during the test.
-    // This test will fill up the database using testing prefixes
-    // and urls.
-    command_line->AppendSwitch(safe_browsing::switches::kSbDisableAutoUpdate);
 #if defined(OS_CHROMEOS)
     command_line->AppendSwitch(
         chromeos::switches::kIgnoreUserProfileMappingForTests);
@@ -757,6 +752,7 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingServiceTest);
 };
 
+#if defined(ENABLE_FLAKY_PVER3_TESTS)
 class SafeBrowsingServiceMetadataTest
     : public SafeBrowsingServiceTest,
       public ::testing::WithParamInterface<ThreatPatternType> {
@@ -1171,6 +1167,7 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, SubResourceHitOnFreshTab) {
   content::WaitForInterstitialDetach(new_tab_contents);
   EXPECT_FALSE(ShowingInterstitialPage());
 }
+#endif  // defined(ENABLE_FLAKY_PVER3_TESTS)
 
 namespace {
 
@@ -1287,6 +1284,7 @@ class TestSBClient : public base::RefCountedThreadSafe<TestSBClient>,
 
 }  // namespace
 
+#if defined(ENABLE_FLAKY_PVER3_TESTS)
 // These tests use SafeBrowsingService::Client to directly interact with
 // SafeBrowsingService.
 IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, CheckDownloadUrl) {
@@ -1654,6 +1652,7 @@ INSTANTIATE_TEST_CASE_P(
     /* no prefix */,
     SafeBrowsingServiceWebSocketSafeTest,
     ::testing::Values("window", "worker", "shared-worker", "service-worker"));
+#endif  // defined(ENABLE_FLAKY_PVER3_TESTS)
 
 class SafeBrowsingServiceShutdownTest : public SafeBrowsingServiceTest {
  public:

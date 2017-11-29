@@ -222,7 +222,7 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
 
     void AddData(SocketDataProvider* data) {
       auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
-      ssl_provider->cert =
+      ssl_provider->ssl_info.cert =
           ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
       AddDataWithSSLSocketDataProvider(data, std::move(ssl_provider));
     }
@@ -2249,8 +2249,9 @@ TEST_F(SpdyNetworkTransactionTest, RedirectServerPush) {
 
   SSLSocketDataProvider ssl_provider0(ASYNC, OK);
   ssl_provider0.next_proto = kProtoHTTP2;
-  ssl_provider0.cert =
+  ssl_provider0.ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+  ASSERT_TRUE(ssl_provider0.ssl_info.cert);
   spdy_url_request_context.socket_factory().AddSSLSocketDataProvider(
       &ssl_provider0);
 
@@ -3070,35 +3071,34 @@ TEST_F(SpdyNetworkTransactionTest, RejectServerPushWithInvalidMethod) {
 // Verify that various response headers parse correctly through the HTTP layer.
 TEST_F(SpdyNetworkTransactionTest, ResponseHeaders) {
   struct ResponseHeadersTests {
-    int num_headers;
-    const char* extra_headers[5];
-    SpdyHeaderBlock expected_headers;
-  } test_cases[] = {// This uses a multi-valued cookie header.
-                    {
-                        2,
-                        {"cookie", "val1", "cookie",
-                         "val2",  // will get appended separated by nullptr
-                         nullptr},
-                    },
-                    // This is the minimalist set of headers.
-                    {
-                        0, {nullptr},
-                    },
-                    // Headers with a comma separated list.
-                    {
-                        1, {"cookie", "val1,val2", nullptr},
-                    }};
-
-  test_cases[0].expected_headers["status"] = "200";
-  test_cases[1].expected_headers["status"] = "200";
-  test_cases[2].expected_headers["status"] = "200";
-
-  test_cases[0].expected_headers["hello"] = "bye";
-  test_cases[1].expected_headers["hello"] = "bye";
-  test_cases[2].expected_headers["hello"] = "bye";
-
-  test_cases[0].expected_headers["cookie"] = SpdyStringPiece("val1\0val2", 9);
-  test_cases[2].expected_headers["cookie"] = "val1,val2";
+    int extra_header_count;
+    const char* extra_headers[4];
+    size_t expected_header_count;
+    SpdyStringPiece expected_headers[8];
+  } test_cases[] = {
+      // No extra headers.
+      {0, {}, 2, {"status", "200", "hello", "bye"}},
+      // Comma-separated header value.
+      {1,
+       {"cookie", "val1, val2"},
+       3,
+       {"status", "200", "hello", "bye", "cookie", "val1, val2"}},
+      // Multiple headers are preserved: they are joined with \0 separator in
+      // SpdyHeaderBlock.AppendValueOrAddHeader(), then split up in
+      // HpackEncoder, then joined with \0 separator when
+      // HpackDecoderAdapter::ListenerAdapter::OnHeader() calls
+      // SpdyHeaderBlock.AppendValueOrAddHeader(), then split up again in
+      // HttpResponseHeaders.
+      {2,
+       {"content-encoding", "val1", "content-encoding", "val2"},
+       4,
+       {"status", "200", "hello", "bye", "content-encoding", "val1",
+        "content-encoding", "val2"}},
+      // Cookie header is not split up by HttpResponseHeaders.
+      {2,
+       {"cookie", "val1", "cookie", "val2"},
+       3,
+       {"status", "200", "hello", "bye", "cookie", "val1; val2"}}};
 
   for (size_t i = 0; i < arraysize(test_cases); ++i) {
     SpdyTestUtil spdy_test_util;
@@ -3107,7 +3107,7 @@ TEST_F(SpdyNetworkTransactionTest, ResponseHeaders) {
     MockWrite writes[] = {CreateMockWrite(req, 0)};
 
     SpdySerializedFrame resp(spdy_test_util.ConstructSpdyGetReply(
-        test_cases[i].extra_headers, test_cases[i].num_headers, 1));
+        test_cases[i].extra_headers, test_cases[i].extra_header_count, 1));
     SpdySerializedFrame body(spdy_test_util.ConstructSpdyDataFrame(1, true));
     MockRead reads[] = {
         CreateMockRead(resp, 1), CreateMockRead(body, 2),
@@ -3129,19 +3129,18 @@ TEST_F(SpdyNetworkTransactionTest, ResponseHeaders) {
     EXPECT_TRUE(headers);
     size_t iter = 0;
     SpdyString name, value;
-    SpdyHeaderBlock header_block;
+    size_t expected_header_index = 0;
     while (headers->EnumerateHeaderLines(&iter, &name, &value)) {
-      auto value_it = header_block.find(name);
-      if (value_it == header_block.end() || value_it->second.empty()) {
-        header_block[name] = value;
-      } else {
-        SpdyString joint_value = value_it->second.as_string();
-        joint_value.append(1, '\0');
-        joint_value.append(value);
-        header_block[name] = joint_value;
-      }
+      ASSERT_LT(expected_header_index, test_cases[i].expected_header_count)
+          << i;
+      EXPECT_EQ(name, test_cases[i].expected_headers[2 * expected_header_index])
+          << i;
+      EXPECT_EQ(value,
+                test_cases[i].expected_headers[2 * expected_header_index + 1])
+          << i;
+      ++expected_header_index;
     }
-    EXPECT_EQ(test_cases[i].expected_headers, header_block);
+    EXPECT_EQ(expected_header_index, test_cases[i].expected_header_count) << i;
   }
 }
 
@@ -4059,6 +4058,28 @@ TEST_F(SpdyNetworkTransactionTest, CloseWithActiveStream) {
 
   const HttpResponseInfo* response = helper.trans()->GetResponseInfo();
   EXPECT_TRUE(response->headers);
+  EXPECT_TRUE(response->was_fetched_via_spdy);
+
+  // Verify that we consumed all test data.
+  helper.VerifyDataConsumed();
+}
+
+TEST_F(SpdyNetworkTransactionTest, GoAwayImmediately) {
+  SpdySerializedFrame goaway(spdy_util_.ConstructSpdyGoAway(1));
+  MockRead reads[] = {CreateMockRead(goaway, 0, SYNCHRONOUS)};
+  SequencedSocketData data(reads, arraysize(reads), nullptr, 0);
+
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_, nullptr);
+  helper.RunPreTestSetup();
+  helper.AddData(&data);
+  helper.StartDefaultTest();
+  EXPECT_THAT(helper.output().rv, IsError(ERR_IO_PENDING));
+
+  helper.WaitForCallbackToComplete();
+  EXPECT_THAT(helper.output().rv, IsError(ERR_CONNECTION_CLOSED));
+
+  const HttpResponseInfo* response = helper.trans()->GetResponseInfo();
+  EXPECT_FALSE(response->headers);
   EXPECT_TRUE(response->was_fetched_via_spdy);
 
   // Verify that we consumed all test data.
@@ -5054,14 +5075,16 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushValidCrossOriginWithOpenSession) {
   // "spdy_pooling.pem" is valid for www.example.org, but not for
   // docs.example.org.
   auto ssl_provider0 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
-  ssl_provider0->cert =
+  ssl_provider0->ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+  ASSERT_TRUE(ssl_provider0->ssl_info.cert);
   helper.AddDataWithSSLSocketDataProvider(&data0, std::move(ssl_provider0));
 
   // "wildcard.pem" is valid for both www.example.org and docs.example.org.
   auto ssl_provider1 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
-  ssl_provider1->cert =
+  ssl_provider1->ssl_info.cert =
       ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
+  ASSERT_TRUE(ssl_provider1->ssl_info.cert);
   helper.AddDataWithSSLSocketDataProvider(&data1, std::move(ssl_provider1));
 
   HttpNetworkTransaction* trans0 = helper.trans();
@@ -6464,7 +6487,7 @@ class SpdyNetworkTransactionTLSUsageCheckTest
 TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSVersionTooOld) {
   auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   SSLConnectionStatusSetVersion(SSL_CONNECTION_VERSION_SSL3,
-                                &ssl_provider->connection_status);
+                                &ssl_provider->ssl_info.connection_status);
 
   RunTLSUsageCheckTest(std::move(ssl_provider));
 }
@@ -6472,7 +6495,8 @@ TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSVersionTooOld) {
 TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSCipherSuiteSucky) {
   auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   // Set to TLS_RSA_WITH_NULL_MD5
-  SSLConnectionStatusSetCipherSuite(0x1, &ssl_provider->connection_status);
+  SSLConnectionStatusSetCipherSuite(0x1,
+                                    &ssl_provider->ssl_info.connection_status);
 
   RunTLSUsageCheckTest(std::move(ssl_provider));
 }
@@ -6484,7 +6508,7 @@ TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSCipherSuiteSucky) {
 TEST_F(SpdyNetworkTransactionTest, InsecureUrlCreatesSecureSpdySession) {
   auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   SSLConnectionStatusSetVersion(SSL_CONNECTION_VERSION_SSL3,
-                                &ssl_provider->connection_status);
+                                &ssl_provider->ssl_info.connection_status);
 
   SpdySerializedFrame goaway(
       spdy_util_.ConstructSpdyGoAway(0, ERROR_CODE_INADEQUATE_SECURITY, ""));

@@ -44,6 +44,7 @@ void UiElementRenderer::Init() {
   laser_renderer_ = base::MakeUnique<Laser::Renderer>();
   controller_renderer_ = base::MakeUnique<Controller::Renderer>();
   gradient_grid_renderer_ = base::MakeUnique<Grid::Renderer>();
+  shadow_renderer_ = base::MakeUnique<Shadow::Renderer>();
 }
 
 void UiElementRenderer::DrawTexturedQuad(
@@ -93,31 +94,47 @@ void UiElementRenderer::DrawGradientGridQuad(
                                 opacity);
 }
 
-void UiElementRenderer::DrawController(ControllerMesh::State state,
-                                       float opacity,
-                                       const gfx::Transform& view_proj_matrix) {
+void UiElementRenderer::DrawController(
+    ControllerMesh::State state,
+    float opacity,
+    const gfx::Transform& model_view_proj_matrix) {
   if (!controller_renderer_->IsSetUp()) {
     return;
   }
   FlushIfNecessary(controller_renderer_.get());
-  controller_renderer_->Draw(state, opacity, view_proj_matrix);
+  controller_renderer_->Draw(state, opacity, model_view_proj_matrix);
 }
 
-void UiElementRenderer::DrawLaser(float opacity,
-                                  const gfx::Transform& view_proj_matrix) {
+void UiElementRenderer::DrawLaser(
+    float opacity,
+    const gfx::Transform& model_view_proj_matrix) {
   FlushIfNecessary(laser_renderer_.get());
-  laser_renderer_->Draw(opacity, view_proj_matrix);
+  laser_renderer_->Draw(opacity, model_view_proj_matrix);
 }
 
-void UiElementRenderer::DrawReticle(float opacity,
-                                    const gfx::Transform& view_proj_matrix) {
+void UiElementRenderer::DrawReticle(
+    float opacity,
+    const gfx::Transform& model_view_proj_matrix) {
   FlushIfNecessary(reticle_renderer_.get());
-  reticle_renderer_->Draw(opacity, view_proj_matrix);
+  reticle_renderer_->Draw(opacity, model_view_proj_matrix);
 }
 
 void UiElementRenderer::DrawWebVr(int texture_data_handle) {
   FlushIfNecessary(webvr_renderer_.get());
   webvr_renderer_->Draw(texture_data_handle);
+}
+
+void UiElementRenderer::DrawShadow(const gfx::Transform& model_view_proj_matrix,
+                                   const gfx::SizeF& element_size,
+                                   float x_padding,
+                                   float y_padding,
+                                   float y_offset,
+                                   SkColor color,
+                                   float opacity,
+                                   float corner_radius) {
+  FlushIfNecessary(shadow_renderer_.get());
+  shadow_renderer_->Draw(model_view_proj_matrix, element_size, x_padding,
+                         y_padding, y_offset, color, opacity, corner_radius);
 }
 
 void UiElementRenderer::Flush() {

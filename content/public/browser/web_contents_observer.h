@@ -44,7 +44,6 @@ struct FaviconURL;
 struct LoadCommittedDetails;
 struct PrunedDetails;
 struct Referrer;
-struct ResourceRedirectDetails;
 struct ResourceRequestDetails;
 
 // An observer API implemented by classes which are interested in various page
@@ -258,11 +257,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   virtual void DidGetResourceResponseStart(
       const ResourceRequestDetails& details) {}
 
-  // This method is invoked when a redirect has been received for a resource
-  // request.
-  virtual void DidGetRedirectForResourceRequest(
-      const ResourceRedirectDetails& details) {}
-
   // This method is invoked when a new non-pending navigation entry is created.
   // This corresponds to one NavigationController entry being created
   // (in the case of new navigations) or renavigated to (for back/forward
@@ -337,7 +331,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   virtual void FrameNameChanged(RenderFrameHost* render_frame_host,
                                 const std::string& name) {}
 
-  // This methods is invoked when the title of the WebContents is set.
+  // This method is invoked when the title of the WebContents is set. Note that
+  // |entry| may be null if the web page whose title changed has not yet had a
+  // NavigationEntry assigned to it.
   virtual void TitleWasSet(NavigationEntry* entry) {}
 
   virtual void AppCacheAccessed(const GURL& manifest_url,

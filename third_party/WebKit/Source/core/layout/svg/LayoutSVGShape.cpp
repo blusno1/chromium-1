@@ -54,7 +54,9 @@ LayoutSVGShape::LayoutSVGShape(SVGGeometryElement* node)
       needs_shape_update_(true),
       // Default is true, so we grab a AffineTransform object once from
       // SVGGeometryElement.
-      needs_transform_update_(true) {}
+      needs_transform_update_(true),
+      // <line> elements have no joins and thus needn't care about miters.
+      affected_by_miter_(!IsSVGLineElement(node)) {}
 
 LayoutSVGShape::~LayoutSVGShape() {}
 
@@ -77,8 +79,45 @@ void LayoutSVGShape::UpdateShapeFromElement() {
 
   fill_bounding_box_ = CalculateObjectBoundingBox();
   stroke_bounding_box_ = CalculateStrokeBoundingBox();
-  if (GetElement())
-    GetElement()->SetNeedsResizeObserverUpdate();
+}
+
+namespace {
+
+bool HasMiterJoinStyle(const SVGComputedStyle& svg_style) {
+  return svg_style.JoinStyle() == kMiterJoin;
+}
+bool HasSquareCapStyle(const SVGComputedStyle& svg_style) {
+  return svg_style.CapStyle() == kSquareCap;
+}
+
+}  // namespace
+
+FloatRect LayoutSVGShape::ApproximateStrokeBoundingBox(
+    const FloatRect& shape_bbox) const {
+  FloatRect stroke_box = shape_bbox;
+
+  // Implementation of
+  // https://drafts.fxtf.org/css-masking/#compute-stroke-bounding-box
+  // except that we ignore whether the stroke is none.
+
+  const float stroke_width = StrokeWidth();
+  if (stroke_width <= 0)
+    return stroke_box;
+
+  const SVGComputedStyle& svg_style = StyleRef().SvgStyle();
+  float delta = stroke_width / 2;
+  if (affected_by_miter_ && HasMiterJoinStyle(svg_style)) {
+    const float miter = svg_style.StrokeMiterLimit();
+    if (miter < M_SQRT2 && HasSquareCapStyle(svg_style))
+      delta *= M_SQRT2;
+    else
+      delta *= std::max(miter, 1.0f);
+  } else if (HasSquareCapStyle(svg_style)) {
+    delta *= M_SQRT2;
+  }
+
+  stroke_box.Inflate(delta);
+  return stroke_box;
 }
 
 FloatRect LayoutSVGShape::HitTestStrokeBoundingBox() const {
@@ -86,10 +125,11 @@ FloatRect LayoutSVGShape::HitTestStrokeBoundingBox() const {
     return stroke_bounding_box_;
 
   // Implementation of
-  // http://dev.w3.org/fxtf/css-masking-1/#compute-stroke-bounding-box
+  // https://drafts.fxtf.org/css-masking/#compute-stroke-bounding-box
   // for the <rect> / <ellipse> / <circle> case except that we ignore whether
   // the stroke is none.
 
+  // TODO(fs): Fold this into ApproximateStrokeBoundingBox.
   FloatRect box = fill_bounding_box_;
   const float stroke_width = this->StrokeWidth();
   box.Inflate(stroke_width / 2);
@@ -134,6 +174,10 @@ bool LayoutSVGShape::FillContains(const FloatPoint& point,
 
 bool LayoutSVGShape::StrokeContains(const FloatPoint& point,
                                     bool requires_stroke) {
+  // "A zero value causes no stroke to be painted."
+  if (StyleRef().SvgStyle().StrokeWidth().IsZero())
+    return false;
+
   if (requires_stroke) {
     if (!StrokeBoundingBox().Contains(point))
       return false;
@@ -167,14 +211,16 @@ void LayoutSVGShape::UpdateLayout() {
     SVGResourcesCache::ClientLayoutChanged(this);
 
   bool update_parent_boundaries = false;
-  // updateShapeFromElement() also updates the object & stroke bounds - which
+  // UpdateShapeFromElement() also updates the object & stroke bounds - which
   // feeds into the visual rect - so we need to call it for both the
   // shape-update and the bounds-update flag.
   if (needs_shape_update_ || needs_boundaries_update_) {
     FloatRect old_object_bounding_box = ObjectBoundingBox();
     UpdateShapeFromElement();
-    if (old_object_bounding_box != ObjectBoundingBox())
+    if (old_object_bounding_box != ObjectBoundingBox()) {
+      GetElement()->SetNeedsResizeObserverUpdate();
       SetShouldDoFullPaintInvalidation();
+    }
     needs_shape_update_ = false;
 
     local_visual_rect_ = StrokeBoundingBox();
@@ -317,7 +363,7 @@ FloatRect LayoutSVGShape::CalculateStrokeBoundingBox() const {
         stroke_bounding_box.Unite(stroke_bounding_rect);
       }
     } else {
-      stroke_bounding_box.Unite(GetPath().StrokeBoundingRect(stroke_data));
+      stroke_bounding_box = ApproximateStrokeBoundingBox(stroke_bounding_box);
     }
   }
 

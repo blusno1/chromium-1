@@ -476,6 +476,12 @@ CHAR-LIMIT guidelines:
       <message name="IDS_PASSWORD_GENERATION_POPUP_CONTENT_DESCRIPTION" desc="The text announced by the screen reader when the password generation popup is shown.">
         Showing password generation popup
       </message>
+      <message name="IDS_SAVE_PASSWORD_PREFERENCES_EXPORT_ACTION_TITLE" desc="The title of a menu item to trigger exporting passwords from the password settings.">
+        Export passwords...
+      </message>
+      <message name="IDS_SAVE_PASSWORD_PREFERENCES_EXPORT_ACTION_DESCRIPTION" desc="The description of a menu item to trigger exporting passwords from the password settings.">
+        Export passwords stored with Chrome
+      </message>
 
       <!-- Lock Screen Fragment -->
       <message name="IDS_LOCKSCREEN_DESCRIPTION" desc='Text on lockscreen explaining to user that they need to unlock the device to continue setup.'>
@@ -552,11 +558,11 @@ CHAR-LIMIT guidelines:
       <message name="IDS_SAFE_BROWSING_SUMMARY" desc="Summary for safe browsing.">
         Protect you and your device from dangerous sites
       </message>
-      <message name="IDS_NETWORK_PREDICTIONS_TITLE" desc="Title of a setting in Chrome settings. Followed by a body that describes what pages are downloaded. If setting is turned on, Chrome will download certain pages to the user’s phone automatically for offline reading. “Download” is a verb, imperative. ">
-        Automatically download pages
+      <message name="IDS_NETWORK_PREDICTIONS_TITLE" desc="Title of a setting in Chrome settings. Followed by a body that describes the setting. If setting is turned on, Chrome will download certain pages to the user’s phone automatically for offline reading. 'predictions' convey the idea that Chrome is using predictive models to figure out pages likely of interest to the user.">
+        Use page predictions
       </message>
-      <message name="IDS_NETWORK_PREDICTIONS_SUMMARY" desc="Body text for the “Automatically download pages” setting in Chrome settings. Describes what happens if the setting is turned on. Load pages refers to how quickly website pages load. Offline reading refers to the ability to access the pages without a network connection.">
-        Load pages more quickly and save popular pages for offline reading
+      <message name="IDS_NETWORK_PREDICTIONS_SUMMARY" desc="Body text for the “Use page predictions” setting in Chrome settings. Describes what happens if the setting is turned on. 'Preload' conveys the idea that Chrome is getting pages for the user without their explicit interaction or consent.">
+        Preload pages for faster loading and offline reading
       </message>
       <message name="IDS_CONTEXTUAL_SEARCH_TITLE" desc="Name for the Contextual Search feature, which allows users to search for a term in a web page by tapping on it.">
         Touch to Search
@@ -653,6 +659,9 @@ Your Google account may have other forms of browsing history like searches and a
       </message>
       <message name="IDS_CLEAR_BROWSING_DATA_TAB_PERIOD_FOUR_WEEKS" desc="The option to delete browsing data from the last 4 weeks.">
         Last 4 weeks
+      </message>
+      <message name="IDS_CLEAR_BROWSING_DATA_TAB_PERIOD_OLDER_THAN_30_DAYS" desc="The option to delete browsing data older than 30 days.">
+        Older than 30 days
       </message>
       <message name="IDS_CLEAR_BROWSING_DATA_TAB_PERIOD_EVERYTHING" desc="The option to delete browsing data from the beginning of time.">
         All time
@@ -1559,11 +1568,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
         Download
       </message>
 
-      <!-- PermissionInfoBar -->
-      <message name="IDS_PERMISSION_PROMPT_PERSIST_TEXT" desc="Toggle to persist a permission prompt decision">
-        Remember my decision
-      </message>
-
       <!-- TranslateInfoBar -->
       <message name="IDS_TRANSLATE_INFOBAR_TEXT" desc="Text to display on the translate infobar to offer a translate. [CHAR-LIMIT=64]" meaning="Android">
         This page is in <ph name="SOURCE_LANGUAGE">^1<ex>English</ex></ph>. Translate it to <ph name="TARGET_LANGUAGE">^2<ex>FRENCH</ex></ph>?
@@ -2184,6 +2188,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
 
       <!-- First Run strings -->
+      <message name="IDS_FRE_ACTIVITY_LABEL" desc="Label for first run dialog in Android Recents.">
+        Chrome First Run Experience
+      </message>
       <message name="IDS_FRE_SKIP_TEXT" desc="Text for second page skip button">
         No thanks
       </message>
@@ -2714,9 +2721,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_ACCESSIBILITY_OMNIBOX_BTN_REFINE" desc="Content description for the omnibox refine button.">
         Refine
       </message>
-      <message name="IDS_ACCESSIBILITY_BOOKMARK_MORE_INFO" desc="Content description for the button that shows option menu for a bookmark.">
-        Options
-      </message>
       <message name="IDS_ACCESSIBILITY_CANCEL_SELECTION" desc="Content description for the cancel selection button that deselects the selected items in a selectable list view.">
         Cancel selection
       </message>
@@ -2725,6 +2729,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_ACCESSIBILITY_DRAWER_TOGGLE_BTN_CLOSE" desc="Content description for the button to close the navigation drawer.">
         Close navigation drawer
+      </message>
+      <message name="IDS_ACCESSIBILITY_LIST_MENU_BUTTON" desc="Content description for the button that shows option menu for a list item.">
+        Options
       </message>
       <message name="IDS_ACCESSIBILITY_TOOLBAR_SCREEN_POSITION" desc="Accessibility announcement to inform users about a toolbar's location.">
         Options available near top of the screen
@@ -2792,14 +2799,14 @@ However, you aren’t invisible. Going incognito doesn’t hide your browsing fr
       <message name="IDS_CONTEXTUAL_SEARCH_QUICK_ACTION_CAPTION_GENERIC_WEBSITE" desc="Caption displayed in the Contextual Search bar prompting the user to navigate to a web page.">
         Go to page
       </message>
-      <message name="IDS_CONTEXTUAL_SEARCH_IPH_ENTITY" desc="The in-product-help message for encouraging users to open the Contextual Search panel to learn to more about the phrase they have tapped on. This is a placeholder while the string is being finalized. Do not translate for now.">
-        Open this panel to find more information
+      <message name="IDS_CONTEXTUAL_SEARCH_IPH_ENTITY" desc="An in-product-help message for the Touch to Search feature on Chrome Android. The message encourages users to open a panel that contains search results for the word or phrase they tapped on.">
+        See instant search results in this panel
       </message>
-      <message name="IDS_CONTEXTUAL_SEARCH_IPH_SEARCH_RESULT" desc="The in-product-help message for encouraging users to open the Contextual Search panel to see related results about a phrase they have selected. This is a placeholder while the string is being finalized. Do not translate for now.">
-        Open this panel to find related search results
+      <message name="IDS_CONTEXTUAL_SEARCH_IPH_SEARCH_RESULT" desc="An in-product-help message for the Touch to Search feature. It encourages users to open the Touch to Search panel to see search results for a word or phrase they have tapped.">
+        Tap a word to search instantly or see related actions
       </message>
-      <message name="IDS_CONTEXTUAL_SEARCH_IPH_TAP" desc="The in-product-help message for encouraging users to tap instead of long pressing for triggeting Contextual Search. This is a placeholder while the string is being finalized. Do not translate for now.">
-        You can also search with one tap
+      <message name="IDS_CONTEXTUAL_SEARCH_IPH_TAP" desc="An in-product-help message for encouraging users to tap instead of long pressing to trigger the Touch to Search feature.">
+        You can also search with a quick tap on a word
       </message>
 
       <!-- Web apps -->
@@ -2997,11 +3004,11 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       <message name="IDS_WEBAPP_TAP_TO_COPY_URL" desc="Message on the notification that indicates that taping it will copy a Web App's URL into the clipboard.">
         Tap to copy the URL for this app
       </message>
+      <message name="IDS_WEBAPP_TWA_OFFLINE_DIALOG" desc="The message on the dialog shown when launching a Webapp or TWA needs network connection.">
+        To use <ph name="APP_NAME">%1$s<ex>PWA List</ex></ph>, please connect to the internet.
+      </message>
       <message name="IDS_WEBAPK_OFFLINE_DIALOG" desc="The message on the dialog shown when launching a WebAPK needs network connection.">
         To use <ph name="APP_NAME">%1$s<ex>PWA List</ex></ph> for the first time, please connect to the internet.
-      </message>
-      <message name="IDS_WEBAPK_OFFLINE_DIALOG_QUIT_BUTTON" desc="The text on the quit button on the dialog shown when launching a WebAPK needs network connection.">
-        OK
       </message>
 
       <!-- Keyboard shortcuts in Android N-->
@@ -3156,8 +3163,11 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       <message name="IDS_BOTTOM_SHEET_HELP_BUBBLE_MESSAGE" desc="Text displayed in a help bubble above the bottom navigation sheet prompting users to pull the sheet up to see their bookmarks and other content.">
         Pull up to see bookmarks and more
       </message>
-      <message name="IDS_BOTTOM_SHEET_EXPAND_BUTTON_HELP_BUBBLE_MESSAGE" desc="Text displayed in a help bubble above the toolbar expand button prompting users to tap the button to see their bookmarks and other content.">
-        Tap to see bookmarks and more
+      <message name="IDS_BOTTOM_SHEET_PULL_TO_REFRESH_HELP_BUBBLE_MESSAGE" desc="Text displayed in a help bubble above the address bar. “access” is a verb (imperative). The intent of the string is to help users find the address bar at the bottom of the screen.">
+        Access the address bar here
+      </message>
+      <message name="IDS_BOTTOM_SHEET_PULL_TO_REFRESH_HELP_BUBBLE_ACCESSIBILITY_MESSAGE" desc="Text displayed in a help bubble above the address bar when TalkBack is enabled. “access” is a verb (imperative). The intent of the string is to help users find the address bar at the bottom of the screen.">
+        Access the address bar at the bottom of your screen
       </message>
       <message name="IDS_BOTTOM_SHEET_ACCESSIBILITY_EXPAND_BUTTON_HELP_BUBBLE_MESSAGE" desc="Text displayed in a help bubble above the toolbar expand button prompting users to tap the button to see their bookmarks and other content when accessibility is enabled.">
         Tap to see downloads, bookmarks, and history
@@ -3198,8 +3208,8 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       <message name="IDS_CHROME_HOME_PROMO_DIALOG_MESSAGE_ACCESSIBILITY" desc="Dialog body text when accessibility is enabled. Dialog describes a new feature called “Chrome Home” (which is a placeholder name, official naming is underway; for now, do not translate the feature name). “Swipe up” (imperative) refers to the gesture on a mobile phone. “access” is a noun. “Popular” modifies both “sites and articles.” “Downloads” refers to items the user has downloaded in Chrome.">
         Swipe up from the bottom of the screen or tap the expand button for easy access to popular sites and articles, downloads, and more
       </message>
-      <message name="IDS_CHROME_HOME_PROMO_DIALOG_NOT_NOW" desc="Dialog button text that is visible if the new Chrome is disabled and will dismiss the dialog when pressed without changing the state of Chrome.">
-        Not now
+      <message name="IDS_CHROME_HOME_PROMO_DIALOG_NOT_YET" desc="Dialog button text that is visible if the new Chrome is disabled and will dismiss the dialog when pressed without changing the state of Chrome.">
+        Not yet
       </message>
       <message name="IDS_CHROME_HOME_PROMO_DIALOG_TITLE" desc="Dialog title text. Dialog describes the new Chrome. Object is omitted; intended meaning is that we wish to introduce you, the user, to a new version of Chrome. Infinitive or other verb form may be used if the gerund is not appropriate in your language.">
         Introducing the new Chrome
@@ -3237,6 +3247,12 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       </message>
 
       <!-- Interventions -->
+      <message name="IDS_REDIRECT_BLOCKED_MESSAGE" desc="The message stating that a redirect (noun) was blocked on this page. This will be followed on a separate line with the address the user was being redirected to.">
+         Chrome stopped this site from taking you to
+      </message>
+      <message name="IDS_REDIRECT_BLOCKED_SHORT_MESSAGE" desc="The short message stating that a redirect (noun) was blocked on this page.">
+         Redirect blocked.
+      </message>
       <message name="IDS_NEAR_OOM_INTERVENTION_MESSAGE" desc="The message stating that the browser intervened to stop the page using too much memory.">
          This page uses too much memory, so Chrome paused it.
       </message>

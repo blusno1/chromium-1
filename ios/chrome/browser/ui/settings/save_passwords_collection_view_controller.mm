@@ -129,10 +129,6 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
   std::vector<std::unique_ptr<autofill::PasswordForm>> savedForms_;
   // The list of the user's blacklisted sites.
   std::vector<std::unique_ptr<autofill::PasswordForm>> blacklistedForms_;
-  // Deletion of password being asynchronous, and the method taking a reference
-  // to the PasswordForm, the PasswordForm must outlive the calls to
-  // RemoveLogin. This vector will ensure this.
-  std::vector<std::unique_ptr<autofill::PasswordForm>> deletedForms_;
   // Map containing duplicates of saved passwords.
   password_manager::DuplicatesMap savedPasswordDuplicates_;
   // Map containing duplicates of blacklisted passwords.
@@ -543,7 +539,6 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
 
     forms.erase(formIterator);
     passwordStore_->RemoveLogin(*form);
-    deletedForms_.push_back(std::move(form));
     if (blacklisted) {
       ++blacklistedDeleted;
     } else {
@@ -589,7 +584,7 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
         if (!strongSelf)
           return;
         if (![strongSelf editButtonEnabled]) {
-          [strongSelf setEditing:NO];
+          [strongSelf.editor setEditing:NO];
         }
         [strongSelf updateEditButton];
       }];
@@ -599,12 +594,33 @@ void SavePasswordsConsumer::OnGetPasswordStoreResults(
 
 - (void)deletePassword:(const autofill::PasswordForm&)form {
   passwordStore_->RemoveLogin(form);
-  for (auto it = savedForms_.begin(); it != savedForms_.end(); ++it) {
-    if (**it == form) {
-      savedForms_.erase(it);
-      break;
-    }
+
+  std::vector<std::unique_ptr<autofill::PasswordForm>>& forms =
+      form.blacklisted_by_user ? blacklistedForms_ : savedForms_;
+  auto iterator = std::find_if(
+      forms.begin(), forms.end(),
+      [&form](const std::unique_ptr<autofill::PasswordForm>& value) {
+        return *value == form;
+      });
+  DCHECK(iterator != forms.end());
+  forms.erase(iterator);
+
+  password_manager::DuplicatesMap& duplicates =
+      form.blacklisted_by_user ? blacklistedPasswordDuplicates_
+                               : savedPasswordDuplicates_;
+  password_manager::PasswordEntryType entryType =
+      form.blacklisted_by_user
+          ? password_manager::PasswordEntryType::BLACKLISTED
+          : password_manager::PasswordEntryType::SAVED;
+  std::string key = password_manager::CreateSortKey(form, entryType);
+  auto duplicatesRange = duplicates.equal_range(key);
+  for (auto iterator = duplicatesRange.first;
+       iterator != duplicatesRange.second; ++iterator) {
+    passwordStore_->RemoveLogin(*(iterator->second));
   }
+  duplicates.erase(key);
+
+  [self updateEditButton];
   [self reloadData];
   [self.navigationController popViewControllerAnimated:YES];
 }

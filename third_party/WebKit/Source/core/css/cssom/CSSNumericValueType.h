@@ -30,27 +30,35 @@ class CORE_EXPORT CSSNumericValueType {
   static constexpr unsigned kNumBaseTypes =
       static_cast<unsigned>(BaseType::kNumBaseTypes);
 
-  explicit CSSNumericValueType(CSSPrimitiveValue::UnitType);
+  explicit CSSNumericValueType(
+      CSSPrimitiveValue::UnitType = CSSPrimitiveValue::UnitType::kNumber);
 
-  static CSSNumericValueType NegateEntries(CSSNumericValueType);
+  static CSSNumericValueType NegateExponents(CSSNumericValueType);
+  static CSSNumericValueType Add(CSSNumericValueType,
+                                 CSSNumericValueType,
+                                 bool& error);
+  static CSSNumericValueType Multiply(CSSNumericValueType,
+                                      CSSNumericValueType,
+                                      bool& error);
 
-  int GetEntry(BaseType type) const {
+  int Exponent(BaseType type) const {
     DCHECK_LT(type, BaseType::kNumBaseTypes);
-    return entries_[static_cast<unsigned>(type)];
+    return exponents_[static_cast<unsigned>(type)];
   }
 
-  void SetEntry(BaseType type, int value) {
+  void SetExponent(BaseType type, int value) {
     DCHECK_LT(type, BaseType::kNumBaseTypes);
-    entries_[static_cast<unsigned>(type)] = value;
+    exponents_[static_cast<unsigned>(type)] = value;
   }
 
-  bool HasPercentHint() const {
-    // TODO(crbug.com/776173): Implement this
-    return false;
-  }
+  bool HasPercentHint() const { return has_percent_hint_; }
+  BaseType PercentHint() const { return percent_hint_; }
+  void ApplyPercentHint(BaseType hint);
 
  private:
-  std::array<int, kNumBaseTypes> entries_{};  // zero-initialize
+  std::array<int, kNumBaseTypes> exponents_{};  // zero-initialize
+  BaseType percent_hint_ = BaseType::kPercent;
+  bool has_percent_hint_ = false;
 };
 
 }  // namespace blink

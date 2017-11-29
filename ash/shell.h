@@ -37,10 +37,6 @@ class WindowManagerClient;
 class WindowTreeClient;
 }  // namespace aura
 
-namespace chromeos {
-class AudioA11yController;
-}
-
 namespace app_list {
 class AppList;
 }  // namespace app_list
@@ -111,7 +107,7 @@ class LaserPointerController;
 class LocaleNotificationController;
 class LockStateController;
 class LogoutConfirmationController;
-class LockScreenController;
+class LoginScreenController;
 class MagnificationController;
 class TabletModeController;
 class MediaController;
@@ -306,9 +302,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   AshDisplayController* ash_display_controller() {
     return ash_display_controller_.get();
   }
-  chromeos::AudioA11yController* audio_a11y_controller() {
-    return audio_a11y_controller_.get();
-  }
   AutoclickController* autoclick_controller() {
     return autoclick_controller_.get();
   }
@@ -359,8 +352,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   LocaleNotificationController* locale_notification_controller() {
     return locale_notification_controller_.get();
   }
-  LockScreenController* lock_screen_controller() {
-    return lock_screen_controller_.get();
+  LoginScreenController* login_screen_controller() {
+    return login_screen_controller_.get();
   }
   LockStateController* lock_state_controller() {
     return lock_state_controller_.get();
@@ -497,12 +490,6 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // Starts the animation that occurs on first login.
   void DoInitialWorkspaceAnimation();
-
-  void SetTouchHudProjectionEnabled(bool enabled);
-
-  bool is_touch_hud_projection_enabled() const {
-    return is_touch_hud_projection_enabled_;
-  }
 
   // NOTE: Prefer ScopedRootWindowForNewWindows when setting temporarily.
   void set_root_window_for_new_windows(aura::Window* root) {
@@ -657,7 +644,7 @@ class ASH_EXPORT Shell : public SessionObserver,
       keyboard_brightness_control_delegate_;
   std::unique_ptr<KeyboardUI> keyboard_ui_;
   std::unique_ptr<LocaleNotificationController> locale_notification_controller_;
-  std::unique_ptr<LockScreenController> lock_screen_controller_;
+  std::unique_ptr<LoginScreenController> login_screen_controller_;
   std::unique_ptr<LogoutConfirmationController> logout_confirmation_controller_;
   std::unique_ptr<TabletModeController> tablet_mode_controller_;
   std::unique_ptr<MediaController> media_controller_;
@@ -741,7 +728,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<BluetoothPowerController> bluetooth_power_controller_;
   std::unique_ptr<TrayBluetoothHelper> tray_bluetooth_helper_;
   std::unique_ptr<VirtualKeyboardController> virtual_keyboard_controller_;
-  std::unique_ptr<chromeos::AudioA11yController> audio_a11y_controller_;
   // Controls video output device state.
   std::unique_ptr<display::DisplayConfigurator> display_configurator_;
   std::unique_ptr<DisplayColorManager> display_color_manager_;
@@ -783,8 +769,6 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // For testing only: simulate that a modal window is open
   bool simulate_modal_window_open_for_testing_;
-
-  bool is_touch_hud_projection_enabled_;
 
   // See comment for GetRootWindowForNewWindows().
   aura::Window* root_window_for_new_windows_ = nullptr;

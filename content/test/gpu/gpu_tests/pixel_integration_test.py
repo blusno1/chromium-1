@@ -54,7 +54,9 @@ class PixelIntegrationTest(
 
   @classmethod
   def SetUpProcess(cls):
-    color_profile_manager.ForceUntilExitSRGB()
+    options = cls.GetParsedCommandLineOptions()
+    color_profile_manager.ForceUntilExitSRGB(
+      options.dont_restore_color_profile_after_test)
     super(PixelIntegrationTest, cls).SetUpProcess()
     cls.CustomizeBrowserArgs(cls._AddDefaultArgs([]))
     cls.StartBrowser()
@@ -67,7 +69,7 @@ class PixelIntegrationTest(
     # All tests receive the following options.
     return [
       '--force-color-profile=srgb',
-      '--enable-features=ColorCorrectRendering',
+      '--ensure-forced-color-profile',
       '--enable-gpu-benchmarking',
       '--test-type=gpu'] + browser_args
 

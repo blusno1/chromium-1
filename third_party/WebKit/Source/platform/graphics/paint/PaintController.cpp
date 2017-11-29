@@ -248,6 +248,11 @@ void PaintController::RemoveLastDisplayItem() {
     } else {
       DCHECK(under_invalidation_checking_begin_);
       --under_invalidation_checking_begin_;
+      // The old display item is a tombstone because it was matched by the begin
+      // display item being removed. Restore the tombstone so that we can match
+      // the next new display item against it.
+      current_paint_artifact_.GetDisplayItemList().RestoreTombstone(
+          under_invalidation_checking_begin_, new_display_item_list_.Last());
     }
   }
   new_display_item_list_.RemoveLast();
@@ -502,9 +507,8 @@ void PaintController::CopyCachedSubsequence(size_t begin_index,
     properties_before_subsequence =
         new_paint_chunks_.CurrentPaintChunkProperties();
     new_paint_chunks_.ForceNewChunk();
-    UpdateCurrentPaintChunkProperties(
-        cached_chunk->is_cacheable ? &cached_chunk->id : nullptr,
-        cached_chunk->properties);
+    UpdateCurrentPaintChunkProperties(cached_chunk->id,
+                                      cached_chunk->properties);
   } else {
     // Avoid uninitialized variable error on Windows.
     cached_chunk = current_paint_artifact_.PaintChunks().begin();
@@ -513,10 +517,7 @@ void PaintController::CopyCachedSubsequence(size_t begin_index,
   for (size_t current_index = begin_index; current_index < end_index;
        ++current_index) {
     cached_item = &current_paint_artifact_.GetDisplayItemList()[current_index];
-    DCHECK(!cached_item->IsTombstone());
-    // TODO(chrishtr); remove this hack once crbug.com/712660 is resolved.
-    if (cached_item->IsTombstone())
-      continue;
+    SECURITY_CHECK(!cached_item->IsTombstone());
 #if DCHECK_IS_ON()
     DCHECK(cached_item->Client().IsAlive());
 #endif
@@ -526,9 +527,8 @@ void PaintController::CopyCachedSubsequence(size_t begin_index,
       ++cached_chunk;
       DCHECK(cached_chunk != current_paint_artifact_.PaintChunks().end());
       new_paint_chunks_.ForceNewChunk();
-      UpdateCurrentPaintChunkProperties(
-          cached_chunk->is_cacheable ? &cached_chunk->id : nullptr,
-          cached_chunk->properties);
+      UpdateCurrentPaintChunkProperties(cached_chunk->id,
+                                        cached_chunk->properties);
     }
 
 #if DCHECK_IS_ON()
@@ -558,7 +558,8 @@ void PaintController::CopyCachedSubsequence(size_t begin_index,
     // Restore properties and force new chunk for any trailing display items
     // after the cached subsequence without new properties.
     new_paint_chunks_.ForceNewChunk();
-    UpdateCurrentPaintChunkProperties(nullptr, properties_before_subsequence);
+    UpdateCurrentPaintChunkProperties(WTF::nullopt,
+                                      properties_before_subsequence);
   }
 }
 
@@ -1115,7 +1116,7 @@ void PaintController::CheckUnderInvalidation() {
   }
 
   // Discard the forced repainted display item and move the cached item into
-  // m_newDisplayItemList. This is to align with the
+  // new_display_item_list_. This is to align with the
   // non-under-invalidation-checking path to empty the original cached slot,
   // leaving only disappeared or invalidated display items in the old list after
   // painting.

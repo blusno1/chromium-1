@@ -13,11 +13,7 @@
 
 namespace ukm {
 
-#if defined(OS_IOS)
-const base::Feature kUkmFeature = {"Ukm", base::FEATURE_DISABLED_BY_DEFAULT};
-#else
 const base::Feature kUkmFeature = {"Ukm", base::FEATURE_ENABLED_BY_DEFAULT};
-#endif
 
 UkmRecorder::UkmRecorder() = default;
 
@@ -36,7 +32,7 @@ ukm::SourceId UkmRecorder::GetNewSourceID() {
 std::unique_ptr<UkmEntryBuilder> UkmRecorder::GetEntryBuilder(
     ukm::SourceId source_id,
     const char* event_name) {
-  return base::MakeUnique<UkmEntryBuilder>(
+  return std::make_unique<UkmEntryBuilder>(
       base::Bind(&UkmRecorder::AddEntry, base::Unretained(this)), source_id,
       event_name);
 }

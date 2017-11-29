@@ -278,7 +278,6 @@ Bug(none) compositing/layer-creation/spanOverlapsCanvas.html [ Failure ]
 Bug(none) compositing/layer-creation/squashing-into-ancestor-clipping-layer-change.html [ Failure ]
 Bug(none) compositing/layer-creation/stacking-context-overlap-nested.html [ Failure ]
 Bug(none) compositing/layer-creation/stacking-context-overlap.html [ Failure ]
-Bug(none) compositing/layer-tree.html [ Failure ]
 Bug(none) compositing/layers-inside-overflow-scroll.html [ Failure ]
 Bug(none) compositing/layout-width-change.html [ Failure ]
 Bug(none) compositing/masks/mask-with-added-filters.html [ Failure Crash ]
@@ -944,6 +943,7 @@ Bug(none) paint/invalidation/compositing/should-not-clip-composited-viewport-scr
 Bug(none) paint/invalidation/compositing/should-not-repaint-composited-filter.html [ Failure ]
 Bug(none) paint/invalidation/compositing/should-not-repaint-composited-opacity.html [ Failure ]
 Bug(none) paint/invalidation/compositing/should-not-repaint-move-backface-hidden.html [ Failure ]
+Bug(none) paint/invalidation/forms/select-option-background-color.html [ Failure ]
 Bug(none) paint/invalidation/scroll/document-flipped-blocks-writing-mode-scroll.html [ Failure ]
 Bug(none) paint/invalidation/empty-object-move-and-resize.html [ Failure ]
 Bug(none) paint/invalidation/flexbox/repaint-on-layout.html [ Failure ]
@@ -1088,7 +1088,6 @@ crbug.com/707444 svg/custom/clip-mask-negative-scale.svg [ Failure ]
 crbug.com/707444 svg/custom/mask-inside-defs.svg [ Failure ]
 
 # Subpixel differences
-Bug(none) compositing/overflow/border-radius-prevents-squashing-with-inline-transform.html [ Failure ]
 Bug(none) compositing/composited-scaled-child-with-border-radius-parent-clip.html [ Failure ]
 Bug(none) compositing/composited-translated-child-with-border-radius-parent-clip.html [ Failure ]
 Bug(none) compositing/overflow/border-radius-on-grandparent-composited-grandchild.html [ Failure ]
@@ -1096,6 +1095,7 @@ Bug(none) compositing/overflow/border-radius-on-two-ancestors-composited-grandch
 Bug(none) compositing/overflow/border-radius-styles-with-composited-child.html [ Failure ]
 Bug(none) compositing/overflow/grandchild-composited-with-border-radius-ancestor.html [ Failure ]
 Bug(none) compositing/overflow/grandchild-with-border-radius-ancestor.html [ Failure ]
+Bug(none) compositing/overflow/overflow-scroll-with-negative-offset-translucent-outline.html [ Failure ]
 Bug(none) compositing/overflow/siblings-composited-with-border-radius-ancestor-one-clipped.html [ Failure ]
 Bug(none) compositing/overflow/siblings-composited-with-border-radius-ancestor.html [ Failure ]
 Bug(none) compositing/overflow/siblings-with-border-radius-ancestor.html [ Failure ]
@@ -1449,7 +1449,6 @@ crbug.com/692310 virtual/threaded/animations/composited-animations-rotate-zero-d
 # This test uses internal call to initiate smooth scrolling on impl-thread.
 crbug.com/667946 fast/compositor-wheel-scroll-latching/touchpad-scroll-impl-to-main.html [ Failure ]
 
-Bug(none) virtual/threaded/animations/svg-attribute-composition/svg-startOffset-composition.html [ Failure ]
 
 # virtual/threaded variants of sub-directories and tests already skipped or marked as failing above.
 Bug(none) virtual/threaded/http/tests/devtools/ [ Skip ]

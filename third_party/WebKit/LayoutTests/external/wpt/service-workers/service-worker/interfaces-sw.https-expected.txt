@@ -20,7 +20,6 @@ PASS ServiceWorkerGlobalScope interface: operation skipWaiting()
 PASS ServiceWorkerGlobalScope interface: attribute oninstall
 PASS ServiceWorkerGlobalScope interface: attribute onactivate
 PASS ServiceWorkerGlobalScope interface: attribute onfetch
-PASS ServiceWorkerGlobalScope interface: attribute onforeignfetch
 PASS ServiceWorkerGlobalScope interface: attribute onmessage
 FAIL ServiceWorkerGlobalScope interface: attribute onmessageerror assert_own_property: The global object must have a property "onmessageerror" expected property "onmessageerror" missing
 PASS ServiceWorkerGlobalScope interface: internal [[SetPrototypeOf]] method of global platform object - setting to a new value via Object.setPrototypeOf should throw a TypeError
@@ -37,7 +36,6 @@ PASS ServiceWorkerGlobalScope interface: self must inherit property "skipWaiting
 PASS ServiceWorkerGlobalScope interface: self must inherit property "oninstall" with the proper type
 PASS ServiceWorkerGlobalScope interface: self must inherit property "onactivate" with the proper type
 PASS ServiceWorkerGlobalScope interface: self must inherit property "onfetch" with the proper type
-PASS ServiceWorkerGlobalScope interface: self must inherit property "onforeignfetch" with the proper type
 PASS ServiceWorkerGlobalScope interface: self must inherit property "onmessage" with the proper type
 FAIL ServiceWorkerGlobalScope interface: self must inherit property "onmessageerror" with the proper type assert_own_property: expected property "onmessageerror" missing
 PASS Client interface: existence and properties of interface object
@@ -97,7 +95,7 @@ PASS ServiceWorkerRegistration interface: attribute waiting
 PASS ServiceWorkerRegistration interface: attribute active
 PASS ServiceWorkerRegistration interface: attribute navigationPreload
 PASS ServiceWorkerRegistration interface: attribute scope
-FAIL ServiceWorkerRegistration interface: attribute updateViaCache assert_true: The prototype object must have a property "updateViaCache" expected true got false
+PASS ServiceWorkerRegistration interface: attribute updateViaCache
 PASS ServiceWorkerRegistration interface: operation update()
 PASS ServiceWorkerRegistration interface: operation unregister()
 PASS ServiceWorkerRegistration interface: attribute onupdatefound
@@ -108,7 +106,7 @@ PASS ServiceWorkerRegistration interface: self.registration must inherit propert
 PASS ServiceWorkerRegistration interface: self.registration must inherit property "active" with the proper type
 PASS ServiceWorkerRegistration interface: self.registration must inherit property "navigationPreload" with the proper type
 PASS ServiceWorkerRegistration interface: self.registration must inherit property "scope" with the proper type
-FAIL ServiceWorkerRegistration interface: self.registration must inherit property "updateViaCache" with the proper type assert_inherits: property "updateViaCache" not found in prototype chain
+PASS ServiceWorkerRegistration interface: self.registration must inherit property "updateViaCache" with the proper type
 PASS ServiceWorkerRegistration interface: self.registration must inherit property "update()" with the proper type
 PASS ServiceWorkerRegistration interface: self.registration must inherit property "unregister()" with the proper type
 PASS ServiceWorkerRegistration interface: self.registration must inherit property "onupdatefound" with the proper type

@@ -6,6 +6,10 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/css/CSSResolutionUnits.h"
+#include "core/css/cssom/CSSMathMax.h"
+#include "core/css/cssom/CSSMathMin.h"
+#include "core/css/cssom/CSSMathProduct.h"
+#include "core/css/cssom/CSSMathSum.h"
 #include "platform/wtf/MathExtras.h"
 
 namespace blink {
@@ -79,7 +83,7 @@ CSSStyleValue::StyleValueType CSSUnitValue::GetType() const {
   return StyleValueType::kUnknownType;
 }
 
-const CSSValue* CSSUnitValue::ToCSSValue() const {
+const CSSValue* CSSUnitValue::ToCSSValue(SecureContextMode) const {
   return CSSPrimitiveValue::Create(value_, unit_);
 }
 
@@ -294,6 +298,14 @@ double CSSUnitValue::ConvertAngle(CSSPrimitiveValue::UnitType unit) const {
       NOTREACHED();
       return 0;
   }
+}
+
+bool CSSUnitValue::Equals(const CSSNumericValue& other) const {
+  if (!other.IsUnitValue())
+    return false;
+
+  const CSSUnitValue& other_unit_value = ToCSSUnitValue(other);
+  return value_ == other_unit_value.value_ && unit_ == other_unit_value.unit_;
 }
 
 }  // namespace blink

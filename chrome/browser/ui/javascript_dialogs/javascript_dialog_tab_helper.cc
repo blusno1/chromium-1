@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/app_modal/javascript_dialog_manager.h"
+#include "components/navigation_metrics/navigation_metrics.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "ui/gfx/text_elider.h"
@@ -55,6 +56,7 @@ enum class JavaScriptDialogTabHelper::DismissalCause {
   BROWSER_SWITCHED = 5,
   DIALOG_BUTTON_CLICKED = 6,
   TAB_NAVIGATED = 7,
+  TAB_SWITCHED_OUT = 8,
   MAX,
 };
 
@@ -87,15 +89,23 @@ void JavaScriptDialogTabHelper::RunJavaScriptDialog(
   content::WebContents* parent_web_contents =
       WebContentsObserver::web_contents();
   bool foremost = IsWebContentsForemost(parent_web_contents);
+  navigation_metrics::Scheme scheme =
+      navigation_metrics::GetScheme(alerting_frame_url);
   switch (dialog_type) {
     case content::JAVASCRIPT_DIALOG_TYPE_ALERT:
       UMA_HISTOGRAM_BOOLEAN("JSDialogs.IsForemost.Alert", foremost);
+      UMA_HISTOGRAM_ENUMERATION("JSDialogs.Scheme.Alert", scheme,
+                                navigation_metrics::Scheme::COUNT);
       break;
     case content::JAVASCRIPT_DIALOG_TYPE_CONFIRM:
       UMA_HISTOGRAM_BOOLEAN("JSDialogs.IsForemost.Confirm", foremost);
+      UMA_HISTOGRAM_ENUMERATION("JSDialogs.Scheme.Confirm", scheme,
+                                navigation_metrics::Scheme::COUNT);
       break;
     case content::JAVASCRIPT_DIALOG_TYPE_PROMPT:
       UMA_HISTOGRAM_BOOLEAN("JSDialogs.IsForemost.Prompt", foremost);
+      UMA_HISTOGRAM_ENUMERATION("JSDialogs.Scheme.Prompt", scheme,
+                                navigation_metrics::Scheme::COUNT);
       break;
   }
 
@@ -194,16 +204,26 @@ void JavaScriptDialogTabHelper::RunJavaScriptDialog(
 
 void JavaScriptDialogTabHelper::RunBeforeUnloadDialog(
     content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     bool is_reload,
     DialogClosedCallback callback) {
+  content::WebContents* parent_web_contents =
+      WebContentsObserver::web_contents();
+  bool foremost = IsWebContentsForemost(parent_web_contents);
+  navigation_metrics::Scheme scheme =
+      navigation_metrics::GetScheme(render_frame_host->GetLastCommittedURL());
+  UMA_HISTOGRAM_BOOLEAN("JSDialogs.IsForemost.BeforeUnload", foremost);
+  UMA_HISTOGRAM_ENUMERATION("JSDialogs.Scheme.BeforeUnload", scheme,
+                            navigation_metrics::Scheme::COUNT);
+
   // onbeforeunload dialogs are always handled with an app-modal dialog, because
   // - they are critical to the user not losing data
   // - they can be requested for tabs that are not foremost
   // - they can be requested for many tabs at the same time
   // and therefore auto-dismissal is inappropriate for them.
 
-  return AppModalDialogManager()->RunBeforeUnloadDialog(web_contents, is_reload,
-                                                        std::move(callback));
+  return AppModalDialogManager()->RunBeforeUnloadDialog(
+      web_contents, render_frame_host, is_reload, std::move(callback));
 }
 
 bool JavaScriptDialogTabHelper::HandleJavaScriptDialog(
@@ -274,6 +294,21 @@ void JavaScriptDialogTabHelper::OnBrowserSetLastActive(Browser* browser) {
     HandleTabSwitchAway(DismissalCause::BROWSER_SWITCHED);
   }
 }
+
+void JavaScriptDialogTabHelper::TabReplacedAt(
+    TabStripModel* tab_strip_model,
+    content::WebContents* old_contents,
+    content::WebContents* new_contents,
+    int index) {
+  if (old_contents == WebContentsObserver::web_contents()) {
+    // At this point, this WebContents is no longer in the tabstrip. The usual
+    // teardown will not be able to turn off the attention indicator, so that
+    // must be done here.
+    SetTabNeedsAttentionImpl(false, tab_strip_model, index);
+
+    CloseDialog(DismissalCause::TAB_SWITCHED_OUT, false, base::string16());
+  }
+}
 #endif
 
 void JavaScriptDialogTabHelper::LogDialogDismissalCause(
@@ -337,6 +372,13 @@ void JavaScriptDialogTabHelper::CloseDialog(DismissalCause cause,
   if (dialog_callback_)
     std::move(dialog_callback_).Run(success, user_input);
 
+  // If there's a pending dialog, then the tab is still in the "needs attention"
+  // state; clear it out. However, if the tab was switched out, the turning off
+  // of the "needs attention" state was done in TabReplacedAt() because
+  // SetTabNeedsAttention won't work, so don't call it.
+  if (pending_dialog_ && cause != DismissalCause::TAB_SWITCHED_OUT)
+    SetTabNeedsAttention(false);
+
   dialog_.reset();
   pending_dialog_.Reset();
   dialog_callback_.Reset();
@@ -350,9 +392,23 @@ void JavaScriptDialogTabHelper::SetTabNeedsAttention(bool attention) {
 #if !defined(OS_ANDROID)
   content::WebContents* web_contents = WebContentsObserver::web_contents();
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
-  DCHECK(browser);
-  browser->tab_strip_model()->SetTabNeedsAttentionAt(
-      browser->tab_strip_model()->GetIndexOfWebContents(web_contents),
-      attention);
+  TabStripModel* tab_strip_model = browser->tab_strip_model();
+
+  SetTabNeedsAttentionImpl(
+      attention, tab_strip_model,
+      tab_strip_model->GetIndexOfWebContents(web_contents));
 #endif
 }
+
+#if !defined(OS_ANDROID)
+void JavaScriptDialogTabHelper::SetTabNeedsAttentionImpl(
+    bool attention,
+    TabStripModel* tab_strip_model,
+    int index) {
+  tab_strip_model->SetTabNeedsAttentionAt(index, attention);
+  if (attention)
+    tab_strip_model->AddObserver(this);
+  else
+    tab_strip_model->RemoveObserver(this);
+}
+#endif

@@ -75,6 +75,10 @@ _NEGATIVE_FILTER = [
     'PerfTest.testColdExecuteScript',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
     'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2144
+    'MobileEmulationCapabilityTest.testClickElement',
+    'MobileEmulationCapabilityTest.testNetworkConnectionTypeIsAppliedToAllTabs',
+    'MobileEmulationCapabilityTest.testNetworkConnectionTypeIsAppliedToAllTabsImmediately',
 ]
 
 _VERSION_SPECIFIC_FILTER = {}
@@ -98,7 +102,7 @@ _OS_SPECIFIC_FILTER['linux'] = [
     # Xvfb doesn't support maximization.
     'ChromeDriverTest.testWindowMaximize',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2132
-    'ChromeDriverTest.testDeviceMetricsWithDeviceWidth',
+    'MobileEmulationCapabilityTest.testDeviceMetricsWithDeviceWidth',
 ]
 _OS_SPECIFIC_FILTER['mac'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1927

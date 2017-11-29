@@ -9,13 +9,14 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
+#include "chrome/browser/notifications/metrics/notification_metrics_logger.h"
+#include "chrome/browser/notifications/metrics/notification_metrics_logger_factory.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/web_notification_delegate.h"
@@ -128,6 +129,11 @@ static bool ShouldDisplayWebNotificationOnFullScreen(Profile* profile,
   return false;
 }
 
+NotificationMetricsLogger* GetMetricsLogger(BrowserContext* browser_context) {
+  return NotificationMetricsLoggerFactory::GetForBrowserContext(
+      browser_context);
+}
+
 }  // namespace
 
 // static
@@ -150,26 +156,28 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
     const std::string& notification_id,
     const GURL& origin,
     const base::Optional<int>& action_index,
-    const base::Optional<base::string16>& reply) {
+    const base::Optional<base::string16>& reply,
+    base::OnceClosure completed_closure) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   blink::mojom::PermissionStatus permission_status =
       CheckPermissionOnUIThread(browser_context, origin,
                                 kInvalidRenderProcessId);
 
+  NotificationMetricsLogger* metrics_logger = GetMetricsLogger(browser_context);
+
   // TODO(peter): Change this to a CHECK() when Issue 555572 is resolved.
   // Also change this method to be const again.
   if (permission_status != blink::mojom::PermissionStatus::GRANTED) {
-    base::RecordAction(base::UserMetricsAction(
-        "Notifications.Persistent.ClickedWithoutPermission"));
+    metrics_logger->LogPersistentNotificationClickWithoutPermission();
+
+    std::move(completed_closure).Run();
     return;
   }
 
   if (action_index.has_value()) {
-    base::RecordAction(base::UserMetricsAction(
-        "Notifications.Persistent.ClickedActionButton"));
+    metrics_logger->LogPersistentNotificationActionButtonClick();
   } else {
-    base::RecordAction(
-        base::UserMetricsAction("Notifications.Persistent.Clicked"));
+    metrics_logger->LogPersistentNotificationClick();
   }
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
@@ -185,9 +193,9 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
   content::NotificationEventDispatcher::GetInstance()
       ->DispatchNotificationClickEvent(
           browser_context, notification_id, origin, action_index, reply,
-          base::Bind(
+          base::BindOnce(
               &PlatformNotificationServiceImpl::OnClickEventDispatchComplete,
-              base::Unretained(this)));
+              base::Unretained(this), std::move(completed_closure)));
 }
 
 // TODO(miguelg): Move this to PersistentNotificationHandler
@@ -195,26 +203,28 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClose(
     BrowserContext* browser_context,
     const std::string& notification_id,
     const GURL& origin,
-    bool by_user) {
+    bool by_user,
+    base::OnceClosure completed_closure) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // If we programatically closed this notification, don't dispatch any event.
-  if (closed_notifications_.erase(notification_id) != 0)
+  if (closed_notifications_.erase(notification_id) != 0) {
+    std::move(completed_closure).Run();
     return;
-
-  if (by_user) {
-    base::RecordAction(
-        base::UserMetricsAction("Notifications.Persistent.ClosedByUser"));
-  } else {
-    base::RecordAction(base::UserMetricsAction(
-        "Notifications.Persistent.ClosedProgrammatically"));
   }
+
+  NotificationMetricsLogger* metrics_logger = GetMetricsLogger(browser_context);
+  if (by_user)
+    metrics_logger->LogPersistentNotificationClosedByUser();
+  else
+    metrics_logger->LogPersistentNotificationClosedProgrammatically();
+
   content::NotificationEventDispatcher::GetInstance()
       ->DispatchNotificationCloseEvent(
           browser_context, notification_id, origin, by_user,
-          base::Bind(
+          base::BindOnce(
               &PlatformNotificationServiceImpl::OnCloseEventDispatchComplete,
-              base::Unretained(this)));
+              base::Unretained(this), std::move(completed_closure)));
 }
 
 blink::mojom::PermissionStatus
@@ -349,11 +359,11 @@ void PlatformNotificationServiceImpl::DisplayNotification(
   message_center::Notification notification = CreateNotificationFromData(
       profile, origin, notification_id, notification_data,
       notification_resources,
-      new WebNotificationDelegate(NotificationCommon::NON_PERSISTENT, profile,
-                                  notification_id, origin));
+      new WebNotificationDelegate(NotificationHandler::Type::WEB_NON_PERSISTENT,
+                                  profile, notification_id, origin));
 
   NotificationDisplayServiceFactory::GetForProfile(profile)->Display(
-      NotificationCommon::NON_PERSISTENT, notification);
+      NotificationHandler::Type::WEB_NON_PERSISTENT, notification);
 }
 
 void PlatformNotificationServiceImpl::DisplayPersistentNotification(
@@ -377,14 +387,16 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
   message_center::Notification notification = CreateNotificationFromData(
       profile, origin, notification_id, notification_data,
       notification_resources,
-      new WebNotificationDelegate(NotificationCommon::PERSISTENT, profile,
-                                  notification_id, origin));
+      new WebNotificationDelegate(NotificationHandler::Type::WEB_PERSISTENT,
+                                  profile, notification_id, origin));
   auto metadata = std::make_unique<PersistentNotificationMetadata>();
   metadata->service_worker_scope = service_worker_scope;
 
   NotificationDisplayServiceFactory::GetForProfile(profile)->Display(
-      NotificationCommon::PERSISTENT, notification, std::move(metadata));
-  base::RecordAction(base::UserMetricsAction("Notifications.Persistent.Shown"));
+      NotificationHandler::Type::WEB_PERSISTENT, notification,
+      std::move(metadata));
+
+  GetMetricsLogger(browser_context)->LogPersistentNotificationShown();
 }
 
 void PlatformNotificationServiceImpl::CloseNotification(
@@ -396,7 +408,7 @@ void PlatformNotificationServiceImpl::CloseNotification(
   DCHECK(profile);
 
   NotificationDisplayServiceFactory::GetForProfile(profile)->Close(
-      NotificationCommon::NON_PERSISTENT, notification_id);
+      NotificationHandler::Type::WEB_NON_PERSISTENT, notification_id);
 }
 
 void PlatformNotificationServiceImpl::ClosePersistentNotification(
@@ -410,7 +422,7 @@ void PlatformNotificationServiceImpl::ClosePersistentNotification(
   closed_notifications_.insert(notification_id);
 
   NotificationDisplayServiceFactory::GetForProfile(profile)->Close(
-      NotificationCommon::PERSISTENT, notification_id);
+      NotificationHandler::Type::WEB_PERSISTENT, notification_id);
 }
 
 void PlatformNotificationServiceImpl::GetDisplayedNotifications(
@@ -431,6 +443,7 @@ void PlatformNotificationServiceImpl::GetDisplayedNotifications(
 }
 
 void PlatformNotificationServiceImpl::OnClickEventDispatchComplete(
+    base::OnceClosure completed_closure,
     content::PersistentNotificationStatus status) {
   UMA_HISTOGRAM_ENUMERATION(
       "Notifications.PersistentWebNotificationClickResult", status,
@@ -442,14 +455,19 @@ void PlatformNotificationServiceImpl::OnClickEventDispatchComplete(
     click_dispatch_keep_alive_.reset();
   }
 #endif
+
+  std::move(completed_closure).Run();
 }
 
 void PlatformNotificationServiceImpl::OnCloseEventDispatchComplete(
+    base::OnceClosure completed_closure,
     content::PersistentNotificationStatus status) {
   UMA_HISTOGRAM_ENUMERATION(
       "Notifications.PersistentWebNotificationCloseResult", status,
       content::PersistentNotificationStatus::
           PERSISTENT_NOTIFICATION_STATUS_MAX);
+
+  std::move(completed_closure).Run();
 }
 
 message_center::Notification

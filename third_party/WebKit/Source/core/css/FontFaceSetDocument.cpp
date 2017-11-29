@@ -48,7 +48,7 @@ FontFaceSetDocument::FontFaceSetDocument(Document& document)
   PauseIfNeeded();
 }
 
-FontFaceSetDocument::~FontFaceSetDocument() {}
+FontFaceSetDocument::~FontFaceSetDocument() = default;
 
 Document* FontFaceSetDocument::GetDocument() const {
   return ToDocument(GetExecutionContext());
@@ -109,7 +109,7 @@ ScriptPromise FontFaceSetDocument::ready(ScriptState* script_state) {
   return ready_->Promise(script_state->World());
 }
 
-const HeapListHashSet<Member<FontFace>>&
+const HeapLinkedHashSet<Member<FontFace>>&
 FontFaceSetDocument::CSSConnectedFontFaceList() const {
   Document* document = this->GetDocument();
   document->UpdateActiveStyle();
@@ -144,7 +144,8 @@ bool FontFaceSetDocument::ResolveFontStyle(const String& font_string,
   // CanvasRenderingContext2D.
   MutableCSSPropertyValueSet* parsed_style =
       MutableCSSPropertyValueSet::Create(kHTMLStandardMode);
-  CSSParser::ParseValue(parsed_style, CSSPropertyFont, font_string, true);
+  CSSParser::ParseValue(parsed_style, CSSPropertyFont, font_string, true,
+                        GetDocument()->SecureContextMode());
   if (parsed_style->IsEmpty())
     return false;
 

@@ -7,6 +7,11 @@
 
 namespace flag_descriptions {
 
+// Title and description for the flag to enable the new bookmark edit page in
+// the new bookmark UI.
+extern const char kBookmarkNewEditPageName[];
+extern const char kBookmarkNewEditPageDescription[];
+
 // Title and description for the flag to enable the new bookmark UI.
 extern const char kBookmarkNewGenerationName[];
 extern const char kBookmarkNewGenerationDescription[];
@@ -19,6 +24,10 @@ extern const char kBrowserTaskSchedulerDescription[];
 // Title and description for the flag to enable Captive Portal Login.
 extern const char kCaptivePortalName[];
 extern const char kCaptivePortalDescription[];
+
+// Title and description for the flag to enable Clean Toolbar.
+extern const char kCleanToolbarName[];
+extern const char kCleanToolbarDescription[];
 
 // Title and description for the flag to enable Contextual Search.
 extern const char kContextualSearch[];
@@ -66,6 +75,11 @@ extern const char kOmniboxUIHideSuggestionUrlSchemeDescription[];
 // (www, m) in omnibox URL suggestions.
 extern const char kOmniboxUIHideSuggestionUrlTrivialSubdomainsName[];
 extern const char kOmniboxUIHideSuggestionUrlTrivialSubdomainsDescription[];
+
+// Title and description for the flag to enable the ability to export passwords
+// from the password settings.
+extern const char kPasswordExportName[];
+extern const char kPasswordExportDescription[];
 
 // Title and description for the flag to enable Physical Web in the omnibox.
 extern const char kPhysicalWeb[];

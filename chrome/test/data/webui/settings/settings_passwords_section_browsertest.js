@@ -165,6 +165,18 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
   }
 
   /**
+   * Helper method used to create an export passwords dialog.
+   * @return {!Object}
+   * @private
+   */
+  function createExportPasswordsDialog() {
+    var dialog = document.createElement('passwords-export-dialog');
+    document.body.appendChild(dialog);
+    Polymer.dom.flush();
+    return dialog;
+  }
+
+  /**
    * Helper method used to test for a url in a list of passwords.
    * @param {!Array<!chrome.passwordsPrivate.PasswordUiEntry>} passwordList
    * @param {string} url The URL that is being searched for.
@@ -548,6 +560,37 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       });
 
       MockInteractions.tap(passwordListItem.$$('#showPasswordButton'));
+    });
+
+    // Test that tapping "Export passwords..." notifies the browser accordingly
+    test('startExport', function(done) {
+      var exportDialog = createExportPasswordsDialog();
+
+      passwordManager.exportPasswords = () => {
+        done();
+      };
+
+      MockInteractions.tap(exportDialog.$.exportPasswordsButton);
+    });
+
+    test('closingPasswordsSectionHidesUndoToast', function(done) {
+      var passwordEntry = FakeDataMaker.passwordEntry('goo.gl', 'bart', 1);
+      var passwordsSection =
+          createPasswordsSection(passwordManager, [passwordEntry], []);
+
+      // Click the remove button on the first password and assert that an undo
+      // toast is shown.
+      var firstNode = Polymer.dom(passwordsSection.$.passwordList).children[1];
+      MockInteractions.tap(firstNode.$$('#passwordMenu'));
+      MockInteractions.tap(passwordsSection.$.menuRemovePassword);
+      assertTrue(passwordsSection.$.undoToast.open);
+
+      // Remove the passwords section from the DOM and check that this closes
+      // the undo toast.
+      document.body.removeChild(passwordsSection);
+      assertFalse(passwordsSection.$.undoToast.open);
+
+      done();
     });
   });
 

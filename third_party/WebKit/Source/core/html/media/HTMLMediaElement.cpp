@@ -85,9 +85,9 @@
 #include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/AutoReset.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/CString.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
@@ -720,14 +720,14 @@ void HTMLMediaElement::ScheduleTextTrackResourceLoad() {
   pending_action_flags_ |= kLoadTextTrackResource;
 
   if (!load_timer_.IsActive())
-    load_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void HTMLMediaElement::ScheduleNextSourceChild() {
   // Schedule the timer to try the next <source> element WITHOUT resetting state
   // ala invokeLoadAlgorithm.
   pending_action_flags_ |= kLoadMediaResource;
-  load_timer_.StartOneShot(0, BLINK_FROM_HERE);
+  load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void HTMLMediaElement::ScheduleEvent(const AtomicString& event_name) {
@@ -1289,7 +1289,7 @@ void HTMLMediaElement::DeferLoad() {
   ChangeNetworkStateFromLoadingToIdle();
   // 3. Queue a task to set the element's delaying-the-load-event
   // flag to false. This stops delaying the load event.
-  deferred_load_timer_.StartOneShot(0, BLINK_FROM_HERE);
+  deferred_load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
   // 4. Wait for the task to be run.
   deferred_load_state_ = kWaitingForStopDelayingLoadEventTask;
   // Continued in executeDeferredLoad().
@@ -2141,25 +2141,19 @@ void HTMLMediaElement::setPlaybackRate(double rate,
                                        ExceptionState& exception_state) {
   BLINK_MEDIA_LOG << "setPlaybackRate(" << (void*)this << ", " << rate << ")";
 
-  // TODO(apacible): While visible clamping is currently experimental, do NOT
-  // clamp the values of |playback_rate_| in |this|. Instead, clamp these
-  // values in WebMediaPlayerImpl until .
   if (rate != 0.0 && (rate < kMinRate || rate > kMaxRate)) {
     UseCounter::Count(GetDocument(),
                       WebFeature::kHTMLMediaElementMediaPlaybackRateOutOfRange);
 
-    // Experimental: crbug/747082.
     // When the proposed playbackRate is unsupported, throw a NotSupportedError
     // DOMException and don't update the value.
-    if (RuntimeEnabledFeatures::PreloadDefaultIsMetadataEnabled()) {
-      exception_state.ThrowDOMException(
-          kNotSupportedError, "The provided playback rate (" +
-                                  String::Number(rate) + ") is not in the " +
-                                  "supported playback range.");
+    exception_state.ThrowDOMException(
+        kNotSupportedError, "The provided playback rate (" +
+                                String::Number(rate) + ") is not in the " +
+                                "supported playback range.");
 
-      // Do not update |playback_rate_|.
-      return;
-    }
+    // Do not update |playback_rate_|.
+    return;
   }
 
   if (playback_rate_ != rate) {
@@ -2609,7 +2603,7 @@ void HTMLMediaElement::AudioTrackChanged(AudioTrack* track) {
     media_source_->OnTrackChanged(track);
 
   if (!audio_tracks_timer_.IsActive())
-    audio_tracks_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    audio_tracks_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void HTMLMediaElement::AudioTracksTimerFired(TimerBase*) {

@@ -14,7 +14,7 @@
 #include "core/testing/sim/SimTest.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/CharacterNames.h"
 
 namespace blink {
@@ -24,13 +24,12 @@ class NGInlineLayoutTest : public SimTest {
   scoped_refptr<NGConstraintSpace> ConstraintSpaceForElement(
       LayoutBlockFlow* block_flow) {
     return NGConstraintSpaceBuilder(
-               FromPlatformWritingMode(block_flow->Style()->GetWritingMode()),
+               block_flow->Style()->GetWritingMode(),
                /* icb_size */ {NGSizeIndefinite, NGSizeIndefinite})
         .SetAvailableSize(NGLogicalSize(LayoutUnit(), LayoutUnit()))
         .SetPercentageResolutionSize(NGLogicalSize(LayoutUnit(), LayoutUnit()))
         .SetTextDirection(block_flow->Style()->Direction())
-        .ToConstraintSpace(
-            FromPlatformWritingMode(block_flow->Style()->GetWritingMode()));
+        .ToConstraintSpace(block_flow->Style()->GetWritingMode());
   }
 };
 

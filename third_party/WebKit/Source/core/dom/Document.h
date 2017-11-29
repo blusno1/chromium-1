@@ -33,6 +33,7 @@
 #include <string>
 #include <utility>
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/CoreExport.h"
@@ -70,7 +71,6 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebFocusType.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 
@@ -150,6 +150,7 @@ class NthIndexCache;
 class OriginAccessEntry;
 class Page;
 class PendingAnimations;
+class Policy;
 class ProcessingInstruction;
 class PropertyRegistry;
 class QualifiedName;
@@ -165,7 +166,6 @@ class ScriptRunner;
 class ScriptableDocumentParser;
 class ScriptedAnimationController;
 class SecurityOrigin;
-class SegmentedString;
 class SelectorQueryCache;
 class SerializedScriptValue;
 class Settings;
@@ -257,6 +257,8 @@ enum class WouldLoadReason {
   kCount,
 };
 
+enum class SecureContextState { kUnknown, kNonSecure, kSecure };
+
 using DocumentClassFlags = unsigned char;
 
 class CORE_EXPORT Document : public ContainerNode,
@@ -282,6 +284,9 @@ class CORE_EXPORT Document : public ContainerNode,
   // https://dom.spec.whatwg.org/#dom-document-document
   static Document* Create(const Document&);
   ~Document() override;
+
+  // Support JS introspection of frame policy (e.g. feature policy).
+  Policy* policy();
 
   MediaQueryMatcher& GetMediaQueryMatcher();
 
@@ -400,7 +405,7 @@ class CORE_EXPORT Document : public ContainerNode,
   String suborigin() const;
 
   String visibilityState() const;
-  PageVisibilityState GetPageVisibilityState() const;
+  mojom::PageVisibilityState GetPageVisibilityState() const;
   bool hidden() const;
   void DidChangeVisibilityState();
 
@@ -595,7 +600,19 @@ class CORE_EXPORT Document : public ContainerNode,
                                     const AtomicString& encoding);
   DocumentParser* ImplicitOpen(ParserSynchronizationPolicy);
 
-  // This is the DOM API document.close()
+  // This is the DOM API document.open() implementation.
+  // document.open() opens a new window when called with three arguments.
+  Document* open(LocalDOMWindow* entered_window,
+                 const AtomicString& type,
+                 const AtomicString& replace,
+                 ExceptionState&);
+  DOMWindow* open(LocalDOMWindow* current_window,
+                  LocalDOMWindow* entered_window,
+                  const AtomicString& url,
+                  const AtomicString& name,
+                  const AtomicString& features,
+                  ExceptionState&);
+  // This is the DOM API document.close().
   void close(ExceptionState&);
   // This is used internally and does not handle exceptions.
   void close();
@@ -618,9 +635,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void CancelParsing();
 
-  void write(const SegmentedString& text,
-             Document* entered_document = nullptr,
-             ExceptionState& = ASSERT_NO_EXCEPTION);
   void write(const String& text,
              Document* entered_document = nullptr,
              ExceptionState& = ASSERT_NO_EXCEPTION);
@@ -1315,6 +1329,9 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool IsSecureContext(String& error_message) const override;
   bool IsSecureContext() const override;
+  void SetSecureContextStateForTesting(SecureContextState state) {
+    secure_context_state_ = state;
+  }
 
   ClientHintsPreferences& GetClientHintsPreferences() {
     return client_hints_preferences_;
@@ -1376,7 +1393,10 @@ class CORE_EXPORT Document : public ContainerNode,
   CoreProbeSink* GetProbeSink() final;
   service_manager::InterfaceProvider* GetInterfaceProvider() final;
 
-  void SetFeaturePolicy(const String& feature_policy_header);
+  // Set an explicit feature policy on this document in response to an HTTP
+  // Feature Policy header. This will be relayed to the embedder through the
+  // LocalFrameClient.
+  void ApplyFeaturePolicyFromHeader(const String& feature_policy_header);
 
   const AtomicString& bgColor() const;
   void setBgColor(const AtomicString&);
@@ -1432,6 +1452,7 @@ class CORE_EXPORT Document : public ContainerNode,
   ScriptedAnimationController& EnsureScriptedAnimationController();
   ScriptedIdleTaskController& EnsureScriptedIdleTaskController();
   void InitSecurityContext(const DocumentInit&);
+  void InitSecureContextState();
   SecurityContext& GetSecurityContext() final { return *this; }
   EventQueue* GetEventQueue() const final;
 
@@ -1470,7 +1491,6 @@ class CORE_EXPORT Document : public ContainerNode,
   bool ChildTypeAllowed(NodeType) const final;
   Node* cloneNode(bool deep, ExceptionState&) final;
   void CloneDataFromDocument(const Document&);
-  bool IsSecureContextImpl() const;
 
   ShadowCascadeOrder shadow_cascade_order_ = kShadowCascadeNone;
 
@@ -1522,6 +1542,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   const AtomicString& BodyAttributeValue(const QualifiedName&) const;
   void SetBodyAttribute(const QualifiedName&, const AtomicString&);
+
+  // Set the feature policy on this document, inheriting as necessary from the
+  // parent document and frame owner (if they exist). The caller must ensure
+  // that any changes to the declared policy are relayed to the embedder through
+  // the LocalFrameClient.
+  void ApplyFeaturePolicy(const ParsedFeaturePolicy& declared_policy);
 
   DocumentLifecycle lifecycle_;
 
@@ -1766,6 +1792,8 @@ class CORE_EXPORT Document : public ContainerNode,
   TaskHandle sensitive_input_edited_task_;
 
   mojom::EngagementLevel engagement_level_;
+
+  SecureContextState secure_context_state_;
 
   Member<NetworkStateObserver> network_state_observer_;
 

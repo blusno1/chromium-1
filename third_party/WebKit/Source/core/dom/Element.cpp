@@ -1708,10 +1708,6 @@ Node::InsertionNotificationRequest Element::InsertedInto(
   // by the time we reach updateId
   ContainerNode::InsertedInto(insertion_point);
 
-  if (ContainsFullScreenElement() && parentElement() &&
-      !parentElement()->ContainsFullScreenElement())
-    SetContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(true);
-
   DCHECK(!HasRareData() || !GetElementRareData()->HasPseudoElements());
 
   if (!insertion_point->IsInTreeScope())
@@ -1850,7 +1846,8 @@ void Element::AttachLayoutTree(AttachContext& context) {
 
   AddCallbackSelectors();
 
-  if (HasRareData() && !GetLayoutObject()) {
+  if (HasRareData() && !GetLayoutObject() &&
+      !GetElementRareData()->GetComputedStyle()) {
     if (ElementAnimations* element_animations =
             GetElementRareData()->GetElementAnimations()) {
       element_animations->CssAnimations().Cancel();
@@ -3490,7 +3487,7 @@ const ComputedStyle* Element::EnsureComputedStyle(
 }
 
 const ComputedStyle* Element::NonLayoutObjectComputedStyle() const {
-  if (GetLayoutObject() || !HasRareData())
+  if (!HasRareData())
     return nullptr;
 
   return GetElementRareData()->GetComputedStyle();
@@ -3506,11 +3503,12 @@ bool Element::ShouldStoreNonLayoutObjectComputedStyle(
     const ComputedStyle& style) const {
 #if DCHECK_IS_ON()
   if (style.Display() == EDisplay::kContents)
-    DCHECK(!GetLayoutObject());
+    DCHECK(!GetLayoutObject() || IsPseudoElement());
 #endif
 
   return style.Display() == EDisplay::kContents ||
-         IsHTMLOptGroupElement(*this) || IsHTMLOptionElement(*this);
+         IsHTMLOptGroupElement(*this) || IsHTMLOptionElement(*this) ||
+         IsSVGStopElement(*this);
 }
 
 void Element::StoreNonLayoutObjectComputedStyle(
@@ -4401,6 +4399,7 @@ inline void Element::SetInlineStyleFromString(
     DCHECK(inline_style->IsMutable());
     static_cast<MutableCSSPropertyValueSet*>(inline_style.Get())
         ->ParseDeclarationList(new_style_string,
+                               GetDocument().SecureContextMode(),
                                GetDocument().ElementSheet().Contents());
   }
 }
@@ -4489,6 +4488,7 @@ bool Element::SetInlineStyleProperty(CSSPropertyID property_id,
   DCHECK(IsStyledElement());
   bool did_change = EnsureMutableInlineStyle()
                         .SetProperty(property_id, value, important,
+                                     GetDocument().SecureContextMode(),
                                      GetDocument().ElementSheet().Contents())
                         .did_change;
   if (did_change)
@@ -4546,7 +4546,8 @@ void Element::AddPropertyToPresentationAttributeStyle(
     CSSPropertyID property_id,
     const String& value) {
   DCHECK(IsStyledElement());
-  style->SetProperty(property_id, value, false);
+  style->SetProperty(property_id, value, false,
+                     GetDocument().SecureContextMode());
 }
 
 void Element::AddPropertyToPresentationAttributeStyle(

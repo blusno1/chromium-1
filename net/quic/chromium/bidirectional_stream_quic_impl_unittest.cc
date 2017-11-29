@@ -473,8 +473,9 @@ class BidirectionalStreamQuicImplTest
     connection_ = new QuicConnection(
         connection_id_, QuicSocketAddress(QuicSocketAddressImpl(peer_addr_)),
         helper_.get(), alarm_factory_.get(),
-        new QuicChromiumPacketWriter(socket.get()), true /* owns_writer */,
-        Perspective::IS_CLIENT, SupportedTransportVersions(GetParam()));
+        new QuicChromiumPacketWriter(socket.get(), runner_.get()),
+        true /* owns_writer */, Perspective::IS_CLIENT,
+        SupportedTransportVersions(GetParam()));
     base::TimeTicks dns_end = base::TimeTicks::Now();
     base::TimeTicks dns_start = dns_end - base::TimeDelta::FromMilliseconds(1);
 
@@ -486,7 +487,9 @@ class BidirectionalStreamQuicImplTest
         QuicServerId(kDefaultServerHostName, kDefaultServerPort,
                      PRIVACY_MODE_DISABLED),
         /*require_confirmation=*/false, /*migrate_session_early*/ false,
-        /*migrate_session_on_network_change*/ false, kQuicYieldAfterPacketsRead,
+        /*migrate_session_on_network_change*/ false,
+        /*migrate_session_on_network_change_v2*/ false,
+        kQuicYieldAfterPacketsRead,
         QuicTime::Delta::FromMilliseconds(kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, DefaultQuicConfig(), &crypto_config_,
         "CONNECTION_UNKNOWN", dns_start, dns_end, &push_promise_index_, nullptr,

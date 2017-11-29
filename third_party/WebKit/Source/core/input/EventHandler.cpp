@@ -95,9 +95,9 @@
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/Scrollbar.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebInputEvent.h"
 #include "public/platform/WebMouseWheelEvent.h"
@@ -1870,7 +1870,7 @@ void EventHandler::ScheduleHoverStateUpdate() {
   // TODO(https://crbug.com/668758): Use a normal BeginFrame update for this.
   if (!hover_timer_.IsActive() &&
       !mouse_event_manager_->IsMousePositionUnknown())
-    hover_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    hover_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void EventHandler::ScheduleCursorUpdate() {

@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -195,14 +196,86 @@ class AddRemoveThread : public PlatformThread::Delegate,
 
 TEST(ObserverListTest, BasicTest) {
   ObserverList<Foo> observer_list;
+  const ObserverList<Foo>& const_observer_list = observer_list;
+
+  {
+    const ObserverList<Foo>::const_iterator it1 = const_observer_list.begin();
+    EXPECT_EQ(it1, const_observer_list.end());
+    // Iterator copy.
+    const ObserverList<Foo>::const_iterator it2 = it1;
+    EXPECT_EQ(it2, it1);
+    // Iterator assignment.
+    ObserverList<Foo>::const_iterator it3;
+    it3 = it2;
+    EXPECT_EQ(it3, it1);
+    EXPECT_EQ(it3, it2);
+    // Self assignment.
+    it3 = it3;
+    EXPECT_EQ(it3, it1);
+    EXPECT_EQ(it3, it2);
+  }
+
+  {
+    const ObserverList<Foo>::iterator it1 = observer_list.begin();
+    EXPECT_EQ(it1, observer_list.end());
+    // Iterator copy.
+    const ObserverList<Foo>::iterator it2 = it1;
+    EXPECT_EQ(it2, it1);
+    // Iterator assignment.
+    ObserverList<Foo>::iterator it3;
+    it3 = it2;
+    EXPECT_EQ(it3, it1);
+    EXPECT_EQ(it3, it2);
+    // Self assignment.
+    it3 = it3;
+    EXPECT_EQ(it3, it1);
+    EXPECT_EQ(it3, it2);
+  }
+
   Adder a(1), b(-1), c(1), d(-1), e(-1);
   Disrupter evil(&observer_list, &c);
 
   observer_list.AddObserver(&a);
   observer_list.AddObserver(&b);
 
-  EXPECT_TRUE(observer_list.HasObserver(&a));
-  EXPECT_FALSE(observer_list.HasObserver(&c));
+  EXPECT_TRUE(const_observer_list.HasObserver(&a));
+  EXPECT_FALSE(const_observer_list.HasObserver(&c));
+
+  {
+    const ObserverList<Foo>::const_iterator it1 = const_observer_list.begin();
+    EXPECT_NE(it1, const_observer_list.end());
+    // Iterator copy.
+    const ObserverList<Foo>::const_iterator it2 = it1;
+    EXPECT_EQ(it2, it1);
+    EXPECT_NE(it2, const_observer_list.end());
+    // Iterator assignment.
+    ObserverList<Foo>::const_iterator it3;
+    it3 = it2;
+    EXPECT_EQ(it3, it1);
+    EXPECT_EQ(it3, it2);
+    // Self assignment.
+    it3 = it3;
+    EXPECT_EQ(it3, it1);
+    EXPECT_EQ(it3, it2);
+  }
+
+  {
+    const ObserverList<Foo>::iterator it1 = observer_list.begin();
+    EXPECT_NE(it1, observer_list.end());
+    // Iterator copy.
+    const ObserverList<Foo>::iterator it2 = it1;
+    EXPECT_EQ(it2, it1);
+    EXPECT_NE(it2, observer_list.end());
+    // Iterator assignment.
+    ObserverList<Foo>::iterator it3;
+    it3 = it2;
+    EXPECT_EQ(it3, it1);
+    EXPECT_EQ(it3, it2);
+    // Self assignment.
+    it3 = it3;
+    EXPECT_EQ(it3, it1);
+    EXPECT_EQ(it3, it2);
+  }
 
   for (auto& observer : observer_list)
     observer.Observe(10);
@@ -222,6 +295,76 @@ TEST(ObserverListTest, BasicTest) {
   EXPECT_EQ(0, c.total);
   EXPECT_EQ(-10, d.total);
   EXPECT_EQ(0, e.total);
+}
+
+TEST(ObserverListTest, CompactsWhenNoActiveIterator) {
+  ObserverList<const Foo> ol;
+  const ObserverList<const Foo>& col = ol;
+
+  const Adder a(1);
+  const Adder b(2);
+  const Adder c(3);
+
+  ol.AddObserver(&a);
+  ol.AddObserver(&b);
+
+  EXPECT_TRUE(col.HasObserver(&a));
+  EXPECT_FALSE(col.HasObserver(&c));
+
+  EXPECT_TRUE(col.might_have_observers());
+
+  using It = ObserverList<const Foo>::const_iterator;
+
+  {
+    It it = col.begin();
+    EXPECT_NE(it, col.end());
+    It ita = it;
+    EXPECT_EQ(ita, it);
+    EXPECT_NE(++it, col.end());
+    EXPECT_NE(ita, it);
+    It itb = it;
+    EXPECT_EQ(itb, it);
+    EXPECT_EQ(++it, col.end());
+
+    EXPECT_TRUE(col.might_have_observers());
+    EXPECT_EQ(&*ita, &a);
+    EXPECT_EQ(&*itb, &b);
+
+    ol.RemoveObserver(&a);
+    EXPECT_TRUE(col.might_have_observers());
+    EXPECT_FALSE(col.HasObserver(&a));
+    EXPECT_EQ(&*itb, &b);
+
+    ol.RemoveObserver(&b);
+    EXPECT_TRUE(col.might_have_observers());
+    EXPECT_FALSE(col.HasObserver(&a));
+    EXPECT_FALSE(col.HasObserver(&b));
+
+    it = It();
+    ita = It();
+    EXPECT_TRUE(col.might_have_observers());
+    ita = itb;
+    itb = It();
+    EXPECT_TRUE(col.might_have_observers());
+    ita = It();
+    EXPECT_FALSE(col.might_have_observers());
+  }
+
+  ol.AddObserver(&a);
+  ol.AddObserver(&b);
+  EXPECT_TRUE(col.might_have_observers());
+  ol.Clear();
+  EXPECT_FALSE(col.might_have_observers());
+
+  ol.AddObserver(&a);
+  ol.AddObserver(&b);
+  EXPECT_TRUE(col.might_have_observers());
+  {
+    const It it = col.begin();
+    ol.Clear();
+    EXPECT_TRUE(col.might_have_observers());
+  }
+  EXPECT_FALSE(col.might_have_observers());
 }
 
 TEST(ObserverListTest, DisruptSelf) {
@@ -632,7 +775,7 @@ TEST(ObserverListThreadSafeTest, RemoveWhileNotificationIsRunning) {
 }
 
 TEST(ObserverListTest, Existing) {
-  ObserverList<Foo> observer_list(ObserverList<Foo>::NOTIFY_EXISTING_ONLY);
+  ObserverList<Foo> observer_list(ObserverListPolicy::EXISTING_ONLY);
   Adder a(1);
   AddInObserve<ObserverList<Foo> > b(&observer_list);
   Adder c(1);
@@ -658,8 +801,8 @@ TEST(ObserverListTest, Existing) {
 // Same as above, but for ObserverListThreadSafe
 TEST(ObserverListThreadSafeTest, Existing) {
   MessageLoop loop;
-  scoped_refptr<ObserverListThreadSafe<Foo> > observer_list(
-      new ObserverListThreadSafe<Foo>(ObserverList<Foo>::NOTIFY_EXISTING_ONLY));
+  scoped_refptr<ObserverListThreadSafe<Foo>> observer_list(
+      new ObserverListThreadSafe<Foo>(ObserverListPolicy::EXISTING_ONLY));
   Adder a(1);
   AddInObserve<ObserverListThreadSafe<Foo> > b(observer_list.get());
   Adder c(1);
@@ -717,7 +860,7 @@ TEST(ObserverListTest, ClearNotifyAll) {
 }
 
 TEST(ObserverListTest, ClearNotifyExistingOnly) {
-  ObserverList<Foo> observer_list(ObserverList<Foo>::NOTIFY_EXISTING_ONLY);
+  ObserverList<Foo> observer_list(ObserverListPolicy::EXISTING_ONLY);
   AddInClearObserve a(&observer_list);
 
   observer_list.AddObserver(&a);

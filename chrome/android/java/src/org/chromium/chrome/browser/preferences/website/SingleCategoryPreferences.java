@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.preferences.website;
 
 import android.content.DialogInterface;
 import android.content.res.Resources;
+import android.os.Build;
 import android.os.Bundle;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceChangeListener;
@@ -28,7 +29,6 @@ import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
@@ -448,7 +448,13 @@ public class SingleCategoryPreferences extends PreferenceFragment
         if (preference instanceof WebsitePreference) {
             WebsitePreference website = (WebsitePreference) preference;
             website.setFragment(SingleWebsitePreferences.class.getName());
-            website.putSiteIntoExtras(SingleWebsitePreferences.EXTRA_SITE);
+            // EXTRA_SITE re-uses already-fetched permissions, which we can only use if the Website
+            // was populated with data for all permission types.
+            if (mCategory.showAllSites()) {
+                website.putSiteIntoExtras(SingleWebsitePreferences.EXTRA_SITE);
+            } else {
+                website.putSiteAddressIntoExtras(SingleWebsitePreferences.EXTRA_SITE_ADDRESS);
+            }
         }
 
         return super.onPreferenceTreeClick(screen, preference);
@@ -653,7 +659,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
         // Configure/hide the notifications vibrate toggle, as needed.
         Preference notificationsVibrate =
                 getPreferenceScreen().findPreference(NOTIFICATIONS_VIBRATE_TOGGLE_KEY);
-        if (mCategory.showNotificationsSites() && !BuildInfo.isAtLeastO()) {
+        if (mCategory.showNotificationsSites() && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             notificationsVibrate.setOnPreferenceChangeListener(this);
             updateNotificationsVibrateCheckBox();
         } else {

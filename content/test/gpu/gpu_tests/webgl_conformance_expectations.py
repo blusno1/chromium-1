@@ -97,7 +97,7 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     # Were the failures caused by this gray area in the spec, now
     # forbidden?)
     self.Fail('conformance/extensions/ext-sRGB.html',
-        ['linux', 'mac', 'win'], bug=769989)
+        ['linux', 'mac', 'win', 'android'], bug=769989)
 
     # Need to implement new lifetime/deletion semantics.
     self.Fail('conformance/extensions/oes-vertex-array-object.html', bug=739604)
@@ -460,8 +460,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['mac', ('nvidia', 0xfe9), 'no_passthrough'], bug=635081)
     self.Fail('conformance/textures/misc/tex-input-validation.html',
         ['mac', ('nvidia', 0xfe9)], bug=635081)
-    self.Fail('conformance/canvas/drawingbuffer-static-canvas-test.html',
-        ['highsierra', ('nvidia', 0xfe9)], bug=775202)
+    self.Fail('conformance/glsl/bugs/init-array-with-loop.html',
+        ['mac', ('nvidia', 0xfe9)], bug=784817)
 
     # Linux failures
     self.Fail('conformance/extensions/webgl-compressed-texture-astc.html',
@@ -616,6 +616,9 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         bug=609883)
     self.Fail('conformance/extensions/webgl-compressed-texture-atc.html',
         ['android', ('qualcomm', 'Adreno (TM) 418')], bug=609883)
+    # This test is skipped because it is crashing the GPU process.
+    self.Skip('conformance/glsl/bugs/init-array-with-loop.html',
+        ['android', ('qualcomm', 'Adreno (TM) 418')], bug=784817)
     self.Fail('conformance/glsl/bugs/sampler-struct-function-arg.html',
         ['android', ('qualcomm', 'Adreno (TM) 418')], bug=609883)
     # This test is skipped because it is crashing the GPU process.

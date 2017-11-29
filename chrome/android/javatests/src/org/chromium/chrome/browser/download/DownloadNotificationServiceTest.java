@@ -21,8 +21,8 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.components.background_task_scheduler.BackgroundTaskScheduler;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
 import org.chromium.components.background_task_scheduler.TaskInfo;
@@ -168,7 +168,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure(message = "crbug.com/773346")
+    @DisabledTest(message = "crbug.com/773346")
     public void testPausingWithoutOngoingDownloads() {
         setupService();
         startNotificationService();
@@ -189,7 +189,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure(message = "crbug.com/773346")
+    @DisabledTest(message = "crbug.com/773346")
     public void testResumptionScheduledWithoutDownloadOperationIntent() throws Exception {
         MockBackgroundTaskScheduler scheduler = new MockBackgroundTaskScheduler();
         BackgroundTaskSchedulerFactory.setSchedulerForTesting(scheduler);
@@ -213,7 +213,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure(message = "crbug.com/653609")
+    @DisabledTest(message = "crbug.com/653609")
     public void testResumptionNotScheduledWithDownloadOperationIntent() {
         MockBackgroundTaskScheduler scheduler = new MockBackgroundTaskScheduler();
         BackgroundTaskSchedulerFactory.setSchedulerForTesting(scheduler);
@@ -236,7 +236,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure(message = "crbug.com/773346")
+    @DisabledTest(message = "crbug.com/773346")
     public void testResumptionNotScheduledWithoutAutoResumableDownload() throws Exception {
         MockBackgroundTaskScheduler scheduler = new MockBackgroundTaskScheduler();
         BackgroundTaskSchedulerFactory.setSchedulerForTesting(scheduler);
@@ -258,6 +258,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
+    @DisabledTest(message = "crbug.com/773346")
     public void testPausingWithOngoingDownloads() {
         setupService();
         Context mockContext = new AdvancedMockContext(getSystemContext());
@@ -291,7 +292,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure(message = "crbug.com/773346")
+    @DisabledTest(message = "crbug.com/773346")
     public void testAddingAndCancelingNotifications() {
         setupService();
         Context mockContext = new AdvancedMockContext(getSystemContext());
@@ -361,7 +362,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure
+    @DisabledTest(message = "crbug.com/773346")
     public void testDownloadSuccessNotification() {
         setupService();
         startNotificationService();
@@ -378,7 +379,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure
+    @DisabledTest(message = "crbug.com/773346")
     public void testResumeAllPendingDownloads() throws Exception {
         setupService();
         Context mockContext = new AdvancedMockContext(getSystemContext());
@@ -427,7 +428,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure(message = "crbug.com/773346")
+    @DisabledTest(message = "crbug.com/773346")
     public void testIncognitoDownloadCanceledOnServiceShutdown() throws Exception {
         setupService();
         Context mockContext = new AdvancedMockContext(getSystemContext());
@@ -457,7 +458,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure
+    @DisabledTest(message = "crbug.com/773346")
     public void testServiceWillStopOnCompletedDownload() throws Exception {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
@@ -478,7 +479,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure
+    @DisabledTest(message = "crbug.com/773346")
     public void testServiceWillStopOnFailedDownload() throws Exception {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
@@ -498,7 +499,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure
+    @DisabledTest(message = "crbug.com/773346")
     public void testServiceWillStopOnCancelledDownload() throws Exception {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
@@ -537,7 +538,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure(message = "crbug.com/773346")
+    @DisabledTest(message = "crbug.com/773346")
     public void testServiceWillNotStopOnPausedDownload() throws Exception {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
@@ -557,7 +558,7 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    @RetryOnFailure
+    @DisabledTest(message = "crbug.com/773346")
     public void testServiceWillNotStopWithOneOngoingDownload() throws Exception {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
@@ -587,10 +588,11 @@ public class DownloadNotificationServiceTest
     @Test
     @SmallTest
     @Feature({"Download"})
-    public void testServiceStopsIfCancelIsCalledWhenServiceIsStopped() {
+    @DisabledTest(message = "crbug.com/773346")
+    public void testForegroundServiceStopsIfCancelIsCalledWhenServiceIsStopped() {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
-        if (DownloadNotificationService.useForegroundService()) return;
+        if (!DownloadNotificationService.useForegroundService()) return;
 
         // Make sure that when the download fails, the service stops.
         setupService();
@@ -599,13 +601,38 @@ public class DownloadNotificationServiceTest
         ContentId id = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
         service.notifyDownloadProgress(id, "/path/to/test", Progress.createIndeterminateProgress(),
                 10L, 1000L, 10L, false, false, false, null);
-        Assert.assertFalse(service.hideSummaryNotificationIfNecessary(-1));
+        Assert.assertTrue(getService().isForegroundRunning());
         service.notifyDownloadFailed(id, "/path/to/test", null);
-        Assert.assertTrue(service.hideSummaryNotificationIfNecessary(-1));
+        Assert.assertFalse(getService().isForegroundRunning());
 
         // In the case of offline pages failures, cancel is called even after the download fails and
         // the service stops. Confirm that if this happens, the service will still stop.
         service.notifyDownloadCanceled(id);
-        Assert.assertTrue(service.hideSummaryNotificationIfNecessary(-1));
+        Assert.assertFalse(getService().isForegroundRunning());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Download"})
+    @DisabledTest(message = "crbug.com/773346")
+    public void testForegroundServiceStopsIfPauseIsCalledWhenServiceIsStopped() {
+        // This only applies to versions that uses the foreground service.
+        if (!DownloadNotificationService.useForegroundService()) return;
+
+        // Make sure that when the download fails, the service stops.
+        setupService();
+        startNotificationService();
+        DownloadNotificationService service = bindNotificationService();
+        ContentId id = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
+        service.notifyDownloadProgress(id, "/path/to/test", Progress.createIndeterminateProgress(),
+                10L, 1000L, 10L, false, false, false, null);
+        Assert.assertTrue(getService().isForegroundRunning());
+        service.notifyDownloadPaused(id, "/path/to/test", true, false, false, false, null);
+        Assert.assertFalse(getService().isForegroundRunning());
+
+        // In the case of offline pages pause, pause is called even after the download pauses and
+        // the service stops. Confirm that if this happens, the service will still stop.
+        service.notifyDownloadPaused(id, "/path/to/test", true, false, false, false, null);
+        Assert.assertFalse(getService().isForegroundRunning());
     }
 }

@@ -160,8 +160,9 @@ class SpdySessionTest : public PlatformTest {
   }
 
   void AddSSLSocketData() {
-    ssl_.cert = ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
-    ASSERT_TRUE(ssl_.cert);
+    ssl_.ssl_info.cert =
+        ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+    ASSERT_TRUE(ssl_.ssl_info.cert);
     session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl_);
   }
 
@@ -347,9 +348,7 @@ TEST_F(SpdySessionTest, GoAwayImmediatelyWithNoActiveStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-
-  session_ = TryCreateSpdySessionExpectingFailure(
-      http_session_.get(), key_, ERR_CONNECTION_CLOSED, NetLogWithSource());
+  CreateSpdySession();
   base::RunLoop().RunUntilIdle();
 
   EXPECT_FALSE(session_);
@@ -905,7 +904,7 @@ TEST_F(SpdySessionTest, ClientPing) {
   EXPECT_EQ(0, session_->pings_in_flight());
   EXPECT_GE(session_->next_ping_id(), 1U);
   EXPECT_FALSE(session_->check_ping_status_pending());
-  EXPECT_GE(session_->last_activity_time(), before_ping_time);
+  EXPECT_GE(session_->last_read_time(), before_ping_time);
 
   data.Resume();
   base::RunLoop().RunUntilIdle();
@@ -1479,9 +1478,12 @@ TEST_F(SpdySessionTest, CancelPushBeforeClaimed) {
       spdy_util_.ConstructSpdyPriority(4, 2, IDLE, true));
   SpdySerializedFrame rst_a(
       spdy_util_.ConstructSpdyRstStream(2, ERROR_CODE_REFUSED_STREAM));
+  SpdySerializedFrame rst_b(
+      spdy_util_.ConstructSpdyRstStream(4, ERROR_CODE_CANCEL));
   MockWrite writes[] = {
-      CreateMockWrite(req, 0), CreateMockWrite(priority_a, 2),
+      CreateMockWrite(req, 0),        CreateMockWrite(priority_a, 2),
       CreateMockWrite(priority_b, 6), CreateMockWrite(rst_a, 7),
+      CreateMockWrite(rst_b, 9),
   };
 
   SpdySerializedFrame push_a(spdy_util_.ConstructSpdyPush(
@@ -1494,7 +1496,7 @@ TEST_F(SpdySessionTest, CancelPushBeforeClaimed) {
   MockRead reads[] = {
       CreateMockRead(push_a, 1),          CreateMockRead(push_a_body, 3),
       MockRead(ASYNC, ERR_IO_PENDING, 4), CreateMockRead(push_b, 5),
-      MockRead(ASYNC, ERR_IO_PENDING, 8), MockRead(ASYNC, 0, 9)  // EOF
+      MockRead(ASYNC, ERR_IO_PENDING, 8), MockRead(ASYNC, 0, 10)  // EOF
   };
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
@@ -1796,7 +1798,7 @@ TEST_F(SpdySessionTest, FailedPing) {
   // We set last time we have received any data in 1 sec less than now.
   // CheckPingStatus will trigger timeout because hung interval is zero.
   base::TimeTicks now = base::TimeTicks::Now();
-  session_->last_activity_time_ = now - base::TimeDelta::FromSeconds(1);
+  session_->last_read_time_ = now - base::TimeDelta::FromSeconds(1);
   session_->CheckPingStatus(now);
   base::RunLoop().RunUntilIdle();
 
@@ -2599,7 +2601,7 @@ TEST_F(SpdySessionTest, ConnectionPooledWithTlsChannelId) {
   SequencedSocketData data(nullptr, 0, nullptr, 0);
   session_deps_.socket_factory->AddSocketDataProvider(&data);
 
-  ssl_.channel_id_sent = true;
+  ssl_.ssl_info.channel_id_sent = true;
   AddSSLSocketData();
 
   CreateNetworkSession();

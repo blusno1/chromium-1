@@ -18,6 +18,10 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kExecutionContext, "{{interface_name}}", "{{method.name}}");
   {%- endset %}
 
+  {% if method.is_ce_reactions %}
+  CEReactionsScope ceReactionsScope;
+  {% endif %}
+
   {% set function_call = func_call_with_prep_of_args(method, world_suffix) %}
 
   {% if 'exceptionState' in function_call or
@@ -531,9 +535,6 @@ void {{v8_class_or_partial}}::{{method.name}}MethodCallback{{world_suffix}}(cons
     contextData->ActivityLogger()->LogMethod("{{interface_name}}.{{method.name}}", info.Length(), loggerArgs.data());
   }
   {% endif %}
-  {% if method.is_ce_reactions %}
-  CEReactionsScope ceReactionsScope;
-  {% endif %}
   {% if method.is_custom %}
   {{v8_class}}::{{method.name}}MethodCustom(info);
   {% elif method.is_post_message %}
@@ -669,8 +670,8 @@ for (const auto& methodConfig : {{method.name}}MethodConfiguration)
 
 
 {######################################}
-{% macro install_conditionally_enabled_methods(secure_context_test_result) %}
-{% for method in conditionally_enabled_methods %}
+{% macro install_conditional_methods(secure_context_test_result) %}
+{% for method in conditional_methods %}
 {% filter secure_context(method.overloads.secure_context_test_all
                          if method.overloads else
                          method.secure_context_test,

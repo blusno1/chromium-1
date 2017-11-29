@@ -15,9 +15,10 @@
 namespace content {
 
 // Wrapper class that adds cross-origin resource sharing capabilities
-// (https://www.w3.org/TR/cors/), delegating requests as well as potential
-// preflight requests to the supplied |network_loader_factory|. It is owned by
-// the CORSURLLoaderFactory that created it.
+// (https://fetch.spec.whatwg.org/#http-cors-protocol), delegating requests as
+// well as potential preflight requests to the supplied
+// |network_loader_factory|. It is owned by the CORSURLLoaderFactory that
+// created it.
 class CONTENT_EXPORT CORSURLLoader : public mojom::URLLoader,
                                      public mojom::URLLoaderClient {
  public:
@@ -54,7 +55,7 @@ class CONTENT_EXPORT CORSURLLoader : public mojom::URLLoader,
   void OnTransferSizeUpdated(int32_t transfer_size_diff) override;
   void OnStartLoadingResponseBody(
       mojo::ScopedDataPipeConsumerHandle body) override;
-  void OnComplete(const network::URLLoaderStatus& status) override;
+  void OnComplete(const network::URLLoaderCompletionStatus& status) override;
 
  private:
   // Called when there is a connection error on the upstream pipe used for the
@@ -62,7 +63,7 @@ class CONTENT_EXPORT CORSURLLoader : public mojom::URLLoader,
   void OnUpstreamConnectionError();
 
   // Handles OnComplete() callback.
-  void HandleComplete(const network::URLLoaderStatus& status);
+  void HandleComplete(const network::URLLoaderCompletionStatus& status);
 
   // This raw URLLoaderFactory pointer is shared with the CORSURLLoaderFactory
   // that created and owns this object.

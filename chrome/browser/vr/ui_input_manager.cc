@@ -6,10 +6,12 @@
 
 #include <algorithm>
 
+#include "base/containers/adapters.h"
 #include "base/macros.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/model/controller_model.h"
 #include "chrome/browser/vr/model/reticle_model.h"
+#include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 // TODO(tiborg): Remove include once we use a generic type to pass scroll/fling
 // gestures.
@@ -43,27 +45,35 @@ bool IsScrollEvent(const GestureList& list) {
   return false;
 }
 
-void HitTestElements(UiElement* element,
+void HitTestElements(UiElement* root_element,
                      ReticleModel* reticle_model,
                      HitTestRequest* request) {
-  for (auto& child : element->children()) {
-    HitTestElements(child.get(), reticle_model, request);
+  std::vector<const UiElement*> elements;
+  for (auto& element : *root_element) {
+    if (element.IsVisible()) {
+      elements.push_back(&element);
+    }
   }
 
-  if (!element->IsHitTestable()) {
-    return;
-  }
+  std::vector<const UiElement*> sorted =
+      UiRenderer::GetElementsInDrawOrder(elements);
 
-  HitTestResult result;
-  element->HitTest(*request, &result);
-  if (result.type != HitTestResult::Type::kHits) {
-    return;
-  }
+  for (const auto* element : base::Reversed(sorted)) {
+    if (!element->IsHitTestable()) {
+      continue;
+    }
 
-  reticle_model->target_element_id = element->id();
-  reticle_model->target_local_point = result.local_hit_point;
-  reticle_model->target_point = result.hit_point;
-  request->max_distance_to_plane = result.distance_to_plane;
+    HitTestResult result;
+    element->HitTest(*request, &result);
+    if (result.type != HitTestResult::Type::kHits) {
+      continue;
+    }
+
+    reticle_model->target_element_id = element->id();
+    reticle_model->target_local_point = result.local_hit_point;
+    reticle_model->target_point = result.hit_point;
+    break;
+  }
 }
 
 }  // namespace
@@ -362,13 +372,20 @@ void UiInputManager::GetVisualTargetElement(
       controller_model.laser_origin +
       gfx::ScaleVector3d(controller_model.laser_direction, distance);
 
-  // Determine which UI element (if any) intersects the line between the eyes
-  // and the controller target position.
+  // Determine which UI element (if any) intersects the line between the ray
+  // origin and the controller target position. The ray origin will typically be
+  // the world origin (roughly the eye) to make targeting with a real controller
+  // more intuitive. For testing, however, we occasionally hit test along the
+  // laser precisely since this geometric accuracy is important and we are not
+  // dealing with a physical controller.
   float closest_element_distance =
       (reticle_model->target_point - kOrigin).Length();
 
   HitTestRequest request;
-  request.ray_origin = kOrigin;
+  request.ray_origin =
+      hit_test_strategy_ == HitTestStrategy::PROJECT_TO_WORLD_ORIGIN
+          ? kOrigin
+          : controller_model.laser_origin;
   request.ray_target = reticle_model->target_point;
   request.max_distance_to_plane = closest_element_distance;
   HitTestElements(&scene_->root_element(), reticle_model, &request);

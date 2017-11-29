@@ -28,6 +28,7 @@
 #include "core/workers/WorkerScriptLoader.h"
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -44,7 +45,6 @@
 #include "platform/network/http_names.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebAddressSpace.h"
 
 namespace blink {
@@ -172,14 +172,10 @@ void WorkerScriptLoader::DidReceiveData(const char* data, unsigned len) {
     return;
 
   if (!decoder_) {
-    if (!response_encoding_.IsEmpty()) {
-      decoder_ = TextResourceDecoder::Create(TextResourceDecoderOptions(
-          TextResourceDecoderOptions::kPlainTextContent,
-          WTF::TextEncoding(response_encoding_)));
-    } else {
-      decoder_ = TextResourceDecoder::Create(TextResourceDecoderOptions(
-          TextResourceDecoderOptions::kPlainTextContent, UTF8Encoding()));
-    }
+    decoder_ = TextResourceDecoder::Create(TextResourceDecoderOptions(
+        TextResourceDecoderOptions::kPlainTextContent,
+        response_encoding_.IsEmpty() ? UTF8Encoding()
+                                     : WTF::TextEncoding(response_encoding_)));
   }
 
   if (!len)

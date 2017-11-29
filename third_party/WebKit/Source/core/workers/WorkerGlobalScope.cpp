@@ -27,6 +27,7 @@
 
 #include "core/workers/WorkerGlobalScope.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/SourceLocation.h"
@@ -62,7 +63,6 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLRequest.h"
 
@@ -106,8 +106,9 @@ void WorkerGlobalScope::EvaluateClassicScript(
       source_code.length(),
       cached_meta_data.get() ? cached_meta_data->size() : 0);
   bool success = ScriptController()->Evaluate(
-      ScriptSourceCode(source_code, script_url), nullptr /* error_event */,
-      handler, v8_cache_options_);
+      ScriptSourceCode(source_code, ScriptSourceLocationType::kUnknown,
+                       script_url),
+      nullptr /* error_event */, handler, v8_cache_options_);
   ReportingProxy().DidEvaluateWorkerScript(success);
 }
 
@@ -200,8 +201,10 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls,
         complete_url, cached_meta_data.get()));
     ReportingProxy().WillEvaluateImportedScript(
         source_code.length(), cached_meta_data ? cached_meta_data->size() : 0);
-    ScriptController()->Evaluate(ScriptSourceCode(source_code, response_url),
-                                 &error_event, handler, v8_cache_options_);
+    ScriptController()->Evaluate(
+        ScriptSourceCode(source_code, ScriptSourceLocationType::kUnknown,
+                         response_url),
+        &error_event, handler, v8_cache_options_);
     if (error_event) {
       ScriptController()->RethrowExceptionFromImportedScript(error_event,
                                                              exception_state);
@@ -324,11 +327,12 @@ WorkerGlobalScope::WorkerGlobalScope(
       font_selector_(OffscreenFontSelector::Create(this)) {
   InstanceCounters::IncrementCounter(
       InstanceCounters::kWorkerGlobalScopeCounter);
-  SetSecurityOrigin(SecurityOrigin::Create(url_));
+  scoped_refptr<SecurityOrigin> security_origin = SecurityOrigin::Create(url_);
   if (creation_params->starter_origin) {
-    GetSecurityOrigin()->TransferPrivilegesFrom(
+    security_origin->TransferPrivilegesFrom(
         creation_params->starter_origin->CreatePrivilegeData());
   }
+  SetSecurityOrigin(std::move(security_origin));
   ApplyContentSecurityPolicyFromVector(
       *creation_params->content_security_policy_parsed_headers);
   SetWorkerSettings(std::move(creation_params->worker_settings));

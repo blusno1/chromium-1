@@ -15,6 +15,7 @@
 
 namespace metrics {
 class UkmBrowserTest;
+class UkmEGTestHelper;
 }
 
 namespace ukm {
@@ -45,26 +46,30 @@ class UkmRecorderImpl : public UkmRecorder {
   // Writes recordings into a report proto, and clears recordings.
   void StoreRecordingsInReport(Report* report);
 
-  const std::map<ukm::SourceId, std::unique_ptr<UkmSource>>& sources() const {
+  const std::map<SourceId, std::unique_ptr<UkmSource>>& sources() const {
     return sources_;
   }
 
   const std::vector<mojom::UkmEntryPtr>& entries() const { return entries_; }
 
- private:
-  friend ::metrics::UkmBrowserTest;
-  friend ::ukm::debug::DebugPage;
-
   // UkmRecorder:
   void UpdateSourceURL(SourceId source_id, const GURL& url) override;
+
+  virtual bool ShouldRestrictToWhitelistedSourceIds() const;
+
+ private:
+  friend ::metrics::UkmBrowserTest;
+  friend ::metrics::UkmEGTestHelper;
+  friend ::ukm::debug::DebugPage;
+
   void AddEntry(mojom::UkmEntryPtr entry) override;
 
   // Whether recording new data is currently allowed.
   bool recording_enabled_;
 
   // Contains newly added sources and entries of UKM metrics which periodically
-  // get serialized and cleared by BuildAndStoreLog().
-  std::map<ukm::SourceId, std::unique_ptr<UkmSource>> sources_;
+  // get serialized and cleared by StoreRecordingsInReport().
+  std::map<SourceId, std::unique_ptr<UkmSource>> sources_;
   std::vector<mojom::UkmEntryPtr> entries_;
 
   // Whitelisted Entry hashes, only the ones in this set will be recorded.

@@ -23,6 +23,8 @@
 #ifndef StyleResolver_h
 #define StyleResolver_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/animation/Interpolation.h"
 #include "core/animation/PropertyHandle.h"
@@ -37,8 +39,6 @@
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/ListHashSet.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -60,7 +60,6 @@ enum RuleMatchingBehavior { kMatchAllRules, kMatchAllRulesExcludingSMIL };
 // of stylesheets.
 class CORE_EXPORT StyleResolver final
     : public GarbageCollectedFinalized<StyleResolver> {
-  WTF_MAKE_NONCOPYABLE(StyleResolver);
 
  public:
   static StyleResolver* Create(Document& document) {
@@ -79,7 +78,7 @@ class CORE_EXPORT StyleResolver final
       Element&,
       const ComputedStyle& base_style,
       const ComputedStyle* parent_style,
-      CSSPropertyID,
+      const CSSProperty&,
       const CSSValue*);
 
   scoped_refptr<ComputedStyle> PseudoStyleForElement(
@@ -272,12 +271,6 @@ class CORE_EXPORT StyleResolver final
                         const CSSValue&,
                         bool inherited_only,
                         PropertyWhitelistType);
-  template <CSSPropertyPriority priority, ShouldUpdateNeedsApplyPass>
-  void ApplyPropertiesForApplyAtRule(StyleResolverState&,
-                                     const CSSValue&,
-                                     bool is_important,
-                                     NeedsApplyPass&,
-                                     PropertyWhitelistType);
 
   bool PseudoStyleForElementInternal(Element&,
                                      const PseudoStyleRequest&,
@@ -302,6 +295,7 @@ class CORE_EXPORT StyleResolver final
 
   bool print_media_type_ = false;
   bool was_viewport_resized_ = false;
+  DISALLOW_COPY_AND_ASSIGN(StyleResolver);
 };
 
 }  // namespace blink

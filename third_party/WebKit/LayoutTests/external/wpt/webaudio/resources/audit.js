@@ -69,7 +69,13 @@ window.Audit = (function() {
               String(target) :
               String(target.slice(0, options.numberOfArrayElements)) + '...';
           targetString = '[' + arrayElements + ']';
+        } else if (target === null) {
+          // null is an object, so we need to handle this specially.
+          targetString = String(target);
         } else {
+          // We're expecting String() to return something like "[object Foo]",
+          // so we split the string to get the object type "Foo".  This is
+          // pretty fragile.
           targetString = '' + String(targetString).split(/[\s\]]/)[1];
         }
         break;
@@ -112,6 +118,8 @@ window.Audit = (function() {
       this._expectedDescription = null;
 
       this._detail = '';
+      // If true and the test failed, print the actual value at the
+      // end of the message.
       this._printActualForFailure = true;
 
       this._result = null;
@@ -167,10 +175,8 @@ window.Audit = (function() {
 
       // If there is a second operand (i.e. expected value), we have to build
       // the string for it as well.
-      if (this._expected !== null) {
-        this._detail =
-            this._detail.replace(/\$\{expected\}/g, this._expectedDescription);
-      }
+      this._detail =
+          this._detail.replace(/\$\{expected\}/g, this._expectedDescription);
 
       // If there is any property in |_options|, replace the property name
       // with the value.
@@ -616,7 +622,8 @@ window.Audit = (function() {
         passDetail = '${actual} contains only the constant ${expected}.';
       } else {
         let counter = 0;
-        failDetail = 'Expected ${expected} for all values but found ' +
+        failDetail =
+            '${actual}: Expected ${expected} for all values but found ' +
             numberOfErrors + ' unexpected values: ';
         failDetail += '\n\tIndex\tActual';
         for (let errorIndex in errors) {

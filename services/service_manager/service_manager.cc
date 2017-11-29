@@ -275,8 +275,9 @@ class ServiceManager::Instance
     runner_ = service_manager_->service_process_launcher_factory_->Create(path);
     if (!runner_)
       return false;
+    // TODO(tsepez): use actual sandbox type. https://crbug.com/788778
     mojom::ServicePtr service = runner_->Start(
-        identity_, sandbox_type,
+        identity_, SANDBOX_TYPE_NO_SANDBOX,
         base::Bind(&Instance::PIDAvailable, weak_factory_.GetWeakPtr()));
     StartWithService(std::move(service));
     return true;
@@ -835,7 +836,7 @@ ServiceManager::ServiceManager(std::unique_ptr<ServiceProcessLauncherFactory>
                      InstanceType::kSingleton, std::move(specs));
 
   mojom::ServicePtr service;
-  service_context_.reset(new ServiceContext(base::MakeUnique<ServiceImpl>(this),
+  service_context_.reset(new ServiceContext(std::make_unique<ServiceImpl>(this),
                                             mojo::MakeRequest(&service)));
   service_manager_instance_->StartWithService(std::move(service));
 
@@ -1001,7 +1002,7 @@ void ServiceManager::Connect(std::unique_ptr<ConnectParams> params) {
 }
 
 void ServiceManager::StartService(const Identity& identity) {
-  auto params = base::MakeUnique<ConnectParams>();
+  auto params = std::make_unique<ConnectParams>();
   params->set_source(CreateServiceManagerIdentity());
 
   Identity target_identity = identity;
@@ -1027,7 +1028,7 @@ void ServiceManager::RegisterService(
     const Identity& identity,
     mojom::ServicePtr service,
     mojom::PIDReceiverRequest pid_receiver_request) {
-  auto params = base::MakeUnique<ConnectParams>();
+  auto params = std::make_unique<ConnectParams>();
 
   if (!pid_receiver_request.is_pending()) {
     mojom::PIDReceiverPtr pid_receiver;
@@ -1138,7 +1139,7 @@ ServiceManager::Instance* ServiceManager::CreateInstance(
     const InterfaceProviderSpecMap& specs) {
   CHECK(target.user_id() != mojom::kInheritUserID);
 
-  auto instance = base::MakeUnique<Instance>(this, target, std::move(specs));
+  auto instance = std::make_unique<Instance>(this, target, std::move(specs));
   Instance* raw_instance = instance.get();
 
   instances_.insert(std::make_pair(raw_instance, std::move(instance)));

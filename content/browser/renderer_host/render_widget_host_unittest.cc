@@ -120,7 +120,8 @@ class MockInputRouter : public InputRouter {
   void SetFrameTreeNodeId(int frameTreeNodeId) override {}
   cc::TouchAction AllowedTouchAction() override { return cc::kTouchActionAuto; }
   void SetForceEnableZoom(bool enabled) override {}
-  void BindHost(mojom::WidgetInputHandlerHostRequest request) override {}
+  void BindHost(mojom::WidgetInputHandlerHostRequest request,
+                bool frame_handler) override {}
 
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& message) override {
@@ -2900,6 +2901,7 @@ TEST_F(RenderWidgetHostTest, FrameToken_RendererCrash) {
   host_->RendererExited(base::TERMINATION_STATUS_PROCESS_CRASHED, -1);
   EXPECT_EQ(0u, host_->queued_messages_.size());
   EXPECT_EQ(0u, host_->processed_frame_messages_count());
+  host_->SetView(view_.get());
   host_->Init();
 
   host_->OnMessageReceived(
@@ -2912,6 +2914,18 @@ TEST_F(RenderWidgetHostTest, FrameToken_RendererCrash) {
   host_->SubmitCompositorFrame(local_surface_id, std::move(frame), nullptr, 0);
   EXPECT_EQ(0u, host_->queued_messages_.size());
   EXPECT_EQ(1u, host_->processed_frame_messages_count());
+}
+
+TEST_F(RenderWidgetHostTest, InflightEventCountResetsAfterRebind) {
+  // Simulate a keyboard event.
+  SimulateKeyboardEvent(WebInputEvent::kRawKeyDown);
+
+  EXPECT_EQ(1u, host_->in_flight_event_count());
+  mojom::WidgetPtr widget;
+  std::unique_ptr<MockWidgetImpl> widget_impl =
+      std::make_unique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+  host_->SetWidget(std::move(widget));
+  EXPECT_EQ(0u, host_->in_flight_event_count());
 }
 
 }  // namespace content

@@ -63,8 +63,7 @@ source_set("wayland") {
 
   deps = [
     ":aura_shell_protocol",
-    "//ash",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//components/exo",
     "//device/gamepad",
@@ -120,6 +119,8 @@ source_set("unit_tests") {
     ":wayland",
     "//base",
     "//components/exo",
+    "//components/exo:test_support",
+    "//skia",
     "//testing/gtest",
     "//third_party/wayland:wayland_client",
   ]
@@ -310,8 +311,9 @@ test("wayland_client_perftests") {
     ":client_support",
     ":simple",
     ":wayland",
+    "//ash",
     "//ash:test_support_without_content",
-    "//ash/public/cpp:ash_public_cpp",
+    "//ash/public/cpp",
     "//base",
     "//base/test:test_support",
     "//cc:test_support",
@@ -320,6 +322,7 @@ test("wayland_client_perftests") {
     "//mojo/edk/embedder:headers",
     "//testing/perf",
     "//ui/aura",
+    "//ui/aura:test_support",
     "//ui/base",
     "//ui/compositor:test_support",
     "//ui/events:gesture_detection",

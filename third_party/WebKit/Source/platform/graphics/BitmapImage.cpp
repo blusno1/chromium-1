@@ -26,6 +26,7 @@
 
 #include "platform/graphics/BitmapImage.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "platform/Timer.h"
 #include "platform/geometry/FloatRect.h"
@@ -43,7 +44,6 @@
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/web/WebSettings.h"
 
@@ -413,6 +413,9 @@ PaintImage BitmapImage::PaintImageForCurrentFrame() {
 scoped_refptr<Image> BitmapImage::ImageForDefaultFrame() {
   if (FrameCount() > 1) {
     PaintImage paint_image = FrameAtIndex(PaintImage::kDefaultFrameIndex);
+    if (!paint_image)
+      return nullptr;
+
     if (paint_image.ShouldAnimate()) {
       // To prevent the compositor from animating this image, we set the
       // animation count to kAnimationNone. This makes the image essentially
@@ -717,7 +720,7 @@ bool BitmapImage::InternalAdvanceAnimation(AnimationAdvancement advancement) {
         frame_timer_ = WTF::WrapUnique(new TaskRunnerTimer<BitmapImage>(
             task_runner_, this,
             &BitmapImage::NotifyObserversOfAnimationAdvance));
-        frame_timer_->StartOneShot(0, BLINK_FROM_HERE);
+        frame_timer_->StartOneShot(TimeDelta(), BLINK_FROM_HERE);
       }
 
       return false;

@@ -27,6 +27,7 @@
 #include "modules/media_controls/MediaControlsImpl.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/css/CSSStyleDeclaration.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/MutationObserverInit.h"
 #include "core/dom/MutationRecord.h"
@@ -153,8 +154,9 @@ bool ShouldShowCastButton(HTMLMediaElement& media_element) {
   // false to make sure the overlay does not appear.
   Document& document = media_element.GetDocument();
   if (document.GetSettings() &&
-      !document.GetSettings()->GetMediaControlsEnabled())
+      !document.GetSettings()->GetMediaControlsEnabled()) {
     return false;
+  }
 
   // The page disabled the button via the attribute.
   if (media_element.ControlsListInternal()->ShouldHideRemotePlayback()) {
@@ -987,6 +989,9 @@ void MediaControlsImpl::UpdateOverflowMenuWanted() const {
   }
 
   MaybeRecordElementsDisplayed();
+
+  if (download_iph_manager_)
+    download_iph_manager_->UpdateInProductHelp();
 }
 
 void MediaControlsImpl::DefaultEventHandler(Event* event) {
@@ -1282,7 +1287,7 @@ void MediaControlsImpl::NotifyElementSizeChanged(DOMRectReadOnly* new_size) {
 
   // Don't bother to do any work if this matches the most recent size.
   if (old_size != size_)
-    element_size_changed_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    element_size_changed_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void MediaControlsImpl::ElementSizeChangedTimerFired(TimerBase*) {
@@ -1413,6 +1418,9 @@ void MediaControlsImpl::ComputeWhichControlsFit() {
     overlay_play_button_->SetDoesFit(does_fit);
   }
 
+  if (download_iph_manager_)
+    download_iph_manager_->UpdateInProductHelp();
+
   MaybeRecordElementsDisplayed();
 }
 
@@ -1435,6 +1443,7 @@ void MediaControlsImpl::MaybeRecordElementsDisplayed() const {
       current_time_display_.Get(),
       duration_display_.Get(),
       overlay_play_button_.Get(),
+      overlay_cast_button_.Get(),
   };
 
   // Record which controls are used.
@@ -1443,9 +1452,6 @@ void MediaControlsImpl::MaybeRecordElementsDisplayed() const {
       element->MaybeRecordDisplayed();
   }
   overflow_menu_->MaybeRecordDisplayed();
-
-  if (download_iph_manager_)
-    download_iph_manager_->UpdateInProductHelp();
 }
 
 void MediaControlsImpl::PositionPopupMenu(Element* popup_menu) {
@@ -1474,10 +1480,10 @@ void MediaControlsImpl::PositionPopupMenu(Element* popup_menu) {
   bottom_str_value.append(kPx);
   right_str_value.append(kPx);
 
-  popup_menu->style()->setProperty("bottom", bottom_str_value, kImportant,
-                                   ASSERT_NO_EXCEPTION);
-  popup_menu->style()->setProperty("right", right_str_value, kImportant,
-                                   ASSERT_NO_EXCEPTION);
+  popup_menu->style()->setProperty(&GetDocument(), "bottom", bottom_str_value,
+                                   kImportant, ASSERT_NO_EXCEPTION);
+  popup_menu->style()->setProperty(&GetDocument(), "right", right_str_value,
+                                   kImportant, ASSERT_NO_EXCEPTION);
 }
 
 void MediaControlsImpl::Invalidate(Element* element) {

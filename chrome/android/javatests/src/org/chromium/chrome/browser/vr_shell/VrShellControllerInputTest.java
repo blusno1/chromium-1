@@ -19,6 +19,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -40,7 +41,7 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG, "enable-features=VrShell"})
+        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
 @Restriction({RESTRICTION_TYPE_DEVICE_DAYDREAM, RESTRICTION_TYPE_VIEWER_DAYDREAM})
 public class VrShellControllerInputTest {
     // We explicitly instantiate a rule here instead of using parameterization since this class
@@ -59,6 +60,7 @@ public class VrShellControllerInputTest {
      * Verifies that swiping up/down/left/right on the Daydream controller's
      * touchpad scrolls the webpage while in the VR browser.
      */
+    @DisabledTest(message = "crbug.com/786200")
     @Test
     @MediumTest
     public void testControllerScrolling() throws InterruptedException {

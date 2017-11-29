@@ -11,13 +11,11 @@
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 
+// Height of the toolbar.
+extern const CGFloat kToolbarHeight;
+
 // The time delay before non-initial button images are loaded.
 extern const int64_t kNonInitialImageAdditionDelayNanosec;
-
-// Notification that the tools menu has been requested to be shown.
-extern NSString* const kMenuWillShowNotification;
-// Notification that the tools menu is closed.
-extern NSString* const kMenuWillHideNotification;
 
 // Accessibility identifier of the toolbar view.
 extern NSString* const kToolbarIdentifier;

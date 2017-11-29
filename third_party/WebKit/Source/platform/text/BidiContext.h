@@ -23,9 +23,9 @@
 #ifndef BidiContext_h
 #define BidiContext_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/ThreadSafeRefCounted.h"
 #include "platform/wtf/text/Unicode.h"
 
@@ -41,7 +41,7 @@ class PLATFORM_EXPORT BidiContext : public ThreadSafeRefCounted<BidiContext> {
       WTF::Unicode::CharDirection,
       bool override = false,
       BidiEmbeddingSource = kFromStyleOrDOM,
-      BidiContext* parent = 0);
+      BidiContext* parent = nullptr);
 
   BidiContext* Parent() const { return parent_.get(); }
   unsigned char Level() const { return level_; }

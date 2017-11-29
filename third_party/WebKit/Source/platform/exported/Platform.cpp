@@ -64,7 +64,6 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
 #include "public/platform/modules/webmidi/WebMIDIAccessor.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "third_party/WebKit/common/feature_policy/feature_policy.h"
 #include "third_party/WebKit/common/origin_trials/trial_policy.h"
 
 namespace blink {
@@ -207,6 +206,11 @@ std::unique_ptr<WebMIDIAccessor> Platform::CreateMIDIAccessor(
 }
 
 std::unique_ptr<WebStorageNamespace> Platform::CreateLocalStorageNamespace() {
+  return nullptr;
+}
+
+std::unique_ptr<WebStorageNamespace> Platform::CreateSessionStorageNamespace(
+    int64_t namespace_id) {
   return nullptr;
 }
 

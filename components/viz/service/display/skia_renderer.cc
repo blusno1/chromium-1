@@ -7,7 +7,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
-#include "cc/base/render_surface_filters.h"
 #include "cc/resources/scoped_resource.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -87,7 +86,7 @@ ResourceFormat SkiaRenderer::BackbufferFormat() const {
 }
 
 void SkiaRenderer::BeginDrawingFrame() {
-  TRACE_EVENT0("cc", "SkiaRenderer::BeginDrawingFrame");
+  TRACE_EVENT0("viz", "SkiaRenderer::BeginDrawingFrame");
   // Copied from GLRenderer.
   bool use_sync_query_ = false;
   scoped_refptr<ResourceFence> read_lock_fence;
@@ -113,7 +112,7 @@ void SkiaRenderer::BeginDrawingFrame() {
 }
 
 void SkiaRenderer::FinishDrawingFrame() {
-  TRACE_EVENT0("cc", "SkiaRenderer::FinishDrawingFrame");
+  TRACE_EVENT0("viz", "SkiaRenderer::FinishDrawingFrame");
   if (settings_->show_overdraw_feedback) {
     sk_sp<SkImage> image = overdraw_surface_->makeImageSnapshot();
     SkPaint paint;
@@ -326,7 +325,7 @@ void SkiaRenderer::DoDrawQuad(const DrawQuad* quad,
     current_canvas_->save();
   }
 
-  TRACE_EVENT0("cc", "SkiaRenderer::DoDrawQuad");
+  TRACE_EVENT0("viz", "SkiaRenderer::DoDrawQuad");
   gfx::Transform quad_rect_matrix;
   QuadRectTransform(&quad_rect_matrix,
                     quad->shared_quad_state->quad_to_target_transform,
@@ -447,7 +446,7 @@ void SkiaRenderer::DrawPictureQuad(const PictureDrawQuad* quad) {
   const bool disable_image_filtering =
       disable_picture_quad_image_filtering_ || quad->nearest_neighbor;
 
-  TRACE_EVENT0("cc", "SkiaRenderer::DrawPictureQuad");
+  TRACE_EVENT0("viz", "SkiaRenderer::DrawPictureQuad");
 
   SkCanvas* raster_canvas = current_canvas_;
 

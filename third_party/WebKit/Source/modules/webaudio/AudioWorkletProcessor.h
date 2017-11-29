@@ -18,6 +18,8 @@ namespace blink {
 class AudioBus;
 class AudioWorkletGlobalScope;
 class AudioWorkletProcessorDefinition;
+class MessagePort;
+class ExecutionContext;
 
 // AudioWorkletProcessor class represents the active instance created from
 // AudioWorkletProcessorDefinition. |AudioWorkletNodeHandler| invokes
@@ -29,13 +31,13 @@ class MODULES_EXPORT AudioWorkletProcessor : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static AudioWorkletProcessor* Create(AudioWorkletGlobalScope*,
-                                       const String& name);
-  virtual ~AudioWorkletProcessor();
+  // This static factory should be called after an instance of
+  // |AudioWorkletNode| gets created by user-supplied JS code in the main
+  // thread. This factory must not be called by user in
+  // |AudioWorkletGlobalScope|.
+  static AudioWorkletProcessor* Create(ExecutionContext*);
 
-  void SetInstance(v8::Isolate*, v8::Local<v8::Object> instance);
-
-  v8::Local<v8::Object> InstanceLocal(v8::Isolate*);
+  ~AudioWorkletProcessor() {}
 
   // |AudioWorkletHandler| invokes this method to process audio.
   bool Process(
@@ -46,15 +48,30 @@ class MODULES_EXPORT AudioWorkletProcessor : public ScriptWrappable {
 
   const String& Name() const { return name_; }
 
+  // Mark this processor as "not runnable" so it does not execute the
+  // user-supplied code even after the associated node is connected to the
+  // graph.
+  void MarkNonRunnable() { is_runnable_ = false; }
+  bool IsRunnable() { return is_runnable_; }
+
+  // IDL
+  MessagePort* port() const;
+
   void Trace(blink::Visitor*);
-  void TraceWrappers(const ScriptWrappableVisitor*) const;
 
  private:
-  AudioWorkletProcessor(AudioWorkletGlobalScope*, const String& name);
+  AudioWorkletProcessor(AudioWorkletGlobalScope*,
+                        const String& name,
+                        MessagePort*);
 
   Member<AudioWorkletGlobalScope> global_scope_;
-  TraceWrapperV8Reference<v8::Object> instance_;
+  Member<MessagePort> processor_port_;
+
   const String name_;
+
+  // Becomes |false| when Process() method throws an exception from the the
+  // user-supplied code. It is an irreversible transition.
+  bool is_runnable_ = true;
 };
 
 }  // namespace blink

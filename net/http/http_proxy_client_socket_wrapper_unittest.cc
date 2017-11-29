@@ -90,6 +90,7 @@ class HttpProxyClientSocketWrapperTest
         idle_connection_timeout_seconds_(kIdleConnectionTimeoutSeconds),
         reduced_ping_timeout_seconds_(kPingTimeoutSecs),
         migrate_sessions_on_network_change_(false),
+        migrate_sessions_on_network_change_v2_(false),
         migrate_sessions_early_(false),
         allow_server_migration_(false),
         race_cert_verification_(false),
@@ -113,10 +114,16 @@ class HttpProxyClientSocketWrapperTest
         &crypto_client_stream_factory_, &random_generator_, &clock_,
         kDefaultMaxPacketSize, /*user_agent_id=*/kUserAgent,
         store_server_configs_in_properties_,
+        /*close_sessions_on_ip_change=*/true,
         /*mark_quic_broken_when_network_blackholes=*/false,
         idle_connection_timeout_seconds_, reduced_ping_timeout_seconds_,
+        /*max_time_before_crypto_handshake_seconds=*/
+        kMaxTimeForCryptoHandshakeSecs,
+        /*max_idle_time_before_crypto_handshake_seconds=*/
+        kInitialIdleTimeoutSecs,
         /*connect_using_default_network=*/true,
-        migrate_sessions_on_network_change_, migrate_sessions_early_,
+        migrate_sessions_on_network_change_,
+        migrate_sessions_on_network_change_v2_, migrate_sessions_early_,
         allow_server_migration_, race_cert_verification_, estimate_initial_rtt_,
         connection_options_, client_connection_options_,
         /*enable_token_binding=*/false));
@@ -208,6 +215,7 @@ class HttpProxyClientSocketWrapperTest
   int idle_connection_timeout_seconds_;
   int reduced_ping_timeout_seconds_;
   bool migrate_sessions_on_network_change_;
+  bool migrate_sessions_on_network_change_v2_;
   bool migrate_sessions_early_;
   bool allow_server_migration_;
   bool race_cert_verification_;

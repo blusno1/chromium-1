@@ -73,10 +73,36 @@ const struct {
     {ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN},
     {ui::VKEY_F4, ui::EF_ALT_DOWN}};
 
-class CustomFrameView : public views::NonClientFrameView {
+class CustomFrameView : public ash::CustomFrameViewAshBase {
  public:
+  using ShapeRects = std::vector<gfx::Rect>;
+
   explicit CustomFrameView(views::Widget* widget) : widget_(widget) {}
   ~CustomFrameView() override {}
+
+  // Overridden from ash::CustomFrameViewAshBase:
+  void SetShouldPaintHeader(bool paint) override {
+    aura::Window* window = widget_->GetNativeWindow();
+    ui::Layer* layer = window->layer();
+    if (paint) {
+      if (layer->alpha_shape()) {
+        layer->SetAlphaShape(nullptr);
+        layer->SetMasksToBounds(false);
+      }
+      return;
+    }
+
+    int inset = window->GetProperty(aura::client::kTopViewInset);
+    if (inset <= 0)
+      return;
+
+    gfx::Rect bound(bounds().size());
+    bound.Inset(0, inset, 0, 0);
+    std::unique_ptr<ShapeRects> shape = std::make_unique<ShapeRects>();
+    shape->push_back(bound);
+    layer->SetAlphaShape(std::move(shape));
+    layer->SetMasksToBounds(true);
+  }
 
   // Overridden from views::NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override { return bounds(); }
@@ -883,7 +909,7 @@ bool ShellSurface::CanResize() const {
 
 bool ShellSurface::CanMaximize() const {
   // Shell surfaces in system modal container cannot be maximized.
-  if (container_ == ash::kShellWindowId_SystemModalContainer)
+  if (container_ != ash::kShellWindowId_DefaultContainer)
     return false;
 
   // Non-transient shell surfaces can be maximized.
@@ -1365,7 +1391,7 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   window_state->set_ignore_keyboard_bounds_change(movement_disabled);
 
   // AutoHide shelf in fullscreen state.
-  window_state->set_hide_shelf_when_fullscreen(false);
+  window_state->SetHideShelfWhenFullscreen(false);
 
   // Fade visibility animations for non-activatable windows.
   if (!activatable_) {

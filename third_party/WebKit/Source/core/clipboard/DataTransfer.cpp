@@ -124,10 +124,8 @@ class DraggedNodeImageBuilder {
 
     PropertyTreeState border_box_properties = PropertyTreeState::Root();
     if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
-      border_box_properties = *layer->GetLayoutObject()
-                                   .FirstFragment()
-                                   .GetRarePaintData()
-                                   ->LocalBorderBoxProperties();
+      border_box_properties =
+          *layer->GetLayoutObject().FirstFragment().LocalBorderBoxProperties();
     }
     return DataTransfer::CreateDragImageForFrame(
         *local_frame_, 1.0f,
@@ -460,12 +458,13 @@ static void WriteImageToDataObject(DataObject* data_object,
   if (!cached_image || !cached_image->GetImage() || !cached_image->IsLoaded())
     return;
 
-  scoped_refptr<SharedBuffer> image_buffer = cached_image->GetImage()->Data();
+  Image* image = cached_image->GetImage();
+  scoped_refptr<SharedBuffer> image_buffer = image->Data();
   if (!image_buffer || !image_buffer->size())
     return;
 
   data_object->AddSharedBuffer(
-      image_buffer, image_url, cached_image->GetImage()->FilenameExtension(),
+      image_buffer, image_url, image->FilenameExtension(),
       cached_image->GetResponse().HttpHeaderFields().Get(
           HTTPNames::Content_Disposition));
 }

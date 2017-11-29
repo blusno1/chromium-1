@@ -45,6 +45,7 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/url_loader_factory.mojom.h"
+#include "content/public/common/url_utils.h"
 #include "net/base/net_errors.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
@@ -594,8 +595,7 @@ void NavigatorImpl::DidNavigate(
   // <meta> elements - we need to reset CSP and Feature Policy.
   if (!is_same_document_navigation) {
     render_frame_host->ResetContentSecurityPolicies();
-    frame_tree_node->ResetCspHeaders();
-    frame_tree_node->ResetFeaturePolicyHeader();
+    frame_tree_node->ResetForNavigation();
   }
 
   frame_tree_node->render_manager()->DidNavigateFrame(
@@ -1162,7 +1162,7 @@ void NavigatorImpl::RequestNavigation(
         nullptr,  // body
         mojo::ScopedDataPipeConsumerHandle(), scoped_request->common_params(),
         scoped_request->request_params(), scoped_request->is_view_source(),
-        base::nullopt);
+        base::nullopt, scoped_request->devtools_navigation_token());
     return;
   }
 

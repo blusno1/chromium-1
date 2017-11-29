@@ -17,6 +17,7 @@
 class NightLightClient;
 class NotificationPlatformBridge;
 class TabletModeClient;
+class WallpaperControllerClient;
 
 namespace lock_screen_apps {
 class StateController;
@@ -37,6 +38,7 @@ class IdleActionWarningObserver;
 class LowDiskNotification;
 class NetworkPrefStateObserver;
 class NetworkThrottlingObserver;
+class PowerMetricsReporter;
 class PowerPrefs;
 class RendererFreezer;
 class ShutdownPolicyForwarder;
@@ -83,6 +85,7 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<IdleActionWarningObserver> idle_action_warning_observer_;
   std::unique_ptr<DataPromoNotification> data_promo_notification_;
   std::unique_ptr<RendererFreezer> renderer_freezer_;
+  std::unique_ptr<PowerMetricsReporter> power_metrics_reporter_;
   std::unique_ptr<WakeOnWifiManager> wake_on_wifi_manager_;
   std::unique_ptr<NetworkThrottlingObserver> network_throttling_observer_;
 
@@ -113,6 +116,7 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
       lock_screen_apps_state_controller_;
 
   std::unique_ptr<NightLightClient> night_light_client_;
+  std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_;
 
   // TODO(estade): Remove this when Chrome OS uses native notifications by
   // default (as it will be instantiated elsewhere). For now it's necessary to

@@ -462,9 +462,8 @@ class LayerTreeHostContextCacheTest : public LayerTreeHostTest {
     // Create the main viz::ContextProvider with a MockContextSupport.
     auto worker_support = std::make_unique<MockContextSupport>();
     mock_worker_context_support_ = worker_support.get();
-    auto test_worker_context_provider = TestContextProvider::Create(
+    auto test_worker_context_provider = TestContextProvider::CreateWorker(
         TestWebGraphicsContext3D::Create(), std::move(worker_support));
-    test_worker_context_provider->BindToCurrentThread();
 
     // At init, visibility is set to true, so SetAggressivelyFreeResources will
     // be disabled.
@@ -8131,6 +8130,17 @@ class LayerTreeHostTestImageAnimation : public LayerTreeHostTest {
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestImageAnimation);
+
+class LayerTreeHostTestImageAnimationSynchronousScheduling
+    : public LayerTreeHostTestImageAnimation {
+ public:
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    LayerTreeHostTestImageAnimation::InitializeSettings(settings);
+    settings->using_synchronous_renderer_compositor = true;
+  }
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestImageAnimationSynchronousScheduling);
 
 class LayerTreeHostTestImageDecodingHints : public LayerTreeHostTest {
  public:

@@ -444,12 +444,17 @@ _IPC_ENUM_TRAITS_DEPRECATED = (
     'You are using IPC_ENUM_TRAITS() in your code. It has been deprecated.\n'
     'See http://www.chromium.org/Home/chromium-security/education/security-tips-for-ipc')
 
+_JAVA_MULTIPLE_DEFINITION_EXCLUDED_PATHS = [
+    r".*[\\\/]BuildHooksAndroidImpl\.java",
+    r".*[\\\/]LicenseContentProvider\.java",
+]
 
 # These paths contain test data and other known invalid JSON files.
 _KNOWN_INVALID_JSON_FILE_PATTERNS = [
     r'test[\\\/]data[\\\/]',
     r'^components[\\\/]policy[\\\/]resources[\\\/]policy_templates\.json$',
     r'^third_party[\\\/]protobuf[\\\/]',
+    r'^third_party[\\\/]WebKit[\\\/]LayoutTests[\\\/]external[\\\/]wpt[\\\/]',
 ]
 
 
@@ -891,7 +896,7 @@ def _CheckUnwantedDependencies(input_api, output_api):
       warning_subjects.add("imports")
 
   for path, rule_type, rule_description in deps_checker.CheckAddedJavaImports(
-      added_java_imports):
+      added_java_imports, _JAVA_MULTIPLE_DEFINITION_EXCLUDED_PATHS):
     path = input_api.os_path.relpath(path, input_api.PresubmitLocalPath())
     description_with_path = '%s\n    %s' % (path, rule_description)
     if rule_type == Rule.DISALLOW:
@@ -1503,11 +1508,15 @@ def _MatchesFile(input_api, patterns, path):
   return False
 
 
-def _CheckIpcOwners(input_api, output_api):
-  """Checks that affected files involving IPC have an IPC OWNERS rule.
+def _GetOwnersFilesToCheckForIpcOwners(input_api):
+  """Gets a list of OWNERS files to check for correct security owners.
 
-  Whether or not a file affects IPC is determined by a simple whitelist of
-  filename patterns."""
+  Returns:
+    A dictionary mapping an OWNER file to the list of OWNERS rules it must
+    contain to cover IPC-related files with noparent reviewer rules.
+  """
+  # Whether or not a file affects IPC is (mostly) determined by a simple list
+  # of filename patterns.
   file_patterns = [
       # Legacy IPC:
       '*_messages.cc',
@@ -1605,8 +1614,20 @@ def _CheckIpcOwners(input_api, output_api):
         AddPatternToCheck(f, pattern)
         break
 
-  # Now go through the OWNERS files we collected, filtering out rules that are
-  # already present in that OWNERS file.
+  return to_check
+
+
+def _CheckIpcOwners(input_api, output_api):
+  """Checks that affected files involving IPC have an IPC OWNERS rule."""
+  to_check = _GetOwnersFilesToCheckForIpcOwners(input_api)
+
+  if to_check:
+    # If there are any OWNERS files to check, there are IPC-related changes in
+    # this CL. Auto-CC the review list.
+    output_api.AppendCC('ipc-security-reviews@chromium.org')
+
+  # Go through the OWNERS files to check, filtering out rules that are already
+  # present in that OWNERS file.
   for owners_file, patterns in to_check.iteritems():
     try:
       with file(owners_file) as f:

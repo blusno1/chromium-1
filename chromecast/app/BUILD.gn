@@ -20,6 +20,7 @@ cast_source_set("app") {
     "//chromecast/common",
     "//chromecast/renderer",
     "//chromecast/utility",
+    "//components/crash/core/common:crash_key",
     "//content/public/app:both",
     "//content/public/browser",
     "//content/public/common",
@@ -28,7 +29,7 @@ cast_source_set("app") {
 
   if (!is_fuchsia) {
     # TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
-    deps += [ "//components/crash/content/app:lib" ]
+    deps += [ "//components/crash/content/app" ]
   }
 }
 
@@ -54,7 +55,6 @@ cast_source_set("cast_crash_client") {
     deps += [
       "//chromecast/crash",
       "//components/crash/content/app",
-      "//components/crash/content/app:lib",
     ]
   }
 

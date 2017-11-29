@@ -21,7 +21,7 @@
 #include "cc/layers/layer_client.h"
 #include "cc/layers/surface_layer.h"
 #include "cc/layers/texture_layer_client.h"
-#include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/common/surfaces/sequence_surface_reference_factory.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/compositor/compositor.h"
@@ -42,6 +42,7 @@ class TextureLayer;
 
 namespace viz {
 class CopyOutputRequest;
+struct TransferableResource;
 }
 
 namespace ui {
@@ -297,10 +298,10 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   const std::string& name() const { return name_; }
   void set_name(const std::string& name) { name_ = name; }
 
-  // Set new TextureMailbox for this layer. Note that |mailbox| may hold a
-  // shared memory resource or an actual mailbox for a texture.
-  void SetTextureMailbox(
-      const viz::TextureMailbox& mailbox,
+  // Set new TransferableResource for this layer. Note that |resource| may hold
+  // a handle for a shared memory resource or a gpu texture.
+  void SetTransferableResource(
+      const viz::TransferableResource& resource,
       std::unique_ptr<viz::SingleReleaseCallback> release_callback,
       gfx::Size texture_size_in_dip);
   void SetTextureSize(gfx::Size texture_size_in_dip);
@@ -309,15 +310,16 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
 
   // Begins showing content from a surface with a particular ID.
   void SetShowPrimarySurface(
-      const viz::SurfaceInfo& surface_info,
+      const viz::SurfaceId& surface_id,
+      const gfx::Size& frame_size_in_dip,
       scoped_refptr<viz::SurfaceReferenceFactory> surface_ref);
 
   // In the event that the primary surface is not yet available in the
   // display compositor, the fallback surface will be used.
   void SetFallbackSurfaceId(const viz::SurfaceId& surface_id);
 
-  // Returns the primary SurfaceInfo set by SetShowPrimarySurface.
-  const viz::SurfaceInfo* GetPrimarySurfaceInfo() const;
+  // Returns the primary SurfaceId set by SetShowPrimarySurface.
+  const viz::SurfaceId* GetPrimarySurfaceId() const;
 
   // Returns the fallback SurfaceId set by SetFallbackSurfaceId.
   const viz::SurfaceId* GetFallbackSurfaceId() const;
@@ -366,10 +368,6 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // Notifies the layer that the device scale factor has changed.
   void OnDeviceScaleFactorChanged(float device_scale_factor);
 
-  // Notifies the layer that one of its children has received a new
-  // delegated frame.
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip);
-
   // Requets a copy of the layer's output as a texture or bitmap.
   void RequestCopyOfOutput(std::unique_ptr<viz::CopyOutputRequest> request);
 
@@ -390,7 +388,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   gfx::ScrollOffset CurrentScrollOffset() const;
   void SetScrollOffset(const gfx::ScrollOffset& offset);
 
-  // ContentLayerClient
+  // ContentLayerClient implementation.
   gfx::Rect PaintableRegion() override;
   scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList(
       ContentLayerClient::PaintingControlSetting painting_control) override;
@@ -399,14 +397,14 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
 
   cc::Layer* cc_layer_for_testing() { return cc_layer_; }
 
-  // TextureLayerClient
-  bool PrepareTextureMailbox(
-      viz::TextureMailbox* mailbox,
+  // TextureLayerClient implementation.
+  bool PrepareTransferableResource(
+      viz::TransferableResource* resource,
       std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override;
 
   float device_scale_factor() const { return device_scale_factor_; }
 
-  // LayerClient
+  // LayerClient implementation.
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(
       cc::Layer* layer) override;
   void didUpdateMainThreadScrollingReasons() override;
@@ -609,15 +607,15 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   gfx::ImageSkia nine_patch_layer_image_;
   gfx::Rect nine_patch_layer_aperture_;
 
-  // The mailbox used by texture_layer_.
-  viz::TextureMailbox mailbox_;
+  // The external resource used by texture_layer_.
+  viz::TransferableResource transfer_resource_;
 
   // The callback to release the mailbox. This is only set after
-  // SetTextureMailbox is called, before we give it to the TextureLayer.
-  std::unique_ptr<viz::SingleReleaseCallback> mailbox_release_callback_;
+  // SetTransferableResource() is called, before we give it to the TextureLayer.
+  std::unique_ptr<viz::SingleReleaseCallback> transfer_release_callback_;
 
   // The size of the frame or texture in DIP, set when SetShowDelegatedContent
-  // or SetTextureMailbox was called.
+  // or SetTransferableResource() was called.
   gfx::Size frame_size_in_dip_;
 
   // The counter to maintain how many cache render surface requests we have. If

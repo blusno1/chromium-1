@@ -24,11 +24,9 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "media/base/video_frame.h"
 #include "third_party/skia/include/core/SkColorPriv.h"
-#include "third_party/skia/include/core/SkImageFilter.h"
 #include "third_party/skia/include/core/SkMatrix.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
-#include "third_party/skia/include/effects/SkColorFilterImageFilter.h"
 #include "third_party/skia/include/effects/SkColorMatrixFilter.h"
 #include "ui/gfx/color_transform.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -224,13 +222,6 @@ void CreateTestYUVVideoDrawQuad_FromVideoFrame(
     cc::DisplayResourceProvider* resource_provider,
     cc::LayerTreeResourceProvider* child_resource_provider) {
   const bool with_alpha = (video_frame->format() == media::PIXEL_FORMAT_YV12A);
-  auto color_space = YUVVideoDrawQuad::REC_601;
-  int video_frame_color_space;
-  if (video_frame->metadata()->GetInteger(
-          media::VideoFrameMetadata::COLOR_SPACE, &video_frame_color_space) &&
-      video_frame_color_space == media::COLOR_SPACE_JPEG) {
-    color_space = YUVVideoDrawQuad::JPEG;
-  }
 
   gfx::ColorSpace video_color_space = video_frame->ColorSpace();
   DCHECK(video_color_space.IsValid());
@@ -249,31 +240,28 @@ void CreateTestYUVVideoDrawQuad_FromVideoFrame(
 
   EXPECT_EQ(cc::VideoFrameExternalResources::YUV_RESOURCE, resources.type);
   EXPECT_EQ(media::VideoFrame::NumPlanes(video_frame->format()),
-            resources.mailboxes.size());
+            resources.resources.size());
   EXPECT_EQ(media::VideoFrame::NumPlanes(video_frame->format()),
             resources.release_callbacks.size());
 
-  ResourceId resource_y =
-      child_resource_provider->CreateResourceFromTextureMailbox(
-          resources.mailboxes[media::VideoFrame::kYPlane],
-          SingleReleaseCallback::Create(
-              resources.release_callbacks[media::VideoFrame::kYPlane]));
-  ResourceId resource_u =
-      child_resource_provider->CreateResourceFromTextureMailbox(
-          resources.mailboxes[media::VideoFrame::kUPlane],
-          SingleReleaseCallback::Create(
-              resources.release_callbacks[media::VideoFrame::kUPlane]));
-  ResourceId resource_v =
-      child_resource_provider->CreateResourceFromTextureMailbox(
-          resources.mailboxes[media::VideoFrame::kVPlane],
-          SingleReleaseCallback::Create(
-              resources.release_callbacks[media::VideoFrame::kVPlane]));
+  ResourceId resource_y = child_resource_provider->ImportResource(
+      resources.resources[media::VideoFrame::kYPlane],
+      SingleReleaseCallback::Create(
+          std::move(resources.release_callbacks[media::VideoFrame::kYPlane])));
+  ResourceId resource_u = child_resource_provider->ImportResource(
+      resources.resources[media::VideoFrame::kUPlane],
+      SingleReleaseCallback::Create(
+          std::move(resources.release_callbacks[media::VideoFrame::kUPlane])));
+  ResourceId resource_v = child_resource_provider->ImportResource(
+      resources.resources[media::VideoFrame::kVPlane],
+      SingleReleaseCallback::Create(
+          std::move(resources.release_callbacks[media::VideoFrame::kVPlane])));
   ResourceId resource_a = 0;
   if (with_alpha) {
-    resource_a = child_resource_provider->CreateResourceFromTextureMailbox(
-        resources.mailboxes[media::VideoFrame::kAPlane],
-        SingleReleaseCallback::Create(
-            resources.release_callbacks[media::VideoFrame::kAPlane]));
+    resource_a = child_resource_provider->ImportResource(
+        resources.resources[media::VideoFrame::kAPlane],
+        SingleReleaseCallback::Create(std::move(
+            resources.release_callbacks[media::VideoFrame::kAPlane])));
   }
 
   // Transfer resources to the parent.
@@ -344,8 +332,8 @@ void CreateTestYUVVideoDrawQuad_FromVideoFrame(
   yuv_quad->SetNew(shared_state, rect, visible_rect, needs_blending,
                    ya_tex_coord_rect, uv_tex_coord_rect, ya_tex_size,
                    uv_tex_size, mapped_resource_y, mapped_resource_u,
-                   mapped_resource_v, mapped_resource_a, color_space,
-                   video_color_space, 0.0f, multiplier, bits_per_channel);
+                   mapped_resource_v, mapped_resource_a, video_color_space,
+                   0.0f, multiplier, bits_per_channel);
 }
 
 void CreateTestY16TextureDrawQuad_FromVideoFrame(
@@ -363,13 +351,12 @@ void CreateTestY16TextureDrawQuad_FromVideoFrame(
           video_frame);
 
   EXPECT_EQ(cc::VideoFrameExternalResources::RGBA_RESOURCE, resources.type);
-  EXPECT_EQ(1u, resources.mailboxes.size());
+  EXPECT_EQ(1u, resources.resources.size());
   EXPECT_EQ(1u, resources.release_callbacks.size());
 
-  ResourceId resource_y =
-      child_resource_provider->CreateResourceFromTextureMailbox(
-          resources.mailboxes[0],
-          SingleReleaseCallback::Create(resources.release_callbacks[0]));
+  ResourceId resource_y = child_resource_provider->ImportResource(
+      resources.resources[0],
+      SingleReleaseCallback::Create(std::move(resources.release_callbacks[0])));
 
   // Transfer resource to the parent.
   cc::ResourceProvider::ResourceIdArray resource_ids_to_transfer;
@@ -613,10 +600,8 @@ void CreateTestYUVVideoDrawQuad_NV12(const SharedQuadState* shared_state,
                                      const gfx::Rect& rect,
                                      const gfx::Rect& visible_rect,
                                      cc::ResourceProvider* resource_provider) {
-  auto color_space = YUVVideoDrawQuad::REC_601;
   gfx::ColorSpace gfx_color_space = gfx::ColorSpace::CreateREC601();
   if (video_frame_color_space == media::COLOR_SPACE_JPEG) {
-    color_space = YUVVideoDrawQuad::JPEG;
     gfx_color_space = gfx::ColorSpace::CreateJpeg();
   }
 
@@ -655,7 +640,7 @@ void CreateTestYUVVideoDrawQuad_NV12(const SharedQuadState* shared_state,
   yuv_quad->SetNew(shared_state, rect, visible_rect, needs_blending,
                    ya_tex_coord_rect, uv_tex_coord_rect, ya_tex_size,
                    uv_tex_size, y_resource, u_resource, v_resource, a_resource,
-                   color_space, video_color_space, 0.0f, 1.0f, 8);
+                   video_color_space, 0.0f, 1.0f, 8);
 }
 
 void CreateTestY16TextureDrawQuad_TwoColor(
@@ -1706,8 +1691,8 @@ TYPED_TEST(RendererPixelTest, FastPassColorFilterAlpha) {
   matrix[15] = matrix[16] = matrix[17] = matrix[19] = 0;
   matrix[18] = 1;
   cc::FilterOperations filters;
-  filters.Append(
-      cc::FilterOperation::CreateReferenceFilter(SkColorFilterImageFilter::Make(
+  filters.Append(cc::FilterOperation::CreateReferenceFilter(
+      sk_make_sp<cc::ColorFilterPaintFilter>(
           SkColorFilter::MakeMatrixFilterRowMajor255(matrix), nullptr)));
 
   std::unique_ptr<RenderPass> child_pass =
@@ -1909,8 +1894,8 @@ TYPED_TEST(RendererPixelTest, FastPassColorFilterAlphaTranslation) {
   matrix[15] = matrix[16] = matrix[17] = matrix[19] = 0;
   matrix[18] = 1;
   cc::FilterOperations filters;
-  filters.Append(
-      cc::FilterOperation::CreateReferenceFilter(SkColorFilterImageFilter::Make(
+  filters.Append(cc::FilterOperation::CreateReferenceFilter(
+      sk_make_sp<cc::ColorFilterPaintFilter>(
           SkColorFilter::MakeMatrixFilterRowMajor255(matrix), nullptr)));
 
   std::unique_ptr<RenderPass> child_pass =

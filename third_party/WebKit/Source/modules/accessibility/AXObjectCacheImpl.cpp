@@ -28,6 +28,7 @@
 
 #include "modules/accessibility/AXObjectCacheImpl.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "core/dom/AccessibleNode.h"
 #include "core/dom/Document.h"
 #include "core/editing/EditingUtilities.h"
@@ -85,7 +86,6 @@
 #include "modules/accessibility/AXVirtualObject.h"
 #include "modules/permissions/PermissionUtils.h"
 #include "platform/wtf/PtrUtil.h"
-#include "platform/wtf/RefPtr.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/modules/permissions/permission.mojom-blink.h"
 #include "public/platform/modules/permissions/permission_status.mojom-blink.h"
@@ -775,7 +775,7 @@ void AXObjectCacheImpl::PostNotification(AXObject* object,
   modification_count_++;
   notifications_to_post_.push_back(std::make_pair(object, notification));
   if (!notification_post_timer_.IsActive())
-    notification_post_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    notification_post_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 bool AXObjectCacheImpl::IsAriaOwned(const AXObject* object) const {

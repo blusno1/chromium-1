@@ -174,28 +174,26 @@ void PartitionAllocGlobalInit(void (*oom_handling_function)()) {
   PartitionRootBase::gOomHandlingFunction = oom_handling_function;
 }
 
-void PartitionAllocInit(PartitionRoot* root,
-                        size_t num_buckets,
-                        size_t max_allocation) {
-  PartitionAllocBaseInit(root);
+void PartitionRoot::Init(size_t num_buckets, size_t max_allocation) {
+  PartitionAllocBaseInit(this);
 
-  root->num_buckets = num_buckets;
-  root->max_allocation = max_allocation;
+  this->num_buckets = num_buckets;
+  this->max_allocation = max_allocation;
   size_t i;
-  for (i = 0; i < root->num_buckets; ++i) {
-    PartitionBucket* bucket = &root->buckets()[i];
+  for (i = 0; i < this->num_buckets; ++i) {
+    PartitionBucket* bucket = &this->buckets()[i];
     if (!i)
       bucket->slot_size = kAllocationGranularity;
     else
       bucket->slot_size = i << kBucketShift;
-    PartitionBucketInitBase(bucket, root);
+    PartitionBucketInitBase(bucket, this);
   }
 }
 
-void PartitionAllocGenericInit(PartitionRootGeneric* root) {
-  subtle::SpinLock::Guard guard(root->lock);
+void PartitionRootGeneric::Init() {
+  subtle::SpinLock::Guard guard(this->lock);
 
-  PartitionAllocBaseInit(root);
+  PartitionAllocBaseInit(this);
 
   // Precalculate some shift and mask constants used in the hot path.
   // Example: malloc(41) == 101001 binary.
@@ -211,7 +209,7 @@ void PartitionAllocGenericInit(PartitionRootGeneric* root) {
       order_index_shift = 0;
     else
       order_index_shift = order - (kGenericNumBucketsPerOrderBits + 1);
-    root->order_index_shifts[order] = order_index_shift;
+    this->order_index_shifts[order] = order_index_shift;
     size_t sub_order_index_mask;
     if (order == kBitsPerSizeT) {
       // This avoids invoking undefined behavior for an excessive shift.
@@ -221,7 +219,7 @@ void PartitionAllocGenericInit(PartitionRootGeneric* root) {
       sub_order_index_mask = ((static_cast<size_t>(1) << order) - 1) >>
                              (kGenericNumBucketsPerOrderBits + 1);
     }
-    root->order_sub_index_masks[order] = sub_order_index_mask;
+    this->order_sub_index_masks[order] = sub_order_index_mask;
   }
 
   // Set up the actual usable buckets first.
@@ -234,11 +232,11 @@ void PartitionAllocGenericInit(PartitionRootGeneric* root) {
   size_t current_size = kGenericSmallestBucket;
   size_t currentIncrement =
       kGenericSmallestBucket >> kGenericNumBucketsPerOrderBits;
-  PartitionBucket* bucket = &root->buckets[0];
+  PartitionBucket* bucket = &this->buckets[0];
   for (i = 0; i < kGenericNumBucketedOrders; ++i) {
     for (j = 0; j < kGenericNumBucketsPerOrder; ++j) {
       bucket->slot_size = current_size;
-      PartitionBucketInitBase(bucket, root);
+      PartitionBucketInitBase(bucket, this);
       // Disable psuedo buckets so that touching them faults.
       if (current_size % kGenericSmallestBucket)
         bucket->active_pages_head = nullptr;
@@ -248,16 +246,16 @@ void PartitionAllocGenericInit(PartitionRootGeneric* root) {
     currentIncrement <<= 1;
   }
   DCHECK(current_size == 1 << kGenericMaxBucketedOrder);
-  DCHECK(bucket == &root->buckets[0] + kGenericNumBuckets);
+  DCHECK(bucket == &this->buckets[0] + kGenericNumBuckets);
 
   // Then set up the fast size -> bucket lookup table.
-  bucket = &root->buckets[0];
-  PartitionBucket** bucketPtr = &root->bucket_lookups[0];
+  bucket = &this->buckets[0];
+  PartitionBucket** bucketPtr = &this->bucket_lookups[0];
   for (order = 0; order <= kBitsPerSizeT; ++order) {
     for (j = 0; j < kGenericNumBucketsPerOrder; ++j) {
       if (order < kGenericMinBucketedOrder) {
         // Use the bucket of the finest granularity for malloc(0) etc.
-        *bucketPtr++ = &root->buckets[0];
+        *bucketPtr++ = &this->buckets[0];
       } else if (order > kGenericMaxBucketedOrder) {
         *bucketPtr++ = &g_sentinel_bucket;
       } else {
@@ -270,10 +268,9 @@ void PartitionAllocGenericInit(PartitionRootGeneric* root) {
       }
     }
   }
-  DCHECK(bucket == &root->buckets[0] + kGenericNumBuckets);
-  DCHECK(bucketPtr ==
-         &root->bucket_lookups[0] +
-             ((kBitsPerSizeT + 1) * kGenericNumBucketsPerOrder));
+  DCHECK(bucket == &this->buckets[0] + kGenericNumBuckets);
+  DCHECK(bucketPtr == &this->bucket_lookups[0] +
+                          ((kBitsPerSizeT + 1) * kGenericNumBucketsPerOrder));
   // And there's one last bucket lookup that will be hit for e.g. malloc(-1),
   // which tries to overflow to a non-existant order.
   *bucketPtr = &g_sentinel_bucket;
@@ -309,7 +306,7 @@ static NOINLINE void PartitionBucketFull() {
   OOM_CRASH();
 }
 
-// partitionPageStateIs*
+// PartitionPageStateIs*
 // Note that it's only valid to call these functions on pages found on one of
 // the page lists. Specifically, you can't call these functions on full pages
 // that were detached from the active list.
@@ -324,7 +321,7 @@ PartitionPageStateIsActive(const PartitionPage* page) {
 static bool ALWAYS_INLINE PartitionPageStateIsFull(const PartitionPage* page) {
   DCHECK(page != &g_sentinel_page);
   DCHECK(!page->page_offset);
-  bool ret = (page->num_allocated_slots == PartitionBucketSlots(page->bucket));
+  bool ret = (page->num_allocated_slots == page->bucket->get_slots_per_span());
   if (ret) {
     DCHECK(!page->freelist_head);
     DCHECK(!page->num_unprovisioned_slots);
@@ -512,7 +509,7 @@ PartitionBucketPartitionPages(const PartitionBucket* bucket) {
 static ALWAYS_INLINE void PartitionPageReset(PartitionPage* page) {
   DCHECK(PartitionPageStateIsDecommitted(page));
 
-  page->num_unprovisioned_slots = PartitionBucketSlots(page->bucket);
+  page->num_unprovisioned_slots = page->bucket->get_slots_per_span();
   DCHECK(page->num_unprovisioned_slots);
 
   page->next_page = nullptr;
@@ -555,13 +552,13 @@ static ALWAYS_INLINE char* PartitionPageAllocAndFillFreelist(
   // We should only get here when _every_ slot is either used or unprovisioned.
   // (The third state is "on the freelist". If we have a non-empty freelist, we
   // should not get here.)
-  DCHECK(num_slots + page->num_allocated_slots == PartitionBucketSlots(bucket));
+  DCHECK(num_slots + page->num_allocated_slots == bucket->get_slots_per_span());
   // Similarly, make explicitly sure that the freelist is empty.
   DCHECK(!page->freelist_head);
   DCHECK(page->num_allocated_slots >= 0);
 
   size_t size = bucket->slot_size;
-  char* base = reinterpret_cast<char*>(PartitionPageToPointer(page));
+  char* base = reinterpret_cast<char*>(PartitionPage::ToPointer(page));
   char* return_object = base + (size * page->num_allocated_slots);
   char* firstFreelistPointer = return_object + size;
   char* firstFreelistPointerExtent =
@@ -671,14 +668,14 @@ static bool PartitionSetNewActivePage(PartitionBucket* bucket) {
 
 static ALWAYS_INLINE PartitionDirectMapExtent* partitionPageToDirectMapExtent(
     PartitionPage* page) {
-  DCHECK(PartitionBucketIsDirectMapped(page->bucket));
+  DCHECK(page->bucket->is_direct_mapped());
   return reinterpret_cast<PartitionDirectMapExtent*>(
       reinterpret_cast<char*>(page) + 3 * kPageMetadataSize);
 }
 
 static ALWAYS_INLINE void PartitionPageSetRawSize(PartitionPage* page,
                                                   size_t size) {
-  size_t* raw_size_ptr = PartitionPageGetRawSizePtr(page);
+  size_t* raw_size_ptr = page->get_raw_size_ptr();
   if (UNLIKELY(raw_size_ptr != nullptr))
     *raw_size_ptr = size;
 }
@@ -732,7 +729,7 @@ static ALWAYS_INLINE PartitionPage* PartitionDirectMap(PartitionRootBase* root,
   DCHECK(!extent->super_page_base);
   DCHECK(!extent->super_pages_end);
   DCHECK(!extent->next);
-  PartitionPage* page = PartitionPointerToPageNoAlignmentCheck(slot);
+  PartitionPage* page = PartitionPage::FromPointerNoAlignmentCheck(slot);
   PartitionBucket* bucket = reinterpret_cast<PartitionBucket*>(
       reinterpret_cast<char*>(page) + (kPageMetadataSize * 2));
   DCHECK(!page->next_page);
@@ -795,7 +792,7 @@ static ALWAYS_INLINE void PartitionDirectUnmap(PartitionPage* page) {
 
   DCHECK(!(unmap_size & kPageAllocationGranularityOffsetMask));
 
-  char* ptr = reinterpret_cast<char*>(PartitionPageToPointer(page));
+  char* ptr = reinterpret_cast<char*>(PartitionPage::ToPointer(page));
   // Account for the mapping starting a partition page before the actual
   // allocation address.
   ptr -= kPartitionPageSize;
@@ -803,18 +800,17 @@ static ALWAYS_INLINE void PartitionDirectUnmap(PartitionPage* page) {
   FreePages(ptr, unmap_size);
 }
 
-void* PartitionAllocSlowPath(PartitionRootBase* root,
-                             int flags,
-                             size_t size,
-                             PartitionBucket* bucket) {
+void* PartitionBucket::SlowPathAlloc(PartitionRootBase* root,
+                                     int flags,
+                                     size_t size) {
   // The slow path is called when the freelist is empty.
-  DCHECK(!bucket->active_pages_head->freelist_head);
+  DCHECK(!this->active_pages_head->freelist_head);
 
   PartitionPage* new_page = nullptr;
 
-  // For the PartitionAllocGeneric API, we have a bunch of buckets marked
-  // as special cases. We bounce them through to the slow path so that we
-  // can still have a blazing fast hot path due to lack of corner-case
+  // For the PartitionRootGeneric::Alloc() API, we have a bunch of buckets
+  // marked as special cases. We bounce them through to the slow path so that
+  // we can still have a blazing fast hot path due to lack of corner-case
   // branches.
   //
   // Note: The ordering of the conditionals matter! In particular,
@@ -822,74 +818,74 @@ void* PartitionAllocSlowPath(PartitionRootBase* root,
   // false where it sweeps the active page list and may move things into
   // the empty or decommitted lists which affects the subsequent conditional.
   bool returnNull = flags & PartitionAllocReturnNull;
-  if (UNLIKELY(PartitionBucketIsDirectMapped(bucket))) {
+  if (UNLIKELY(this->is_direct_mapped())) {
     DCHECK(size > kGenericMaxBucketed);
-    DCHECK(bucket == &g_sentinel_bucket);
-    DCHECK(bucket->active_pages_head == &g_sentinel_page);
+    DCHECK(this == &g_sentinel_bucket);
+    DCHECK(this->active_pages_head == &g_sentinel_page);
     if (size > kGenericMaxDirectMapped) {
       if (returnNull)
         return nullptr;
       PartitionExcessiveAllocationSize();
     }
     new_page = PartitionDirectMap(root, flags, size);
-  } else if (LIKELY(PartitionSetNewActivePage(bucket))) {
+  } else if (LIKELY(PartitionSetNewActivePage(this))) {
     // First, did we find an active page in the active pages list?
-    new_page = bucket->active_pages_head;
+    new_page = this->active_pages_head;
     DCHECK(PartitionPageStateIsActive(new_page));
-  } else if (LIKELY(bucket->empty_pages_head != nullptr) ||
-             LIKELY(bucket->decommitted_pages_head != nullptr)) {
+  } else if (LIKELY(this->empty_pages_head != nullptr) ||
+             LIKELY(this->decommitted_pages_head != nullptr)) {
     // Second, look in our lists of empty and decommitted pages.
     // Check empty pages first, which are preferred, but beware that an
     // empty page might have been decommitted.
-    while (LIKELY((new_page = bucket->empty_pages_head) != nullptr)) {
-      DCHECK(new_page->bucket == bucket);
+    while (LIKELY((new_page = this->empty_pages_head) != nullptr)) {
+      DCHECK(new_page->bucket == this);
       DCHECK(PartitionPageStateIsEmpty(new_page) ||
              PartitionPageStateIsDecommitted(new_page));
-      bucket->empty_pages_head = new_page->next_page;
+      this->empty_pages_head = new_page->next_page;
       // Accept the empty page unless it got decommitted.
       if (new_page->freelist_head) {
         new_page->next_page = nullptr;
         break;
       }
       DCHECK(PartitionPageStateIsDecommitted(new_page));
-      new_page->next_page = bucket->decommitted_pages_head;
-      bucket->decommitted_pages_head = new_page;
+      new_page->next_page = this->decommitted_pages_head;
+      this->decommitted_pages_head = new_page;
     }
     if (UNLIKELY(!new_page) &&
-        LIKELY(bucket->decommitted_pages_head != nullptr)) {
-      new_page = bucket->decommitted_pages_head;
-      DCHECK(new_page->bucket == bucket);
+        LIKELY(this->decommitted_pages_head != nullptr)) {
+      new_page = this->decommitted_pages_head;
+      DCHECK(new_page->bucket == this);
       DCHECK(PartitionPageStateIsDecommitted(new_page));
-      bucket->decommitted_pages_head = new_page->next_page;
-      void* addr = PartitionPageToPointer(new_page);
+      this->decommitted_pages_head = new_page->next_page;
+      void* addr = PartitionPage::ToPointer(new_page);
       PartitionRecommitSystemPages(root, addr,
-                                   PartitionBucketBytes(new_page->bucket));
+                                   new_page->bucket->get_bytes_per_span());
       PartitionPageReset(new_page);
     }
     DCHECK(new_page);
   } else {
     // Third. If we get here, we need a brand new page.
-    uint16_t num_partition_pages = PartitionBucketPartitionPages(bucket);
+    uint16_t num_partition_pages = PartitionBucketPartitionPages(this);
     void* rawPages =
         PartitionAllocPartitionPages(root, flags, num_partition_pages);
     if (LIKELY(rawPages != nullptr)) {
-      new_page = PartitionPointerToPageNoAlignmentCheck(rawPages);
-      PartitionPageSetup(new_page, bucket);
+      new_page = PartitionPage::FromPointerNoAlignmentCheck(rawPages);
+      PartitionPageSetup(new_page, this);
     }
   }
 
   // Bail if we had a memory allocation failure.
   if (UNLIKELY(!new_page)) {
-    DCHECK(bucket->active_pages_head == &g_sentinel_page);
+    DCHECK(this->active_pages_head == &g_sentinel_page);
     if (returnNull)
       return nullptr;
     PartitionOutOfMemory(root);
   }
 
-  // TODO(ajwong): Is there a way to avoid the reassignment of bucket here?
-  // It seems like in many of the conditional branches above, |bucket| ==
-  // |new_page->bucket|.
-  bucket = new_page->bucket;
+  // TODO(ajwong): Is there a way to avoid the reading of bucket here?
+  // It seems like in many of the conditional branches above, |this| ==
+  // |new_page->bucket|. Maybe pull this into another function?
+  PartitionBucket* bucket = new_page->bucket;
   DCHECK(bucket != &g_sentinel_bucket);
   bucket->active_pages_head = new_page;
   PartitionPageSetRawSize(new_page, size);
@@ -911,9 +907,9 @@ void* PartitionAllocSlowPath(PartitionRootBase* root,
 static ALWAYS_INLINE void PartitionDecommitPage(PartitionRootBase* root,
                                                 PartitionPage* page) {
   DCHECK(PartitionPageStateIsEmpty(page));
-  DCHECK(!PartitionBucketIsDirectMapped(page->bucket));
-  void* addr = PartitionPageToPointer(page);
-  PartitionDecommitSystemPages(root, addr, PartitionBucketBytes(page->bucket));
+  DCHECK(!page->bucket->is_direct_mapped());
+  void* addr = PartitionPage::ToPointer(page);
+  PartitionDecommitSystemPages(root, addr, page->bucket->get_bytes_per_span());
 
   // We actually leave the decommitted page in the active list. We'll sweep
   // it on to the decommitted page list when we next walk the active page
@@ -976,55 +972,54 @@ static void PartitionDecommitEmptyPages(PartitionRootBase* root) {
   }
 }
 
-void PartitionFreeSlowPath(PartitionPage* page) {
-  PartitionBucket* bucket = page->bucket;
-  DCHECK(page != &g_sentinel_page);
-  if (LIKELY(page->num_allocated_slots == 0)) {
+void PartitionPage::FreeSlowPath() {
+  DCHECK(this != &g_sentinel_page);
+  if (LIKELY(this->num_allocated_slots == 0)) {
     // Page became fully unused.
-    if (UNLIKELY(PartitionBucketIsDirectMapped(bucket))) {
-      PartitionDirectUnmap(page);
+    if (UNLIKELY(bucket->is_direct_mapped())) {
+      PartitionDirectUnmap(this);
       return;
     }
     // If it's the current active page, change it. We bounce the page to
     // the empty list as a force towards defragmentation.
-    if (LIKELY(page == bucket->active_pages_head))
+    if (LIKELY(this == bucket->active_pages_head))
       PartitionSetNewActivePage(bucket);
-    DCHECK(bucket->active_pages_head != page);
+    DCHECK(bucket->active_pages_head != this);
 
-    PartitionPageSetRawSize(page, 0);
-    DCHECK(!PartitionPageGetRawSize(page));
+    PartitionPageSetRawSize(this, 0);
+    DCHECK(!get_raw_size());
 
-    PartitionRegisterEmptyPage(page);
+    PartitionRegisterEmptyPage(this);
   } else {
-    DCHECK(!PartitionBucketIsDirectMapped(bucket));
+    DCHECK(!bucket->is_direct_mapped());
     // Ensure that the page is full. That's the only valid case if we
     // arrive here.
-    DCHECK(page->num_allocated_slots < 0);
+    DCHECK(this->num_allocated_slots < 0);
     // A transition of num_allocated_slots from 0 to -1 is not legal, and
     // likely indicates a double-free.
-    CHECK(page->num_allocated_slots != -1);
-    page->num_allocated_slots = -page->num_allocated_slots - 2;
-    DCHECK(page->num_allocated_slots == PartitionBucketSlots(bucket) - 1);
+    CHECK(this->num_allocated_slots != -1);
+    this->num_allocated_slots = -this->num_allocated_slots - 2;
+    DCHECK(this->num_allocated_slots == bucket->get_slots_per_span() - 1);
     // Fully used page became partially used. It must be put back on the
     // non-full page list. Also make it the current page to increase the
     // chances of it being filled up again. The old current page will be
     // the next page.
-    DCHECK(!page->next_page);
+    DCHECK(!this->next_page);
     if (LIKELY(bucket->active_pages_head != &g_sentinel_page))
-      page->next_page = bucket->active_pages_head;
-    bucket->active_pages_head = page;
+      this->next_page = bucket->active_pages_head;
+    bucket->active_pages_head = this;
     --bucket->num_full_pages;
     // Special case: for a partition page with just a single slot, it may
     // now be empty and we want to run it through the empty logic.
-    if (UNLIKELY(page->num_allocated_slots == 0))
-      PartitionFreeSlowPath(page);
+    if (UNLIKELY(this->num_allocated_slots == 0))
+      FreeSlowPath();
   }
 }
 
 bool PartitionReallocDirectMappedInPlace(PartitionRootGeneric* root,
                                          PartitionPage* page,
                                          size_t raw_size) {
-  DCHECK(PartitionBucketIsDirectMapped(page->bucket));
+  DCHECK(page->bucket->is_direct_mapped());
 
   raw_size = PartitionCookieSizeAdjustAdd(raw_size);
 
@@ -1039,7 +1034,7 @@ bool PartitionReallocDirectMappedInPlace(PartitionRootGeneric* root,
   if (new_size == current_size)
     return true;
 
-  char* char_ptr = static_cast<char*>(PartitionPageToPointer(page));
+  char* char_ptr = static_cast<char*>(PartitionPage::ToPointer(page));
 
   if (new_size < current_size) {
     size_t map_size = partitionPageToDirectMapExtent(page)->map_size;
@@ -1077,23 +1072,22 @@ bool PartitionReallocDirectMappedInPlace(PartitionRootGeneric* root,
 #endif
 
   PartitionPageSetRawSize(page, raw_size);
-  DCHECK(PartitionPageGetRawSize(page) == raw_size);
+  DCHECK(page->get_raw_size() == raw_size);
 
   page->bucket->slot_size = new_size;
   return true;
 }
 
-void* PartitionReallocGeneric(PartitionRootGeneric* root,
-                              void* ptr,
-                              size_t new_size,
-                              const char* type_name) {
+void* PartitionRootGeneric::Realloc(void* ptr,
+                                    size_t new_size,
+                                    const char* type_name) {
 #if defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
   return realloc(ptr, new_size);
 #else
   if (UNLIKELY(!ptr))
-    return PartitionAllocGeneric(root, new_size, type_name);
+    return this->Alloc(new_size, type_name);
   if (UNLIKELY(!new_size)) {
-    PartitionFreeGeneric(root, ptr);
+    this->Free(ptr);
     return nullptr;
   }
 
@@ -1101,21 +1095,21 @@ void* PartitionReallocGeneric(PartitionRootGeneric* root,
     PartitionExcessiveAllocationSize();
 
   PartitionPage* page =
-      PartitionPointerToPage(PartitionCookieFreePointerAdjust(ptr));
+      PartitionPage::FromPointer(PartitionCookieFreePointerAdjust(ptr));
   // TODO(palmer): See if we can afford to make this a CHECK.
-  DCHECK(PartitionPagePointerIsValid(page));
+  DCHECK(PartitionPage::IsPointerValid(page));
 
-  if (UNLIKELY(PartitionBucketIsDirectMapped(page->bucket))) {
+  if (UNLIKELY(page->bucket->is_direct_mapped())) {
     // We may be able to perform the realloc in place by changing the
     // accessibility of memory pages and, if reducing the size, decommitting
     // them.
-    if (PartitionReallocDirectMappedInPlace(root, page, new_size)) {
+    if (PartitionReallocDirectMappedInPlace(this, page, new_size)) {
       PartitionAllocHooks::ReallocHookIfEnabled(ptr, ptr, new_size, type_name);
       return ptr;
     }
   }
 
-  size_t actual_new_size = PartitionAllocActualSize(root, new_size);
+  size_t actual_new_size = this->ActualSize(new_size);
   size_t actual_old_size = PartitionAllocGetSize(ptr);
 
   // TODO: note that tcmalloc will "ignore" a downsizing realloc() unless the
@@ -1129,20 +1123,20 @@ void* PartitionReallocGeneric(PartitionRootGeneric* root,
 #if DCHECK_IS_ON()
     // Write a new trailing cookie when it is possible to keep track of
     // |new_size| via the raw size pointer.
-    if (PartitionPageGetRawSizePtr(page))
+    if (page->get_raw_size_ptr())
       PartitionCookieWriteValue(static_cast<char*>(ptr) + new_size);
 #endif
     return ptr;
   }
 
   // This realloc cannot be resized in-place. Sadness.
-  void* ret = PartitionAllocGeneric(root, new_size, type_name);
+  void* ret = this->Alloc(new_size, type_name);
   size_t copy_size = actual_old_size;
   if (new_size < copy_size)
     copy_size = new_size;
 
   memcpy(ret, ptr, copy_size);
-  PartitionFreeGeneric(root, ptr);
+  this->Free(ptr);
   return ret;
 #endif
 }
@@ -1153,15 +1147,15 @@ static size_t PartitionPurgePage(PartitionPage* page, bool discard) {
   if (slot_size < kSystemPageSize || !page->num_allocated_slots)
     return 0;
 
-  size_t bucket_num_slots = PartitionBucketSlots(bucket);
+  size_t bucket_num_slots = bucket->get_slots_per_span();
   size_t discardable_bytes = 0;
 
-  size_t raw_size = PartitionPageGetRawSize(page);
+  size_t raw_size = page->get_raw_size();
   if (raw_size) {
     uint32_t usedBytes = static_cast<uint32_t>(RoundUpToSystemPage(raw_size));
     discardable_bytes = bucket->slot_size - usedBytes;
     if (discardable_bytes && discard) {
-      char* ptr = reinterpret_cast<char*>(PartitionPageToPointer(page));
+      char* ptr = reinterpret_cast<char*>(PartitionPage::ToPointer(page));
       ptr += usedBytes;
       DiscardSystemPages(ptr, discardable_bytes);
     }
@@ -1180,11 +1174,10 @@ static size_t PartitionPurgePage(PartitionPage* page, bool discard) {
   size_t last_slot = static_cast<size_t>(-1);
 #endif
   memset(slot_usage, 1, num_slots);
-  char* ptr = reinterpret_cast<char*>(PartitionPageToPointer(page));
-  PartitionFreelistEntry* entry = page->freelist_head;
+  char* ptr = reinterpret_cast<char*>(PartitionPage::ToPointer(page));
   // First, walk the freelist for this page and make a bitmap of which slots
   // are not in use.
-  while (entry) {
+  for (PartitionFreelistEntry* entry = page->freelist_head; entry; /**/) {
     size_t slotIndex = (reinterpret_cast<char*>(entry) - ptr) / slot_size;
     DCHECK(slotIndex < num_slots);
     slot_usage[slotIndex] = 0;
@@ -1210,49 +1203,47 @@ static size_t PartitionPurgePage(PartitionPage* page, bool discard) {
   }
   // First, do the work of calculating the discardable bytes. Don't actually
   // discard anything unless the discard flag was passed in.
-  char* begin_ptr = nullptr;
-  char* end_ptr = nullptr;
-  size_t unprovisioned_bytes = 0;
   if (truncated_slots) {
-    begin_ptr = ptr + (num_slots * slot_size);
-    end_ptr = begin_ptr + (slot_size * truncated_slots);
+    size_t unprovisioned_bytes = 0;
+    char* begin_ptr = ptr + (num_slots * slot_size);
+    char* end_ptr = begin_ptr + (slot_size * truncated_slots);
     begin_ptr = reinterpret_cast<char*>(
         RoundUpToSystemPage(reinterpret_cast<size_t>(begin_ptr)));
     // We round the end pointer here up and not down because we're at the
     // end of a slot span, so we "own" all the way up the page boundary.
     end_ptr = reinterpret_cast<char*>(
         RoundUpToSystemPage(reinterpret_cast<size_t>(end_ptr)));
-    DCHECK(end_ptr <= ptr + PartitionBucketBytes(bucket));
+    DCHECK(end_ptr <= ptr + bucket->get_bytes_per_span());
     if (begin_ptr < end_ptr) {
       unprovisioned_bytes = end_ptr - begin_ptr;
       discardable_bytes += unprovisioned_bytes;
     }
-  }
-  if (unprovisioned_bytes && discard) {
-    DCHECK(truncated_slots > 0);
-    size_t num_new_entries = 0;
-    page->num_unprovisioned_slots += static_cast<uint16_t>(truncated_slots);
-    // Rewrite the freelist.
-    PartitionFreelistEntry** entry_ptr = &page->freelist_head;
-    for (size_t slotIndex = 0; slotIndex < num_slots; ++slotIndex) {
-      if (slot_usage[slotIndex])
-        continue;
-      PartitionFreelistEntry* entry = reinterpret_cast<PartitionFreelistEntry*>(
-          ptr + (slot_size * slotIndex));
-      *entry_ptr = PartitionFreelistMask(entry);
-      entry_ptr = reinterpret_cast<PartitionFreelistEntry**>(entry);
-      num_new_entries++;
+    if (unprovisioned_bytes && discard) {
+      DCHECK(truncated_slots > 0);
+      size_t num_new_entries = 0;
+      page->num_unprovisioned_slots += static_cast<uint16_t>(truncated_slots);
+      // Rewrite the freelist.
+      PartitionFreelistEntry** entry_ptr = &page->freelist_head;
+      for (size_t slotIndex = 0; slotIndex < num_slots; ++slotIndex) {
+        if (slot_usage[slotIndex])
+          continue;
+        auto* entry = reinterpret_cast<PartitionFreelistEntry*>(
+            ptr + (slot_size * slotIndex));
+        *entry_ptr = PartitionFreelistMask(entry);
+        entry_ptr = reinterpret_cast<PartitionFreelistEntry**>(entry);
+        num_new_entries++;
 #if !defined(OS_WIN)
-      last_slot = slotIndex;
+        last_slot = slotIndex;
 #endif
+      }
+      // Terminate the freelist chain.
+      *entry_ptr = nullptr;
+      // The freelist head is stored unmasked.
+      page->freelist_head = PartitionFreelistMask(page->freelist_head);
+      DCHECK(num_new_entries == num_slots - page->num_allocated_slots);
+      // Discard the memory.
+      DiscardSystemPages(begin_ptr, unprovisioned_bytes);
     }
-    // Terminate the freelist chain.
-    *entry_ptr = nullptr;
-    // The freelist head is stored unmasked.
-    page->freelist_head = PartitionFreelistMask(page->freelist_head);
-    DCHECK(num_new_entries == num_slots - page->num_allocated_slots);
-    // Discard the memory.
-    DiscardSystemPages(begin_ptr, unprovisioned_bytes);
   }
 
   // Next, walk the slots and for any not in use, consider where the system
@@ -1297,22 +1288,22 @@ static void PartitionPurgeBucket(PartitionBucket* bucket) {
   }
 }
 
-void PartitionPurgeMemory(PartitionRoot* root, int flags) {
+void PartitionRoot::PurgeMemory(int flags) {
   if (flags & PartitionPurgeDecommitEmptyPages)
-    PartitionDecommitEmptyPages(root);
+    PartitionDecommitEmptyPages(this);
   // We don't currently do anything for PartitionPurgeDiscardUnusedSystemPages
   // here because that flag is only useful for allocations >= system page
   // size. We only have allocations that large inside generic partitions
   // at the moment.
 }
 
-void PartitionPurgeMemoryGeneric(PartitionRootGeneric* root, int flags) {
-  subtle::SpinLock::Guard guard(root->lock);
+void PartitionRootGeneric::PurgeMemory(int flags) {
+  subtle::SpinLock::Guard guard(this->lock);
   if (flags & PartitionPurgeDecommitEmptyPages)
-    PartitionDecommitEmptyPages(root);
+    PartitionDecommitEmptyPages(this);
   if (flags & PartitionPurgeDiscardUnusedSystemPages) {
     for (size_t i = 0; i < kGenericNumBuckets; ++i) {
-      PartitionBucket* bucket = &root->buckets[i];
+      PartitionBucket* bucket = &this->buckets[i];
       if (bucket->slot_size >= kSystemPageSize)
         PartitionPurgeBucket(bucket);
     }
@@ -1321,7 +1312,7 @@ void PartitionPurgeMemoryGeneric(PartitionRootGeneric* root, int flags) {
 
 static void PartitionDumpPageStats(PartitionBucketMemoryStats* stats_out,
                                    PartitionPage* page) {
-  uint16_t bucket_num_slots = PartitionBucketSlots(page->bucket);
+  uint16_t bucket_num_slots = page->bucket->get_slots_per_span();
 
   if (PartitionPageStateIsDecommitted(page)) {
     ++stats_out->num_decommitted_pages;
@@ -1330,7 +1321,7 @@ static void PartitionDumpPageStats(PartitionBucketMemoryStats* stats_out,
 
   stats_out->discardable_bytes += PartitionPurgePage(page, false);
 
-  size_t raw_size = PartitionPageGetRawSize(page);
+  size_t raw_size = page->get_raw_size();
   if (raw_size) {
     stats_out->active_bytes += static_cast<uint32_t>(raw_size);
   } else {
@@ -1355,7 +1346,7 @@ static void PartitionDumpPageStats(PartitionBucketMemoryStats* stats_out,
 
 static void PartitionDumpBucketStats(PartitionBucketMemoryStats* stats_out,
                                      const PartitionBucket* bucket) {
-  DCHECK(!PartitionBucketIsDirectMapped(bucket));
+  DCHECK(!bucket->is_direct_mapped());
   stats_out->is_valid = false;
   // If the active page list is empty (== &g_sentinel_page),
   // the bucket might still need to be reported if it has a list of empty,
@@ -1370,9 +1361,9 @@ static void PartitionDumpBucketStats(PartitionBucketMemoryStats* stats_out,
   stats_out->is_direct_map = false;
   stats_out->num_full_pages = static_cast<size_t>(bucket->num_full_pages);
   stats_out->bucket_slot_size = bucket->slot_size;
-  uint16_t bucket_num_slots = PartitionBucketSlots(bucket);
+  uint16_t bucket_num_slots = bucket->get_slots_per_span();
   size_t bucket_useful_storage = stats_out->bucket_slot_size * bucket_num_slots;
-  stats_out->allocated_page_size = PartitionBucketBytes(bucket);
+  stats_out->allocated_page_size = bucket->get_bytes_per_span();
   stats_out->active_bytes = bucket->num_full_pages * bucket_useful_storage;
   stats_out->resident_bytes =
       bucket->num_full_pages * stats_out->allocated_page_size;
@@ -1398,14 +1389,13 @@ static void PartitionDumpBucketStats(PartitionBucketMemoryStats* stats_out,
   }
 }
 
-void PartitionDumpStatsGeneric(PartitionRootGeneric* partition,
-                               const char* partition_name,
-                               bool is_light_dump,
-                               PartitionStatsDumper* dumper) {
+void PartitionRootGeneric::DumpStats(const char* partition_name,
+                                     bool is_light_dump,
+                                     PartitionStatsDumper* dumper) {
   PartitionMemoryStats stats = {0};
-  stats.total_mmapped_bytes = partition->total_size_of_super_pages +
-                              partition->total_size_of_direct_mapped_pages;
-  stats.total_committed_bytes = partition->total_size_of_committed_pages;
+  stats.total_mmapped_bytes =
+      this->total_size_of_super_pages + this->total_size_of_direct_mapped_pages;
+  stats.total_committed_bytes = this->total_size_of_committed_pages;
 
   size_t direct_mapped_allocations_total_size = 0;
 
@@ -1422,13 +1412,13 @@ void PartitionDumpStatsGeneric(PartitionRootGeneric* partition,
   PartitionBucketMemoryStats bucket_stats[kGenericNumBuckets];
   size_t num_direct_mapped_allocations = 0;
   {
-    subtle::SpinLock::Guard guard(partition->lock);
+    subtle::SpinLock::Guard guard(this->lock);
 
     for (size_t i = 0; i < kGenericNumBuckets; ++i) {
-      const PartitionBucket* bucket = &partition->buckets[i];
+      const PartitionBucket* bucket = &this->buckets[i];
       // Don't report the pseudo buckets that the generic allocator sets up in
       // order to preserve a fast size->bucket map (see
-      // PartitionAllocGenericInit for details).
+      // PartitionRootGeneric::Init() for details).
       if (!bucket->active_pages_head)
         bucket_stats[i].is_valid = false;
       else
@@ -1441,7 +1431,7 @@ void PartitionDumpStatsGeneric(PartitionRootGeneric* partition,
       }
     }
 
-    for (PartitionDirectMapExtent *extent = partition->direct_map_list;
+    for (PartitionDirectMapExtent *extent = this->direct_map_list;
          extent && num_direct_mapped_allocations < kMaxReportableDirectMaps;
          extent = extent->next_extent, ++num_direct_mapped_allocations) {
       DCHECK(!extent->next_extent ||
@@ -1456,8 +1446,8 @@ void PartitionDumpStatsGeneric(PartitionRootGeneric* partition,
 
   if (!is_light_dump) {
     // Call |PartitionsDumpBucketStats| after collecting stats because it can
-    // try to allocate using |PartitionAllocGeneric| and it can't obtain the
-    // lock.
+    // try to allocate using |PartitionRootGeneric::Alloc()| and it can't
+    // obtain the lock.
     for (size_t i = 0; i < kGenericNumBuckets; ++i) {
       if (bucket_stats[i].is_valid)
         dumper->PartitionsDumpBucketStats(partition_name, &bucket_stats[i]);
@@ -1466,16 +1456,15 @@ void PartitionDumpStatsGeneric(PartitionRootGeneric* partition,
     for (size_t i = 0; i < num_direct_mapped_allocations; ++i) {
       uint32_t size = direct_map_lengths[i];
 
-      PartitionBucketMemoryStats stats;
-      memset(&stats, '\0', sizeof(stats));
-      stats.is_valid = true;
-      stats.is_direct_map = true;
-      stats.num_full_pages = 1;
-      stats.allocated_page_size = size;
-      stats.bucket_slot_size = size;
-      stats.active_bytes = size;
-      stats.resident_bytes = size;
-      dumper->PartitionsDumpBucketStats(partition_name, &stats);
+      PartitionBucketMemoryStats mapped_stats = {};
+      mapped_stats.is_valid = true;
+      mapped_stats.is_direct_map = true;
+      mapped_stats.num_full_pages = 1;
+      mapped_stats.allocated_page_size = size;
+      mapped_stats.bucket_slot_size = size;
+      mapped_stats.active_bytes = size;
+      mapped_stats.resident_bytes = size;
+      dumper->PartitionsDumpBucketStats(partition_name, &mapped_stats);
     }
   }
 
@@ -1484,14 +1473,13 @@ void PartitionDumpStatsGeneric(PartitionRootGeneric* partition,
   dumper->PartitionDumpTotals(partition_name, &stats);
 }
 
-void PartitionDumpStats(PartitionRoot* partition,
-                        const char* partition_name,
-                        bool is_light_dump,
-                        PartitionStatsDumper* dumper) {
+void PartitionRoot::DumpStats(const char* partition_name,
+                              bool is_light_dump,
+                              PartitionStatsDumper* dumper) {
   PartitionMemoryStats stats = {0};
-  stats.total_mmapped_bytes = partition->total_size_of_super_pages;
-  stats.total_committed_bytes = partition->total_size_of_committed_pages;
-  DCHECK(!partition->total_size_of_direct_mapped_pages);
+  stats.total_mmapped_bytes = this->total_size_of_super_pages;
+  stats.total_committed_bytes = this->total_size_of_committed_pages;
+  DCHECK(!this->total_size_of_direct_mapped_pages);
 
   static const size_t kMaxReportableBuckets = 4096 / sizeof(void*);
   std::unique_ptr<PartitionBucketMemoryStats[]> memory_stats;
@@ -1499,12 +1487,12 @@ void PartitionDumpStats(PartitionRoot* partition,
     memory_stats = std::unique_ptr<PartitionBucketMemoryStats[]>(
         new PartitionBucketMemoryStats[kMaxReportableBuckets]);
 
-  const size_t partitionNumBuckets = partition->num_buckets;
+  const size_t partitionNumBuckets = this->num_buckets;
   DCHECK(partitionNumBuckets <= kMaxReportableBuckets);
 
   for (size_t i = 0; i < partitionNumBuckets; ++i) {
     PartitionBucketMemoryStats bucket_stats = {0};
-    PartitionDumpBucketStats(&bucket_stats, &partition->buckets()[i]);
+    PartitionDumpBucketStats(&bucket_stats, &this->buckets()[i]);
     if (bucket_stats.is_valid) {
       stats.total_resident_bytes += bucket_stats.resident_bytes;
       stats.total_active_bytes += bucket_stats.active_bytes;
@@ -1520,7 +1508,8 @@ void PartitionDumpStats(PartitionRoot* partition,
   }
   if (!is_light_dump) {
     // PartitionsDumpBucketStats is called after collecting stats because it
-    // can use PartitionAlloc to allocate and this can affect the statistics.
+    // can use PartitionRoot::Alloc() to allocate and this can affect the
+    // statistics.
     for (size_t i = 0; i < partitionNumBuckets; ++i) {
       if (memory_stats[i].is_valid)
         dumper->PartitionsDumpBucketStats(partition_name, &memory_stats[i]);

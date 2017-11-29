@@ -35,12 +35,17 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
       const AtomicString& property_name,
       const PropertyRegistry*,
       const String& value,
+      SecureContextMode,
       StyleSheetContents*);
-  MutableCSSPropertyValueSet::SetResult
-  SetCSSPropertyValue(CSSPropertyID, const String& value, StyleSheetContents*);
+  MutableCSSPropertyValueSet::SetResult SetCSSPropertyValue(
+      CSSPropertyID,
+      const String& value,
+      SecureContextMode,
+      StyleSheetContents*);
   void SetCSSPropertyValue(CSSPropertyID, const CSSValue&);
   void SetPresentationAttributeValue(CSSPropertyID,
                                      const String& value,
+                                     SecureContextMode,
                                      StyleSheetContents*);
   void SetSVGAttributeValue(const QualifiedName&, const String& value);
 
@@ -50,7 +55,8 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
       index =
           css_property_map_->FindPropertyIndex(property.CustomPropertyName());
     else
-      index = css_property_map_->FindPropertyIndex(property.CssProperty());
+      index = css_property_map_->FindPropertyIndex(
+          property.GetCSSProperty().PropertyID());
     CHECK_GE(index, 0);
     return css_property_map_->PropertyAt(static_cast<unsigned>(index)).Value();
   }
@@ -68,6 +74,8 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
 
   PropertyHandleSet Properties() const override;
 
+  void AddKeyframePropertiesToV8Object(V8ObjectBuilder&) const override;
+
   class CSSPropertySpecificKeyframe
       : public Keyframe::PropertySpecificKeyframe {
    public:
@@ -82,7 +90,7 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
 
     const CSSValue* Value() const { return value_.Get(); }
 
-    bool PopulateAnimatableValue(CSSPropertyID,
+    bool PopulateAnimatableValue(const CSSProperty&,
                                  Element&,
                                  const ComputedStyle& base_style,
                                  const ComputedStyle* parent_style) const final;
@@ -164,7 +172,8 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
 
   scoped_refptr<Keyframe> Clone() const override;
   scoped_refptr<Keyframe::PropertySpecificKeyframe>
-  CreatePropertySpecificKeyframe(const PropertyHandle&) const override;
+  CreatePropertySpecificKeyframe(const PropertyHandle&,
+                                 double offset) const override;
 
   bool IsStringKeyframe() const override { return true; }
 

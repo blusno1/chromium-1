@@ -21,6 +21,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/task_scheduler/post_task.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/boot_phase_monitor/arc_boot_phase_monitor_bridge.h"
 #include "chrome/browser/chromeos/arc/voice_interaction/highlighter_controller_client.h"
 #include "chrome/browser/chromeos/arc/voice_interaction/voice_interaction_controller_client.h"
@@ -39,14 +40,16 @@
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_holder.h"
 #include "components/session_manager/core/session_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_owner.h"
 #include "ui/compositor/layer_tree_owner.h"
+#include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_util.h"
@@ -158,18 +161,21 @@ std::unique_ptr<ui::LayerTreeOwner> CreateLayerTreeForSnapshot(
 void EncodeAndReturnImage(
     ArcVoiceInteractionFrameworkService::CaptureFullscreenCallback callback,
     std::unique_ptr<ui::LayerTreeOwner> old_layer_owner,
-    const gfx::Image& image) {
+    gfx::Image image) {
   old_layer_owner.reset();
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
       base::TaskTraits{base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+      // We use SkBitmap here to avoid passing in gfx::Image directly, which
+      // shares a single gfx::ImageStorage that's not threadsafe.
+      // Alternatively, we could also pass in |image| with std::move().
       base::BindOnce(
-          [](const gfx::Image& image) -> std::vector<uint8_t> {
+          [](SkBitmap image) -> std::vector<uint8_t> {
             std::vector<uint8_t> res;
-            gfx::JPEG1xEncodedDataFromImage(image, 100, &res);
+            gfx::JPEGCodec::Encode(image, 100, &res);
             return res;
           },
-          image),
+          image.AsBitmap()),
       std::move(callback));
 }
 
@@ -225,11 +231,11 @@ ArcVoiceInteractionFrameworkService::ArcVoiceInteractionFrameworkService(
     ArcBridgeService* bridge_service)
     : context_(context),
       arc_bridge_service_(bridge_service),
-      binding_(this),
       highlighter_client_(std::make_unique<HighlighterControllerClient>(this)),
       voice_interaction_controller_client_(
           std::make_unique<VoiceInteractionControllerClient>()),
       weak_ptr_factory_(this) {
+  arc_bridge_service_->voice_interaction_framework()->SetHost(this);
   arc_bridge_service_->voice_interaction_framework()->AddObserver(this);
   ArcSessionManager::Get()->AddObserver(this);
   session_manager::SessionManager::Get()->AddObserver(this);
@@ -241,23 +247,27 @@ ArcVoiceInteractionFrameworkService::~ArcVoiceInteractionFrameworkService() {
   session_manager::SessionManager::Get()->RemoveObserver(this);
   ArcSessionManager::Get()->RemoveObserver(this);
   arc_bridge_service_->voice_interaction_framework()->RemoveObserver(this);
+  arc_bridge_service_->voice_interaction_framework()->SetHost(nullptr);
 }
 
-void ArcVoiceInteractionFrameworkService::OnInstanceReady() {
+void ArcVoiceInteractionFrameworkService::OnConnectionReady() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  mojom::VoiceInteractionFrameworkInstance* framework_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(
-          arc_bridge_service_->voice_interaction_framework(), Init);
-  DCHECK(framework_instance);
-  mojom::VoiceInteractionFrameworkHostPtr host_proxy;
-  binding_.Bind(mojo::MakeRequest(&host_proxy));
-  framework_instance->Init(std::move(host_proxy));
 
   if (is_request_pending_) {
     is_request_pending_ = false;
     if (is_pending_request_toggle_) {
+      mojom::VoiceInteractionFrameworkInstance* framework_instance =
+          ARC_GET_INSTANCE_FOR_METHOD(
+              arc_bridge_service_->voice_interaction_framework(),
+              ToggleVoiceInteractionSession);
+      DCHECK(framework_instance);
       framework_instance->ToggleVoiceInteractionSession(IsHomescreenActive());
     } else {
+      mojom::VoiceInteractionFrameworkInstance* framework_instance =
+          ARC_GET_INSTANCE_FOR_METHOD(
+              arc_bridge_service_->voice_interaction_framework(),
+              StartVoiceInteractionSession);
+      DCHECK(framework_instance);
       framework_instance->StartVoiceInteractionSession(IsHomescreenActive());
     }
   }
@@ -265,9 +275,8 @@ void ArcVoiceInteractionFrameworkService::OnInstanceReady() {
   highlighter_client_->Attach();
 }
 
-void ArcVoiceInteractionFrameworkService::OnInstanceClosed() {
+void ArcVoiceInteractionFrameworkService::OnConnectionClosed() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  binding_.Close();
   highlighter_client_->Detach();
 }
 
@@ -345,18 +354,6 @@ void ArcVoiceInteractionFrameworkService::SetVoiceInteractionState(
   voice_interaction_controller_client_->NotifyStatusChanged(state);
 }
 
-void ArcVoiceInteractionFrameworkService::OnMetalayerClosed() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  LOG(ERROR) << "Deprecated method called: "
-                "VoiceInteractionFrameworkHost.OnInstanceClosed";
-}
-
-void ArcVoiceInteractionFrameworkService::SetMetalayerEnabled(bool enabled) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  LOG(ERROR) << "Deprecated method called: "
-                "VoiceInteractionFrameworkHost.SetMetalayerEnabled";
-}
-
 void ArcVoiceInteractionFrameworkService::ShowMetalayer() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   NotifyMetalayerStatusChanged(true);
@@ -369,6 +366,10 @@ void ArcVoiceInteractionFrameworkService::HideMetalayer() {
 
 void ArcVoiceInteractionFrameworkService::OnArcPlayStoreEnabledChanged(
     bool enabled) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  voice_interaction_controller_client_->NotifyFeatureAllowed(
+      IsAssistantAllowedForProfile(Profile::FromBrowserContext(context_)));
+
   if (enabled)
     return;
 
@@ -385,7 +386,8 @@ void ArcVoiceInteractionFrameworkService::OnSessionStateChanged() {
   if (session_state != session_manager::SessionState::ACTIVE)
     return;
 
-  PrefService* prefs = Profile::FromBrowserContext(context_)->GetPrefs();
+  Profile* profile = Profile::FromBrowserContext(context_);
+  PrefService* prefs = profile->GetPrefs();
   bool enabled = prefs->GetBoolean(prefs::kVoiceInteractionEnabled);
   voice_interaction_controller_client_->NotifySettingsEnabled(enabled);
 
@@ -395,6 +397,9 @@ void ArcVoiceInteractionFrameworkService::OnSessionStateChanged() {
   bool setup_completed =
       prefs->GetBoolean(prefs::kArcVoiceInteractionValuePropAccepted);
   voice_interaction_controller_client_->NotifySetupCompleted(setup_completed);
+
+  voice_interaction_controller_client_->NotifyFeatureAllowed(
+      IsAssistantAllowedForProfile(profile));
 
   // We only want notify the status change on first user signed in.
   session_manager::SessionManager::Get()->RemoveObserver(this);
@@ -607,7 +612,7 @@ bool ArcVoiceInteractionFrameworkService::InitiateUserInteraction(
   }
 
   ArcBootPhaseMonitorBridge::RecordFirstAppLaunchDelayUMA(context_);
-  if (!arc_bridge_service_->voice_interaction_framework()->has_instance()) {
+  if (!arc_bridge_service_->voice_interaction_framework()->IsConnected()) {
     VLOG(1) << "Instance not ready.";
     SetArcCpuRestriction(false);
     is_request_pending_ = true;

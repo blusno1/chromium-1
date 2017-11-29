@@ -138,6 +138,10 @@ constexpr base::TimeDelta kMaxProgressivePaintTime =
 constexpr base::TimeDelta kMaxInitialProgressivePaintTime =
     base::TimeDelta::FromMilliseconds(250);
 
+// Flag to turn edit mode tracking on.
+// Do not flip until form saving is completely functional.
+constexpr bool kIsEditModeTracked = false;
+
 PDFiumEngine* g_engine_for_fontmapper = nullptr;
 
 std::vector<uint32_t> GetPageNumbersFromPrintPageNumberRange(
@@ -732,7 +736,8 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
       most_visible_page_(-1),
       called_do_document_action_(false),
       render_grayscale_(false),
-      render_annots_(true) {
+      render_annots_(true),
+      edit_mode_(false) {
   find_factory_.Initialize(this);
   password_factory_.Initialize(this);
 
@@ -1037,7 +1042,6 @@ void PDFiumEngine::ScrolledToXPosition(int position) {
   position_.set_x(position);
   CalculateVisiblePages();
   client_->Scroll(pp::Point(old_x - position, 0));
-  OnSelectionChanged();
 }
 
 void PDFiumEngine::ScrolledToYPosition(int position) {
@@ -1047,7 +1051,6 @@ void PDFiumEngine::ScrolledToYPosition(int position) {
   position_.set_y(position);
   CalculateVisiblePages();
   client_->Scroll(pp::Point(0, old_y - position));
-  OnSelectionChanged();
 }
 
 void PDFiumEngine::PrePaint() {
@@ -1537,7 +1540,7 @@ pp::Buffer_Dev PDFiumEngine::PrintPagesAsRasterPDF(
   if (!output_doc)
     return pp::Buffer_Dev();
 
-  SaveSelectedFormForPrint();
+  KillFormFocus();
 
   std::vector<PDFiumPage> pages_to_print;
   // width and height of source PDF pages.
@@ -1637,7 +1640,7 @@ pp::Buffer_Dev PDFiumEngine::PrintPagesAsPDF(
   if (!output_doc)
     return pp::Buffer_Dev();
 
-  SaveSelectedFormForPrint();
+  KillFormFocus();
 
   std::string page_number_str;
   for (uint32_t index = 0; index < page_range_count; ++index) {
@@ -1691,7 +1694,7 @@ void PDFiumEngine::FitContentsToPrintableAreaIfRequired(
   }
 }
 
-void PDFiumEngine::SaveSelectedFormForPrint() {
+void PDFiumEngine::KillFormFocus() {
   FORM_ForceToKillFocus(form_);
   SetInFormTextArea(false);
 }
@@ -2340,16 +2343,14 @@ void PDFiumEngine::SearchUsingICU(const base::string16& term,
   if (text_length <= 0)
     return;
 
-  // Adding +1 to text_length to account for the string terminator that is
-  // included.
   base::string16 page_text;
   PDFiumAPIStringBufferAdapter<base::string16> api_string_adapter(
-      &page_text, text_length + 1, false);
+      &page_text, text_length, false);
   unsigned short* data =
       reinterpret_cast<unsigned short*>(api_string_adapter.GetData());
-  int written = FPDFText_GetText(pages_[current_page]->GetTextPage(),
-                                 character_to_start_searching_from,
-                                 text_length + 1, data);
+  int written =
+      FPDFText_GetText(pages_[current_page]->GetTextPage(),
+                       character_to_start_searching_from, text_length, data);
   api_string_adapter.Close(written);
 
   std::vector<PDFEngine::Client::SearchStringResult> results =
@@ -3920,6 +3921,14 @@ void PDFiumEngine::SetSelecting(bool selecting) {
     client_->IsSelectingChanged(selecting);
 }
 
+void PDFiumEngine::SetEditMode(bool edit_mode) {
+  if (!kIsEditModeTracked || edit_mode_ == edit_mode)
+    return;
+
+  edit_mode_ = edit_mode;
+  client_->IsEditModeChanged(edit_mode_);
+}
+
 void PDFiumEngine::SetInFormTextArea(bool in_form_text_area) {
   // If focus was previously in form text area, clear form text selection.
   // Clearing needs to be done before changing focus to ensure the correct
@@ -4052,7 +4061,8 @@ FPDF_SYSTEMTIME PDFiumEngine::Form_GetLocalTime(FPDF_FORMFILLINFO* param) {
 }
 
 void PDFiumEngine::Form_OnChange(FPDF_FORMFILLINFO* param) {
-  // Don't care about.
+  PDFiumEngine* engine = static_cast<PDFiumEngine*>(param);
+  engine->SetEditMode(true);
 }
 
 FPDF_PAGE PDFiumEngine::Form_GetPage(FPDF_FORMFILLINFO* param,

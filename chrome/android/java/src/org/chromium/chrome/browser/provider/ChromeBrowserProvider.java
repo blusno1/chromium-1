@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.provider;
 
 import android.annotation.SuppressLint;
+import android.app.Application;
 import android.app.SearchManager;
 import android.content.ContentProvider;
 import android.content.ContentUris;
@@ -26,11 +27,11 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.LongSparseArray;
 
+import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.chrome.browser.UrlConstants;
@@ -56,7 +57,6 @@ public class ChromeBrowserProvider extends ContentProvider {
      * {@link SearchColumns#SEARCH}, and {@link SearchColumns#DATE}.
      */
     @VisibleForTesting
-    @SuppressFBWarnings("MS_PKGPROTECT")
     public static final String[] SEARCHES_PROJECTION = new String[] {
             // if you change column order you must also change indices below
             SearchColumns.ID, // 0
@@ -243,6 +243,7 @@ public class ChromeBrowserProvider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
+        ApplicationStatus.initialize((Application) ContextUtils.getApplicationContext());
         // Work around for broken Android versions that break the Android contract and initialize
         // ContentProviders on non-UI threads.  crbug.com/705442
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -407,7 +408,6 @@ public class ChromeBrowserProvider extends ContentProvider {
     }
 
     @Override
-    @SuppressFBWarnings("SF_SWITCH_FALLTHROUGH")
     public Uri insert(Uri uri, ContentValues values) {
         if (!canHandleContentProviderApiCall() || !hasWriteAccess()) return null;
 
@@ -634,7 +634,6 @@ public class ChromeBrowserProvider extends ContentProvider {
         synchronized (mLoadNativeLock) {
             ThreadUtils.runOnUiThreadBlocking(new Runnable() {
                 @Override
-                @SuppressFBWarnings("DM_EXIT")
                 public void run() {
                     if (mNativeChromeBrowserProvider != 0) return;
                     try {
@@ -733,7 +732,6 @@ public class ChromeBrowserProvider extends ContentProvider {
         /**
          * @return The bookmark favicon, if any.
          */
-        @SuppressFBWarnings("EI_EXPOSE_REP")
         public byte[] favicon() {
             return mFavicon;
         }
@@ -741,7 +739,6 @@ public class ChromeBrowserProvider extends ContentProvider {
         /**
          * @return The bookmark thumbnail, if any.
          */
-        @SuppressFBWarnings("EI_EXPOSE_REP")
         public byte[] thumbnail() {
             return mThumbnail;
         }
@@ -804,13 +801,11 @@ public class ChromeBrowserProvider extends ContentProvider {
         }
 
         @VisibleForTesting
-        @SuppressFBWarnings("EI_EXPOSE_REP2")
         public void setFavicon(byte[] favicon) {
             mFavicon = favicon;
         }
 
         @VisibleForTesting
-        @SuppressFBWarnings("EI_EXPOSE_REP2")
         public void setThumbnail(byte[] thumbnail) {
             mThumbnail = thumbnail;
         }

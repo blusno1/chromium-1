@@ -67,7 +67,7 @@ class CORE_EXPORT InspectorPageAgent final
    public:
     virtual ~Client() {}
     virtual void PageLayoutInvalidated(bool resized) {}
-    virtual void WaitForCreateWindow(LocalFrame*) {}
+    virtual void WaitForCreateWindow(InspectorPageAgent*, LocalFrame*) {}
   };
 
   enum ResourceType {
@@ -125,6 +125,7 @@ class CORE_EXPORT InspectorPageAgent final
                               Maybe<String> referrer,
                               Maybe<String> transitionType,
                               String* frame_id,
+                              Maybe<String>* loader_id,
                               Maybe<String>* errorText) override;
   protocol::Response stopLoading() override;
   protocol::Response setAdBlockingEnabled(bool) override;

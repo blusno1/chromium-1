@@ -14,8 +14,8 @@
 #include "bindings/core/v8/V8Initializer.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8Window.h"
-#include "platform/bindings/ConditionalFeatures.h"
 #include "platform/bindings/DOMWrapperWorld.h"
+#include "platform/bindings/OriginTrialFeatures.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/bindings/V8PerIsolateData.h"
 #include "platform/bindings/V8PrivateProperty.h"
@@ -25,8 +25,6 @@
 namespace blink {
 
 namespace {
-
-const intptr_t* g_v8_context_snapshot_reference_table = nullptr;
 
 // TODO(peria): This method is almost a copy of
 // V8PerContext::ConstructorForTypeSlowCase(), so merge with it.
@@ -63,8 +61,6 @@ v8::Local<v8::Function> ConstructPlainType(v8::Isolate* isolate,
     prototype_object->SetAlignedPointerInInternalField(
         kV8PrototypeTypeIndex, const_cast<WrapperTypeInfo*>(type));
   }
-  type->PreparePrototypeAndInterfaceObject(
-      context, world, prototype_object, interface_object, interface_template);
 
   return interface_object;
 }
@@ -146,16 +142,6 @@ struct DataForDeserializer {
   Member<Document> document;
 };
 
-int CountExternalReferenceEntries() {
-  if (!g_v8_context_snapshot_reference_table)
-    return 0;
-
-  int count = 0;
-  for (const intptr_t* p = g_v8_context_snapshot_reference_table; *p; ++p)
-    ++count;
-  return count;
-}
-
 }  // namespace
 
 v8::Local<v8::Context> V8ContextSnapshot::CreateContextFromSnapshot(
@@ -182,14 +168,14 @@ v8::Local<v8::Context> V8ContextSnapshot::CreateContextFromSnapshot(
   return context;
 }
 
-void V8ContextSnapshot::InstallRuntimeEnabledFeatures(
+bool V8ContextSnapshot::InstallConditionalFeatures(
     v8::Local<v8::Context> context,
     Document* document) {
   ScriptState* script_state = ScriptState::From(context);
   v8::Isolate* isolate = script_state->GetIsolate();
   const DOMWrapperWorld& world = script_state->World();
   if (!CanCreateContextFromSnapshot(isolate, world, document)) {
-    return;
+    return false;
   }
 
   TRACE_EVENT1("v8", "V8ContextSnapshot::InstallRuntimeEnabled", "IsMainFrame",
@@ -209,7 +195,10 @@ void V8ContextSnapshot::InstallRuntimeEnabledFeatures(
                                           .As<v8::Object>();
     V8Window::install_runtime_enabled_features_function_(
         isolate, world, window_wrapper, prototype, interface);
-    InstallConditionalFeatures(type, script_state, prototype, interface);
+    type->InstallConditionalFeatures(context, world, window_wrapper, prototype,
+                                     interface,
+                                     type->domTemplate(isolate, world));
+    InstallOriginTrialFeatures(type, script_state, prototype, interface);
   }
   {
     const WrapperTypeInfo* type = &V8EventTarget::wrapperTypeInfo;
@@ -219,11 +208,14 @@ void V8ContextSnapshot::InstallRuntimeEnabledFeatures(
                                           .As<v8::Object>();
     V8EventTarget::InstallRuntimeEnabledFeatures(
         isolate, world, v8::Local<v8::Object>(), prototype, interface);
-    InstallConditionalFeatures(type, script_state, prototype, interface);
+    type->InstallConditionalFeatures(context, world, v8::Local<v8::Object>(),
+                                     prototype, interface,
+                                     type->domTemplate(isolate, world));
+    InstallOriginTrialFeatures(type, script_state, prototype, interface);
   }
 
   if (!world.IsMainWorld()) {
-    return;
+    return true;
   }
 
   // The below code handles window.document on the main world.
@@ -240,7 +232,10 @@ void V8ContextSnapshot::InstallRuntimeEnabledFeatures(
                                           .As<v8::Object>();
     V8HTMLDocument::InstallRuntimeEnabledFeatures(
         isolate, world, document_wrapper, prototype, interface);
-    InstallConditionalFeatures(type, script_state, prototype, interface);
+    type->InstallConditionalFeatures(context, world, document_wrapper,
+                                     prototype, interface,
+                                     type->domTemplate(isolate, world));
+    InstallOriginTrialFeatures(type, script_state, prototype, interface);
   }
   {
     const WrapperTypeInfo* type = &V8Document::wrapperTypeInfo;
@@ -250,7 +245,10 @@ void V8ContextSnapshot::InstallRuntimeEnabledFeatures(
                                           .As<v8::Object>();
     V8Document::InstallRuntimeEnabledFeatures(
         isolate, world, v8::Local<v8::Object>(), prototype, interface);
-    InstallConditionalFeatures(type, script_state, prototype, interface);
+    type->InstallConditionalFeatures(context, world, v8::Local<v8::Object>(),
+                                     prototype, interface,
+                                     type->domTemplate(isolate, world));
+    InstallOriginTrialFeatures(type, script_state, prototype, interface);
   }
   {
     const WrapperTypeInfo* type = &V8Node::wrapperTypeInfo;
@@ -260,8 +258,13 @@ void V8ContextSnapshot::InstallRuntimeEnabledFeatures(
                                           .As<v8::Object>();
     V8Node::InstallRuntimeEnabledFeatures(
         isolate, world, v8::Local<v8::Object>(), prototype, interface);
-    InstallConditionalFeatures(type, script_state, prototype, interface);
+    type->InstallConditionalFeatures(context, world, v8::Local<v8::Object>(),
+                                     prototype, interface,
+                                     type->domTemplate(isolate, world));
+    InstallOriginTrialFeatures(type, script_state, prototype, interface);
   }
+
+  return true;
 }
 
 void V8ContextSnapshot::EnsureInterfaceTemplates(v8::Isolate* isolate) {
@@ -284,15 +287,6 @@ void V8ContextSnapshot::EnsureInterfaceTemplates(v8::Isolate* isolate) {
   EnsureInterfaceTemplatesForWorld(isolate, *isolated_world);
 }
 
-void V8ContextSnapshot::SetReferenceTable(const intptr_t* table) {
-  DCHECK(!g_v8_context_snapshot_reference_table);
-  g_v8_context_snapshot_reference_table = table;
-}
-
-const intptr_t* V8ContextSnapshot::GetReferenceTable() {
-  return g_v8_context_snapshot_reference_table;
-}
-
 v8::StartupData V8ContextSnapshot::TakeSnapshot() {
   DCHECK_EQ(V8PerIsolateData::From(V8PerIsolateData::MainThreadIsolate())
                 ->GetV8ContextSnapshotMode(),
@@ -303,9 +297,6 @@ v8::StartupData V8ContextSnapshot::TakeSnapshot() {
           ->GetSnapshotCreator();
   v8::Isolate* isolate = creator->GetIsolate();
   CHECK_EQ(isolate, v8::Isolate::GetCurrent());
-
-  VLOG(1) << "External reference table has " << CountExternalReferenceEntries()
-          << " entries.";
 
   // Disable all runtime enabled features
   RuntimeEnabledFeatures::SetStableFeaturesEnabled(false);

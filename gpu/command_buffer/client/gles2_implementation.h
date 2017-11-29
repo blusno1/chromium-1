@@ -192,9 +192,9 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // ContextSupport implementation.
   void FlushPendingWork() override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
-                       const base::Closure& callback) override;
+                       base::OnceClosure callback) override;
   bool IsSyncTokenSignaled(const gpu::SyncToken& sync_token) override;
-  void SignalQuery(uint32_t query, const base::Closure& callback) override;
+  void SignalQuery(uint32_t query, base::OnceClosure callback) override;
   void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
   void Swap() override;
   void SwapWithBounds(const std::vector<gfx::Rect>& rects) override;
@@ -207,9 +207,8 @@ class GLES2_IMPL_EXPORT GLES2Implementation
                             const gfx::RectF& uv_rect) override;
   uint64_t ShareGroupTracingGUID() const override;
   void SetErrorMessageCallback(
-      const base::Callback<void(const char*, int32_t)>& callback) override;
-  void AddLatencyInfo(
-      const std::vector<ui::LatencyInfo>& latency_info) override;
+      base::RepeatingCallback<void(const char*, int32_t)> callback) override;
+  void SetSnapshotRequested() override;
   bool ThreadSafeShallowLockDiscardableTexture(uint32_t texture_id) override;
   void CompleteLockDiscardableTexureOnContextThread(
       uint32_t texture_id) override;
@@ -626,7 +625,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void FinishHelper();
   void FlushHelper();
 
-  void RunIfContextNotLost(const base::Closure& callback);
+  void RunIfContextNotLost(base::OnceClosure callback);
 
   // Validate if an offset is valid, i.e., non-negative and fit into 32-bit.
   // If not, generate an approriate error, and return false.

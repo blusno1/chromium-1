@@ -7,11 +7,11 @@
 #include "ash/ash_constants.h"
 #include "ash/frame/caption_buttons/frame_caption_button.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/frame/default_header_painter.h"
-#include "ash/frame/header_painter.h"
+#include "ash/frame/frame_header.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
 #include "ash/shell.h"
+#include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
@@ -34,6 +34,7 @@
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/hosted_app_button_container.h"
+#include "chrome/browser/ui/views/frame/hosted_app_frame_header_ash.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
@@ -185,7 +186,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest, ImmersiveFullscreen) {
 
   // Frame paints by default.
   EXPECT_TRUE(frame_view->ShouldPaint());
-  EXPECT_LT(0, frame_view->header_painter_->GetHeaderHeightForPainting());
+  EXPECT_LT(0, frame_view->frame_header_->GetHeaderHeightForPainting());
 
   // Enter both browser fullscreen and tab fullscreen. Entering browser
   // fullscreen should enable immersive fullscreen.
@@ -206,7 +207,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest, ImmersiveFullscreen) {
   revealed_lock.reset();
   EXPECT_FALSE(immersive_mode_controller->IsRevealed());
   EXPECT_FALSE(frame_view->ShouldPaint());
-  EXPECT_EQ(0, frame_view->header_painter_->GetHeaderHeightForPainting());
+  EXPECT_EQ(0, frame_view->frame_header_->GetHeaderHeightForPainting());
 
   // Repeat test but without tab fullscreen.
   ExitFullscreenModeForTabAndWait(browser(), web_contents);
@@ -217,13 +218,13 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest, ImmersiveFullscreen) {
   EXPECT_TRUE(immersive_mode_controller->IsRevealed());
   EXPECT_TRUE(frame_view->ShouldPaint());
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
-  EXPECT_LT(0, frame_view->header_painter_->GetHeaderHeightForPainting());
+  EXPECT_LT(0, frame_view->frame_header_->GetHeaderHeightForPainting());
 
   // Ending the reveal. Immersive browser should have the same behavior as full
   // screen, i.e., having an origin of (0,0).
   revealed_lock.reset();
   EXPECT_FALSE(frame_view->ShouldPaint());
-  EXPECT_EQ(0, frame_view->header_painter_->GetHeaderHeightForPainting());
+  EXPECT_EQ(0, frame_view->frame_header_->GetHeaderHeightForPainting());
 
   // Exiting immersive fullscreen should make the caption buttons and the frame
   // visible again.
@@ -231,7 +232,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest, ImmersiveFullscreen) {
   EXPECT_FALSE(immersive_mode_controller->IsEnabled());
   EXPECT_TRUE(frame_view->ShouldPaint());
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
-  EXPECT_LT(0, frame_view->header_painter_->GetHeaderHeightForPainting());
+  EXPECT_LT(0, frame_view->frame_header_->GetHeaderHeightForPainting());
 }
 
 // Tests that Avatar icon should show on the top left corner of the teleported
@@ -246,7 +247,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
           widget->non_client_view()->frame_view());
   aura::Window* window = browser()->window()->GetNativeWindow();
 
-  EXPECT_FALSE(chrome::MultiUserWindowManager::ShouldShowAvatar(window));
+  EXPECT_FALSE(MultiUserWindowManager::ShouldShowAvatar(window));
   EXPECT_FALSE(frame_view->profile_indicator_icon());
 
   const AccountId current_account_id =
@@ -257,7 +258,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
   // Teleport the window to another desktop.
   const AccountId account_id2(AccountId::FromUserEmail("user2"));
   manager->ShowWindowForUser(window, account_id2);
-  EXPECT_TRUE(chrome::MultiUserWindowManager::ShouldShowAvatar(window));
+  EXPECT_TRUE(MultiUserWindowManager::ShouldShowAvatar(window));
 
   // An icon should show on the top left corner of the teleported browser
   // window.
@@ -479,22 +480,45 @@ IN_PROC_BROWSER_TEST_F(HostedAppNonClientFrameViewAshTest, HostedAppFrame) {
       static_cast<BrowserNonClientFrameViewAsh*>(
           browser_view->frame()->GetFrameView());
 
-  EXPECT_TRUE(frame_view->hosted_app_button_container_->visible());
+  HostedAppButtonContainer* button_container =
+      frame_view->hosted_app_button_container_;
+  EXPECT_TRUE(button_container->visible());
 
   // Ensure the theme color is set.
-  auto* header_painter = static_cast<ash::DefaultHeaderPainter*>(
-      frame_view->header_painter_.get());
-  EXPECT_EQ(SK_ColorBLUE, header_painter->GetActiveFrameColor());
-  EXPECT_EQ(SK_ColorBLUE, header_painter->GetInactiveFrameColor());
+  auto* frame_header =
+      static_cast<HostedAppFrameHeaderAsh*>(frame_view->frame_header_.get());
+  EXPECT_EQ(SK_ColorBLUE, frame_header->GetActiveFrameColor());
+  EXPECT_EQ(SK_ColorBLUE, frame_header->GetInactiveFrameColor());
+  EXPECT_EQ(SK_ColorWHITE, button_container->active_icon_color_);
 
   // Show the menu.
   HostedAppButtonContainer::AppMenuButton* menu_button =
-      frame_view->hosted_app_button_container_->app_menu_button_;
+      button_container->app_menu_button_;
 
   ui::MouseEvent e(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                    ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0);
   menu_button->OnMousePressed(e);
   EXPECT_TRUE(menu_button->menu()->IsShowing());
+
+  // The app and domain should render next to the window title.
+  frame_header->LayoutRenderTexts(gfx::Rect(300, 30), 100, 100);
+  EXPECT_EQ(gfx::Rect(100, 30),
+            frame_header->title_render_text_->display_rect());
+  EXPECT_EQ(gfx::Rect(100, 0, 100, 30),
+            frame_header->app_and_domain_render_text_->display_rect());
+
+  // The title should prefer truncating the window title.
+  frame_header->LayoutRenderTexts(gfx::Rect(300, 30), 250, 100);
+  EXPECT_EQ(gfx::Rect(200, 30),
+            frame_header->title_render_text_->display_rect());
+  EXPECT_EQ(gfx::Rect(200, 0, 100, 30),
+            frame_header->app_and_domain_render_text_->display_rect());
+
+  // The app and domain should be clipped to the available title bounds.
+  frame_header->LayoutRenderTexts(gfx::Rect(60, 30), 250, 100);
+  EXPECT_EQ(gfx::Rect(0, 30), frame_header->title_render_text_->display_rect());
+  EXPECT_EQ(gfx::Rect(60, 30),
+            frame_header->app_and_domain_render_text_->display_rect());
 }
 
 namespace {
@@ -579,6 +603,7 @@ IN_PROC_BROWSER_TEST_F(HostedAppNonClientFrameViewAshTest, V1AppTopViewInset) {
   ImmersiveModeController* immersive_mode_controller =
       browser_view->immersive_mode_controller();
   aura::Window* window = browser->window()->GetNativeWindow();
+  window->Show();
   EXPECT_FALSE(immersive_mode_controller->IsEnabled());
   EXPECT_LT(0, window->GetProperty(aura::client::kTopViewInset));
 
@@ -601,4 +626,12 @@ IN_PROC_BROWSER_TEST_F(HostedAppNonClientFrameViewAshTest, V1AppTopViewInset) {
   ToggleFullscreenModeAndWait(browser);
   EXPECT_FALSE(immersive_mode_controller->IsEnabled());
   EXPECT_LT(0, window->GetProperty(aura::client::kTopViewInset));
+
+  // The kTopViewInset is the same as in overview mode.
+  const int inset_normal = window->GetProperty(aura::client::kTopViewInset);
+  EXPECT_TRUE(
+      ash::Shell::Get()->window_selector_controller()->ToggleOverview());
+  const int inset_in_overview_mode =
+      window->GetProperty(aura::client::kTopViewInset);
+  EXPECT_EQ(inset_normal, inset_in_overview_mode);
 }

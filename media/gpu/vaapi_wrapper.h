@@ -35,11 +35,9 @@
 #include <va/va_x11.h>
 #endif  // USE_X11
 
-#if defined(USE_OZONE)
 namespace gfx {
 class NativePixmap;
 }
-#endif
 
 namespace media {
 
@@ -88,6 +86,9 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // Return true when JPEG decode is supported.
   static bool IsJpegDecodeSupported();
 
+  // Return true when JPEG encode is supported.
+  static bool IsJpegEncodeSupported();
+
   // Create |num_surfaces| backing surfaces in driver for VASurfaces of
   // |va_format|, each of size |size|. Returns true when successful, with the
   // created IDs in |va_surfaces| to be managed and later wrapped in
@@ -96,13 +97,13 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // again to free the allocated surfaces first, but is not required to do so
   // at destruction time, as this will be done automatically from
   // the destructor.
-  bool CreateSurfaces(unsigned int va_format,
-                      const gfx::Size& size,
-                      size_t num_surfaces,
-                      std::vector<VASurfaceID>* va_surfaces);
+  virtual bool CreateSurfaces(unsigned int va_format,
+                              const gfx::Size& size,
+                              size_t num_surfaces,
+                              std::vector<VASurfaceID>* va_surfaces);
 
   // Free all memory allocated in CreateSurfaces.
-  void DestroySurfaces();
+  virtual void DestroySurfaces();
 
   // Create a VASurface of |va_format|, |size| and using |va_attribs|
   // attributes. The ownership of the surface is transferred to the
@@ -113,13 +114,11 @@ class MEDIA_GPU_EXPORT VaapiWrapper
       const gfx::Size& size,
       const std::vector<VASurfaceAttrib>& va_attribs);
 
-#if defined(USE_OZONE)
   // Create a VASurface for |pixmap|. The ownership of the surface is
   // transferred to the caller. It differs from surfaces created using
   // CreateSurfaces(), where VaapiWrapper is the owner of the surfaces.
   scoped_refptr<VASurface> CreateVASurfaceForPixmap(
       const scoped_refptr<gfx::NativePixmap>& pixmap);
-#endif
 
   // Submit parameters or slice data of |va_buffer_type|, copying them from
   // |buffer| of size |size|, into HW codec. The data in |buffer| is no
@@ -185,6 +184,14 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // be used as a sync point, i.e. it will have to become idle before starting
   // the download. |sync_surface_id| should be the source surface passed
   // to the encode job.
+  bool DownloadFromCodedBuffer(VABufferID buffer_id,
+                               VASurfaceID sync_surface_id,
+                               uint8_t* target_ptr,
+                               size_t target_size,
+                               size_t* coded_data_size);
+
+  // See DownloadFromCodedBuffer() for details. After downloading, it deletes
+  // the VA buffer with |buffer_id|.
   bool DownloadAndDestroyCodedBuffer(VABufferID buffer_id,
                                      VASurfaceID sync_surface_id,
                                      uint8_t* target_ptr,
@@ -206,57 +213,19 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   // Get the created surfaces format.
   unsigned int va_surface_format() const { return va_surface_format_; }
 
+ protected:
+  VaapiWrapper();
+  virtual ~VaapiWrapper();
+
  private:
   friend class base::RefCountedThreadSafe<VaapiWrapper>;
-
-  struct ProfileInfo {
-    VAProfile va_profile;
-    gfx::Size max_resolution;
-  };
-
-  class LazyProfileInfos {
-   public:
-    LazyProfileInfos();
-    ~LazyProfileInfos();
-    std::vector<ProfileInfo> GetSupportedProfileInfosForCodecMode(
-        CodecMode mode);
-    bool IsProfileSupported(CodecMode mode, VAProfile va_profile);
-
-   private:
-    std::vector<ProfileInfo> supported_profiles_[kCodecModeMax];
-  };
-
-  VaapiWrapper();
-  ~VaapiWrapper();
 
   bool Initialize(CodecMode mode, VAProfile va_profile);
   void Deinitialize();
   bool VaInitialize(const base::Closure& report_error_to_uma_cb);
-  bool GetSupportedVaProfiles(std::vector<VAProfile>* profiles);
 
   // Free all memory allocated in CreateSurfaces.
   void DestroySurfaces_Locked();
-
-  // Check if |va_profile| supports |entrypoint| or not. |va_lock_| must be
-  // held on entry.
-  bool IsEntrypointSupported_Locked(VAProfile va_profile,
-                                    VAEntrypoint entrypoint);
-
-  // Return true if |va_profile| for |entrypoint| with |required_attribs| is
-  // supported. |va_lock_| must be held on entry.
-  bool AreAttribsSupported_Locked(
-      VAProfile va_profile,
-      VAEntrypoint entrypoint,
-      const std::vector<VAConfigAttrib>& required_attribs);
-
-  // Get maximum resolution for |va_profile| and |entrypoint| with
-  // |required_attribs|. If return value is true, |resolution| is the maximum
-  // resolution. |va_lock_| must be held on entry.
-  bool GetMaxResolution_Locked(VAProfile va_profile,
-                               VAEntrypoint entrypoint,
-                               std::vector<VAConfigAttrib>& required_attribs,
-                               gfx::Size* resolution);
-
   // Destroys a |va_surface| created using CreateUnownedSurface.
   void DestroyUnownedSurface(VASurfaceID va_surface_id);
 
@@ -274,19 +243,6 @@ class MEDIA_GPU_EXPORT VaapiWrapper
 
   // Attempt to set render mode to "render to texture.". Failure is non-fatal.
   void TryToSetVADisplayAttributeToLocalGPU();
-
-  // Get supported profile infos for |mode|.
-  std::vector<ProfileInfo> GetSupportedProfileInfosForCodecModeInternal(
-      CodecMode mode);
-
-  // Map VideoCodecProfile enum values to VaProfile values. This function
-  // includes a workaround for crbug.com/345569. If va_profile is h264 baseline
-  // and it is not supported, we try constrained baseline.
-  static VAProfile ProfileToVAProfile(VideoCodecProfile profile,
-                                      CodecMode mode);
-
-  // Singleton accessors.
-  static LazyProfileInfos* GetProfileInfos();
 
   // Pointer to VADisplayState's member |va_lock_|. Guaranteed to be valid for
   // the lifetime of VaapiWrapper.

@@ -259,7 +259,6 @@ class CONTENT_EXPORT RenderWidget
 
   // RenderWidgetInputHandlerDelegate
   void FocusChangeComplete() override;
-  bool HasTouchEventHandlersAt(const gfx::Point& point) const override;
   void ObserveGestureEventAndResult(const blink::WebGestureEvent& gesture_event,
                                     const gfx::Vector2dF& unused_delta,
                                     bool event_processed) override;
@@ -398,6 +397,7 @@ class CONTENT_EXPORT RenderWidget
   float GetOriginalDeviceScaleFactor() const;
 
   // Helper to convert |point| using ConvertWindowToViewport().
+  gfx::PointF ConvertWindowPointToViewport(const gfx::PointF& point);
   gfx::Point ConvertWindowPointToViewport(const gfx::Point& point);
 
   void TransferActiveWheelFlingAnimation(
@@ -560,25 +560,27 @@ class CONTENT_EXPORT RenderWidget
   void OnUpdateWindowScreenRect(const gfx::Rect& window_screen_rect);
   void OnSetViewportIntersection(const gfx::Rect& viewport_intersection);
   void OnSetIsInert(bool);
+  void OnUpdateRenderThrottlingStatus(bool is_throttled,
+                                      bool subtree_throttled);
   // Real data that is dragged is not included at DragEnter time.
   void OnDragTargetDragEnter(
       const std::vector<DropData::Metadata>& drop_meta_data,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
+      const gfx::PointF& client_pt,
+      const gfx::PointF& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
       int key_modifiers);
-  void OnDragTargetDragOver(const gfx::Point& client_pt,
-                            const gfx::Point& screen_pt,
+  void OnDragTargetDragOver(const gfx::PointF& client_pt,
+                            const gfx::PointF& screen_pt,
                             blink::WebDragOperationsMask operations_allowed,
                             int key_modifiers);
-  void OnDragTargetDragLeave(const gfx::Point& client_point,
-                             const gfx::Point& screen_point);
+  void OnDragTargetDragLeave(const gfx::PointF& client_point,
+                             const gfx::PointF& screen_point);
   void OnDragTargetDrop(const DropData& drop_data,
-                        const gfx::Point& client_pt,
-                        const gfx::Point& screen_pt,
+                        const gfx::PointF& client_pt,
+                        const gfx::PointF& screen_pt,
                         int key_modifiers);
-  void OnDragSourceEnded(const gfx::Point& client_point,
-                         const gfx::Point& screen_point,
+  void OnDragSourceEnded(const gfx::PointF& client_point,
+                         const gfx::PointF& screen_point,
                          blink::WebDragOperation drag_operation);
   void OnDragSourceSystemDragEnded();
 
@@ -650,6 +652,10 @@ class CONTENT_EXPORT RenderWidget
 
   // Called to update whether low latency input mode is enabled or not.
   void SetNeedsLowLatencyInput(bool) override;
+
+  // Requests unbuffered (ie. low latency) input until a pointerup
+  // event occurs.
+  void RequestUnbufferedInputEvents() override;
 
   // Tell the browser about the actions permitted for a new touch point.
   void SetTouchAction(cc::TouchAction touch_action) override;

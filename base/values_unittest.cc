@@ -943,13 +943,6 @@ TEST(ValuesTest, DictionarySetReturnsPointer) {
 
   {
     DictionaryValue dict;
-    DictionaryValue* dict_ptr = dict.SetDictionaryWithoutPathExpansion(
-        "foo.bar", std::make_unique<base::DictionaryValue>());
-    EXPECT_EQ(Value::Type::DICTIONARY, dict_ptr->type());
-  }
-
-  {
-    DictionaryValue dict;
     ListValue* list_ptr =
         dict.SetList("foo.bar", std::make_unique<base::ListValue>());
     EXPECT_EQ(Value::Type::LIST, list_ptr->type());
@@ -1875,15 +1868,6 @@ TEST(ValuesTest, GetWithNullOutValue) {
   EXPECT_FALSE(main_list.GetString(5, static_cast<string16*>(nullptr)));
   EXPECT_FALSE(main_list.GetString(6, static_cast<string16*>(nullptr)));
   EXPECT_FALSE(main_list.GetString(7, static_cast<string16*>(nullptr)));
-
-  EXPECT_FALSE(main_list.GetBinary(0, nullptr));
-  EXPECT_FALSE(main_list.GetBinary(1, nullptr));
-  EXPECT_FALSE(main_list.GetBinary(2, nullptr));
-  EXPECT_FALSE(main_list.GetBinary(3, nullptr));
-  EXPECT_TRUE(main_list.GetBinary(4, nullptr));
-  EXPECT_FALSE(main_list.GetBinary(5, nullptr));
-  EXPECT_FALSE(main_list.GetBinary(6, nullptr));
-  EXPECT_FALSE(main_list.GetBinary(7, nullptr));
 
   EXPECT_FALSE(main_list.GetDictionary(0, nullptr));
   EXPECT_FALSE(main_list.GetDictionary(1, nullptr));

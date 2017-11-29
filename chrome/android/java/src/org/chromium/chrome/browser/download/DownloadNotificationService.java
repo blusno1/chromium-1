@@ -35,7 +35,6 @@ import android.util.Pair;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
@@ -152,7 +151,7 @@ public class DownloadNotificationService extends Service {
      */
     @VisibleForTesting
     static boolean useForegroundService() {
-        return BuildInfo.isAtLeastO();
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
     }
 
     /**
@@ -626,8 +625,7 @@ public class DownloadNotificationService extends Service {
      *                               here if there is a notification that should be assumed gone.
      *                               Or pass -1 if no notification fits that criteria.
      */
-    @SuppressWarnings("NewApi")
-    @SuppressLint("NewApi")
+    @SuppressLint("NewApi") // useForegroundService guards StatusBarNotification.getNotification
     boolean hideSummaryNotificationIfNecessary(int notificationIdToIgnore) {
         if (mDownloadsInProgress.size() > 0) return false;
 
@@ -879,8 +877,12 @@ public class DownloadNotificationService extends Service {
             notifyDownloadFailed(id, fileName, icon);
             return;
         }
-        // If download is already paused, do nothing.
-        if (entry != null && !entry.isAutoResumable) return;
+        // Download is already paused.
+        if (entry != null && !entry.isAutoResumable) {
+            // Shutdown the service in case it was restarted unnecessarily.
+            stopTrackingInProgressDownload(id, true);
+            return;
+        }
         boolean canDownloadWhileMetered = entry == null ? false : entry.canDownloadWhileMetered;
         // If download is interrupted due to network disconnection, show download pending state.
         if (isAutoResumable) {

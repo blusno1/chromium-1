@@ -5,7 +5,7 @@
 #include "net/http/http_network_session.h"
 
 #include <inttypes.h>
-
+#include <memory>
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
@@ -45,13 +45,13 @@ namespace {
 
 base::AtomicSequenceNumber g_next_shard_id;
 
-ClientSocketPoolManager* CreateSocketPoolManager(
+std::unique_ptr<ClientSocketPoolManager> CreateSocketPoolManager(
     HttpNetworkSession::SocketPoolType pool_type,
     const HttpNetworkSession::Context& context,
     const std::string& ssl_session_cache_shard) {
   // TODO(yutak): Differentiate WebSocket pool manager and allow more
   // simultaneous connections for WebSockets.
-  return new ClientSocketPoolManagerImpl(
+  return std::make_unique<ClientSocketPoolManagerImpl>(
       context.net_log,
       context.client_socket_factory ? context.client_socket_factory
                                     : ClientSocketFactory::GetDefaultFactory(),
@@ -113,12 +113,19 @@ HttpNetworkSession::Params::Params()
       mark_quic_broken_when_network_blackholes(false),
       retry_without_alt_svc_on_quic_errors(false),
       support_ietf_format_quic_altsvc(false),
+      quic_close_sessions_on_ip_change(false),
       quic_idle_connection_timeout_seconds(kIdleConnectionTimeoutSeconds),
       quic_reduced_ping_timeout_seconds(kPingTimeoutSecs),
+      quic_max_time_before_crypto_handshake_seconds(
+          kMaxTimeForCryptoHandshakeSecs),
+      quic_max_idle_time_before_crypto_handshake_seconds(
+          kInitialIdleTimeoutSecs),
       quic_connect_using_default_network(false),
       quic_migrate_sessions_on_network_change(false),
+      quic_migrate_sessions_on_network_change_v2(false),
       quic_migrate_sessions_early(false),
       quic_allow_server_migration(false),
+      quic_allow_remote_alt_svc(false),
       quic_disable_bidirectional_streams(false),
       quic_force_hol_blocking(false),
       quic_race_cert_verification(false),
@@ -187,11 +194,15 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
           params.quic_max_packet_length,
           params.quic_user_agent_id,
           params.quic_max_server_configs_stored_in_properties > 0,
+          params.quic_close_sessions_on_ip_change,
           params.mark_quic_broken_when_network_blackholes,
           params.quic_idle_connection_timeout_seconds,
           params.quic_reduced_ping_timeout_seconds,
+          params.quic_max_time_before_crypto_handshake_seconds,
+          params.quic_max_idle_time_before_crypto_handshake_seconds,
           params.quic_connect_using_default_network,
           params.quic_migrate_sessions_on_network_change,
+          params.quic_migrate_sessions_on_network_change_v2,
           params.quic_migrate_sessions_early,
           params.quic_allow_server_migration,
           params.quic_race_cert_verification,
@@ -221,10 +232,10 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
 
   const std::string ssl_session_cache_shard =
       "http_network_session/" + base::IntToString(g_next_shard_id.GetNext());
-  normal_socket_pool_manager_.reset(CreateSocketPoolManager(
-      NORMAL_SOCKET_POOL, context, ssl_session_cache_shard));
-  websocket_socket_pool_manager_.reset(CreateSocketPoolManager(
-      WEBSOCKET_SOCKET_POOL, context, ssl_session_cache_shard));
+  normal_socket_pool_manager_ = CreateSocketPoolManager(
+      NORMAL_SOCKET_POOL, context, ssl_session_cache_shard);
+  websocket_socket_pool_manager_ = CreateSocketPoolManager(
+      WEBSOCKET_SOCKET_POOL, context, ssl_session_cache_shard);
 
   if (params_.enable_http2) {
     next_protos_.push_back(kProtoHTTP2);
@@ -336,8 +347,12 @@ std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
                    params_.quic_race_cert_verification);
   dict->SetBoolean("disable_bidirectional_streams",
                    params_.quic_disable_bidirectional_streams);
+  dict->SetBoolean("close_sessions_on_ip_change",
+                   params_.quic_close_sessions_on_ip_change);
   dict->SetBoolean("migrate_sessions_on_network_change",
                    params_.quic_migrate_sessions_on_network_change);
+  dict->SetBoolean("migrate_sessions_on_network_change_v2",
+                   params_.quic_migrate_sessions_on_network_change_v2);
   dict->SetBoolean("migrate_sessions_early",
                    params_.quic_migrate_sessions_early);
   dict->SetBoolean("allow_server_migration",
@@ -463,8 +478,8 @@ void HttpNetworkSession::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
   switch (memory_pressure_level) {
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE:
-      break;
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
+      break;
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
       CloseIdleConnections();
       break;

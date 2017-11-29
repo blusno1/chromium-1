@@ -16,8 +16,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.os.SystemClock;
+import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
+import android.support.customtabs.CustomTabsService;
 import android.support.customtabs.CustomTabsSessionToken;
+import android.support.customtabs.TrustedWebUtils;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.View.OnSystemUiVisibilityChangeListener;
@@ -40,6 +43,8 @@ import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
 import org.chromium.chrome.browser.browserservices.BrowserSessionContentHandler;
 import org.chromium.chrome.browser.browserservices.BrowserSessionContentUtils;
 import org.chromium.chrome.browser.browserservices.BrowserSessionDataProvider;
+import org.chromium.chrome.browser.browserservices.OriginVerifier;
+import org.chromium.chrome.browser.browserservices.OriginVerifier.OriginVerificationListener;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.customtabs.CustomTabAppMenuPropertiesDelegate;
 import org.chromium.chrome.browser.customtabs.CustomTabLayoutManager;
@@ -62,6 +67,8 @@ import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.PageTransition;
 
 import java.io.File;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
@@ -71,6 +78,14 @@ import java.util.concurrent.TimeUnit;
  */
 public class WebappActivity extends SingleTabActivity {
     public static final String WEBAPP_SCHEME = "webapp";
+    // The activity type of WebappActivity.
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({ACTIVITY_TYPE_WEBAPP, ACTIVITY_TYPE_WEBAPK, ACTIVITY_TYPE_TWA})
+    public @interface ActivityType {}
+    public static final int ACTIVITY_TYPE_OTHER = -1;
+    public static final int ACTIVITY_TYPE_WEBAPP = 0;
+    public static final int ACTIVITY_TYPE_WEBAPK = 1;
+    public static final int ACTIVITY_TYPE_TWA = 2;
 
     private static final String TAG = "WebappActivity";
     private static final String HISTOGRAM_NAVIGATION_STATUS = "Webapp.NavigationStatus";
@@ -104,7 +119,11 @@ public class WebappActivity extends SingleTabActivity {
 
     private TrustedWebContentProvider mTrustedWebContentProvider;
 
-    private class TrustedWebContentProvider implements BrowserSessionContentHandler {
+    private class TrustedWebContentProvider
+            implements BrowserSessionContentHandler, OriginVerificationListener {
+        private boolean mVerificationFailed;
+        private OriginVerifier mOriginVerifier;
+
         @Override
         public void loadUrlAndTrackFromTimestamp(LoadUrlParams params, long timestamp) {}
 
@@ -135,6 +154,32 @@ public class WebappActivity extends SingleTabActivity {
 
             return getActivityTab().getUrl();
         }
+
+        /**
+         * Verify the Digital Asset Links declared by the Android native client with the currently
+         * loading origin. See {@link TrustedWebContentProvider#didVerificationFail()} for the
+         * result.
+         */
+        void verifyRelationship() {
+            mOriginVerifier = new OriginVerifier(mTrustedWebContentProvider,
+                    getNativeClientPackageName(), CustomTabsService.RELATION_HANDLE_ALL_URLS);
+            mOriginVerifier.start(mWebappInfo.uri());
+        }
+
+        @Override
+        public void onOriginVerified(String packageName, Uri origin, boolean verified) {
+            mVerificationFailed = !verified;
+            mOriginVerifier.cleanUp();
+            mOriginVerifier = null;
+            if (mVerificationFailed) getFullscreenManager().setPositionsForTabToNonFullscreen();
+        }
+
+        /**
+         * @return Whether origin verification for the corresponding client failed.
+         */
+        boolean didVerificationFail() {
+            return mVerificationFailed;
+        }
     }
 
     /** Initialization-on-demand holder. This exists for thread-safe lazy initialization. */
@@ -153,12 +198,8 @@ public class WebappActivity extends SingleTabActivity {
     public WebappActivity() {
         mWebappInfo = createWebappInfo(null);
         mDirectoryManager = new WebappDirectoryManager();
-        mSplashController = createWebappSplashScreenController();
+        mSplashController = new WebappSplashScreenController();
         mNotificationManager = new WebappActionsNotificationManager(this);
-    }
-
-    protected WebappSplashScreenController createWebappSplashScreenController() {
-        return new WebappSplashScreenController();
     }
 
     @Override
@@ -207,8 +248,7 @@ public class WebappActivity extends SingleTabActivity {
 
     @Override
     protected boolean shouldPreferLightweightFre(Intent intent) {
-        return intent.getBooleanExtra(
-                BrowserSessionDataProvider.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, false);
+        return intent.getBooleanExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, false);
     }
 
     @Override
@@ -257,9 +297,10 @@ public class WebappActivity extends SingleTabActivity {
         ScreenOrientationProvider.lockOrientation(
                 getWindowAndroid(), (byte) mWebappInfo.orientation());
 
-        // TODO(yusufo): Consider not initializing these for WebAPKs.
-        mBrowserSessionDataProvider = new BrowserSessionDataProvider(intent);
-        mTrustedWebContentProvider = new TrustedWebContentProvider();
+        if (intent.hasExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY)) {
+            mBrowserSessionDataProvider = new BrowserSessionDataProvider(intent);
+            mTrustedWebContentProvider = new TrustedWebContentProvider();
+        }
 
         // When turning on TalkBack on Android, hitting app switcher to bring a WebappActivity to
         // front will speak "Web App", which is the label of WebappActivity. Therefore, we set title
@@ -505,6 +546,7 @@ public class WebappActivity extends SingleTabActivity {
     @Override
     public void postInflationStartup() {
         initializeWebappData();
+        if (getBrowserSession() != null) mTrustedWebContentProvider.verifyRelationship();
 
         super.postInflationStartup();
     }
@@ -538,7 +580,7 @@ public class WebappActivity extends SingleTabActivity {
         }
 
         ViewGroup contentView = (ViewGroup) findViewById(android.R.id.content);
-        mSplashController.showSplashScreen(contentView, mWebappInfo);
+        mSplashController.showSplashScreen(getActivityType(), contentView, mWebappInfo);
     }
 
     protected void updateStorage(WebappDataStorage storage) {
@@ -576,7 +618,7 @@ public class WebappActivity extends SingleTabActivity {
     @Override
     protected ChromeFullscreenManager createFullscreenManager() {
         // Disable HTML5 fullscreen in PWA fullscreen mode.
-        return new ChromeFullscreenManager(this, false) {
+        return new ChromeFullscreenManager(this, ChromeFullscreenManager.CONTROLS_POSITION_TOP) {
             @Override
             public void setPersistentFullscreenMode(boolean enabled) {
                 if (mWebappInfo.displayMode() == WebDisplayMode.FULLSCREEN) return;
@@ -681,7 +723,22 @@ public class WebappActivity extends SingleTabActivity {
      *         this is a Trusted Web Activity.
      */
     public CustomTabsSessionToken getBrowserSession() {
+        if (mTrustedWebContentProvider == null) return null;
         return mTrustedWebContentProvider.getSession();
+    }
+
+    /**
+     * @return The actual activity type of {@link WebappActivity}, which to be one of the values in
+     * {@link ActivityType}.
+     *
+     * This function is needed because Webapp, WebAPK and Trusted Web Activity all use {@link
+     * WebappActivity}. This doesn't check whether the TWA is valid as the point is to capture time
+     * by use-case.
+     */
+    public @ActivityType int getActivityType() {
+        if (getBrowserSession() != null) return ACTIVITY_TYPE_TWA;
+        if (getNativeClientPackageName() != null) return ACTIVITY_TYPE_WEBAPK;
+        return ACTIVITY_TYPE_WEBAPP;
     }
 
     /**
@@ -689,7 +746,8 @@ public class WebappActivity extends SingleTabActivity {
      *         through Digital Asset Links (DAL) or browser level confirmation.
      */
     protected boolean isVerified() {
-        return mTrustedWebContentProvider.getSession() != null;
+        return mTrustedWebContentProvider != null
+                && mTrustedWebContentProvider.getSession() != null;
     }
 
     /**
@@ -852,7 +910,7 @@ public class WebappActivity extends SingleTabActivity {
 
     @Override
     protected TabDelegate createTabDelegate(boolean incognito) {
-        return new WebappTabDelegate(incognito);
+        return new WebappTabDelegate(incognito, getActivityType(), mWebappInfo.apkPackageName());
     }
 
     // We're temporarily disable CS on webapp since there are some issues. (http://crbug.com/471950)
@@ -860,5 +918,15 @@ public class WebappActivity extends SingleTabActivity {
     @Override
     protected boolean isContextualSearchAllowed() {
         return false;
+    }
+
+    /**
+     * @return Whether origin verification for the corresponding client failed. Since the
+     *         verification happens async, this being false during startup may mean the verification
+     *         hasn't finished yet.
+     */
+    boolean didVerificationFail() {
+        if (!isVerified()) return false;
+        return mTrustedWebContentProvider.didVerificationFail();
     }
 }

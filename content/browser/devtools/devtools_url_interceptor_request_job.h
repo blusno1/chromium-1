@@ -29,13 +29,14 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob {
   DevToolsURLInterceptorRequestJob(
       DevToolsURLRequestInterceptor* interceptor,
       const std::string& interception_id,
+      intptr_t owning_entry_id,
       net::URLRequest* original_request,
       net::NetworkDelegate* original_network_delegate,
       const base::UnguessableToken& devtools_token,
-      const base::UnguessableToken& target_id,
-      base::WeakPtr<protocol::NetworkHandler> network_handler,
+      DevToolsURLRequestInterceptor::RequestInterceptedCallback callback,
       bool is_redirect,
-      ResourceType resource_type);
+      ResourceType resource_type,
+      DevToolsURLRequestInterceptor::InterceptionStage stage_to_intercept);
 
   ~DevToolsURLInterceptorRequestJob() override;
 
@@ -61,19 +62,25 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob {
 
   using ContinueInterceptedRequestCallback =
       protocol::Network::Backend::ContinueInterceptedRequestCallback;
+  using GetResponseBodyForInterceptionCallback =
+      protocol::Network::Backend::GetResponseBodyForInterceptionCallback;
+  using InterceptionStage = DevToolsURLRequestInterceptor::InterceptionStage;
 
   // Must be called only once per interception. Must be called on IO thread.
   void ContinueInterceptedRequest(
       std::unique_ptr<DevToolsURLRequestInterceptor::Modifications>
           modifications,
       std::unique_ptr<ContinueInterceptedRequestCallback> callback);
+  void GetResponseBody(
+      std::unique_ptr<GetResponseBodyForInterceptionCallback> callback);
 
-  const base::UnguessableToken& target_id() const { return target_id_; }
+  intptr_t owning_entry_id() const { return owning_entry_id_; }
 
  private:
   std::unique_ptr<InterceptedRequestInfo> BuildRequestInfo();
 
   class SubRequest;
+  class InterceptedRequest;
   class MockResponseDetails;
 
   // We keep a copy of the original request details to facilitate the
@@ -102,6 +109,11 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob {
                                     const net::RedirectInfo& redirectinfo,
                                     bool* defer_redirect);
   void OnSubRequestResponseStarted(const net::Error& net_error);
+  void OnSubRequestHeadersReceived(const net::Error& net_error);
+
+  // Callbacks from InterceptedRequest.
+  void OnInterceptedRequestResponseStarted(const net::Error& net_error);
+  void OnInterceptedRequestResponseReady(const net::IOBuffer& buf, int result);
 
   // Retrieves the response headers from either the |sub_request_| or the
   // |mock_response_|.  In some cases (e.g. file access) this may be null.
@@ -118,6 +130,7 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob {
   enum class WaitingForUserResponse {
     NOT_WAITING,
     WAITING_FOR_REQUEST_ACK,
+    WAITING_FOR_RESPONSE_ACK,
     WAITING_FOR_AUTH_ACK,
   };
 
@@ -127,18 +140,18 @@ class DevToolsURLInterceptorRequestJob : public net::URLRequestJob {
   std::unique_ptr<MockResponseDetails> mock_response_details_;
   std::unique_ptr<net::RedirectInfo> redirect_;
   WaitingForUserResponse waiting_for_user_response_;
-  bool intercepting_requests_;
   scoped_refptr<net::AuthChallengeInfo> auth_info_;
 
   const std::string interception_id_;
-  base::UnguessableToken devtools_token_;
-  // TODO(caseq): this really needs to be session id, not target id,
-  // so that we can clean up pending intercept jobs for individual
-  // session.
-  base::UnguessableToken target_id_;
-  const base::WeakPtr<protocol::NetworkHandler> network_handler_;
+  const intptr_t owning_entry_id_;
+  const base::UnguessableToken devtools_token_;
+  DevToolsURLRequestInterceptor::RequestInterceptedCallback callback_;
   const bool is_redirect_;
   const ResourceType resource_type_;
+  DevToolsURLRequestInterceptor::InterceptionStage stage_to_intercept_;
+  std::vector<std::unique_ptr<GetResponseBodyForInterceptionCallback>>
+      pending_body_requests_;
+
   base::WeakPtrFactory<DevToolsURLInterceptorRequestJob> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DevToolsURLInterceptorRequestJob);

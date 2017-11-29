@@ -111,7 +111,7 @@ class TestCacheStorageObserver : public CacheStorageContextImpl::Observer {
 std::unique_ptr<storage::BlobProtocolHandler> CreateMockBlobProtocolHandler(
     storage::BlobStorageContext* blob_storage_context) {
   return base::WrapUnique(
-      new storage::BlobProtocolHandler(blob_storage_context, nullptr));
+      new storage::BlobProtocolHandler(blob_storage_context));
 }
 
 class CacheStorageManagerTest : public testing::Test {
@@ -445,7 +445,8 @@ class CacheStorageManagerTest : public testing::Test {
     cache->BatchOperation(
         std::vector<CacheStorageBatchOperation>(1, operation),
         base::BindOnce(&CacheStorageManagerTest::CachePutCallback,
-                       base::Unretained(this), base::Unretained(&loop)));
+                       base::Unretained(this), base::Unretained(&loop)),
+        CacheStorageCache::BadMessageCallback());
     loop.Run();
 
     return callback_error_ == CacheStorageError::kSuccess;
@@ -465,7 +466,8 @@ class CacheStorageManagerTest : public testing::Test {
     cache->BatchOperation(
         std::vector<CacheStorageBatchOperation>(1, operation),
         base::BindOnce(&CacheStorageManagerTest::CacheDeleteCallback,
-                       base::Unretained(this), base::Unretained(&loop)));
+                       base::Unretained(this), base::Unretained(&loop)),
+        CacheStorageCache::BadMessageCallback());
     loop.Run();
 
     return callback_error_ == CacheStorageError::kSuccess;

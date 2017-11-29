@@ -21,11 +21,11 @@ Polymer({
     },
 
     /**
-     * The media description to display. Uses route description if none is
-     * provided by the route status object.
+     * The route description to display. Uses the media route description if
+     * none is provided by the media route status object.
      * @private {string}
      */
-    displayedDescription_: {
+    routeDescription_: {
       type: String,
       value: '',
     },
@@ -47,6 +47,15 @@ Polymer({
     hangoutsLocalPresent_: {
       type: Boolean,
       value: false,
+    },
+
+    /**
+     * Keep in sync with media remoting individual user setting.
+     * @private {boolean}
+     */
+    mediaRemotingEnabled_: {
+      type: Boolean,
+      value: true,
     },
 
     /**
@@ -348,7 +357,7 @@ Polymer({
       this.displayedVolume_ = Math.round(newRouteStatus.volume * 100) / 100;
     }
     if (newRouteStatus.description !== '') {
-      this.displayedDescription_ = newRouteStatus.description;
+      this.routeDescription_ = newRouteStatus.description;
     }
     if (!this.initialLoadTime_) {
       this.initialLoadTime_ = Date.now();
@@ -362,6 +371,8 @@ Polymer({
     }
     this.hangoutsLocalPresent_ = !!newRouteStatus.hangoutsExtraData &&
         newRouteStatus.hangoutsExtraData.localPresent;
+    this.mediaRemotingEnabled_ = !!newRouteStatus.mirroringExtraData &&
+        newRouteStatus.mirroringExtraData.mediaRemotingEnabled;
   },
 
   /**
@@ -375,8 +386,7 @@ Polymer({
       this.stopIncrementingCurrentTime_();
     }
     if (route && this.routeStatus.description === '') {
-      this.displayedDescription_ =
-          loadTimeData.getStringF('castingActivityStatus', route.description);
+      this.routeDescription_ = route.description;
     }
   },
 
@@ -433,6 +443,16 @@ Polymer({
     var target = /** @type {{immediateValue: number}} */ (e.target);
     this.displayedVolume_ = target.immediateValue;
     media_router.browserApi.setCurrentMediaVolume(this.displayedVolume_);
+  },
+
+  /**
+   * Called when the "always use mirroring" box is changed by the user.
+   * @param {!Event} e "always use mirroring" paper-checkbox's change event
+   * @private
+   */
+  onMediaRemotingEnabledChange_: function(e) {
+    this.mediaRemotingEnabled_ = !e.target.checked;
+    media_router.browserApi.setMediaRemotingEnabled(this.mediaRemotingEnabled_);
   },
 
   /**

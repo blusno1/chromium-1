@@ -28,7 +28,6 @@
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/quads/shared_bitmap.h"
-#include "components/viz/common/quads/texture_mailbox.h"
 #include "components/viz/common/resources/release_callback.h"
 #include "components/viz/common/resources/resource.h"
 #include "components/viz/common/resources/resource_fence.h"
@@ -39,6 +38,8 @@
 #include "components/viz/common/resources/resource_type.h"
 #include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/common/resources/transferable_resource.h"
+#include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -93,7 +94,7 @@ class CC_EXPORT ResourceProvider
 
   bool IsSoftware() const { return !compositor_context_provider_; }
 
-  void DidLoseVulkanContextProvider() { lost_context_provider_ = true; }
+  void DidLoseContextProvider() { lost_context_provider_ = true; }
 
   int max_texture_size() const { return settings_.max_texture_size; }
   viz::ResourceFormat best_texture_format() const {
@@ -312,19 +313,18 @@ class CC_EXPORT ResourceProvider
   bool IsBackedBySurfaceTexture(viz::ResourceId id);
 
   // Indicates if this resource wants to receive promotion hints.
-  bool WantsPromotionHint(viz::ResourceId id);
+  bool WantsPromotionHintForTesting(viz::ResourceId id);
 
   // Return the number of resources that request promotion hints.
   size_t CountPromotionHintRequestsForTesting();
 #endif
 
+  // TODO(danakj): Move to DisplayResourceProvider.
   void WaitSyncToken(viz::ResourceId id);
 
   static GLint GetActiveTextureUnit(gpu::gles2::GLES2Interface* gl);
 
   static gpu::SyncToken GenerateSyncTokenHelper(gpu::gles2::GLES2Interface* gl);
-
-  void ValidateResource(viz::ResourceId id) const;
 
   GLenum GetImageTextureTarget(gfx::BufferUsage usage,
                                viz::ResourceFormat format) const;

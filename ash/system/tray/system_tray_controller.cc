@@ -15,7 +15,7 @@ namespace ash {
 SystemTrayController::SystemTrayController()
     : binding_(this), hour_clock_type_(base::GetHourClockType()) {}
 
-SystemTrayController::~SystemTrayController() {}
+SystemTrayController::~SystemTrayController() = default;
 
 void SystemTrayController::ShowSettings() {
   if (system_tray_client_)
@@ -177,6 +177,7 @@ void SystemTrayController::SetPrimaryTrayVisible(bool visible) {
   if (visible) {
     tray->GetWidget()->Show();
   } else {
+    tray->CloseBubble();
     tray->GetWidget()->Hide();
   }
 }

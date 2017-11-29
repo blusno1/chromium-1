@@ -7,7 +7,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
@@ -115,6 +117,7 @@ ContentSettingsType kPermissionType[] = {
     CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
     CONTENT_SETTINGS_TYPE_AUTOPLAY,
     CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
+    CONTENT_SETTINGS_TYPE_CLIPBOARD_READ,
 };
 
 // Checks whether this permission is currently the factory default, as set by
@@ -166,6 +169,11 @@ bool ShouldShowPermission(const PageInfoUI::PermissionInfo& info,
       return true;
   }
 
+  if (info.type == CONTENT_SETTINGS_TYPE_CLIPBOARD_READ) {
+    if (!base::FeatureList::IsEnabled(features::kClipboardContentSetting))
+      return false;
+  }
+
 #if defined(OS_ANDROID)
   // Special geolocation DSE settings apply only on Android, so make sure it
   // gets checked there regardless of default setting on Desktop.
@@ -174,10 +182,7 @@ bool ShouldShowPermission(const PageInfoUI::PermissionInfo& info,
 #endif
 
   // All other content settings only show when they are non-factory-default.
-  if ((base::CommandLine::ForCurrentProcess()->HasSwitch(
-           switches::kEnableSiteSettings) ||
-       base::FeatureList::IsEnabled(features::kSiteDetails)) &&
-      IsPermissionFactoryDefault(content_settings, info)) {
+  if (IsPermissionFactoryDefault(content_settings, info)) {
     return false;
   }
 
@@ -580,9 +585,13 @@ void PageInfo::Init(const GURL& url,
     // HTTPS with no or minor errors.
     if (security_info.security_level ==
         security_state::SECURE_WITH_POLICY_INSTALLED_CERT) {
+#if defined(OS_CHROMEOS)
       site_identity_status_ = SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT;
       site_identity_details_ = l10n_util::GetStringFUTF16(
           IDS_CERT_POLICY_PROVIDED_CERT_MESSAGE, UTF8ToUTF16(url.host()));
+#else
+      DCHECK(false) << "Policy certificates exist only on ChromeOS";
+#endif
     } else if (net::IsCertStatusMinorError(security_info.cert_status)) {
       site_identity_status_ = SITE_IDENTITY_STATUS_CERT_REVOCATION_UNKNOWN;
       base::string16 issuer_name(
@@ -900,4 +909,16 @@ void PageInfo::PresentSiteIdentity() {
         safe_browsing::PasswordProtectionService::SHOWN);
   }
 #endif
+}
+
+std::vector<ContentSettingsType> PageInfo::GetAllPermissionsForTesting() {
+  std::vector<ContentSettingsType> permission_list;
+  for (size_t i = 0; i < arraysize(kPermissionType); ++i) {
+#if !defined(OS_ANDROID)
+    if (kPermissionType[i] == CONTENT_SETTINGS_TYPE_AUTOPLAY)
+      continue;
+#endif
+    permission_list.push_back(kPermissionType[i]);
+  }
+  return permission_list;
 }

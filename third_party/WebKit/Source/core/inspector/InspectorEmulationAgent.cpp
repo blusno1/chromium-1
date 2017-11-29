@@ -138,8 +138,9 @@ Response InspectorEmulationAgent::setCPUThrottlingRate(double throttling_rate) {
 
 Response InspectorEmulationAgent::setVirtualTimePolicy(
     const String& policy,
-    Maybe<int> budget,
-    protocol::Maybe<int> max_virtual_time_task_starvation_count) {
+    Maybe<double> budget,
+    protocol::Maybe<int> max_virtual_time_task_starvation_count,
+    double* virtual_time_base_ms) {
   if (protocol::Emulation::VirtualTimePolicyEnum::Advance == policy) {
     web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
         WebViewScheduler::VirtualTimePolicy::kAdvance);
@@ -151,7 +152,11 @@ Response InspectorEmulationAgent::setVirtualTimePolicy(
     web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
         WebViewScheduler::VirtualTimePolicy::kDeterministicLoading);
   }
-  web_local_frame_->View()->Scheduler()->EnableVirtualTime();
+  WTF::TimeTicks virtual_time_base_ticks(
+      web_local_frame_->View()->Scheduler()->EnableVirtualTime());
+  WTF::TimeDelta virtual_time_base_delta =
+      virtual_time_base_ticks - WTF::TimeTicks::UnixEpoch();
+  *virtual_time_base_ms = virtual_time_base_delta.InMillisecondsF();
   if (!virtual_time_observer_registered_) {
     web_local_frame_->View()->Scheduler()->AddVirtualTimeObserver(this);
     virtual_time_observer_registered_ = true;
@@ -159,7 +164,7 @@ Response InspectorEmulationAgent::setVirtualTimePolicy(
 
   if (budget.isJust()) {
     WTF::TimeDelta budget_amount =
-        WTF::TimeDelta::FromMilliseconds(budget.fromJust());
+        WTF::TimeDelta::FromMillisecondsD(budget.fromJust());
     web_local_frame_->View()->Scheduler()->GrantVirtualTimeBudget(
         budget_amount,
         WTF::Bind(&InspectorEmulationAgent::VirtualTimeBudgetExpired,
@@ -188,12 +193,12 @@ void InspectorEmulationAgent::VirtualTimeBudgetExpired() {
 
 void InspectorEmulationAgent::OnVirtualTimeAdvanced(
     WTF::TimeDelta virtual_time_offset) {
-  GetFrontend()->virtualTimeAdvanced(virtual_time_offset.InMilliseconds());
+  GetFrontend()->virtualTimeAdvanced(virtual_time_offset.InMillisecondsF());
 }
 
 void InspectorEmulationAgent::OnVirtualTimePaused(
     WTF::TimeDelta virtual_time_offset) {
-  GetFrontend()->virtualTimePaused(virtual_time_offset.InMilliseconds());
+  GetFrontend()->virtualTimePaused(virtual_time_offset.InMillisecondsF());
 }
 
 Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
@@ -212,6 +217,32 @@ Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
   int alpha = lroundf(255.0f * rgba->getA(1.0f));
   GetWebViewImpl()->SetBaseBackgroundColorOverride(
       Color(rgba->getR(), rgba->getG(), rgba->getB(), alpha).Rgb());
+  return Response::OK();
+}
+
+Response InspectorEmulationAgent::setDeviceMetricsOverride(
+    int width,
+    int height,
+    double device_scale_factor,
+    bool mobile,
+    Maybe<double> scale,
+    Maybe<int> screen_width,
+    Maybe<int> screen_height,
+    Maybe<int> position_x,
+    Maybe<int> position_y,
+    Maybe<bool> dont_set_visible_size,
+    Maybe<protocol::Emulation::ScreenOrientation>,
+    Maybe<protocol::Page::Viewport>) {
+  // We don't have to do anything other than reply to the client, as the
+  // emulation parameters should have already been updated by the handling of
+  // ViewMsg_EnableDeviceEmulation.
+  return Response::OK();
+}
+
+Response InspectorEmulationAgent::clearDeviceMetricsOverride() {
+  // We don't have to do anything other than reply to the client, as the
+  // emulation parameters should have already been cleared by the handling of
+  // ViewMsg_DisableDeviceEmulation.
   return Response::OK();
 }
 

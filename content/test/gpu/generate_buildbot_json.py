@@ -227,6 +227,18 @@ WATERFALL = {
       'swarming': True,
       'os_type': 'linux',
     },
+    'Android Release (Nexus 5X)': {
+      'swarming_dimensions': [
+        {
+          'device_type': 'bullhead',
+          'device_os': 'M',
+          'os': 'Android'
+        },
+      ],
+      'build_config': 'android-chromium',
+      'swarming': True,
+      'os_type': 'android',
+    },
   }
 }
 
@@ -237,13 +249,17 @@ FYI_WATERFALL = {
   'builders': {
     'GPU Win Builder' : {},
     'GPU Win Builder (dbg)' : {},
+    'GPU Win dEQP Builder': {},
     'GPU Win x64 Builder' : {},
     'GPU Win x64 Builder (dbg)' : {},
+    'GPU Win x64 dEQP Builder' : {},
     'GPU Mac Builder' : {},
     'GPU Mac Builder (dbg)' : {},
+    'GPU Mac dEQP Builder' : {},
     'GPU Linux Builder' : {},
     'GPU Linux Builder (dbg)' : {},
     'GPU Linux Ozone Builder' : {},
+    'GPU Linux dEQP Builder' : {},
   },
 
   'testers': {
@@ -268,18 +284,6 @@ FYI_WATERFALL = {
         },
       ],
       'build_config': 'Debug',
-      'swarming': True,
-      'os_type': 'win',
-    },
-    'Win7 Release (NVIDIA Quadro P400)': {
-      'swarming_dimensions': [
-        {
-          'gpu': WIN_NVIDIA_QUADRO_P400_STABLE_DRIVER,
-          'os': 'Windows-2008ServerR2-SP1',
-          'pool': 'Chrome-GPU',
-        },
-      ],
-      'build_config': 'Release',
       'swarming': True,
       'os_type': 'win',
     },
@@ -390,19 +394,6 @@ FYI_WATERFALL = {
         {
           'gpu': '10de:1cb3',
           'os': 'Windows-10'
-        },
-      ],
-      'build_config': 'Release',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
-      'os_type': 'win',
-    },
-    'Win7 Release (AMD R7 240)': {
-      'swarming_dimensions': [
-        {
-          'gpu': '1002:6613',
-          'os': 'Windows-2008ServerR2-SP1',
         },
       ],
       'build_config': 'Release',
@@ -552,12 +543,12 @@ FYI_WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '8086:0a2e',
-          'os': 'Mac-10.12.6'
+          'os': 'Mac-10.13.2',
+          'pool': 'Chrome-GPU',
         },
       ],
       'build_config': 'Release',
-      # This bot is a one-off for testing purposes.
-      'swarming': False,
+      'swarming': True,
       'os_type': 'mac',
     },
     'Mac Experimental Retina Release (AMD)': {
@@ -565,12 +556,12 @@ FYI_WATERFALL = {
         {
           'gpu': '1002:6821',
           'hidpi': '1',
-          'os': 'Mac-10.12.6',
+          'os': 'Mac-10.13.2',
+          'pool': 'Chrome-GPU',
         },
       ],
       'build_config': 'Release',
-      # This bot is a one-off for testing purposes.
-      'swarming': False,
+      'swarming': True,
       'os_type': 'mac',
     },
     'Mac Experimental Retina Release (NVIDIA)': {
@@ -578,7 +569,8 @@ FYI_WATERFALL = {
         {
           'gpu': '10de:0fe9',
           'hidpi': '1',
-          'os': 'Mac-10.12.6',
+          'os': 'Mac-10.13.2',
+          'pool': 'Chrome-GPU',
         },
       ],
       'build_config': 'Release',
@@ -634,18 +626,6 @@ FYI_WATERFALL = {
       'type': Types.DEQP,
     },
     'Linux Release (NVIDIA)': {
-      'swarming_dimensions': [
-        {
-          'gpu': LINUX_QUADRO_P400_STABLE_DRIVER,
-          'os': 'Ubuntu',
-          'pool': 'Chrome-GPU',
-        },
-      ],
-      'build_config': 'Release',
-      'swarming': True,
-      'os_type': 'linux',
-    },
-    'Linux Release (NVIDIA Quadro P400)': {
       'swarming_dimensions': [
         {
           'gpu': LINUX_QUADRO_P400_STABLE_DRIVER,
@@ -1857,6 +1837,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
   'maps_pixel_test': {
     'target_name': 'maps',
     'args': [
+      '--dont-restore-color-profile-after-test',
       '--os-type',
       '${os_type}',
       '--build-revision',
@@ -1890,6 +1871,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
   'pixel_test': {
     'target_name': 'pixel',
     'args': [
+      '--dont-restore-color-profile-after-test',
       '--refimg-cloud-storage-bucket',
       'chromium-gpu-archive/reference-images',
       '--os-type',
@@ -1920,6 +1902,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     ],
   },
   'screenshot_sync': {
+    'args': [
+      '--dont-restore-color-profile-after-test',
+    ],
     'tester_configs': [
       {
         'predicate': Predicates.DEFAULT_PLUS_V8,

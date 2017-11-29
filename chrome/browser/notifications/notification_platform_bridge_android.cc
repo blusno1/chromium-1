@@ -44,6 +44,10 @@ using base::android::ScopedJavaLocalRef;
 
 namespace {
 
+// Value used to represent the absence of a button index following a user
+// interaction with a notification.
+constexpr int kNotificationInvalidButtonIndex = -1;
+
 // A Java counterpart will be generated for this enum.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.notifications
 enum NotificationActionType {
@@ -52,8 +56,9 @@ enum NotificationActionType {
   TEXT
 };
 
-ScopedJavaLocalRef<jobject> ConvertToJavaBitmap(JNIEnv* env,
-                                                const gfx::Image& icon) {
+ScopedJavaLocalRef<jobject> JNI_NotificationPlatformBridge_ConvertToJavaBitmap(
+    JNIEnv* env,
+    const gfx::Image& icon) {
   SkBitmap skbitmap = icon.AsBitmap();
   ScopedJavaLocalRef<jobject> j_bitmap;
   if (!skbitmap.drawsNothing())
@@ -89,7 +94,8 @@ ScopedJavaLocalRef<jobjectArray> ConvertToJavaActionInfos(
     int type = GetNotificationActionType(button);
     ScopedJavaLocalRef<jstring> placeholder =
         base::android::ConvertUTF16ToJavaString(env, button.placeholder);
-    ScopedJavaLocalRef<jobject> icon = ConvertToJavaBitmap(env, button.icon);
+    ScopedJavaLocalRef<jobject> icon =
+        JNI_NotificationPlatformBridge_ConvertToJavaBitmap(env, button.icon);
     ScopedJavaLocalRef<jobject> action_info = Java_ActionInfo_createActionInfo(
         AttachCurrentThread(), title, icon, type, placeholder);
     env->SetObjectArrayElement(actions, i, action_info.obj());
@@ -102,7 +108,7 @@ ScopedJavaLocalRef<jobjectArray> ConvertToJavaActionInfos(
 // given |operation| in a notification.
 // TODO(miguelg) move it to notification_common?
 void ProfileLoadedCallback(NotificationCommon::Operation operation,
-                           NotificationCommon::Type notification_type,
+                           NotificationHandler::Type notification_type,
                            const GURL& origin,
                            const std::string& notification_id,
                            const base::Optional<int>& action_index,
@@ -129,7 +135,7 @@ void ProfileLoadedCallback(NotificationCommon::Operation operation,
 // Called by the Java side when a notification event has been received, but the
 // NotificationBridge has not been initialized yet. Enforce initialization of
 // the class.
-static void InitializeNotificationPlatformBridge(
+static void JNI_NotificationPlatformBridge_InitializeNotificationPlatformBridge(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz) {
   g_browser_process->notification_platform_bridge();
@@ -138,6 +144,12 @@ static void InitializeNotificationPlatformBridge(
 // static
 NotificationPlatformBridge* NotificationPlatformBridge::Create() {
   return new NotificationPlatformBridgeAndroid();
+}
+
+// static
+bool NotificationPlatformBridge::CanHandleType(
+    NotificationHandler::Type notification_type) {
+  return notification_type != NotificationHandler::Type::TRANSIENT;
 }
 
 NotificationPlatformBridgeAndroid::NotificationPlatformBridgeAndroid() {
@@ -159,7 +171,7 @@ void NotificationPlatformBridgeAndroid::OnNotificationClicked(
     jboolean incognito,
     const JavaParamRef<jstring>& java_tag,
     const JavaParamRef<jstring>& java_webapk_package,
-    jint action_index,
+    jint java_action_index,
     const JavaParamRef<jstring>& java_reply) {
   std::string notification_id =
       ConvertJavaStringToUTF8(env, java_notification_id);
@@ -177,14 +189,19 @@ void NotificationPlatformBridgeAndroid::OnNotificationClicked(
   regenerated_notification_infos_[notification_id] =
       RegeneratedNotificationInfo(origin, scope_url, tag, webapk_package);
 
+  base::Optional<int> action_index;
+  if (java_action_index != kNotificationInvalidButtonIndex)
+    action_index = java_action_index;
+
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   DCHECK(profile_manager);
 
   profile_manager->LoadProfile(
       profile_id, incognito,
       base::Bind(&ProfileLoadedCallback, NotificationCommon::CLICK,
-                 NotificationCommon::PERSISTENT, origin, notification_id,
-                 action_index, std::move(reply), base::nullopt /* by_user */));
+                 NotificationHandler::Type::WEB_PERSISTENT, origin,
+                 notification_id, std::move(action_index), std::move(reply),
+                 base::nullopt /* by_user */));
 }
 
 void NotificationPlatformBridgeAndroid::
@@ -228,14 +245,14 @@ void NotificationPlatformBridgeAndroid::OnNotificationClosed(
   profile_manager->LoadProfile(
       profile_id, incognito,
       base::Bind(&ProfileLoadedCallback, NotificationCommon::CLOSE,
-                 NotificationCommon::PERSISTENT,
+                 NotificationHandler::Type::WEB_PERSISTENT,
                  GURL(ConvertJavaStringToUTF8(env, java_origin)),
                  notification_id, base::nullopt /* action index */,
                  base::nullopt /* reply */, by_user));
 }
 
 void NotificationPlatformBridgeAndroid::Display(
-    NotificationCommon::Type notification_type,
+    NotificationHandler::Type notification_type,
     const std::string& profile_id,
     bool incognito,
     const message_center::Notification& notification,
@@ -247,7 +264,7 @@ void NotificationPlatformBridgeAndroid::Display(
   // TODO(miguelg): Store the notification type in java instead of assuming it's
   // persistent once/if non persistent notifications are ever implemented on
   // Android.
-  DCHECK_EQ(notification_type, NotificationCommon::PERSISTENT);
+  DCHECK_EQ(notification_type, NotificationHandler::Type::WEB_PERSISTENT);
   GURL scope_url(PersistentNotificationMetadata::From(metadata.get())
                      ->service_worker_scope);
   if (!scope_url.is_valid())

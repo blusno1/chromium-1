@@ -54,12 +54,14 @@ NativeNotificationDisplayService::~NativeNotificationDisplayService() = default;
 void NativeNotificationDisplayService::OnNotificationPlatformBridgeReady(
     bool success) {
   UMA_HISTOGRAM_BOOLEAN("Notifications.UsingNativeNotificationCenter", success);
-  if (success) {
+  if (success)
     notification_bridge_ready_ = true;
-  } else {
-    message_center_display_service_ =
-        std::make_unique<MessageCenterDisplayService>(profile_);
-  }
+
+  // TODO(estade): this shouldn't be necessary in the succesful case, but some
+  // notification bridges can't handle TRANSIENT notifications and still have to
+  // fall back to the MessageCenter.
+  message_center_display_service_ =
+      std::make_unique<MessageCenterDisplayService>(profile_);
 
   while (!actions_.empty()) {
     std::move(actions_.front()).Run();
@@ -68,20 +70,21 @@ void NativeNotificationDisplayService::OnNotificationPlatformBridgeReady(
 }
 
 void NativeNotificationDisplayService::Display(
-    NotificationCommon::Type notification_type,
+    NotificationHandler::Type notification_type,
     const message_center::Notification& notification,
     std::unique_ptr<NotificationCommon::Metadata> metadata) {
   // TODO(estade): in the future, the reverse should also be true: a
   // non-TRANSIENT type implies no delegate.
-  if (notification_type == NotificationCommon::TRANSIENT)
+  if (notification_type == NotificationHandler::Type::TRANSIENT)
     DCHECK(notification.delegate());
 
-  if (notification_bridge_ready_) {
+  if (ShouldUsePlatformBridge(notification_type)) {
     notification_bridge_->Display(notification_type, GetProfileId(profile_),
                                   profile_->IsOffTheRecord(), notification,
                                   std::move(metadata));
     NotificationHandler* handler = GetNotificationHandler(notification_type);
-    handler->OnShow(profile_, notification.id());
+    if (handler)
+      handler->OnShow(profile_, notification.id());
   } else if (message_center_display_service_) {
     message_center_display_service_->Display(notification_type, notification,
                                              std::move(metadata));
@@ -93,18 +96,10 @@ void NativeNotificationDisplayService::Display(
 }
 
 void NativeNotificationDisplayService::Close(
-    NotificationCommon::Type notification_type,
+    NotificationHandler::Type notification_type,
     const std::string& notification_id) {
-  if (notification_bridge_ready_) {
+  if (ShouldUsePlatformBridge(notification_type)) {
     notification_bridge_->Close(GetProfileId(profile_), notification_id);
-
-    // TODO(miguelg): Figure out something better here, passing an empty
-    // origin works because only non persistent notifications care about
-    // this method for JS generated close calls and they don't require
-    // the origin.
-    NotificationHandler* handler = GetNotificationHandler(notification_type);
-    if (handler)
-      handler->OnClose(profile_, GURL(), notification_id, false /* by user */);
   } else if (message_center_display_service_) {
     message_center_display_service_->Close(notification_type, notification_id);
   } else {
@@ -126,4 +121,10 @@ void NativeNotificationDisplayService::GetDisplayed(
         base::BindOnce(&NativeNotificationDisplayService::GetDisplayed,
                        weak_factory_.GetWeakPtr(), callback));
   }
+}
+
+bool NativeNotificationDisplayService::ShouldUsePlatformBridge(
+    NotificationHandler::Type notification_type) {
+  return notification_bridge_ready_ &&
+         NotificationPlatformBridge::CanHandleType(notification_type);
 }

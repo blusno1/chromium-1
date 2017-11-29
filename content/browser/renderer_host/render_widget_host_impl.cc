@@ -346,7 +346,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       is_last_unlocked_by_target_(false),
       has_touch_handler_(false),
       is_in_touchpad_gesture_fling_(false),
-      latency_tracker_(true),
+      latency_tracker_(true, delegate_),
       next_browser_snapshot_id_(1),
       owned_by_render_frame_host_(false),
       is_focused_(false),
@@ -362,7 +362,6 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       weak_factory_(this) {
   CHECK(delegate_);
   CHECK_NE(MSG_ROUTING_NONE, routing_id_);
-  latency_tracker_.SetDelegate(delegate_);
   DCHECK(base::TaskScheduler::GetInstance())
       << "Ref. Prerequisite section of post_task.h";
 
@@ -1476,15 +1475,14 @@ void RenderWidgetHostImpl::GetScreenInfo(ScreenInfo* result) {
 
   // TODO(sievers): find a way to make this done another way so the method
   // can be const.
-  latency_tracker_.set_device_scale_factor(result->device_scale_factor);
   if (IsUseZoomForDSFEnabled())
     input_router_->SetDeviceScaleFactor(result->device_scale_factor);
 }
 
 void RenderWidgetHostImpl::DragTargetDragEnter(
     const DropData& drop_data,
-    const gfx::Point& client_pt,
-    const gfx::Point& screen_pt,
+    const gfx::PointF& client_pt,
+    const gfx::PointF& screen_pt,
     WebDragOperationsMask operations_allowed,
     int key_modifiers) {
   DragTargetDragEnterWithMetaData(DropDataToMetaData(drop_data), client_pt,
@@ -1493,8 +1491,8 @@ void RenderWidgetHostImpl::DragTargetDragEnter(
 
 void RenderWidgetHostImpl::DragTargetDragEnterWithMetaData(
     const std::vector<DropData::Metadata>& metadata,
-    const gfx::Point& client_pt,
-    const gfx::Point& screen_pt,
+    const gfx::PointF& client_pt,
+    const gfx::PointF& screen_pt,
     WebDragOperationsMask operations_allowed,
     int key_modifiers) {
   Send(new DragMsg_TargetDragEnter(GetRoutingID(), metadata, client_pt,
@@ -1503,22 +1501,23 @@ void RenderWidgetHostImpl::DragTargetDragEnterWithMetaData(
 }
 
 void RenderWidgetHostImpl::DragTargetDragOver(
-    const gfx::Point& client_pt,
-    const gfx::Point& screen_pt,
+    const gfx::PointF& client_pt,
+    const gfx::PointF& screen_pt,
     WebDragOperationsMask operations_allowed,
     int key_modifiers) {
   Send(new DragMsg_TargetDragOver(GetRoutingID(), client_pt, screen_pt,
                                   operations_allowed, key_modifiers));
 }
 
-void RenderWidgetHostImpl::DragTargetDragLeave(const gfx::Point& client_point,
-                                               const gfx::Point& screen_point) {
+void RenderWidgetHostImpl::DragTargetDragLeave(
+    const gfx::PointF& client_point,
+    const gfx::PointF& screen_point) {
   Send(new DragMsg_TargetDragLeave(GetRoutingID(), client_point, screen_point));
 }
 
 void RenderWidgetHostImpl::DragTargetDrop(const DropData& drop_data,
-                                          const gfx::Point& client_pt,
-                                          const gfx::Point& screen_pt,
+                                          const gfx::PointF& client_pt,
+                                          const gfx::PointF& screen_pt,
                                           int key_modifiers) {
   DropData drop_data_with_permissions(drop_data);
   GrantFileAccessFromDropData(&drop_data_with_permissions);
@@ -1527,8 +1526,8 @@ void RenderWidgetHostImpl::DragTargetDrop(const DropData& drop_data,
 }
 
 void RenderWidgetHostImpl::DragSourceEndedAt(
-    const gfx::Point& client_pt,
-    const gfx::Point& screen_pt,
+    const gfx::PointF& client_pt,
+    const gfx::PointF& screen_pt,
     blink::WebDragOperation operation) {
   Send(new DragMsg_SourceEnded(GetRoutingID(),
                                client_pt,
@@ -1769,8 +1768,6 @@ void RenderWidgetHostImpl::RendererExited(base::TerminationStatus status,
   // event. (In particular, the above call to view_->RenderProcessGone will
   // destroy the aura window, which may dispatch a synthetic mouse move.)
   SetupInputRouter();
-  associated_widget_input_handler_ = nullptr;
-  widget_input_handler_ = nullptr;
   synthetic_gesture_controller_.reset();
 
   last_received_frame_token_ = 0;
@@ -2466,7 +2463,7 @@ void RenderWidgetHostImpl::DelayedAutoResized() {
 
 void RenderWidgetHostImpl::DetachDelegate() {
   delegate_ = nullptr;
-  latency_tracker_.SetDelegate(nullptr);
+  latency_tracker_.reset_delegate();
 }
 
 void RenderWidgetHostImpl::DidAllocateLocalSurfaceIdForAutoResize(
@@ -2555,7 +2552,7 @@ void RenderWidgetHostImpl::OnSnapshotFromSurfaceReceived(
 }
 
 void RenderWidgetHostImpl::OnSnapshotReceived(int snapshot_id,
-                                              const gfx::Image& image) {
+                                              gfx::Image image) {
   // Any pending snapshots with a lower ID than the one received are considered
   // to be implicitly complete, and returned the same snapshot data.
   PendingSnapshotMap::iterator it = pending_browser_snapshots_.begin();
@@ -2630,8 +2627,12 @@ void RenderWidgetHostImpl::RequestCompositorFrameSink(
     viz::mojom::CompositorFrameSinkRequest request,
     viz::mojom::CompositorFrameSinkClientPtr client) {
   if (enable_viz_) {
-    GetHostFrameSinkManager()->CreateCompositorFrameSink(
-        view_->GetFrameSinkId(), std::move(request), std::move(client));
+    // TODO(kylechar): Find out why renderer is requesting a CompositorFrameSink
+    // with no view.
+    if (view_) {
+      GetHostFrameSinkManager()->CreateCompositorFrameSink(
+          view_->GetFrameSinkId(), std::move(request), std::move(client));
+    }
     return;
   }
 
@@ -2709,7 +2710,6 @@ void RenderWidgetHostImpl::SubmitCompositorFrame(
   last_surface_properties_ = new_surface_properties;
 
   last_received_content_source_id_ = frame.metadata.content_source_id;
-  uint32_t frame_token = frame.metadata.frame_token;
 
   // |has_damage| is not transmitted.
   frame.metadata.begin_frame_ack.has_damage = true;
@@ -2753,9 +2753,6 @@ void RenderWidgetHostImpl::SubmitCompositorFrame(
 
   if (delegate_)
     delegate_->DidReceiveCompositorFrame();
-
-  if (frame_token)
-    DidProcessFrame(frame_token);
 }
 
 void RenderWidgetHostImpl::DidProcessFrame(uint32_t frame_token) {
@@ -2828,6 +2825,11 @@ void RenderWidgetHostImpl::DidAllocateSharedBitmap(uint32_t sequence_number) {
 }
 
 void RenderWidgetHostImpl::SetupInputRouter() {
+  in_flight_event_count_ = 0;
+  StopHangMonitorTimeout();
+  associated_widget_input_handler_ = nullptr;
+  widget_input_handler_ = nullptr;
+
   if (base::FeatureList::IsEnabled(features::kMojoInputMessages)) {
     input_router_.reset(
         new InputRouterImpl(this, this, GetInputRouterConfigForPlatform()));
@@ -2845,6 +2847,11 @@ void RenderWidgetHostImpl::SetupInputRouter() {
         std::make_unique<LegacyIPCWidgetInputHandler>(
             static_cast<LegacyInputRouterImpl*>(input_router_.get()));
   }
+
+  if (IsUseZoomForDSFEnabled()) {
+    input_router_->SetDeviceScaleFactor(
+        view_.get() ? content::GetScaleFactorForView(view_.get()) : 1.0f);
+  }
 }
 
 void RenderWidgetHostImpl::SetForceEnableZoom(bool enabled) {
@@ -2852,20 +2859,26 @@ void RenderWidgetHostImpl::SetForceEnableZoom(bool enabled) {
 }
 
 void RenderWidgetHostImpl::SetWidgetInputHandler(
-    mojom::WidgetInputHandlerAssociatedPtr widget_input_handler) {
-  associated_widget_input_handler_ = std::move(widget_input_handler);
+    mojom::WidgetInputHandlerAssociatedPtr widget_input_handler,
+    mojom::WidgetInputHandlerHostRequest host_request) {
+  if (base::FeatureList::IsEnabled(features::kMojoInputMessages)) {
+    associated_widget_input_handler_ = std::move(widget_input_handler);
+    input_router_->BindHost(std::move(host_request), true);
+  }
 }
 
 void RenderWidgetHostImpl::SetWidget(mojom::WidgetPtr widget) {
   if (widget && base::FeatureList::IsEnabled(features::kMojoInputMessages)) {
-    widget_input_handler_.reset();
+    // If we have a bound handler ensure that we destroy the old input router.
+    if (widget_input_handler_.get())
+      SetupInputRouter();
 
     mojom::WidgetInputHandlerHostPtr host;
     mojom::WidgetInputHandlerHostRequest host_request =
         mojo::MakeRequest(&host);
     widget->SetupWidgetInputHandler(mojo::MakeRequest(&widget_input_handler_),
                                     std::move(host));
-    input_router_->BindHost(std::move(host_request));
+    input_router_->BindHost(std::move(host_request), false);
   }
 }
 

@@ -25,12 +25,6 @@
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "services/viz/public/interfaces/hit_test/hit_test_region_list.mojom.h"
 
-namespace {
-// The frame index starts at 2 so that empty frames will be treated as
-// completely damaged the first time they're drawn from.
-constexpr int kFrameIndexStart = 2;
-}  // namespace
-
 namespace viz {
 
 class FrameSinkManagerImpl;
@@ -48,6 +42,8 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   using AggregatedDamageCallback =
       base::RepeatingCallback<void(const LocalSurfaceId& local_surface_id,
                                    const gfx::Rect& damage_rect)>;
+
+  static const uint64_t kFrameIndexStart = 2;
 
   static std::unique_ptr<CompositorFrameSinkSupport> Create(
       mojom::CompositorFrameSinkClient* client,
@@ -109,6 +105,7 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   // CapturableFrameSink implementation.
   void AttachCaptureClient(CapturableFrameSink::Client* client) override;
   void DetachCaptureClient(CapturableFrameSink::Client* client) override;
+  gfx::Size GetSurfaceSize() override;
   void RequestCopyOfSurface(
       std::unique_ptr<CopyOutputRequest> request) override;
 

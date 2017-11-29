@@ -43,7 +43,8 @@ Polymer({
     discardImageLabel: String,
     previewAltText: String,
     takePhotoLabel: String,
-    switchModeLabel: String,
+    switchModeToCameraLabel: String,
+    switchModeToVideoLabel: String,
 
     /** Whether camera video mode is enabled */
     cameraVideoModeEnabled: Boolean,
@@ -66,11 +67,19 @@ Polymer({
       camera.takePhoto();
   },
 
+  /** Tells the pane to focus the main action button. */
+  focusActionButton: function() {
+    if (this.showDiscard_())
+      this.$.discardImage.focus();
+    else if (this.cameraActive_)
+      this.$$('#camera').focusTakePhotoButton();
+  },
+
   /**
    * @return {boolean}
    * @private
    */
-  getCameraActive_() {
+  getCameraActive_: function() {
     return this.cameraPresent &&
         this.imageType == CrPicture.SelectionTypes.CAMERA;
   },

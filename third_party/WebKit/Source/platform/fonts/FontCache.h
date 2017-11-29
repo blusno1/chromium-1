@@ -34,6 +34,7 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "platform/PlatformExport.h"
 #include "platform/fonts/FallbackListCompositeKey.h"
@@ -48,7 +49,6 @@
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashMap.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/Unicode.h"
@@ -71,7 +71,6 @@ namespace blink {
 class FontFaceCreationParams;
 class FontGlobalContext;
 class FontDescription;
-class OpenTypeVerticalData;
 class SimpleFontData;
 
 enum class AlternateFontName {
@@ -180,7 +179,7 @@ class PLATFORM_EXPORT FontCache {
   static void SetDeviceScaleFactor(float device_scale_factor) {
     device_scale_factor_ = device_scale_factor;
   }
-  static void AddSideloadedFontForTesting(SkTypeface*);
+  static void AddSideloadedFontForTesting(sk_sp<SkTypeface>);
   // Functions to cache and retrieve the system font metrics.
   static void SetMenuFontMetrics(const wchar_t* family_name,
                                  int32_t font_height);
@@ -204,10 +203,6 @@ class PLATFORM_EXPORT FontCache {
     use_skia_font_fallback_ = use_skia_font_fallback;
   }
 #endif
-
-  typedef uint32_t FontFileKey;
-  scoped_refptr<OpenTypeVerticalData> GetVerticalData(const FontFileKey&,
-                                               const FontPlatformData&);
 
   static void AcceptLanguagesChanged(const String&);
 
@@ -323,7 +318,6 @@ class PLATFORM_EXPORT FontCache {
   FontDataCache font_data_cache_;
 
   void PurgePlatformFontDataCache();
-  void PurgeFontVerticalDataCache();
   void PurgeFallbackListShaperCache();
 
   friend class SimpleFontData;  // For fontDataFromFontPlatformData

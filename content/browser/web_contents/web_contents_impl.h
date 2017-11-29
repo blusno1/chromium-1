@@ -24,6 +24,7 @@
 #include "build/build_config.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/frame_host/navigation_controller_delegate.h"
 #include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigator_delegate.h"
@@ -99,7 +100,6 @@ struct ColorSuggestion;
 struct FaviconURL;
 struct LoadNotificationDetails;
 struct MHTMLGenerationParams;
-struct ResourceRedirectDetails;
 struct ResourceRequestDetails;
 
 namespace mojom {
@@ -138,7 +138,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
 
   static WebContentsImpl* CreateWithOpener(
       const WebContents::CreateParams& params,
-      FrameTreeNode* opener);
+      RenderFrameHostImpl* opener_rfh);
 
   static std::vector<WebContentsImpl*> GetAllWebContents();
 
@@ -198,10 +198,10 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
 
   // Informs the render view host and the BrowserPluginEmbedder, if present, of
   // a Drag Source End.
-  void DragSourceEndedAt(int client_x,
-                         int client_y,
-                         int screen_x,
-                         int screen_y,
+  void DragSourceEndedAt(float client_x,
+                         float client_y,
+                         float screen_x,
+                         float screen_y,
                          blink::WebDragOperation operation,
                          RenderWidgetHost* source_rwh);
 
@@ -214,10 +214,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // A response has been received for a resource request.
   void DidGetResourceResponseStart(
       const ResourceRequestDetails& details);
-
-  // A redirect was received while requesting a resource.
-  void DidGetRedirectForResourceRequest(
-      const ResourceRedirectDetails& details);
 
   // Notify observers that the web contents has been focused.
   void NotifyWebContentsFocused(RenderWidgetHost* render_widget_host);
@@ -407,7 +403,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void FocusThroughTabTraversal(bool reverse) override;
   bool ShowingInterstitialPage() const override;
   void AdjustPreviewsStateForNavigation(PreviewsState* previews_state) override;
-  InterstitialPage* GetInterstitialPage() const override;
+  InterstitialPageImpl* GetInterstitialPage() const override;
   bool IsSavable() override;
   void OnSavePage() override;
   bool SavePage(const base::FilePath& main_file,

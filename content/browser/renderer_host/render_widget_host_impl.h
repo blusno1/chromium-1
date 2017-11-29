@@ -191,30 +191,30 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // |drop_data| must have been filtered. The embedder should call
   // FilterDropData before passing the drop data to RWHI.
   void DragTargetDragEnter(const DropData& drop_data,
-                           const gfx::Point& client_pt,
-                           const gfx::Point& screen_pt,
+                           const gfx::PointF& client_pt,
+                           const gfx::PointF& screen_pt,
                            blink::WebDragOperationsMask operations_allowed,
                            int key_modifiers) override;
   void DragTargetDragEnterWithMetaData(
       const std::vector<DropData::Metadata>& metadata,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
+      const gfx::PointF& client_pt,
+      const gfx::PointF& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
       int key_modifiers) override;
-  void DragTargetDragOver(const gfx::Point& client_pt,
-                          const gfx::Point& screen_pt,
+  void DragTargetDragOver(const gfx::PointF& client_pt,
+                          const gfx::PointF& screen_pt,
                           blink::WebDragOperationsMask operations_allowed,
                           int key_modifiers) override;
-  void DragTargetDragLeave(const gfx::Point& client_point,
-                           const gfx::Point& screen_point) override;
+  void DragTargetDragLeave(const gfx::PointF& client_point,
+                           const gfx::PointF& screen_point) override;
   // |drop_data| must have been filtered. The embedder should call
   // FilterDropData before passing the drop data to RWHI.
   void DragTargetDrop(const DropData& drop_data,
-                      const gfx::Point& client_pt,
-                      const gfx::Point& screen_pt,
+                      const gfx::PointF& client_pt,
+                      const gfx::PointF& screen_pt,
                       int key_modifiers) override;
-  void DragSourceEndedAt(const gfx::Point& client_pt,
-                         const gfx::Point& screen_pt,
+  void DragSourceEndedAt(const gfx::PointF& client_pt,
+                         const gfx::PointF& screen_pt,
                          blink::WebDragOperation operation) override;
   void DragSourceSystemDragEnded() override;
   void FilterDropData(DropData* drop_data) override;
@@ -616,7 +616,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // interface calls processed on the FrameInputHandler to be processed in order
   // with the interface calls processed on the WidgetInputHandler.
   void SetWidgetInputHandler(
-      mojom::WidgetInputHandlerAssociatedPtr widget_input_handler);
+      mojom::WidgetInputHandlerAssociatedPtr widget_input_handler,
+      mojom::WidgetInputHandlerHostRequest host_request);
   void SetWidget(mojom::WidgetPtr widget);
 
   // InputRouterImplClient overrides.
@@ -769,7 +770,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
                                      const SkBitmap& bitmap,
                                      ReadbackResponse response);
 
-  void OnSnapshotReceived(int snapshot_id, const gfx::Image& image);
+  void OnSnapshotReceived(int snapshot_id, gfx::Image image);
 
   // 1. Grants permissions to URL (if any)
   // 2. Grants permissions to filenames

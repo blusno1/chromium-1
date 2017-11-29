@@ -134,22 +134,11 @@ bool WASAPIAudioOutputStream::Open() {
   DCHECK(!audio_client_.Get());
   DCHECK(!audio_render_client_.Get());
 
-  // Will be set to true if we ended up opening the default communications
-  // device.
-  bool communications_device = false;
+  const bool communications_device =
+      device_id_.empty() ? (device_role_ == eCommunications) : false;
 
-  // Create an IAudioClient interface for the default rendering IMMDevice.
-  Microsoft::WRL::ComPtr<IAudioClient> audio_client;
-  if (device_id_.empty()) {
-    audio_client = CoreAudioUtil::CreateDefaultClient(eRender, device_role_);
-    communications_device = (device_role_ == eCommunications);
-  } else {
-    Microsoft::WRL::ComPtr<IMMDevice> device =
-        CoreAudioUtil::CreateDevice(device_id_);
-    DLOG_IF(ERROR, !device.Get()) << "Failed to open device: " << device_id_;
-    if (device.Get())
-      audio_client = CoreAudioUtil::CreateClient(device.Get());
-  }
+  Microsoft::WRL::ComPtr<IAudioClient> audio_client(
+      CoreAudioUtil::CreateClient(device_id_, eRender, device_role_));
 
   if (!audio_client.Get())
     return false;
@@ -525,8 +514,10 @@ bool WASAPIAudioOutputStream::RenderAudioFromSource(UINT64 device_frequency) {
       delay = base::TimeDelta::FromMicroseconds(
           delay_frames * base::Time::kMicrosecondsPerSecond /
           format_.Format.nSamplesPerSec);
-
-      delay_timestamp = base::TimeTicks::FromQPCValue(qpc_position);
+      // Note: the obtained |qpc_position| value is in 100ns intervals and from
+      // the same time origin as QPC. We can simply convert it into us dividing
+      // by 10.0 since 10x100ns = 1us.
+      delay_timestamp += base::TimeDelta::FromMicroseconds(qpc_position * 0.1);
     } else {
       // Use a delay of zero.
       delay_timestamp = base::TimeTicks::Now();

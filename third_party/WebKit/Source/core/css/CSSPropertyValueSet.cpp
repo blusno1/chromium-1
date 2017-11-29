@@ -100,9 +100,9 @@ ImmutableCSSPropertyValueSet::ImmutableCSSPropertyValueSet(
   }
 }
 
-ImmutableCSSPropertyValueSet::~ImmutableCSSPropertyValueSet() {}
+ImmutableCSSPropertyValueSet::~ImmutableCSSPropertyValueSet() = default;
 
-// Convert property into an uint16_t for comparison with metadata's property_id_
+// Convert property into an uint16_t for comparison with metadata's property id
 // to avoid the compiler converting it to an int multiple times in a loop.
 static uint16_t GetConvertedCSSPropertyID(CSSPropertyID property_id) {
   return static_cast<uint16_t>(property_id);
@@ -117,7 +117,7 @@ static bool IsPropertyMatch(const CSSPropertyValueMetadata& metadata,
                             uint16_t id,
                             CSSPropertyID property_id) {
   DCHECK_EQ(id, property_id);
-  bool result = metadata.property_id_ == id;
+  bool result = metadata.Property().PropertyID() == id;
 // Only enabled properties should be part of the style.
 #if DCHECK_IS_ON()
   DCHECK(!result ||
@@ -131,7 +131,7 @@ static bool IsPropertyMatch(const CSSPropertyValueMetadata& metadata,
                             uint16_t id,
                             const AtomicString& custom_property_name) {
   DCHECK_EQ(id, CSSPropertyVariable);
-  return metadata.property_id_ == id &&
+  return metadata.Property().PropertyID() == id &&
          ToCSSCustomPropertyDeclaration(value).GetName() ==
              custom_property_name;
 }
@@ -287,7 +287,7 @@ bool CSSPropertyValueSet::ShorthandIsImportant(
     return false;
 
   for (unsigned i = 0; i < shorthand.length(); ++i) {
-    if (!PropertyIsImportant(shorthand.properties()[i]))
+    if (!PropertyIsImportant(shorthand.properties()[i]->PropertyID()))
       return false;
   }
   return true;
@@ -318,6 +318,7 @@ MutableCSSPropertyValueSet::SetResult MutableCSSPropertyValueSet::SetProperty(
     CSSPropertyID unresolved_property,
     const String& value,
     bool important,
+    SecureContextMode secure_context_mode,
     StyleSheetContents* context_style_sheet) {
   DCHECK_GE(unresolved_property, firstCSSProperty);
 
@@ -334,7 +335,7 @@ MutableCSSPropertyValueSet::SetResult MutableCSSPropertyValueSet::SetProperty(
   // end of the list. Firefox preserves the position, and MSIE moves the
   // property to the beginning.
   return CSSParser::ParseValue(this, unresolved_property, value, important,
-                               context_style_sheet);
+                               secure_context_mode, context_style_sheet);
 }
 
 MutableCSSPropertyValueSet::SetResult MutableCSSPropertyValueSet::SetProperty(
@@ -342,6 +343,7 @@ MutableCSSPropertyValueSet::SetResult MutableCSSPropertyValueSet::SetProperty(
     const PropertyRegistry* registry,
     const String& value,
     bool important,
+    SecureContextMode secure_context_mode,
     StyleSheetContents* context_style_sheet,
     bool is_animation_tainted) {
   if (value.IsEmpty()) {
@@ -351,7 +353,7 @@ MutableCSSPropertyValueSet::SetResult MutableCSSPropertyValueSet::SetProperty(
   }
   return CSSParser::ParseValueForCustomProperty(
       this, custom_property_name, registry, value, important,
-      context_style_sheet, is_animation_tainted);
+      secure_context_mode, context_style_sheet, is_animation_tainted);
 }
 
 void MutableCSSPropertyValueSet::SetProperty(CSSPropertyID property_id,
@@ -359,7 +361,8 @@ void MutableCSSPropertyValueSet::SetProperty(CSSPropertyID property_id,
                                              bool important) {
   StylePropertyShorthand shorthand = shorthandForProperty(property_id);
   if (!shorthand.length()) {
-    SetProperty(CSSPropertyValue(property_id, value, important));
+    SetProperty(
+        CSSPropertyValue(CSSProperty::Get(property_id), value, important));
     return;
   }
 
@@ -367,7 +370,7 @@ void MutableCSSPropertyValueSet::SetProperty(CSSPropertyID property_id,
 
   for (unsigned i = 0; i < shorthand.length(); ++i) {
     property_vector_.push_back(
-        CSSPropertyValue(shorthand.properties()[i], value, important));
+        CSSPropertyValue(*shorthand.properties()[i], value, important));
   }
 }
 
@@ -392,13 +395,15 @@ bool MutableCSSPropertyValueSet::SetProperty(const CSSPropertyValue& property,
 bool MutableCSSPropertyValueSet::SetProperty(CSSPropertyID property_id,
                                              CSSValueID identifier,
                                              bool important) {
-  SetProperty(CSSPropertyValue(
-      property_id, *CSSIdentifierValue::Create(identifier), important));
+  SetProperty(CSSPropertyValue(CSSProperty::Get(property_id),
+                               *CSSIdentifierValue::Create(identifier),
+                               important));
   return true;
 }
 
 void MutableCSSPropertyValueSet::ParseDeclarationList(
     const String& style_declaration,
+    SecureContextMode secure_context_mode,
     StyleSheetContents* context_style_sheet) {
   property_vector_.clear();
 
@@ -408,7 +413,7 @@ void MutableCSSPropertyValueSet::ParseDeclarationList(
         context_style_sheet->ParserContext(), context_style_sheet);
     context->SetMode(CssParserMode());
   } else {
-    context = CSSParserContext::Create(CssParserMode());
+    context = CSSParserContext::Create(CssParserMode(), secure_context_mode);
   }
 
   CSSParser::ParseDeclarationList(context, this, style_declaration);
@@ -462,17 +467,17 @@ void MutableCSSPropertyValueSet::Clear() {
   property_vector_.clear();
 }
 
-inline bool ContainsId(const CSSPropertyID* set,
+inline bool ContainsId(const CSSProperty** set,
                        unsigned length,
                        CSSPropertyID id) {
   for (unsigned i = 0; i < length; ++i) {
-    if (set[i] == id)
+    if (set[i]->IDEquals(id))
       return true;
   }
   return false;
 }
 
-bool MutableCSSPropertyValueSet::RemovePropertiesInSet(const CSSPropertyID* set,
+bool MutableCSSPropertyValueSet::RemovePropertiesInSet(const CSSProperty** set,
                                                        unsigned length) {
   if (property_vector_.IsEmpty())
     return false;
@@ -554,13 +559,14 @@ MutableCSSPropertyValueSet* CSSPropertyValueSet::MutableCopy() const {
 }
 
 MutableCSSPropertyValueSet* CSSPropertyValueSet::CopyPropertiesInSet(
-    const Vector<CSSPropertyID>& properties) const {
+    const Vector<const CSSProperty*>& properties) const {
   HeapVector<CSSPropertyValue, 256> list;
   list.ReserveInitialCapacity(properties.size());
   for (unsigned i = 0; i < properties.size(); ++i) {
-    const CSSValue* value = GetPropertyCSSValue(properties[i]);
-    if (value)
-      list.push_back(CSSPropertyValue(properties[i], *value, false));
+    const CSSValue* value = GetPropertyCSSValue(properties[i]->PropertyID());
+    if (value) {
+      list.push_back(CSSPropertyValue(*properties[i], *value, false));
+    }
   }
   return MutableCSSPropertyValueSet::Create(list.data(), list.size());
 }

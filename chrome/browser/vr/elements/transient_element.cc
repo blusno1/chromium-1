@@ -14,14 +14,23 @@ TransientElement::TransientElement(const base::TimeDelta& timeout)
 TransientElement::~TransientElement() {}
 
 void TransientElement::SetVisible(bool visible) {
+  bool will_be_visible = GetTargetOpacity() == opacity_when_visible();
   // We're already at the desired visibility, no-op.
-  if (visible == (GetTargetOpacity() == opacity_when_visible()))
+  if (visible == will_be_visible)
     return;
 
   if (visible)
     set_visible_time_ = last_frame_time();
 
   super::SetVisible(visible);
+}
+
+void TransientElement::SetVisibleImmediately(bool visible) {
+  bool will_be_visible = GetTargetOpacity() == opacity_when_visible();
+  if (!will_be_visible && visible)
+    set_visible_time_ = last_frame_time();
+
+  super::SetVisibleImmediately(visible);
 }
 
 void TransientElement::RefreshVisible() {
@@ -96,8 +105,8 @@ bool ShowUntilSignalTransientElement::OnBeginFrame(
   return false;
 }
 
-void ShowUntilSignalTransientElement::Signal() {
-  signaled_ = true;
+void ShowUntilSignalTransientElement::Signal(bool value) {
+  signaled_ = value;
 }
 
 }  // namespace vr

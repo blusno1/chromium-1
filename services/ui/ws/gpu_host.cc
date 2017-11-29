@@ -26,6 +26,10 @@
 #include "ui/gfx/win/rendering_window_manager.h"
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "services/ui/ws/arc_client.h"
+#endif
+
 namespace ui {
 namespace ws {
 
@@ -69,7 +73,7 @@ DefaultGpuHost::DefaultGpuHost(GpuHostDelegate* delegate,
                               std::move(gpu_host_proxy),
                               mojo::ScopedSharedBufferHandle());
   gpu_memory_buffer_manager_ =
-      base::MakeUnique<viz::ServerGpuMemoryBufferManager>(gpu_service_.get(),
+      std::make_unique<viz::ServerGpuMemoryBufferManager>(gpu_service_.get(),
                                                           next_client_id_++);
 }
 
@@ -104,13 +108,19 @@ void DefaultGpuHost::OnAcceleratedWidgetDestroyed(
 }
 
 void DefaultGpuHost::CreateFrameSinkManager(
-    viz::mojom::FrameSinkManagerRequest request,
-    viz::mojom::FrameSinkManagerClientPtr client) {
-  viz_main_->CreateFrameSinkManager(std::move(request), std::move(client));
+    viz::mojom::FrameSinkManagerParamsPtr params) {
+  viz_main_->CreateFrameSinkManager(std::move(params));
 }
 
+#if defined(OS_CHROMEOS)
+void DefaultGpuHost::AddArc(mojom::ArcRequest request) {
+  arc_bindings_.AddBinding(std::make_unique<ArcClient>(gpu_service_.get()),
+                           std::move(request));
+}
+#endif  // defined(OS_CHROMEOS)
+
 GpuClient* DefaultGpuHost::AddInternal(mojom::GpuRequest request) {
-  auto client(base::MakeUnique<GpuClient>(
+  auto client(std::make_unique<GpuClient>(
       next_client_id_++, &gpu_info_, &gpu_feature_info_,
       gpu_memory_buffer_manager_.get(), gpu_service_.get()));
   GpuClient* client_ref = client.get();
@@ -141,6 +151,8 @@ void DefaultGpuHost::DidInitialize(
 }
 
 void DefaultGpuHost::DidFailInitialize() {}
+
+void DefaultGpuHost::DidCreateContextSuccessfully() {}
 
 void DefaultGpuHost::DidCreateOffscreenContext(const GURL& url) {}
 

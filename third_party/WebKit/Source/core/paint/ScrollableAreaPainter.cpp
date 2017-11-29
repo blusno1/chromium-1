@@ -18,7 +18,6 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
-#include "platform/graphics/paint/ScopedPaintChunkProperties.h"
 
 namespace blink {
 
@@ -178,51 +177,31 @@ void ScrollableAreaPainter::PaintOverflowControls(
                              DisplayItem::kClipLayerOverflowControls,
                              clip_rect);
 
-  {
-    Optional<ScopedPaintChunkProperties> scoped_transform_property;
-    if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
-      if (auto* object_properties =
-              GetScrollableArea().Box().FirstFragment().PaintProperties()) {
-        if (object_properties->ScrollbarPaintOffset()) {
-          PaintChunkProperties properties(
-              context.GetPaintController().CurrentPaintChunkProperties());
-          properties.property_tree_state.SetTransform(
-              object_properties->ScrollbarPaintOffset());
-          scoped_transform_property.emplace(
-              context.GetPaintController(), GetScrollableArea().Box(),
-              DisplayItem::kScrollOverflowControls, properties);
-        }
-      }
-    }
-    if (GetScrollableArea().HorizontalScrollbar() &&
-        !GetScrollableArea().LayerForHorizontalScrollbar()) {
-      TransformRecorder translate_recorder(
-          context, *GetScrollableArea().HorizontalScrollbar(),
-          AffineTransform::Translation(adjusted_paint_offset.X(),
-                                       adjusted_paint_offset.Y()));
-      GetScrollableArea().HorizontalScrollbar()->Paint(context,
-                                                       adjusted_cull_rect);
-    }
-    if (GetScrollableArea().VerticalScrollbar() &&
-        !GetScrollableArea().LayerForVerticalScrollbar()) {
-      TransformRecorder translate_recorder(
-          context, *GetScrollableArea().VerticalScrollbar(),
-          AffineTransform::Translation(adjusted_paint_offset.X(),
-                                       adjusted_paint_offset.Y()));
-      GetScrollableArea().VerticalScrollbar()->Paint(context,
+  if (GetScrollableArea().HorizontalScrollbar() &&
+      !GetScrollableArea().LayerForHorizontalScrollbar()) {
+    TransformRecorder translate_recorder(
+        context, *GetScrollableArea().HorizontalScrollbar(),
+        AffineTransform::Translation(adjusted_paint_offset.X(),
+                                     adjusted_paint_offset.Y()));
+    GetScrollableArea().HorizontalScrollbar()->Paint(context,
                                                      adjusted_cull_rect);
-    }
   }
+  if (GetScrollableArea().VerticalScrollbar() &&
+      !GetScrollableArea().LayerForVerticalScrollbar()) {
+    TransformRecorder translate_recorder(
+        context, *GetScrollableArea().VerticalScrollbar(),
+        AffineTransform::Translation(adjusted_paint_offset.X(),
+                                     adjusted_paint_offset.Y()));
+    GetScrollableArea().VerticalScrollbar()->Paint(context, adjusted_cull_rect);
+  }
+  if (!GetScrollableArea().LayerForScrollCorner()) {
+    // We fill our scroll corner with white if we have a scrollbar that doesn't
+    // run all the way up to the edge of the box.
+    PaintScrollCorner(context, adjusted_paint_offset, cull_rect);
 
-  if (GetScrollableArea().LayerForScrollCorner())
-    return;
-
-  // We fill our scroll corner with white if we have a scrollbar that doesn't
-  // run all the way up to the edge of the box.
-  PaintScrollCorner(context, adjusted_paint_offset, cull_rect);
-
-  // Paint our resizer last, since it sits on top of the scroll corner.
-  PaintResizer(context, adjusted_paint_offset, cull_rect);
+    // Paint our resizer last, since it sits on top of the scroll corner.
+    PaintResizer(context, adjusted_paint_offset, cull_rect);
+  }
 }
 
 bool ScrollableAreaPainter::OverflowControlsIntersectRect(
@@ -278,21 +257,6 @@ void ScrollableAreaPainter::PaintScrollCorner(
 
   DrawingRecorder recorder(context, client, DisplayItem::kScrollbarCorner);
   context.FillRect(abs_rect, Color::kWhite);
-}
-
-void ScrollableAreaPainter::PaintCompositedScrollbar(
-    const Scrollbar& scrollbar,
-    GraphicsContext& context,
-    const CullRect& cull_rect_arg) {
-  // Map context and cull_rect which are in the local space of the scrollbar
-  // to the space of the containing scrollable area in which Scrollbar::Paint()
-  // will paint the scrollbar.
-  const IntRect& scrollbar_rect = scrollbar.FrameRect();
-  CullRect cull_rect(cull_rect_arg, scrollbar_rect.Location());
-  AffineTransform translation =
-      AffineTransform::Translation(-scrollbar_rect.X(), -scrollbar_rect.Y());
-  TransformRecorder transform_recorder(context, scrollbar, translation);
-  scrollbar.Paint(context, cull_rect);
 }
 
 PaintLayerScrollableArea& ScrollableAreaPainter::GetScrollableArea() const {

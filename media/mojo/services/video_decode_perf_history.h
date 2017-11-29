@@ -14,11 +14,12 @@
 #include "base/sequence_checker.h"
 #include "base/supports_user_data.h"
 #include "media/base/video_codecs.h"
+#include "media/capabilities/video_decode_stats_db.h"
 #include "media/mojo/interfaces/video_decode_perf_history.mojom.h"
 #include "media/mojo/services/media_mojo_export.h"
-#include "media/mojo/services/video_decode_stats_db.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "ui/gfx/geometry/size.h"
+#include "url/origin.h"
 
 namespace media {
 
@@ -63,7 +64,9 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
   // Save a record of the given performance stats for the described stream.
   // Saving is generally fire-and-forget, but |save_done_cb| may be optionally
   // for tests to know the save is complete.
-  void SavePerfRecord(VideoCodecProfile profile,
+  void SavePerfRecord(const url::Origin& untrusted_top_frame_origin,
+                      bool is_top_frame,
+                      VideoCodecProfile profile,
                       const gfx::Size& natural_size,
                       int frame_rate,
                       uint32_t frames_decoded,
@@ -117,6 +120,8 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
   // of the GetPerfInfo() API. Comparison is recorded via UKM. Then saves the
   // |new_*| performance stats to the database.
   void OnGotStatsForSave(
+      const url::Origin& top_frame_origin,
+      bool is_top_frame,
       const VideoDecodeStatsDB::VideoDescKey& video_key,
       const VideoDecodeStatsDB::DecodeStatsEntry& new_stats,
       base::OnceClosure save_done_cb,
@@ -129,9 +134,15 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
 
   // Report UKM metrics to grade the claims of the API by evaluating how well
   // |past_stats| predicts |new_stats|.
-  void ReportUkmMetrics(const VideoDecodeStatsDB::VideoDescKey& video_key,
+  void ReportUkmMetrics(const url::Origin& top_frame_origin,
+                        bool is_top_frame,
+                        const VideoDecodeStatsDB::VideoDescKey& video_key,
                         const VideoDecodeStatsDB::DecodeStatsEntry& new_stats,
                         VideoDecodeStatsDB::DecodeStatsEntry* past_stats);
+
+  void AssessStats(const VideoDecodeStatsDB::DecodeStatsEntry* stats,
+                   bool* is_smooth,
+                   bool* is_power_efficient);
 
   // Internal callback for ClearHistory(). Reinitializes the database and runs
   // |clear_done_cb|.

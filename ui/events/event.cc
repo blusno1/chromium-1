@@ -4,12 +4,6 @@
 
 #include "ui/events/event.h"
 
-#if defined(USE_X11)
-#include <X11/extensions/XInput2.h>
-#include <X11/keysym.h>
-#include <X11/Xlib.h>
-#endif
-
 #include <cmath>
 #include <cstring>
 #include <utility>
@@ -33,6 +27,7 @@
 
 #if defined(USE_X11)
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"  // nogncheck
+#include "ui/gfx/x/x11.h"                                   // nogncheck
 #elif defined(USE_OZONE)
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"  // nogncheck
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"  // nogncheck
@@ -1179,10 +1174,13 @@ KeyEvent::KeyEvent(const base::NativeEvent& native_event, int event_flags)
 #endif
 #if defined(OS_WIN)
   // Only Windows has native character events.
-  if (is_char_)
+  if (is_char_) {
     key_ = DomKey::FromCharacter(native_event.wParam);
-  else
-    key_ = PlatformKeyMap::DomKeyFromKeyboardCode(key_code(), flags());
+  } else {
+    int adjusted_flags = flags();
+    key_ = PlatformKeyMap::DomKeyFromKeyboardCode(key_code(), &adjusted_flags);
+    set_flags(adjusted_flags);
+  }
 #endif
 }
 

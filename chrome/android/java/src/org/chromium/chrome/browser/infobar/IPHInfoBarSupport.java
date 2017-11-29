@@ -9,7 +9,6 @@ import android.support.v4.view.ViewCompat;
 import android.view.View;
 import android.widget.PopupWindow.OnDismissListener;
 
-import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.browser.infobar.InfoBarContainer.InfoBarContainerObserver;
 import org.chromium.chrome.browser.infobar.InfoBarContainerLayout.Item;
 import org.chromium.chrome.browser.widget.textbubble.TextBubble;
@@ -89,6 +88,9 @@ class IPHInfoBarSupport implements OnDismissListener, InfoBarContainer.InfoBarAn
     /** The state of the currently showing in-product window or {@code null} if none is showing. */
     private PopupState mCurrentState;
 
+    /** Helper for tracking invalid calls to {@link #onDismiss()}.  See crbug.com/786916. */
+    private Throwable mLastDismissStack;
+
     /** Creates a new instance of an IPHInfoBarSupport class. */
     IPHInfoBarSupport(IPHBubbleDelegate delegate) {
         mDelegate = delegate;
@@ -103,7 +105,6 @@ class IPHInfoBarSupport implements OnDismissListener, InfoBarContainer.InfoBarAn
     // goes through the Android SDK, FindBugs does not see this as happening, so the FindBugs
     // warning for a field guaranteed to be non-null being checked for null equality needs to be
     // suppressed.
-    @SuppressFBWarnings("RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE")
     @Override
     public void notifyAllAnimationsFinished(Item frontInfoBar) {
         View view = frontInfoBar == null ? null : frontInfoBar.getView();
@@ -134,7 +135,6 @@ class IPHInfoBarSupport implements OnDismissListener, InfoBarContainer.InfoBarAn
     // goes through the Android SDK, FindBugs does not see this as happening, so the FindBugs
     // warning for a field guaranteed to be non-null being checked for null equality needs to be
     // suppressed.
-    @SuppressFBWarnings("RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE")
     @Override
     public void onRemoveInfoBar(InfoBarContainer container, InfoBar infoBar, boolean isLast) {
         if (mCurrentState != null && infoBar.getView() == mCurrentState.view) {
@@ -152,6 +152,9 @@ class IPHInfoBarSupport implements OnDismissListener, InfoBarContainer.InfoBarAn
     // PopupWindow.OnDismissListener implementation.
     @Override
     public void onDismiss() {
+        // Helper for crbug.com/786916 to catch why we are getting two dismiss calls in a row.
+        if (mCurrentState == null) throw new IllegalStateException(mLastDismissStack);
+        mLastDismissStack = new Exception();
         assert mCurrentState != null;
         mDelegate.onPopupDismissed(mCurrentState);
         mCurrentState = null;

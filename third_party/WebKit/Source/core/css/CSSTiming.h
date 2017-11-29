@@ -5,6 +5,7 @@
 #ifndef CSSTiming_h
 #define CSSTiming_h
 
+#include "base/macros.h"
 #include "core/dom/Document.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
@@ -16,11 +17,10 @@ class PaintTiming;
 
 class CSSTiming : public GarbageCollectedFinalized<CSSTiming>,
                   public Supplement<Document> {
-  WTF_MAKE_NONCOPYABLE(CSSTiming);
   USING_GARBAGE_COLLECTED_MIXIN(CSSTiming);
 
  public:
-  virtual ~CSSTiming() {}
+  virtual ~CSSTiming() = default;
 
   void RecordAuthorStyleSheetParseTime(double seconds);
   void RecordUpdateDuration(double seconds);
@@ -41,6 +41,7 @@ class CSSTiming : public GarbageCollectedFinalized<CSSTiming>,
   double update_time_before_fcp_ = 0;
 
   Member<PaintTiming> paint_timing_;
+  DISALLOW_COPY_AND_ASSIGN(CSSTiming);
 };
 
 }  // namespace blink

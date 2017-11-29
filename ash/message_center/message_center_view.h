@@ -107,6 +107,9 @@ class ASH_EXPORT MessageCenterView
       const message_center::Notification& notification) override;
   void ClickOnNotificationButton(const std::string& notification_id,
                                  int button_index) override;
+  void ClickOnNotificationButtonWithReply(const std::string& notification_id,
+                                          int button_index,
+                                          const base::string16& reply) override;
   void ClickOnSettingsButton(const std::string& notification_id) override;
   void UpdateNotificationSize(const std::string& notification_id) override;
 
@@ -143,6 +146,7 @@ class ASH_EXPORT MessageCenterView
   void EnableCloseAllIfAppropriate();
   void SetNotificationViewForTest(message_center::MessageView* view);
   void UpdateNotification(const std::string& notification_id);
+  void NotifyAnimationState(bool animating);
 
   // There are three patterns for animation.
   // - Only MessageCenterView height changes.

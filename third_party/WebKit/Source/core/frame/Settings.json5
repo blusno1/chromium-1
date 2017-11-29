@@ -556,11 +556,6 @@
     },
 
     {
-      name: "encryptedMediaEnabled",
-      initial: true,
-    },
-
-    {
       name: "viewportEnabled",
       initial: false,
       invalidate: "ViewportDescription",
@@ -644,13 +639,6 @@
       name: "v8CacheOptions",
       initial: "kV8CacheOptionsDefault",
       type: "V8CacheOptions",
-    },
-
-    // V8 code cache for CacheStorage supports three types of strategies (none, normal and aggressive).
-    {
-      name: "v8CacheStrategiesForCacheStorage",
-      initial: "V8CacheStrategiesForCacheStorage::kDefault",
-      type: "V8CacheStrategiesForCacheStorage",
     },
 
     // These values are bit fields for the properties of available pointing devices

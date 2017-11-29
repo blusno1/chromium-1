@@ -1125,7 +1125,7 @@ void PaintLayerScrollableArea::UpdateAfterStyleChange(
 
   UpdateScrollCornerStyle();
   UpdateResizerAreaSet();
-  UpdateResizerStyle();
+  UpdateResizerStyle(old_style);
 }
 
 bool PaintLayerScrollableArea::UpdateAfterCompositingChange() {
@@ -1371,11 +1371,10 @@ bool PaintLayerScrollableArea::TryRemovingAutoScrollbars(
   // remove auto scrollbars for the initial layout pass.
   DCHECK(!in_overflow_relayout_);
 
-  // TODO(pdr): Extend this logic to work with all overflow boxes.
-  if (Box().IsLayoutView()) {
-    if (!needs_horizontal_scrollbar && !needs_vertical_scrollbar)
-      return false;
+  if (!needs_horizontal_scrollbar && !needs_vertical_scrollbar)
+    return false;
 
+  if (Box().IsLayoutView()) {
     ScrollbarMode h_mode;
     ScrollbarMode v_mode;
     ToLayoutView(Box()).CalculateScrollbarModes(h_mode, v_mode);
@@ -1388,7 +1387,19 @@ bool PaintLayerScrollableArea::TryRemovingAutoScrollbars(
         ScrollHeight() <= visible_size_with_scrollbars.Height()) {
       return true;
     }
+  } else {
+    if (!Box().HasAutoVerticalScrollbar() ||
+        !Box().HasAutoHorizontalScrollbar())
+      return false;
+
+    LayoutSize client_size_with_scrollbars =
+        LayoutContentRect(kIncludeScrollbars).Size();
+    if (ScrollWidth() <= client_size_with_scrollbars.Width() &&
+        ScrollHeight() <= client_size_with_scrollbars.Height()) {
+      return true;
+    }
   }
+
   return false;
 }
 
@@ -1673,7 +1684,15 @@ void PaintLayerScrollableArea::UpdateResizerAreaSet() {
     frame_view->RemoveResizerArea(Box());
 }
 
-void PaintLayerScrollableArea::UpdateResizerStyle() {
+void PaintLayerScrollableArea::UpdateResizerStyle(
+    const ComputedStyle* old_style) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() && old_style &&
+      old_style->Resize() != Box().StyleRef().Resize()) {
+    // Invalidate the composited scroll corner layer on resize style change.
+    if (auto* graphics_layer = LayerForScrollCorner())
+      graphics_layer->SetNeedsDisplay();
+  }
+
   if (!resizer_ && !Box().CanResize())
     return;
 
@@ -1910,16 +1929,29 @@ void PaintLayerScrollableArea::UpdateScrollableAreaSet() {
 
 void PaintLayerScrollableArea::UpdateCompositingLayersAfterScroll() {
   PaintLayerCompositor* compositor = Box().View()->Compositor();
-  if (compositor->InCompositingMode()) {
-    if (UsesCompositedScrolling()) {
-      DCHECK(Layer()->HasCompositedLayerMapping());
-      Layer()->GetCompositedLayerMapping()->SetNeedsGraphicsLayerUpdate(
-          kGraphicsLayerUpdateSubtree);
-      compositor->SetNeedsCompositingUpdate(
-          kCompositingUpdateAfterGeometryChange);
-    } else {
-      Layer()->SetNeedsCompositingInputsUpdate();
+  if (!compositor->InCompositingMode())
+    return;
+
+  if (UsesCompositedScrolling()) {
+    DCHECK(Layer()->HasCompositedLayerMapping());
+    Layer()->GetCompositedLayerMapping()->SetNeedsGraphicsLayerUpdate(
+        kGraphicsLayerUpdateSubtree);
+    compositor->SetNeedsCompositingUpdate(
+        kCompositingUpdateAfterGeometryChange);
+
+    // If we have fixed elements and we scroll the root layer in RLS we might
+    // change compositing since the fixed elements might now overlap a
+    // composited layer.
+    if (Layer()->IsRootLayer() &&
+        RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+      LocalFrame* frame = Box().GetFrame();
+      if (frame && frame->View() &&
+          frame->View()->HasViewportConstrainedObjects()) {
+        Layer()->SetNeedsCompositingInputsUpdate();
+      }
     }
+  } else {
+    Layer()->SetNeedsCompositingInputsUpdate();
   }
 }
 

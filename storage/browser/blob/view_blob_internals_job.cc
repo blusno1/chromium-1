@@ -148,8 +148,7 @@ ViewBlobInternalsJob::ViewBlobInternalsJob(
       weak_factory_(this) {
 }
 
-ViewBlobInternalsJob::~ViewBlobInternalsJob() {
-}
+ViewBlobInternalsJob::~ViewBlobInternalsJob() = default;
 
 void ViewBlobInternalsJob::Start() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -282,6 +281,7 @@ void ViewBlobInternalsJob::GenerateHTMLForBlobData(
       case DataElement::TYPE_DATA_PIPE:
         AddHTMLListItem(kType, "data pipe", out);
         break;
+      case DataElement::TYPE_RAW_FILE:
       case DataElement::TYPE_UNKNOWN:
         NOTREACHED();
         break;

@@ -15,7 +15,7 @@
 #include "content/public/common/file_chooser_params.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
@@ -23,6 +23,7 @@
 #include "url/origin.h"
 
 namespace blink {
+class AssociatedInterfaceProvider;
 enum class FeaturePolicyFeature;
 }
 
@@ -45,7 +46,6 @@ struct AXActionData;
 
 namespace content {
 
-class AssociatedInterfaceProvider;
 class RenderProcessHost;
 class RenderViewHost;
 class RenderWidgetHostView;
@@ -217,11 +217,12 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
 
   // Returns the AssociatedInterfaceProvider that this process can use to access
   // remote frame-specific Channel-associated interfaces for this frame.
-  virtual AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() = 0;
+  virtual blink::AssociatedInterfaceProvider*
+  GetRemoteAssociatedInterfaces() = 0;
 
   // Returns the visibility state of the frame. The different visibility states
   // of a frame are defined in Blink.
-  virtual blink::WebPageVisibilityState GetVisibilityState() = 0;
+  virtual blink::mojom::PageVisibilityState GetVisibilityState() = 0;
 
   // Returns whether the RenderFrame in the renderer process has been created
   // and still has a connection.  This is valid for all frames.

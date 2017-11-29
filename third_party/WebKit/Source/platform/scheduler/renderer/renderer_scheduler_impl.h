@@ -94,7 +94,8 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   static const char* VirtualTimePolicyToString(
       WebViewScheduler::VirtualTimePolicy virtual_time_policy);
 
-  RendererSchedulerImpl(scoped_refptr<SchedulerTqmDelegate> main_task_runner);
+  explicit RendererSchedulerImpl(
+      std::unique_ptr<TaskQueueManager> task_queue_manager);
   ~RendererSchedulerImpl() override;
 
   // RendererScheduler implementation:
@@ -138,6 +139,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   bool MainThreadSeemsUnresponsive(
       base::TimeDelta main_thread_responsiveness_threshold) override;
   void SetRendererProcessType(RendererProcessType type) override;
+  WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser() override;
 
   // AutoAdvancingVirtualTimeDomain::Observer implementation:
   void OnVirtualTimeAdvanced() override;
@@ -192,8 +194,9 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   using VirtualTimePolicy = WebViewScheduler::VirtualTimePolicy;
   using VirtualTimeObserver = WebViewScheduler::VirtualTimeObserver;
 
-  // Tells the scheduler that all TaskQueues should use virtual time.
-  void EnableVirtualTime();
+  // Tells the scheduler that all TaskQueues should use virtual time. Returns
+  // the TimeTicks that virtual time offsets will be relative to.
+  base::TimeTicks EnableVirtualTime();
 
   // Migrates all task queues to real time.
   void DisableVirtualTimeForTesting();
@@ -624,12 +627,19 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     base::Optional<base::TimeTicks> last_audio_state_change;
     int renderer_pause_count;  // Renderer is paused if non-zero.
     int navigation_task_expected_count;
-    ExpensiveTaskPolicy expensive_task_policy;
+    TraceableState<ExpensiveTaskPolicy, kTracingCategoryNameInfo>
+        expensive_task_policy;
+    TraceableState<v8::RAILMode, kTracingCategoryNameInfo>
+        rail_mode_for_tracing;  // Don't use except for tracing.
     bool renderer_hidden;
     TraceableState<bool, kTracingCategoryNameDefault> renderer_backgrounded;
     bool stopping_when_backgrounded_enabled;
     bool stopped_when_backgrounded;
     bool was_shutdown;
+    TraceableCounter<base::TimeDelta, kTracingCategoryNameInfo>
+        loading_task_estimated_cost;
+    TraceableCounter<base::TimeDelta, kTracingCategoryNameInfo>
+        timer_task_estimated_cost;
     TraceableState<bool, kTracingCategoryNameInfo> loading_tasks_seem_expensive;
     TraceableState<bool, kTracingCategoryNameInfo> timer_tasks_seem_expensive;
     TraceableState<bool, kTracingCategoryNameDefault> touchstart_expected_soon;

@@ -81,6 +81,7 @@
 #endif
 
 #if !defined(OS_ANDROID)
+#include "chrome/browser/download/default_download_dir_policy_handler.h"
 #include "chrome/browser/download/download_dir_policy_handler.h"
 #include "chrome/browser/policy/local_sync_policy_handler.h"
 #endif
@@ -313,7 +314,7 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     prefs::kCloudPrintSubmitEnabled,
     base::Value::Type::BOOLEAN },
   { key::kTranslateEnabled,
-    prefs::kEnableTranslate,
+    prefs::kOfferTranslateEnabled,
     base::Value::Type::BOOLEAN },
   { key::kAllowOutdatedPlugins,
     prefs::kPluginsAllowOutdated,
@@ -714,6 +715,13 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kBrowserNetworkTimeQueriesEnabled,
     network_time::prefs::kNetworkTimeQueriesEnabled,
     base::Value::Type::BOOLEAN },
+
+  { key::kIsolateOrigins,
+    prefs::kIsolateOrigins,
+    base::Value::Type::STRING },
+  { key::kSitePerProcess,
+    prefs::kSitePerProcess,
+    base::Value::Type::BOOLEAN },
 };
 // clang-format on
 
@@ -806,6 +814,27 @@ class BrowsingHistoryPolicyHandler : public TypeCheckingPolicyHandler {
                         false);
       prefs->SetBoolean(browsing_data::prefs::kDeleteDownloadHistory, false);
     }
+  }
+};
+
+class SecureOriginPolicyHandler : public TypeCheckingPolicyHandler {
+ public:
+  SecureOriginPolicyHandler()
+      : TypeCheckingPolicyHandler(key::kUnsafelyTreatInsecureOriginAsSecure,
+                                  base::Value::Type::LIST) {}
+  void ApplyPolicySettings(const PolicyMap& policies,
+                           PrefValueMap* prefs) override {
+    const base::Value* value = policies.GetValue(policy_name());
+    if (!value)
+      return;
+
+    std::string pref_string;
+    for (const auto& list_entry : value->GetList()) {
+      if (!pref_string.empty())
+        pref_string.append(",");
+      pref_string.append(list_entry.GetString());
+    }
+    prefs->SetString(prefs::kUnsafelyTreatInsecureOriginAsSecure, pref_string);
   }
 };
 
@@ -902,6 +931,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       certificate_transparency::prefs::kCTExcludedHosts, chrome_schema,
       SCHEMA_STRICT, SimpleSchemaValidatingPolicyHandler::RECOMMENDED_ALLOWED,
       SimpleSchemaValidatingPolicyHandler::MANDATORY_ALLOWED));
+  handlers->AddHandler(base::MakeUnique<SecureOriginPolicyHandler>());
 
 #if defined(OS_ANDROID)
   handlers->AddHandler(
@@ -961,7 +991,8 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
 #endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
 #if !defined(OS_ANDROID)
-  handlers->AddHandler(base::WrapUnique(new DownloadDirPolicyHandler));
+  handlers->AddHandler(base::MakeUnique<DefaultDownloadDirPolicyHandler>());
+  handlers->AddHandler(base::MakeUnique<DownloadDirPolicyHandler>());
   handlers->AddHandler(base::MakeUnique<LocalSyncPolicyHandler>());
 
   handlers->AddHandler(base::MakeUnique<SimpleSchemaValidatingPolicyHandler>(

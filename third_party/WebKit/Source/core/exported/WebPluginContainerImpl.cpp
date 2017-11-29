@@ -510,7 +510,7 @@ WebString WebPluginContainerImpl::ExecuteScriptURL(const WebURL& url,
   v8::HandleScope handle_scope(ToIsolate(frame));
   v8::Local<v8::Value> result =
       frame->GetScriptController().ExecuteScriptInMainWorldAndReturnValue(
-          ScriptSourceCode(script));
+          ScriptSourceCode(script, ScriptSourceLocationType::kJavascriptUrl));
 
   // Failure is reported as a null string.
   if (result.IsEmpty() || !result->IsString())
@@ -801,8 +801,8 @@ void WebPluginContainerImpl::HandleDragEvent(MouseEvent* event) {
   WebDragData drag_data = data_transfer->GetDataObject()->ToWebDragData();
   WebDragOperationsMask drag_operation_mask =
       static_cast<WebDragOperationsMask>(data_transfer->SourceOperation());
-  WebPoint drag_screen_location(event->screenX(), event->screenY());
-  WebPoint drag_location(
+  WebFloatPoint drag_screen_location(event->screenX(), event->screenY());
+  WebFloatPoint drag_location(
       event->AbsoluteLocation().X() - frame_rect_.Location().X(),
       event->AbsoluteLocation().Y() - frame_rect_.Location().Y());
 

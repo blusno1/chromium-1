@@ -16,6 +16,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
 <link rel="import" href="item_behavior.html">
 <link rel="import" href="item_util.html">
 <link rel="import" href="navigation_helper.html">
@@ -54,10 +55,11 @@
       }
 
       #main {
+        @apply(--shadow-elevation-2dp);
         background-color: white;
         margin: auto;
         min-height: 100%;
-        width: 640px;
+        width: 680px;
       }
 
       #top-bar {
@@ -69,8 +71,8 @@
       }
 
       #icon {
-        -webkit-margin-end: 8px;
-        -webkit-margin-start: 20px;
+        -webkit-margin-end: 12px;
+        -webkit-margin-start: 16px;
         height: 24px;
         width: 24px;
       }
@@ -169,6 +171,14 @@
 
       #options-section .control-line:first-child {
         border-top: var(--cr-separator-line);
+      }
+
+      #load-path {
+        word-break: break-all;
+      }
+
+      #load-path > a[is='action-link'] {
+        display: inline;
       }
     </style>
     <div id="container">
@@ -355,17 +365,24 @@
           <button class="icon-external" is="paper-icon-button-light"
               aria-labelledby="optionLabel" actionable></button>
         </div>
-        <button class="hr" is="cr-link-row"
-            hidden="[[isControlled_(data.controlledInfo)]]"
-            icon-class="subpage-arrow" id="remove-extension"
-            label="$i18n{itemRemoveExtension}" on-tap="onRemoveTap_">
-        </button>
         <div class="section block">
           <div class="section-title">$i18n{itemSource}</div>
           <div class="section-content">
             [[computeSourceString_(data.*)]]
           </div>
+          <div id="load-path" class="section-content"
+              hidden$="[[!data.prettifiedPath]]">
+            <span>$i18n{itemExtensionPath}</span>
+            <a is="action-link" on-tap="onLoadPathTap_">
+              [[data.prettifiedPath]]
+            </a>
+          </div>
         </div>
+        <button class="hr" is="cr-link-row"
+            hidden="[[isControlled_(data.controlledInfo)]]"
+            icon-class="subpage-arrow" id="remove-extension"
+            label="$i18n{itemRemoveExtension}" on-tap="onRemoveTap_">
+        </button>
       </div>
     </div>
   </template>

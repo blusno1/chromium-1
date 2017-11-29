@@ -694,7 +694,9 @@ void LayoutBox::ScrollRectToVisibleRecursive(
       HTMLFrameOwnerElement* owner_element = GetDocument().LocalOwner();
       if (!IsDisallowedAutoscroll(owner_element, frame_view)) {
         if (make_visible_in_visual_viewport) {
-          if (IsLayoutView() &&
+          // RootFrameViewport::ScrollIntoView expects a rect in layout
+          // viewport content coordinates.
+          if (IsLayoutView() && GetFrame()->IsMainFrame() &&
               RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
             rect_to_scroll.Move(
                 LayoutSize(GetScrollableArea()->GetScrollOffset()));
@@ -4865,7 +4867,7 @@ PositionWithAffinity LayoutBox::PositionForPoint(const LayoutPoint& point) {
   LayoutObject* first_child = SlowFirstChild();
   if (!first_child)
     return CreatePositionWithAffinity(
-        NonPseudoNode() ? FirstPositionInOrBeforeNodeDeprecated(NonPseudoNode())
+        NonPseudoNode() ? FirstPositionInOrBeforeNode(*NonPseudoNode())
                         : Position());
 
   if (IsTable() && NonPseudoNode()) {
@@ -4956,7 +4958,8 @@ PositionWithAffinity LayoutBox::PositionForPoint(const LayoutPoint& point) {
     return closest_layout_object->PositionForPoint(
         adjusted_point - closest_layout_object->LocationOffset());
   return CreatePositionWithAffinity(
-      FirstPositionInOrBeforeNodeDeprecated(NonPseudoNode()));
+      NonPseudoNode() ? FirstPositionInOrBeforeNode(*NonPseudoNode())
+                      : Position());
 }
 
 DISABLE_CFI_PERF

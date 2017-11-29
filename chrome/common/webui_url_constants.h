@@ -193,7 +193,6 @@ extern const char kChromeUIInternetConfigDialogHost[];
 extern const char kChromeUIInternetDetailDialogHost[];
 extern const char kChromeUIKeyboardOverlayHost[];
 extern const char kChromeUIKeyboardOverlayURL[];
-extern const char kChromeUIMdCupsSettingsURL[];
 extern const char kChromeUIMobileSetupHost[];
 extern const char kChromeUIMobileSetupURL[];
 extern const char kChromeUINetworkHost[];
@@ -213,7 +212,6 @@ extern const char kChromeUISysInternalsHost[];
 extern const char kChromeUITermsOemURL[];
 extern const char kChromeUIUserImageHost[];
 extern const char kChromeUIUserImageURL[];
-extern const char kChromeUIVoiceSearchHost[];
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
@@ -262,6 +260,7 @@ extern const char kImportDataSubPage[];
 extern const char kLanguageOptionsSubPage[];
 extern const char kManageProfileSubPage[];
 extern const char kPasswordManagerSubPage[];
+extern const char kPrintingSettingsSubPage[];
 extern const char kResetProfileSettingsSubPage[];
 extern const char kSearchEnginesSubPage[];
 extern const char kSignOutSubPage[];

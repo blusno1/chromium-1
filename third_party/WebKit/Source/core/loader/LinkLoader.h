@@ -74,10 +74,13 @@ class CORE_EXPORT LinkLoader final : public SingleModuleClient,
                 const String& as,
                 const String& media,
                 const String& nonce,
+                const String& integrity,
                 ReferrerPolicy,
                 const KURL&,
                 Document&,
                 const NetworkHintsInterface&);
+  void DispatchLinkLoadingErroredAsync();
+
   enum CanLoadResources {
     kOnlyLoadResources,
     kDoNotLoadResources,

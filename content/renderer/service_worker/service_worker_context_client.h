@@ -265,8 +265,6 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
 
   void Send(IPC::Message* message);
   void SendWorkerStarted();
-  void SetRegistrationInServiceWorkerGlobalScope(
-      blink::mojom::ServiceWorkerRegistrationObjectInfoPtr info);
 
   // mojom::ServiceWorkerEventDispatcher
   void DispatchInstallEvent(
@@ -383,6 +381,9 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void SetupNavigationPreload(int fetch_event_id,
                               const GURL& url,
                               mojom::FetchEventPreloadHandlePtr preload_handle);
+
+  // Called when a certain time has passed since the last task finished.
+  void OnIdle();
 
   base::WeakPtr<ServiceWorkerContextClient> GetWeakPtr();
 

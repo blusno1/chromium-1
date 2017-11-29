@@ -5,6 +5,7 @@
 #ifndef DedicatedWorker_h
 #define DedicatedWorker_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/MessagePort.h"
@@ -13,7 +14,10 @@
 #include "core/dom/events/EventTarget.h"
 #include "core/workers/AbstractWorker.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/RefPtr.h"
+
+namespace v8_inspector {
+struct V8StackTraceId;
+}  // namespace v8_inspector
 
 namespace blink {
 
@@ -76,7 +80,7 @@ class CORE_EXPORT DedicatedWorker final
 
   // Callbacks for |script_loader_|.
   void OnResponse();
-  void OnFinished();
+  void OnFinished(const v8_inspector::V8StackTraceId&);
 
   // Implements EventTarget (via AbstractWorker -> EventTargetWithInlineData).
   const AtomicString& InterfaceName() const final;

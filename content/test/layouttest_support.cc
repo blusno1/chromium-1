@@ -23,6 +23,7 @@
 #include "content/browser/bluetooth/bluetooth_device_chooser_controller.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/shared_worker/shared_worker_service_impl.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/unique_name_helper.h"
@@ -155,12 +156,9 @@ float GetWindowToViewportScale(RenderWidget* render_widget) {
 // DirectWrite only has access to %WINDIR%\Fonts by default. For developer
 // side-loading, support kRegisterFontFiles to allow access to additional fonts.
 void RegisterSideloadedTypefaces(SkFontMgr* fontmgr) {
-  std::vector<std::string> files = switches::GetSideloadFontFiles();
-  for (std::vector<std::string>::const_iterator i(files.begin());
-       i != files.end();
-       ++i) {
-    SkTypeface* typeface = fontmgr->makeFromFile(i->c_str()).release();
-    blink::WebFontRendering::AddSideloadedFontForTesting(typeface);
+  for (const auto& file : switches::GetSideloadFontFiles()) {
+    blink::WebFontRendering::AddSideloadedFontForTesting(
+        fontmgr->makeFromFile(file.c_str()));
   }
 }
 #endif  // OS_WIN
@@ -452,6 +450,11 @@ void EnableBrowserLayoutTestMode() {
   PopupMenuHelper::DontShowPopupMenuForTesting();
 #endif
   RenderWidgetHostImpl::DisableResizeAckCheckForTesting();
+}
+
+void TerminateAllSharedWorkersForTesting(base::OnceClosure callback) {
+  static_cast<SharedWorkerServiceImpl*>(SharedWorkerService::GetInstance())
+      ->TerminateAllWorkersForTesting(std::move(callback));
 }
 
 int GetLocalSessionHistoryLength(RenderView* render_view) {

@@ -209,6 +209,40 @@ TEST(SecurityPolicyTest, GenerateReferrer) {
   }
 }
 
+TEST(SecurityPolicyTest, ReferrerPolicyFromHeaderValue) {
+  struct TestCase {
+    const char* header;
+    bool is_valid;
+    ReferrerPolicyLegacyKeywordsSupport keywords;
+    ReferrerPolicy expected_policy;
+  };
+
+  TestCase inputs[] = {
+      {"origin", true, kDoNotSupportReferrerPolicyLegacyKeywords,
+       kReferrerPolicyOrigin},
+      {"none", true, kSupportReferrerPolicyLegacyKeywords,
+       kReferrerPolicyNever},
+      {"none", false, kDoNotSupportReferrerPolicyLegacyKeywords,
+       kReferrerPolicyDefault},
+      {"foo", false, kDoNotSupportReferrerPolicyLegacyKeywords,
+       kReferrerPolicyDefault},
+      {"origin, foo", true, kDoNotSupportReferrerPolicyLegacyKeywords,
+       kReferrerPolicyOrigin},
+      {"origin, foo-bar", true, kDoNotSupportReferrerPolicyLegacyKeywords,
+       kReferrerPolicyOrigin},
+      {"origin, foo bar", false, kDoNotSupportReferrerPolicyLegacyKeywords,
+       kReferrerPolicyDefault},
+  };
+
+  for (TestCase test : inputs) {
+    ReferrerPolicy actual_policy = kReferrerPolicyDefault;
+    EXPECT_EQ(test.is_valid, SecurityPolicy::ReferrerPolicyFromHeaderValue(
+                                 test.header, test.keywords, &actual_policy));
+    if (test.is_valid)
+      EXPECT_EQ(test.expected_policy, actual_policy);
+  }
+}
+
 TEST(SecurityPolicyTest, TrustworthyWhiteList) {
   const char* insecure_urls[] = {
       "http://a.test/path/to/file.html", "http://b.test/path/to/file.html",

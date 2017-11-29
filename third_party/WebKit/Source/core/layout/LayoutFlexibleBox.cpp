@@ -1092,9 +1092,11 @@ LayoutUnit LayoutFlexibleBox::CrossSizeForPercentageResolution(
 
   // Here we implement https://drafts.csswg.org/css-flexbox/#algo-stretch
   if (HasOrthogonalFlow(child) && child.HasOverrideLogicalContentWidth())
-    return child.OverrideLogicalContentWidth();
-  if (!HasOrthogonalFlow(child) && child.HasOverrideLogicalContentHeight())
-    return child.OverrideLogicalContentHeight();
+    return child.OverrideLogicalContentWidth() - child.ScrollbarLogicalWidth();
+  if (!HasOrthogonalFlow(child) && child.HasOverrideLogicalContentHeight()) {
+    return child.OverrideLogicalContentHeight() -
+           child.ScrollbarLogicalHeight();
+  }
 
   // We don't currently implement the optimization from
   // https://drafts.csswg.org/css-flexbox/#definite-sizes case 1. While that
@@ -1124,10 +1126,12 @@ LayoutUnit LayoutFlexibleBox::MainSizeForPercentageResolution(
 
   if (HasOrthogonalFlow(child))
     return child.HasOverrideLogicalContentHeight()
-               ? child.OverrideLogicalContentHeight()
+               ? child.OverrideLogicalContentHeight() -
+                     child.ScrollbarLogicalHeight()
                : LayoutUnit(-1);
   return child.HasOverrideLogicalContentWidth()
-             ? child.OverrideLogicalContentWidth()
+             ? child.OverrideLogicalContentWidth() -
+                   child.ScrollbarLogicalWidth()
              : LayoutUnit(-1);
 }
 
@@ -1445,6 +1449,12 @@ void LayoutFlexibleBox::LayoutLineItems(FlexLine* current_line,
       relaid_out_children_.insert(child);
     child->LayoutIfNeeded();
 
+    // This shouldn't be necessary, because we set the override size to be
+    // the flexed_content_size and so the result should in fact be that size.
+    // But it turns out that tables ignore the override size, and so we have
+    // to re-check the size so that we place the flex item correctly.
+    flex_item.flexed_content_size =
+        MainAxisExtentForChild(*child) - flex_item.main_axis_border_and_padding;
     flex_item.cross_axis_size = CrossAxisExtentForChild(*child);
     flex_item.cross_axis_intrinsic_size =
         CrossAxisIntrinsicExtentForChild(*child);

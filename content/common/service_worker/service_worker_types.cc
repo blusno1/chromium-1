@@ -143,11 +143,12 @@ size_t ServiceWorkerResponse::EstimatedStructSize() {
   }
   for (const auto& header : cors_exposed_header_names)
     size += header.size();
+  size += side_data_blob_uuid.size();
   return size;
 }
 
 ServiceWorkerClientQueryOptions::ServiceWorkerClientQueryOptions()
-    : client_type(blink::kWebServiceWorkerClientTypeWindow),
+    : client_type(blink::mojom::ServiceWorkerClientType::kWindow),
       include_uncontrolled(false) {}
 
 ExtendableMessageEventSource::ExtendableMessageEventSource() {}

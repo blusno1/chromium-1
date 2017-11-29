@@ -189,9 +189,8 @@ const base::string16 CombineAndCollapseWhitespace(
   if (prefix_trailing_whitespace || suffix_leading_whitespace ||
       force_whitespace) {
     return prefix_trimmed + base::ASCIIToUTF16(" ") + suffix_trimmed;
-  } else {
-    return prefix_trimmed + suffix_trimmed;
   }
+  return prefix_trimmed + suffix_trimmed;
 }
 
 // This is a helper function for the FindChildText() function (see below).
@@ -715,8 +714,7 @@ base::string16 InferLabelForElement(const WebFormControlElement& element,
   inferred_label = InferLabelFromValueAttr(element);
   if (IsLabelValid(inferred_label, stop_words))
     return inferred_label;
-  else
-    return base::string16();
+  return base::string16();
 }
 
 // Fills |option_strings| with the values of the <option> elements present in
@@ -1004,9 +1002,8 @@ void MatchLabelsAndFields(
           if (field_data) {
             field_data = nullptr;
             break;
-          } else {
-            field_data = iter.second;
           }
+          field_data = iter.second;
         }
       }
     } else if (control.IsFormControlElement()) {
@@ -1145,6 +1142,9 @@ bool UnownedFormElementsAndFieldSetsToFormData(
     FormData* form,
     FormFieldData* field) {
   form->origin = GetCanonicalOriginForDocument(document);
+  DCHECK(document.GetFrame()->Top());
+  form->main_frame_origin = document.GetFrame()->Top()->GetSecurityOrigin();
+
   form->is_form_tag = false;
 
   return FormOrFieldsetsToFormData(
@@ -1463,14 +1463,15 @@ bool WebFormElementToFormData(
     ExtractMask extract_mask,
     FormData* form,
     FormFieldData* field) {
-  const WebLocalFrame* frame = form_element.GetDocument().GetFrame();
+  WebLocalFrame* frame = form_element.GetDocument().GetFrame();
   if (!frame)
     return false;
 
   form->name = GetFormIdentifier(form_element);
   form->origin = GetCanonicalOriginForDocument(frame->GetDocument());
   form->action = frame->GetDocument().CompleteURL(form_element.Action());
-
+  DCHECK(frame->Top());
+  form->main_frame_origin = frame->Top()->GetSecurityOrigin();
   // If the completed URL is not valid, just use the action we get from
   // WebKit.
   if (!form->action.is_valid())

@@ -31,6 +31,7 @@
 #ifndef FontFace_h
 #define FontFace_h
 
+#include "base/macros.h"
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
@@ -60,7 +61,6 @@ class CORE_EXPORT FontFace : public ScriptWrappable,
                              public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(FontFace);
-  WTF_MAKE_NONCOPYABLE(FontFace);
 
  public:
   enum LoadStatusType { kUnloaded, kLoading, kLoaded, kError };
@@ -115,7 +115,7 @@ class CORE_EXPORT FontFace : public ScriptWrappable,
 
   class CORE_EXPORT LoadFontCallback : public GarbageCollectedMixin {
    public:
-    virtual ~LoadFontCallback() {}
+    virtual ~LoadFontCallback() = default;
     virtual void NotifyLoaded(FontFace*) = 0;
     virtual void NotifyError(FontFace*) = 0;
     virtual void Trace(blink::Visitor* visitor) {}
@@ -176,6 +176,7 @@ class CORE_EXPORT FontFace : public ScriptWrappable,
   Member<LoadedProperty> loaded_property_;
   Member<CSSFontFace> css_font_face_;
   HeapVector<Member<LoadFontCallback>> callbacks_;
+  DISALLOW_COPY_AND_ASSIGN(FontFace);
 };
 
 using FontFaceArray = HeapVector<Member<FontFace>>;

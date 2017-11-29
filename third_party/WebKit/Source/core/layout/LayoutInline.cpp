@@ -1345,6 +1345,20 @@ InlineFlowBox* LayoutInline::CreateAndAppendInlineFlowBox() {
   return flow_box;
 }
 
+void LayoutInline::DirtyLinesFromChangedChild(
+    LayoutObject* child,
+    MarkingBehavior marking_behavior) {
+  // During layout tree construction, we can't detect whether this node is
+  // in LayoutNG or not.
+  if (Parent() && EnclosingNGBlockFlow()) {
+    SetAncestorLineBoxDirty();
+    return;
+  }
+  line_boxes_.DirtyLinesFromChangedChild(
+      LineLayoutItem(this), LineLayoutItem(child),
+      marking_behavior == kMarkContainerChain);
+}
+
 LayoutUnit LayoutInline::LineHeight(
     bool first_line,
     LineDirectionMode /*direction*/,

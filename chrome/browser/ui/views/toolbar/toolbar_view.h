@@ -27,7 +27,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
 #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
-#include "components/arc/common/intent_helper.mojom.h"
+#include "components/arc/common/intent_helper.mojom.h"  // nogncheck https://crbug.com/784179
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #endif  // defined(OS_CHROMEOS)
 
@@ -203,7 +203,7 @@ class ToolbarView : public views::AccessiblePaneView,
   BrowserActionsContainer* browser_actions_;
   AppMenuButton* app_menu_button_;
 
-  Browser* browser_;
+  Browser* const browser_;
 
   AppMenuIconController app_menu_icon_controller_;
 

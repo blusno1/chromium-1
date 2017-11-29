@@ -59,9 +59,9 @@
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/StringExtras.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/web/WebSettings.h"
@@ -87,22 +87,15 @@ namespace {
 V8CacheOptions CacheOptions(const ScriptResource* resource,
                             const Settings* settings) {
   V8CacheOptions v8_cache_options(kV8CacheOptionsDefault);
-  if (settings)
+  if (settings) {
     v8_cache_options = settings->GetV8CacheOptions();
-  if (resource && !resource->GetResponse().CacheStorageCacheName().IsNull()) {
-    switch (settings->GetV8CacheStrategiesForCacheStorage()) {
-      case V8CacheStrategiesForCacheStorage::kNone:
-        v8_cache_options = kV8CacheOptionsNone;
-        break;
-      case V8CacheStrategiesForCacheStorage::kNormal:
-        v8_cache_options = kV8CacheOptionsCode;
-        break;
-      case V8CacheStrategiesForCacheStorage::kDefault:
-      case V8CacheStrategiesForCacheStorage::kAggressive:
-        v8_cache_options = kV8CacheOptionsAlways;
-        break;
-    }
+    if (v8_cache_options == kV8CacheOptionsNone)
+      return kV8CacheOptionsNone;
   }
+  // If the resource is served from CacheStorage, generate the V8 code cache in
+  // the first load.
+  if (resource && !resource->GetResponse().CacheStorageCacheName().IsNull())
+    return kV8CacheOptionsCodeWithoutHeatCheck;
   return v8_cache_options;
 }
 
@@ -252,8 +245,9 @@ bool ScriptController::ExecuteScriptIfJavaScriptURL(const KURL& url,
   // source, settings, base URL, and the default classic script fetch options."
   // [spec text]
   v8::Local<v8::Value> result = EvaluateScriptInMainWorld(
-      ScriptSourceCode(script_source), ScriptFetchOptions(),
-      kNotSharableCrossOrigin, kDoNotExecuteScriptWhenScriptsDisabled);
+      ScriptSourceCode(script_source, ScriptSourceLocationType::kJavascriptUrl),
+      ScriptFetchOptions(), kNotSharableCrossOrigin,
+      kDoNotExecuteScriptWhenScriptsDisabled);
 
   // If executing script caused this frame to be removed from the page, we
   // don't want to try to replace its document!
@@ -278,11 +272,14 @@ bool ScriptController::ExecuteScriptIfJavaScriptURL(const KURL& url,
   return true;
 }
 
-void ScriptController::ExecuteScriptInMainWorld(const String& script,
-                                                ExecuteScriptPolicy policy) {
+void ScriptController::ExecuteScriptInMainWorld(
+    const String& script,
+    ScriptSourceLocationType source_location_type,
+    ExecuteScriptPolicy policy) {
   v8::HandleScope handle_scope(GetIsolate());
-  EvaluateScriptInMainWorld(ScriptSourceCode(script), ScriptFetchOptions(),
-                            kNotSharableCrossOrigin, policy);
+  EvaluateScriptInMainWorld(ScriptSourceCode(script, source_location_type),
+                            ScriptFetchOptions(), kNotSharableCrossOrigin,
+                            policy);
 }
 
 void ScriptController::ExecuteScriptInMainWorld(
@@ -387,14 +384,5 @@ ScriptController::CreateNewInspectorIsolatedWorld(const String& world_name) {
   WindowProxy(*world);
   return world;
 }
-
-STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::kDefault,
-                   V8CacheStrategiesForCacheStorage::kDefault);
-STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::kNone,
-                   V8CacheStrategiesForCacheStorage::kNone);
-STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::kNormal,
-                   V8CacheStrategiesForCacheStorage::kNormal);
-STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::kAggressive,
-                   V8CacheStrategiesForCacheStorage::kAggressive);
 
 }  // namespace blink

@@ -36,7 +36,7 @@ class StubNotificationDisplayService : public NotificationDisplayService {
 
   // Returns a vector of the displayed Notification objects.
   std::vector<message_center::Notification> GetDisplayedNotificationsForType(
-      NotificationCommon::Type type) const;
+      NotificationHandler::Type type) const;
 
   base::Optional<message_center::Notification> GetNotification(
       const std::string& notification_id);
@@ -46,30 +46,31 @@ class StubNotificationDisplayService : public NotificationDisplayService {
 
   // Simulates the notification identified by |notification_id| being closed due
   // to external events, such as the user dismissing it when |by_user| is set.
-  // When |silent| is set, the notification handlers won't be informed of the
-  // change to immitate behaviour of operating systems that don't inform apps
-  // about removed notifications.
-  void RemoveNotification(NotificationCommon::Type notification_type,
+  // Will wait for the close event to complete. When |silent| is set, the
+  // notification handlers won't be informed of the change to immitate behaviour
+  // of operating systems that don't inform apps about removed notifications.
+  void RemoveNotification(NotificationHandler::Type notification_type,
                           const std::string& notification_id,
                           bool by_user,
                           bool silent);
 
-  // Removes all notifications shown by this display service.
-  void RemoveAllNotifications(NotificationCommon::Type notification_type,
+  // Removes all notifications shown by this display service. Will wait for the
+  // close events to complete.
+  void RemoveAllNotifications(NotificationHandler::Type notification_type,
                               bool by_user);
 
   // NotificationDisplayService implementation:
-  void Display(NotificationCommon::Type notification_type,
+  void Display(NotificationHandler::Type notification_type,
                const message_center::Notification& notification,
                std::unique_ptr<NotificationCommon::Metadata> metadata) override;
-  void Close(NotificationCommon::Type notification_type,
+  void Close(NotificationHandler::Type notification_type,
              const std::string& notification_id) override;
   void GetDisplayed(const DisplayedNotificationsCallback& callback) override;
 
  private:
   // Data to store for a notification that's being shown through this service.
   struct NotificationData {
-    NotificationData(NotificationCommon::Type type,
+    NotificationData(NotificationHandler::Type type,
                      const message_center::Notification& notification,
                      std::unique_ptr<NotificationCommon::Metadata> metadata);
     NotificationData(NotificationData&& other);
@@ -77,7 +78,7 @@ class StubNotificationDisplayService : public NotificationDisplayService {
 
     NotificationData& operator=(NotificationData&& other);
 
-    NotificationCommon::Type type;
+    NotificationHandler::Type type;
     message_center::Notification notification;
     std::unique_ptr<NotificationCommon::Metadata> metadata;
   };

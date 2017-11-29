@@ -27,6 +27,7 @@
 #define HTMLDocumentParser_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/dom/ParserContentPolicy.h"
 #include "core/dom/ScriptableDocumentParser.h"
@@ -47,7 +48,6 @@
 #include "core/html/parser/XSSAuditorDelegate.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/wtf/Deque.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/WeakPtr.h"
 #include "platform/wtf/text/TextPosition.h"
 
@@ -65,7 +65,6 @@ class HTMLParserScriptRunner;
 class HTMLPreloadScanner;
 class HTMLResourcePreloader;
 class HTMLTreeBuilder;
-class SegmentedString;
 class TokenizedChunkQueue;
 
 class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
@@ -106,8 +105,8 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   bool IsParsingAtLineNumber() const final;
   OrdinalNumber LineNumber() const final;
 
-  void SuspendScheduledTasks() final;
-  void ResumeScheduledTasks() final;
+  void PauseScheduledTasks() final;
+  void UnpauseScheduledTasks() final;
 
   HTMLParserReentryPermit* ReentryPermit() { return reentry_permit_.get(); }
 
@@ -139,7 +138,7 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   void SetDecoder(std::unique_ptr<TextResourceDecoder>) final;
 
  protected:
-  void insert(const SegmentedString&) final;
+  void insert(const String&) final;
   void Append(const String&) override;
   void Finish() final;
 
@@ -279,7 +278,7 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   bool should_use_threading_;
   bool end_was_delayed_;
   bool have_background_parser_;
-  bool tasks_were_suspended_;
+  bool tasks_were_paused_;
   unsigned pump_session_nesting_level_;
   unsigned pump_speculations_session_nesting_level_;
   bool is_parsing_at_line_number_;
@@ -287,7 +286,7 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   bool added_pending_stylesheet_in_body_;
   bool is_waiting_for_stylesheets_;
 
-  ScopedVirtualTimePauser virtual_time_pauser_;
+  WebScopedVirtualTimePauser virtual_time_pauser_;
 };
 
 }  // namespace blink

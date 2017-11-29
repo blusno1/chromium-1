@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/session_manager_client.h"
 
@@ -91,6 +92,10 @@ class FakeSessionManagerClient : public SessionManagerClient {
   void RemoveArcData(const cryptohome::Identification& cryptohome_id,
                      VoidDBusMethodCallback callback) override;
 
+  // Notifies observers as if ArcInstanceStopped signal is received.
+  void NotifyArcInstanceStopped(bool clean,
+                                const std::string& conainer_instance_id);
+
   void set_store_device_policy_success(bool success) {
     store_device_policy_success_ = success;
   }
@@ -142,6 +147,15 @@ class FakeSessionManagerClient : public SessionManagerClient {
   }
 
   void set_arc_available(bool available) { arc_available_ = available; }
+  void set_arc_start_time(base::TimeTicks arc_start_time) {
+    arc_start_time_ = arc_start_time;
+  }
+
+  void set_low_disk(bool low_disk) { low_disk_ = low_disk; }
+
+  const std::string& container_instance_id() const {
+    return container_instance_id_;
+  }
 
  private:
   bool store_device_policy_success_ = true;
@@ -164,7 +178,13 @@ class FakeSessionManagerClient : public SessionManagerClient {
   int notify_lock_screen_dismissed_call_count_;
 
   bool arc_available_;
+  base::TimeTicks arc_start_time_;
 
+  bool low_disk_ = false;
+  // Pseudo running container id. If not running, empty.
+  std::string container_instance_id_;
+
+  base::WeakPtrFactory<FakeSessionManagerClient> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(FakeSessionManagerClient);
 };
 

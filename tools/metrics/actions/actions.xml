@@ -847,7 +847,7 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="Accel_Search_LWin">
+<action name="Accel_Search_LWin" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -1583,6 +1583,14 @@ should be able to be added at any place in this file.
   <description>Promo banner for an instant app has been dismissed.</description>
 </action>
 
+<action name="Android.InstantApps.BannerDismissedAppIsDefault">
+  <owner>thildebr@chromium.org</owner>
+  <description>
+    A promo banner shown when opening the instant app is default has been
+    dismissed.
+  </description>
+</action>
+
 <action name="Android.InstantApps.BannerOpen">
   <owner>mariakhomenko@chromium.org</owner>
   <description>
@@ -1590,9 +1598,27 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Android.InstantApps.BannerOpenAppIsDefault">
+  <owner>thildebr@chromium.org</owner>
+  <description>
+    User clicked &quot;Open App&quot; button on an instant apps banner that was
+    shown when opening the app was default, signaling that they were using the
+    mobile web first, and decided to switch over to the instant app.
+  </description>
+</action>
+
 <action name="Android.InstantApps.BannerShown" not_user_triggered="true">
   <owner>mariakhomenko@chromium.org</owner>
   <description>Promo banner for an instant app has been displayed.</description>
+</action>
+
+<action name="Android.InstantApps.BannerShownAppIsDefault"
+    not_user_triggered="true">
+  <owner>thildebr@chromium.org</owner>
+  <description>
+    Promo banner for an instant app has been displayed when opening the app is
+    default.
+  </description>
 </action>
 
 <action name="Android.InstantApps.InstantAppsEligiblePageLoaded">
@@ -3383,6 +3409,14 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="ClearBrowsingData_OlderThan30Days">
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>
+    Browsing data has been cleared for older than 30 days timeperiod.
+  </description>
+</action>
+
 <action name="ClearBrowsingData_Passwords">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -3449,6 +3483,12 @@ should be able to be added at any place in this file.
   <owner>dullweber@chromium.org</owner>
   <owner>msramek@chromium.org</owner>
   <description>Time period in CBD was changed.</description>
+</action>
+
+<action name="ClearBrowsingData_TimePeriodChanged_OlderThan30Days">
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>Time period in CBD was changed to OlderThan30Days.</description>
 </action>
 
 <action name="ClearSelection">
@@ -5369,6 +5409,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Hotword.HotwordTrigger">
+  <obsolete>
+    Deprecated as of 10/2017. Feature removed with crbug/761426.
+  </obsolete>
   <owner>amistry@chromium.org</owner>
   <owner>rlp@chromium.org</owner>
   <owner>somast@chromium.org</owner>
@@ -5431,6 +5474,16 @@ should be able to be added at any place in this file.
   <description>
     The user triggered an event related to the Chrome Home menu header
     in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.NotifyEvent.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered an event related to the Chrome Home in-product help that
+    is shown after a pull-to-refresh. See
     //components/feature_engagement/README.md#Configuring-UMA for details.
   </description>
 </action>
@@ -5620,6 +5673,16 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="InProductHelp.NotifyUsedEvent.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The user triggered a used event related to the Chrome Home in-product help
+    that is shown after a pull-to-refresh. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
 <action name="InProductHelp.NotifyUsedEvent.IPH_ContextualSearch">
   <obsolete>
     Replaced with InProductHelp.NotifyUsedEvent.IPH_ContextualSearchWebSearch.
@@ -5803,6 +5866,17 @@ should be able to be added at any place in this file.
     The feature engagement tracker tried to determine whether the Chrome Home
     menu header in-product help should be shown to the user. See
     //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action name="InProductHelp.ShouldTriggerHelpUI.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    The feature engagement tracker tried to determine whether the Chrome Home
+    in-product help that is shown after a pull-to-refresh should be shown to the
+    user. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
   </description>
 </action>
 
@@ -6031,6 +6105,17 @@ should be able to be added at any place in this file.
 </action>
 
 <action
+    name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A pull-to-refresh that could have triggered the Chrome Home in-product help
+    did not. See //components/feature_engagement/README.md#Configuring-UMA for
+    details.
+  </description>
+</action>
+
+<action
     name="InProductHelp.ShouldTriggerHelpUIResult.NotTriggered.IPH_ContextualSearch">
   <obsolete>
     Replaced with
@@ -6249,6 +6334,16 @@ should be able to be added at any place in this file.
 </action>
 
 <action
+    name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A pull-to-refresh triggered the Chrome Home in-product help. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
     name="InProductHelp.ShouldTriggerHelpUIResult.Triggered.IPH_ContextualSearch">
   <obsolete>
     Replaced with
@@ -6446,6 +6541,17 @@ should be able to be added at any place in this file.
   <description>
     A user action would have triggered the Chrome Home menu header in-product
     help, but the feature was configured for tracking only. See
+    //components/feature_engagement/README.md#Configuring-UMA for details.
+  </description>
+</action>
+
+<action
+    name="InProductHelp.ShouldTriggerHelpUIResult.WouldHaveTriggered.IPH_ChromeHomePullToRefresh">
+  <owner>twellington@chromium.org</owner>
+  <owner>mdjones@chromium.org</owner>
+  <description>
+    A pull-to-refresh would have triggered the Chrome Home in-product help, but
+    the feature was configured for tracking only. See
     //components/feature_engagement/README.md#Configuring-UMA for details.
   </description>
 </action>
@@ -12348,7 +12454,7 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="Mouse_Down">
+<action name="Mouse_Down" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -12941,12 +13047,12 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="OpenFileSystemPersistent">
+<action name="OpenFileSystemPersistent" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="OpenFileSystemTemporary">
+<action name="OpenFileSystemTemporary" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -16804,6 +16910,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_SigninNewAccount_FromNTPContentSuggestions">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS, with a
+    new account.
+  </description>
+</action>
+
 <action name="Signin_SigninNewAccount_FromRecentTabs">
   <owner>jlebel@chromium.org</owner>
   <description>
@@ -16834,6 +16949,15 @@ should be able to be added at any place in this file.
     Recorded on sign in start from access point
     signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, using another
     account than the default one.
+  </description>
+</action>
+
+<action name="Signin_SigninNotDefault_FromNTPContentSuggestions">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS, using
+    another account than the default one.
   </description>
 </action>
 
@@ -16879,6 +17003,15 @@ should be able to be added at any place in this file.
   <description>
     Recorded on sign in start from access point
     signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, using the
+    default account.
+  </description>
+</action>
+
+<action name="Signin_SigninWithDefault_FromNTPContentSuggestions">
+  <owner>bsazonov@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS, using the
     default account.
   </description>
 </action>
@@ -17495,7 +17628,7 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="StatusArea_BrightnessChanged">
+<action name="StatusArea_BrightnessChanged" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -18463,7 +18596,7 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="TextToSpeech.Stop">
+<action name="TextToSpeech.Stop" not_user_triggered="true">
   <owner>dmazzoni@chromium.org</owner>
   <description>Synthesized speech is stopped.</description>
 </action>
@@ -18648,7 +18781,7 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="TrackpadScrollFling">
+<action name="TrackpadScrollFling" not_user_triggered="true">
   <owner>tdresser@chromium.org</owner>
   <description>Logged on an ET_SCROLL_FLING_START scroll event.</description>
 </action>
@@ -19034,7 +19167,7 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="WebView.PermissionAllow.FileSystem">
+<action name="WebView.PermissionAllow.FileSystem" not_user_triggered="true">
   <owner>fsamuel@chromium.org</owner>
   <owner>hanxi@chromium.org</owner>
   <description>

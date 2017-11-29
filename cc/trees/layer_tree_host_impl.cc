@@ -643,8 +643,6 @@ LayerTreeHostImpl::EventListenerTypeForTouchStartOrMoveAt(
   gfx::PointF device_viewport_point = gfx::ScalePoint(
       gfx::PointF(viewport_point), active_tree_->device_scale_factor());
 
-  // Now determine if there are actually any handlers at that point.
-  // TODO(rbyers): Consider also honoring touch-action (crbug.com/347272).
   LayerImpl* layer_impl_with_touch_handler =
       active_tree_->FindLayerThatIsHitByPointInTouchHandlerRegion(
           device_viewport_point);
@@ -656,8 +654,23 @@ LayerTreeHostImpl::EventListenerTypeForTouchStartOrMoveAt(
   }
 
   if (out_touch_action) {
+    gfx::Transform layer_screen_space_transform =
+        layer_impl_with_touch_handler->ScreenSpaceTransform();
+    gfx::Transform inverse_layer_screen_space(
+        gfx::Transform::kSkipInitialization);
+    bool can_be_inversed =
+        layer_screen_space_transform.GetInverse(&inverse_layer_screen_space);
+    // Getting here indicates that |layer_impl_with_touch_handler| is non-null,
+    // which means that the |hit| in FindClosestMatchingLayer() is true, which
+    // indicates that the inverse is available.
+    DCHECK(can_be_inversed);
+    bool clipped = false;
+    gfx::Point3F planar_point = MathUtil::ProjectPoint3D(
+        inverse_layer_screen_space, device_viewport_point, &clipped);
+    gfx::PointF hit_test_point_in_layer_space =
+        gfx::PointF(planar_point.x(), planar_point.y());
     const auto& region = layer_impl_with_touch_handler->touch_action_region();
-    gfx::Point point = gfx::ToRoundedPoint(device_viewport_point);
+    gfx::Point point = gfx::ToRoundedPoint(hit_test_point_in_layer_space);
     *out_touch_action = region.GetWhiteListedTouchAction(point);
   }
 
@@ -1524,7 +1537,7 @@ void LayerTreeHostImpl::SetMemoryPolicy(const ManagedMemoryPolicy& policy) {
   if (!policy.bytes_limit_when_visible && resource_pool_ &&
       settings_.using_synchronous_renderer_compositor) {
     ReleaseTileResources();
-    CleanUpTileManagerAndUIResources();
+    CleanUpTileManagerResources();
 
     // Force a call to NotifyAllTileTasks completed - otherwise this logic may
     // be skipped if no work was enqueued at the time the tile manager was
@@ -2031,7 +2044,7 @@ void LayerTreeHostImpl::UpdateTreeResourcesForGpuRasterizationIfNeeded() {
   // one.
   ReleaseTileResources();
   if (resource_pool_) {
-    CleanUpTileManagerAndUIResources();
+    CleanUpTileManagerResources();
     CreateTileManagerResources();
   }
   RecreateTileResources();
@@ -2127,7 +2140,7 @@ void LayerTreeHostImpl::SynchronouslyInitializeAllTiles() {
 
 void LayerTreeHostImpl::DidLoseLayerTreeFrameSink() {
   if (resource_provider_)
-    resource_provider_->DidLoseVulkanContextProvider();
+    resource_provider_->DidLoseContextProvider();
   has_valid_layer_tree_frame_sink_ = false;
   client_->DidLoseLayerTreeFrameSinkOnImplThread();
 }
@@ -2486,9 +2499,12 @@ void LayerTreeHostImpl::CreateResourceAndRasterBufferProvider(
     int msaa_sample_count = use_msaa_ ? RequestedMSAASampleCount() : 0;
 
     // The worker context must support oop raster to enable oop rasterization.
-    bool oop_raster_enabled =
-        settings_.enable_oop_rasterization &&
-        worker_context_provider->ContextCapabilities().supports_oop_raster;
+    bool oop_raster_enabled = settings_.enable_oop_rasterization;
+    if (oop_raster_enabled) {
+      viz::ContextProvider::ScopedContextLock hold(worker_context_provider);
+      oop_raster_enabled &=
+          worker_context_provider->ContextCapabilities().supports_oop_raster;
+    }
 
     *raster_buffer_provider = std::make_unique<GpuRasterBufferProvider>(
         compositor_context_provider, worker_context_provider,
@@ -2589,8 +2605,7 @@ void LayerTreeHostImpl::DidChangeScrollbarVisibility() {
   client_->SetNeedsCommitOnImplThread();
 }
 
-void LayerTreeHostImpl::CleanUpTileManagerAndUIResources() {
-  ClearUIResources();
+void LayerTreeHostImpl::CleanUpTileManagerResources() {
   tile_manager_.FinishTasksAndCleanUp();
   resource_pool_ = nullptr;
   single_thread_synchronous_task_graph_runner_ = nullptr;
@@ -2626,7 +2641,8 @@ void LayerTreeHostImpl::ReleaseLayerTreeFrameSink() {
   ReleaseTreeResources();
 
   // Note: ui resource cleanup uses the |resource_provider_|.
-  CleanUpTileManagerAndUIResources();
+  CleanUpTileManagerResources();
+  ClearUIResources();
   resource_provider_ = nullptr;
 
   // Release any context visibility before we destroy the LayerTreeFrameSink.
@@ -4403,8 +4419,11 @@ bool LayerTreeHostImpl::ScrollAnimationUpdateTarget(
     ScrollNode* scroll_node,
     const gfx::Vector2dF& scroll_delta,
     base::TimeDelta delayed_by) {
+  float scale_factor = active_tree()->current_page_scale_factor();
+  gfx::Vector2dF scaled_delta =
+      gfx::ScaleVector2d(scroll_delta, 1.f / scale_factor);
   return mutator_host_->ImplOnlyScrollAnimationUpdateTarget(
-      scroll_node->element_id, scroll_delta,
+      scroll_node->element_id, scaled_delta,
       active_tree_->property_trees()->scroll_tree.MaxScrollOffset(
           scroll_node->id),
       CurrentBeginFrameArgs().frame_time, delayed_by);

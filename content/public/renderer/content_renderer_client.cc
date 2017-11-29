@@ -47,6 +47,10 @@ bool ContentRendererClient::ShouldSuppressErrorPage(RenderFrame* render_frame,
   return false;
 }
 
+bool ContentRendererClient::ShouldTrackUseCounter(const GURL& url) {
+  return true;
+}
+
 void ContentRendererClient::DeferMediaLoad(
     RenderFrame* render_frame,
     bool has_played_media_before,
@@ -155,7 +159,7 @@ ContentRendererClient::GetPrescientNetworking() {
 
 bool ContentRendererClient::ShouldOverridePageVisibilityState(
     const RenderFrame* render_frame,
-    blink::WebPageVisibilityState* override_state) {
+    blink::mojom::PageVisibilityState* override_state) {
   return false;
 }
 

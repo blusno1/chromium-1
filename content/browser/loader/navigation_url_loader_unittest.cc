@@ -44,6 +44,7 @@
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -161,7 +162,7 @@ class NavigationURLLoaderTest : public testing::Test {
     std::unique_ptr<NavigationRequestInfo> request_info(
         new NavigationRequestInfo(common_params, begin_params, url, true, false,
                                   false, -1, false, false,
-                                  blink::kWebPageVisibilityStateVisible));
+                                  blink::mojom::PageVisibilityState::kVisible));
     return NavigationURLLoader::Create(
         browser_context_->GetResourceContext(),
         BrowserContext::GetDefaultStoragePartition(browser_context_.get()),
@@ -393,7 +394,9 @@ TEST_F(NavigationURLLoaderTest, RequestBlocked) {
   // Wait for the request to fail as expected.
   delegate.WaitForRequestFailed();
   EXPECT_EQ(net::ERR_ABORTED, delegate.net_error());
-  EXPECT_EQ(1, delegate.on_request_handled_counter());
+
+  // Failing before start means OnRequestStarted is never called.
+  EXPECT_EQ(0, delegate.on_request_handled_counter());
 
   host_.SetDelegate(nullptr);
 }

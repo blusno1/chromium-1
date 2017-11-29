@@ -12,13 +12,12 @@ import imp
 import inspect
 import os
 import re
-import sys
 
 try:
     # pylint: disable=C0103
     audit_non_blink_usage = imp.load_source(
         'audit_non_blink_usage',
-        os.path.join(os.path.dirname(inspect.stack()[0][1]), 'Tools/Scripts/audit-non-blink-usage'))
+        os.path.join(os.path.dirname(inspect.stack()[0][1]), 'Tools/Scripts/audit-non-blink-usage.py'))
 except IOError:
     # One of the presubmit upload tests tries to exec this script, which doesn't interact so well
     # with the import hack... just ignore the exception here and hope for the best.
@@ -31,26 +30,47 @@ _EXCLUDED_PATHS = (
 )
 
 
-def _CheckForNonBlinkVariantMojomIncludes(input_api, output_api):
+def _CheckForWrongMojomIncludes(input_api, output_api):
+    # In blink the code should either use -blink.h or -shared.h mojom
+    # headers, except in public where only -shared.h headers should be
+    # used to avoid exporting Blink types outside Blink.
     def source_file_filter(path):
         return input_api.FilterSourceFile(path,
                                           black_list=[r'third_party/WebKit/common/'])
 
     pattern = input_api.re.compile(r'#include\s+.+\.mojom(.*)\.h[>"]')
-    errors = []
+    public_folder = input_api.os_path.normpath('third_party/WebKit/public/')
+    non_blink_mojom_errors = []
+    public_blink_mojom_errors = []
     for f in input_api.AffectedFiles(file_filter=source_file_filter):
         for line_num, line in f.ChangedContents():
-            m = pattern.match(line)
-            if m and m.group(1) != '-blink' and m.group(1) != '-shared':
-                errors.append('    %s:%d %s' % (
+            error_list = None
+            match = pattern.match(line)
+            if match:
+                if match.group(1) != '-shared':
+                    if f.LocalPath().startswith(public_folder):
+                        error_list = public_blink_mojom_errors
+                    elif match.group(1) != '-blink':
+                        # Neither -shared.h, nor -blink.h.
+                        error_list = non_blink_mojom_errors
+
+            if error_list is not None:
+                error_list.append('    %s:%d %s' % (
                     f.LocalPath(), line_num, line))
 
     results = []
-    if errors:
+    if non_blink_mojom_errors:
         results.append(output_api.PresubmitError(
             'Files that include non-Blink variant mojoms found. '
             'You must include .mojom-blink.h or .mojom-shared.h instead:',
-            errors))
+            non_blink_mojom_errors))
+
+    if public_blink_mojom_errors:
+        results.append(output_api.PresubmitError(
+            'Public blink headers using Blink variant mojoms found. '
+            'You must include .mojom-shared.h instead:',
+            public_blink_mojom_errors))
+
     return results
 
 
@@ -63,7 +83,7 @@ def _CommonChecks(input_api, output_api):
     results.extend(input_api.canned_checks.PanProjectChecks(
         input_api, output_api, excluded_paths=_EXCLUDED_PATHS,
         maxlen=800, license_header=license_header))
-    results.extend(_CheckForNonBlinkVariantMojomIncludes(input_api, output_api))
+    results.extend(_CheckForWrongMojomIncludes(input_api, output_api))
     return results
 
 
@@ -122,15 +142,17 @@ def _CheckForForbiddenChromiumCode(input_api, output_api):
     # the file), so we duplicate the logic here...
     results = []
     for f in input_api.AffectedFiles():
-        errors = audit_non_blink_usage.check(f.LocalPath(),
-                                             [(i + 1, l) for i, l in enumerate(f.NewContents())])
+        path = f.LocalPath()
+        _, ext = os.path.splitext(path)
+        if ext not in ('.cc', '.cpp', '.h', '.mm'):
+            continue
+        errors = audit_non_blink_usage.check(path, [(i + 1, l) for i, l in enumerate(f.NewContents())])
         if errors:
-            errors = audit_non_blink_usage.check(f.LocalPath(), f.ChangedContents())
+            errors = audit_non_blink_usage.check(path, f.ChangedContents())
             if errors:
                 for line_number, disallowed_identifier in errors:
                     results.append(output_api.PresubmitError(
-                        '%s:%d uses disallowed identifier %s' % (f.LocalPath(), line_number,
-                                                                 disallowed_identifier)))
+                        '%s:%d uses disallowed identifier %s' % (path, line_number, disallowed_identifier)))
     return results
 
 

@@ -46,6 +46,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "third_party/WebKit/common/origin_trials/trial_token_validator.h"
+#include "third_party/WebKit/common/service_worker/service_worker_client.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
@@ -299,7 +300,7 @@ ServiceWorkerVersion::ServiceWorkerVersion(
   DCHECK(context_);
   DCHECK(registration);
   DCHECK(script_url_.is_valid());
-  embedded_worker_ = context_->embedded_worker_registry()->CreateWorker();
+  embedded_worker_ = context_->embedded_worker_registry()->CreateWorker(this);
   embedded_worker_->AddListener(this);
   context_->AddLiveVersion(this);
 }
@@ -672,9 +673,9 @@ void ServiceWorkerVersion::RunAfterStartWorker(
     std::move(task).Run();
     return;
   }
-  StartWorker(purpose, base::AdaptCallbackForRepeating(base::BindOnce(
+  StartWorker(purpose, base::BindOnce(
                            &RunTaskAfterStartWorker, weak_factory_.GetWeakPtr(),
-                           std::move(error_callback), std::move(task))));
+                           std::move(error_callback), std::move(task)));
 }
 
 void ServiceWorkerVersion::AddControllee(
@@ -1021,7 +1022,7 @@ void ServiceWorkerVersion::SetCachedMetadata(const GURL& url,
   script_cache_map_.WriteMetadata(
       url, data,
       base::Bind(&ServiceWorkerVersion::OnSetCachedMetadataFinished,
-                 weak_factory_.GetWeakPtr(), callback_id));
+                 weak_factory_.GetWeakPtr(), callback_id, data.size()));
 }
 
 void ServiceWorkerVersion::ClearCachedMetadata(const GURL& url) {
@@ -1035,12 +1036,13 @@ void ServiceWorkerVersion::ClearCachedMetadata(const GURL& url) {
 }
 
 void ServiceWorkerVersion::OnSetCachedMetadataFinished(int64_t callback_id,
+                                                       size_t size,
                                                        int result) {
   TRACE_EVENT_ASYNC_END1("ServiceWorker",
                          "ServiceWorkerVersion::SetCachedMetadata", callback_id,
                          "result", result);
   for (auto& listener : listeners_)
-    listener.OnCachedMetadataUpdated(this);
+    listener.OnCachedMetadataUpdated(this, size);
 }
 
 void ServiceWorkerVersion::OnClearCachedMetadataFinished(int64_t callback_id,
@@ -1049,7 +1051,7 @@ void ServiceWorkerVersion::OnClearCachedMetadataFinished(int64_t callback_id,
                          "ServiceWorkerVersion::ClearCachedMetadata",
                          callback_id, "result", result);
   for (auto& listener : listeners_)
-    listener.OnCachedMetadataUpdated(this);
+    listener.OnCachedMetadataUpdated(this, 0);
 }
 
 void ServiceWorkerVersion::OnGetClient(int request_id,
@@ -1075,8 +1077,10 @@ void ServiceWorkerVersion::OnGetClientFinished(
     int request_id,
     const ServiceWorkerClientInfo& client_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  TRACE_EVENT_ASYNC_END1("ServiceWorker", "ServiceWorkerVersion::OnGetClient",
-                         request_id, "client_type", client_info.client_type);
+  TRACE_EVENT_ASYNC_END1(
+      "ServiceWorker", "ServiceWorkerVersion::OnGetClient", request_id,
+      "client_type",
+      ServiceWorkerUtils::ClientTypeToString(client_info.client_type));
 
   // When Clients.get() is called on the script evaluation phase, the running
   // status can be STARTING here.
@@ -1094,8 +1098,9 @@ void ServiceWorkerVersion::OnGetClients(
     const ServiceWorkerClientQueryOptions& options) {
   TRACE_EVENT_ASYNC_BEGIN2(
       "ServiceWorker", "ServiceWorkerVersion::OnGetClients", request_id,
-      "client_type", options.client_type, "include_uncontrolled",
-      options.include_uncontrolled);
+      "client_type",
+      ServiceWorkerUtils::ClientTypeToString(options.client_type),
+      "include_uncontrolled", options.include_uncontrolled);
   service_worker_client_utils::GetClients(
       weak_factory_.GetWeakPtr(), options,
       base::Bind(&ServiceWorkerVersion::OnGetClientsFinished,
@@ -1267,7 +1272,7 @@ void ServiceWorkerVersion::OnFocusClient(int request_id,
     return;
   }
   if (provider_host->client_type() !=
-      blink::kWebServiceWorkerClientTypeWindow) {
+      blink::mojom::ServiceWorkerClientType::kWindow) {
     // focus() should be called only for WindowClient. This may happen due to
     // bad message.
     return;
@@ -1645,7 +1650,7 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
     scoped_refptr<ServiceWorkerVersion> protect_this(this);
     embedded_worker_->RemoveListener(this);
     embedded_worker_->Detach();
-    embedded_worker_ = context_->embedded_worker_registry()->CreateWorker();
+    embedded_worker_ = context_->embedded_worker_registry()->CreateWorker(this);
     embedded_worker_->AddListener(this);
 
     // Call OnStoppedInternal to fail callbacks and possibly restart.
@@ -1698,7 +1703,10 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
     return;
 
   // The worker has been idle for longer than a certain period.
-  if (GetTickDuration(idle_time_) > kIdleWorkerTimeout) {
+  // S13nServiceWorker: The idle timer is implemented on the renderer, so we can
+  // skip this check.
+  if (!ServiceWorkerUtils::IsServicificationEnabled() &&
+      GetTickDuration(idle_time_) > kIdleWorkerTimeout) {
     StopWorkerIfIdle();
     return;
   }
@@ -1733,17 +1741,11 @@ void ServiceWorkerVersion::StopWorkerIfIdle() {
   }
 
   // StopWorkerIfIdle() may be called for two reasons: "idle-timeout" or
-  // "ping-timeout". For idle-timeout (i.e. ping hasn't timed out), first check
-  // if the worker really is idle.
-  if (!ping_controller_->IsTimedOut()) {
-    // S13nServiceWorker: We don't stop the service worker for idle-timeout
-    // in the browser process when Servicification is enabled, as events
-    // might be dispatched directly without going through the browser-process.
-    // TODO(kinuko): Re-implement timers. (crbug.com/774374)
-    if (HasWork() || ServiceWorkerUtils::IsServicificationEnabled())
-      return;
-  }
-  embedded_worker_->StopIfIdle();
+  // "ping-timeout". For idle-timeout (i.e. ping hasn't timed out), check if the
+  // worker really is idle.
+  if (!ping_controller_->IsTimedOut() && HasWork())
+    return;
+  embedded_worker_->StopIfNotAttachedToDevTools();
 }
 
 bool ServiceWorkerVersion::HasWork() const {

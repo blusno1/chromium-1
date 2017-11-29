@@ -162,6 +162,10 @@ const char kDebugEnableFrameToggle[]        = "debug-enable-frame-toggle";
 // apps.
 const char kDebugPackedApps[]               = "debug-packed-apps";
 
+// Prevents permission prompts from appearing by denying instead of showing
+// prompts.
+const char kDenyPermissionPrompts[] = "deny-permission-prompts";
+
 // Passes command line parameters to the DevTools front-end.
 const char kDevToolsFlags[]                 = "devtools-flags";
 
@@ -185,10 +189,6 @@ const char kDisableBundledPpapiFlash[]      = "disable-bundled-ppapi-flash";
 // Disables hardware encoding support for Cast Streaming.
 const char kDisableCastStreamingHWEncoding[] =
     "disable-cast-streaming-hw-encoding";
-
-// Disables data volume counters in the Clear Browsing Data dialog.
-const char kDisableClearBrowsingDataCounters[] =
-    "disable-clear-browsing-data-counters";
 
 // Disables the client-side phishing detection feature. Note that even if
 // client-side phishing detection is enabled, it will only be active if the
@@ -292,10 +292,6 @@ const char kEnableAudioDebugRecordingsFromExtension[] =
 // Enables the multi-level undo system for bookmarks.
 const char kEnableBookmarkUndo[]            = "enable-bookmark-undo";
 
-// Enables data volume counters in the Clear Browsing Data dialog.
-const char kEnableClearBrowsingDataCounters[] =
-    "enable-clear-browsing-data-counters";
-
 // This applies only when the process type is "service". Enables the Cloud Print
 // Proxy component within the service process.
 const char kEnableCloudPrintProxy[]         = "enable-cloud-print-proxy";
@@ -314,9 +310,6 @@ const char kEnableDomainReliability[] = "enable-domain-reliability";
 // mouse or touch.
 const char kEnableExperimentalFullscreenExitUI[] =
     "enable-experimental-fullscreen-exit-ui";
-
-// Enables experimental hotword features specific to always-on.
-const char kEnableExperimentalHotwordHardware[] = "enable-hotword-hardware";
 
 // Enables logging for extension activity.
 const char kEnableExtensionActivityLogging[] =
@@ -431,6 +424,11 @@ const char kForceEnableMetricsReporting[] = "force-enable-metrics-reporting";
 // Displays the First Run experience when the browser is started, regardless of
 // whether or not it's actually the First Run (this overrides kNoFirstRun).
 const char kForceFirstRun[]                 = "force-first-run";
+
+// Shows the modal first run dialog during browser startup. This is shown for
+// the "organic" first run experience (Chrome downloaded, empty user data dir).
+// This does nothing without --force-first-run also being set.
+const char kForceFirstRunDialog[] = "force-first-run-dialog";
 
 // Forces Chrome to use localNTP instead of server (GWS) NTP.
 const char kForceLocalNtp[]                 = "force-local-ntp";
@@ -901,10 +899,6 @@ const char kEnableMacViewsNativeAppWindows[] =
 
 // Enables Translate experimental new UX which replaces the infobar.
 const char kEnableTranslateNewUX[] = "enable-translate-new-ux";
-
-// Forces the first-run flow even on unofficial builds. Note that this still
-// requires a fresh user-data-dir.
-const char kForceUnofficialFirstRun[] = "force-unofficial-first-run";
 
 // Shows a notification when quitting Chrome with hosted apps running. Default
 // behavior is to also quit all hosted apps.

@@ -88,7 +88,7 @@ class ScreenshotController::ScreenshotLayer : public ui::LayerOwner,
     layer()->SetVisible(true);
     layer()->set_delegate(this);
   }
-  ~ScreenshotLayer() override {}
+  ~ScreenshotLayer() override = default;
 
   const gfx::Rect& region() const { return region_; }
 
@@ -131,8 +131,6 @@ class ScreenshotController::ScreenshotLayer : public ui::LayerOwner,
     if (!region_.IsEmpty())
       recorder.canvas()->FillRect(region_, SK_ColorBLACK, SkBlendMode::kClear);
   }
-
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
 
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                   float new_device_scale_factor) override {}

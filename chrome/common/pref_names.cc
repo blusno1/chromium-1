@@ -369,8 +369,6 @@ const char kWebKitJavascriptEnabled[] = "webkit.webprefs.javascript_enabled";
 const char kWebKitLoadsImagesAutomatically[] =
     "webkit.webprefs.loads_images_automatically";
 const char kWebKitPluginsEnabled[] = "webkit.webprefs.plugins_enabled";
-const char kWebKitEncryptedMediaEnabled[] =
-    "webkit.webprefs.encrypted_media_enabled";
 
 // Boolean that is true when Data Saver is enabled.
 // TODO(bengr): Migrate the preference string to "data_saver.enabled"
@@ -749,9 +747,6 @@ const char kAttestationEnabled[] = "attestation.enabled";
 // remote attestation.
 const char kAttestationExtensionWhitelist[] = "attestation.extension_whitelist";
 
-// A boolean pref indicating whether the projection touch HUD is enabled or not.
-const char kTouchHudProjectionEnabled[] = "touch_hud.projection_enabled";
-
 // A boolean pref recording whether user has dismissed the multiprofile
 // itroduction dialog show.
 const char kMultiProfileNeverShowIntro[] =
@@ -1085,6 +1080,14 @@ const char kEnableReferrers[] = "enable_referrers";
 
 // Whether to send the DNT header.
 const char kEnableDoNotTrack[] = "enable_do_not_track";
+
+// Whether to allow the use of Encrypted Media Extensions (EME), except for the
+// use of Clear Key key sytems, which is always allowed as required by the spec.
+// TODO(crbug.com/784675): This pref was used as a WebPreference which is why
+// the string is prefixed with "webkit.webprefs". Now this is used in
+// RendererPreferences and we should migrate the pref to use a new
+// non-webkit-prefixed string.
+const char kEnableEncryptedMedia[] = "webkit.webprefs.encrypted_media_enabled";
 
 // GL_VENDOR string.
 const char kGLVendorString[] = "gl_vendor_string";
@@ -1710,30 +1713,6 @@ const char kVideoCaptureAllowed[] = "hardware.video_capture_enabled";
 // capture devices without prompt.
 const char kVideoCaptureAllowedUrls[] = "hardware.video_capture_allowed_urls";
 
-// A boolean pref that controls the enabled-state of hotword search voice
-// trigger.
-const char kHotwordSearchEnabled[] = "hotword.search_enabled_2";
-
-// A boolean pref that controls the enabled-state of hotword search voice
-// trigger from any screen.
-const char kHotwordAlwaysOnSearchEnabled[] = "hotword.always_on_search_enabled";
-
-// A boolean pref that indicates whether the hotword always-on notification
-// has been seen already.
-const char kHotwordAlwaysOnNotificationSeen[] =
-    "hotword.always_on_notification_seen";
-
-// A boolean pref that controls whether the sound of "Ok, Google" plus a few
-// seconds of audio data before and the spoken query are sent back to be stored
-// in a user's Voice & Audio Activity. Updated whenever the user opens
-// chrome://settings and also polled for every 24 hours.
-const char kHotwordAudioLoggingEnabled[] = "hotword.audio_logging_enabled";
-
-// A string holding the locale information under which Hotword was installed.
-// It is used for comparison since the hotword voice search trigger must be
-// reinstalled to handle a new language.
-const char kHotwordPreviousLanguage[] = "hotword.previous_language";
-
 #if defined(OS_CHROMEOS)
 // Dictionary for transient storage of settings that should go into device
 // settings storage before owner has been assigned.
@@ -1881,6 +1860,20 @@ const char kReportArcStatusEnabled[] = "arc.status_reporting_enabled";
 // Contains a boolean (is throttling enabled) and two integers (upload rate
 // and download rate in kbits/s to throttle to)
 const char kNetworkThrottlingEnabled[] = "net.throttling_enabled";
+
+// Integer pref used by the metrics::DailyEvent owned by
+// chromeos::PowerMetricsReporter.
+const char kPowerMetricsDailySample[] = "power.metrics.daily_sample";
+
+// Integer prefs used to back event counts reported by
+// chromeos::PowerMetricsReporter.
+const char kPowerMetricsIdleScreenDimCount[] =
+    "power.metrics.idle_screen_dim_count";
+const char kPowerMetricsIdleScreenOffCount[] =
+    "power.metrics.idle_screen_off_count";
+const char kPowerMetricsIdleSuspendCount[] = "power.metrics.idle_suspend_count";
+const char kPowerMetricsLidClosedSuspendCount[] =
+    "power.metrics.lid_closed_suspend_count";
 
 #endif  // defined(OS_CHROMEOS)
 
@@ -2284,6 +2277,9 @@ const char kMediaRouterEnableCloudServices[] =
 // user.
 const char kMediaRouterFirstRunFlowAcknowledged[] =
     "media_router.firstrunflow.acknowledged";
+// Whether or not the user has enabled Media Remoting. Defaults to true.
+const char kMediaRouterMediaRemotingEnabled[] =
+    "media_router.media_remoting.enabled";
 // A list of website origins on which the user has chosen to use tab mirroring.
 const char kMediaRouterTabMirroringSources[] =
     "media_router.tab_mirroring_sources";
@@ -2526,5 +2522,16 @@ const char kTabStatsWindowCountMax[] = "tab_stats.window_count_max";
 
 //  Timestamp of the last time the tab stats daily metrics have been reported.
 const char kTabStatsDailySample[] = "tab_stats.last_daily_sample";
+
+// A list of origins (URLs) to treat as "secure origins" for debugging purposes.
+const char kUnsafelyTreatInsecureOriginAsSecure[] =
+    "unsafely_treat_insecure_origin_as_secure";
+
+// Boolean that specifies opting into --isolate-origins=... (selective Site
+// Isolation).
+const char kIsolateOrigins[] = "site_isolation.isolate_origins";
+
+// Boolean that specifies opting into --site-per-process (full Site Isolation).
+const char kSitePerProcess[] = "site_isolation.site_per_process";
 
 }  // namespace prefs

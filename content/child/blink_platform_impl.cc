@@ -40,6 +40,7 @@
 #include "content/child/child_thread_impl.h"
 #include "content/child/content_child_helpers.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "net/base/net_errors.h"
@@ -177,8 +178,6 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_INPUT_ALT;
     case WebLocalizedString::kMissingPluginText:
       return IDS_PLUGIN_INITIALIZATION_ERROR;
-    case WebLocalizedString::kMediaRemotingDisableText:
-      return IDS_MEDIA_REMOTING_DISABLE_TEXT;
     case WebLocalizedString::kMediaRemotingCastText:
       return IDS_MEDIA_REMOTING_CAST_TEXT;
     case WebLocalizedString::kMediaRemotingCastToUnknownDeviceText:
@@ -590,6 +589,10 @@ WebString BlinkPlatformImpl::QueryLocalizedString(WebLocalizedString::Name name,
   values.push_back(value2.Utf16());
   return WebString::FromUTF16(base::ReplaceStringPlaceholders(
       GetContentClient()->GetLocalizedString(message_id), values, nullptr));
+}
+
+bool BlinkPlatformImpl::IsRendererSideResourceSchedulerEnabled() const {
+  return base::FeatureList::IsEnabled(features::kRendererSideResourceScheduler);
 }
 
 std::unique_ptr<blink::WebGestureCurve>

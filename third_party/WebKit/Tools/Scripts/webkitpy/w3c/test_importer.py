@@ -59,6 +59,9 @@ class TestImporter(object):
         self.verbose = options.verbose
         log_level = logging.DEBUG if self.verbose else logging.INFO
         configure_logging(logging_level=log_level, include_time=True)
+        if options.verbose:
+            # Print out the full output when executive.run_command fails.
+            self.host.executive.error_output_limit = None
 
         if not self.checkout_is_okay():
             return 1
@@ -165,6 +168,13 @@ class TestImporter(object):
             self.git_cl.run(['set-close'])
             return False
 
+        if try_results.status == 'closed':
+            _log.error('The CL was closed, aborting.')
+            return False
+
+        _log.info('All jobs finished.')
+        try_results = try_results.try_job_results
+
         if try_results and self.git_cl.some_failed(try_results):
             self.fetch_new_expectations_and_baselines()
             if self.host.git().has_working_directory_changes():
@@ -187,7 +197,12 @@ class TestImporter(object):
             _log.error('Timed out waiting for CQ; aborting.')
             return False
 
-        try_results = self.git_cl.filter_latest(try_results)
+        if try_results.status == 'closed':
+            _log.error('The CL was closed; aborting.')
+            return False
+
+        _log.info('All jobs finished.')
+        try_results = self.git_cl.filter_latest(try_results.try_job_results)
 
         # We only want to check the status of CQ bots. The set of CQ bots is
         # determined by //infra/config/cq.cfg, but since in import jobs we only

@@ -6,6 +6,7 @@
 #define ImageBitmap_h
 
 #include <memory>
+#include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/html/canvas/CanvasImageSource.h"
 #include "core/html/canvas/ImageElementBase.h"
@@ -17,7 +18,6 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace blink {
@@ -134,6 +134,7 @@ class CORE_EXPORT ImageBitmap final : public ScriptWrappable,
     bool premultiply_alpha = true;
     bool should_scale_input = false;
     bool has_color_space_conversion = false;
+    bool source_is_unpremul = false;
     unsigned resize_width = 0;
     unsigned resize_height = 0;
     IntRect crop_rect;

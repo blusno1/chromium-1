@@ -147,7 +147,17 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
   NavigationURLLoader::NavigationInterceptionCB GetNavigationInterceptionCB(
       const scoped_refptr<ResourceResponse>& response,
       mojo::ScopedDataPipeConsumerHandle consumer_handle,
-      const SSLStatus& ssl_status);
+      const SSLStatus& ssl_status,
+      int frame_tree_node_id);
+
+  // Checks if a download is allowed, |on_download_allowed_cb| is called if
+  // the download is allowed.
+  void CheckDownloadAllowed(
+      const ResourceRequestInfo::WebContentsGetter& web_contents_getter,
+      const GURL& url,
+      const std::string& request_method,
+      UniqueUrlDownloadHandlerPtr downloader,
+      base::OnceClosure on_download_allowed_cb);
 
  private:
   using DownloadSet = std::set<DownloadItem*>;
@@ -211,6 +221,11 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
   void BeginDownloadInternal(
       std::unique_ptr<content::DownloadUrlParameters> params,
       uint32_t id);
+
+  // Called when download permission check is complete.
+  void OnDownloadAllowedCheckComplete(UniqueUrlDownloadHandlerPtr downloader,
+                                      base::OnceClosure callback,
+                                      bool allow);
 
   // Factory for creation of downloads items.
   std::unique_ptr<DownloadItemFactory> item_factory_;

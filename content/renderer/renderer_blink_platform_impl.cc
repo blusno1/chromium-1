@@ -21,6 +21,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -32,7 +33,7 @@
 #include "content/common/frame_messages.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/common/origin_trials/trial_policy_impl.h"
-#include "content/common/render_process_messages.h"
+#include "content/common/render_message_filter.mojom.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
@@ -46,6 +47,7 @@
 #include "content/renderer/device_sensors/device_orientation_event_pump.h"
 #include "content/renderer/dom_storage/local_storage_cached_areas.h"
 #include "content/renderer/dom_storage/local_storage_namespace.h"
+#include "content/renderer/dom_storage/session_web_storage_namespace_impl.h"
 #include "content/renderer/dom_storage/webstoragenamespace_impl.h"
 #include "content/renderer/file_info_util.h"
 #include "content/renderer/fileapi/webfilesystem_impl.h"
@@ -72,7 +74,6 @@
 #include "content/renderer/quota_dispatcher.h"
 #include "content/renderer/quota_message_filter.h"
 #include "content/renderer/render_thread_impl.h"
-#include "content/renderer/renderer_clipboard_delegate.h"
 #include "content/renderer/storage_util.h"
 #include "content/renderer/web_database_observer_impl.h"
 #include "content/renderer/webclipboard_impl.h"
@@ -92,6 +93,7 @@
 #include "media/filters/stream_parser_factory.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 #include "ppapi/features/features.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -128,7 +130,6 @@
 #include "url/gurl.h"
 
 #if defined(OS_MACOSX)
-#include "content/common/mac/font_descriptor.h"
 #include "content/common/mac/font_loader.h"
 #include "content/renderer/webscrollbarbehavior_impl_mac.h"
 #include "third_party/WebKit/public/platform/mac/WebSandboxSupport.h"
@@ -146,10 +147,6 @@
 #include "third_party/WebKit/public/platform/linux/WebSandboxSupport.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
 #endif
-#endif
-
-#if defined(OS_WIN)
-#include "content/common/child_process_messages.h"
 #endif
 
 #if defined(USE_AURA)
@@ -244,7 +241,7 @@ class RendererBlinkPlatformImpl::SandboxSupport
   virtual ~SandboxSupport() {}
 
 #if defined(OS_MACOSX)
-  bool LoadFont(NSFont* src_font,
+  bool LoadFont(CTFontRef src_font,
                 CGFontRef* container,
                 uint32_t* font_id) override;
 #elif defined(OS_POSIX)
@@ -276,8 +273,6 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
                             : nullptr),
       compositor_thread_(nullptr),
       main_thread_(renderer_scheduler->CreateMainThread()),
-      clipboard_delegate_(new RendererClipboardDelegate),
-      clipboard_(new WebClipboardImpl(clipboard_delegate_.get())),
       sudden_termination_disables_(0),
       plugin_refresh_allowed_(true),
       default_task_runner_(renderer_scheduler->DefaultTaskRunner()),
@@ -424,6 +419,9 @@ blink::WebClipboard* RendererBlinkPlatformImpl::Clipboard() {
       GetContentClient()->renderer()->OverrideWebClipboard();
   if (clipboard)
     return clipboard;
+  if (!clipboard_) {
+    clipboard_ = std::make_unique<WebClipboardImpl>(GetClipboardHost());
+  }
   return clipboard_.get();
 }
 
@@ -495,10 +493,10 @@ void RendererBlinkPlatformImpl::CacheMetadata(const blink::WebURL& url,
   // Let the browser know we generated cacheable metadata for this resource. The
   // browser may cache it and return it on subsequent responses to speed
   // the processing of this resource.
-  std::vector<char> copy(data, data + size);
-  RenderThread::Get()->Send(
-      new RenderProcessHostMsg_DidGenerateCacheableMetadata(url, response_time,
-                                                            copy));
+  std::vector<uint8_t> copy(data, data + size);
+  RenderThreadImpl::current()
+      ->render_message_filter()
+      ->DidGenerateCacheableMetadata(url, response_time, copy);
 }
 
 void RendererBlinkPlatformImpl::CacheMetadataInCacheStorage(
@@ -511,11 +509,12 @@ void RendererBlinkPlatformImpl::CacheMetadataInCacheStorage(
   // Let the browser know we generated cacheable metadata for this resource in
   // CacheStorage. The browser may cache it and return it on subsequent
   // responses to speed the processing of this resource.
-  std::vector<char> copy(data, data + size);
-  RenderThread::Get()->Send(
-      new RenderProcessHostMsg_DidGenerateCacheableMetadataInCacheStorage(
+  std::vector<uint8_t> copy(data, data + size);
+  RenderThreadImpl::current()
+      ->render_message_filter()
+      ->DidGenerateCacheableMetadataInCacheStorage(
           url, response_time, copy, cacheStorageOrigin,
-          cacheStorageCacheName.Utf8()));
+          cacheStorageCacheName.Utf8());
 }
 
 WebString RendererBlinkPlatformImpl::DefaultLocale() {
@@ -537,9 +536,9 @@ void RendererBlinkPlatformImpl::SuddenTerminationChanged(bool enabled) {
       return;
   }
 
-  RenderThread* thread = RenderThread::Get();
+  RenderThreadImpl* thread = RenderThreadImpl::current();
   if (thread)  // NULL in unittests.
-    thread->Send(new RenderProcessHostMsg_SuddenTerminationChanged(enabled));
+    thread->GetRendererHost()->SuddenTerminationChanged(enabled);
 }
 
 void RendererBlinkPlatformImpl::AddRefProcess() {
@@ -560,7 +559,8 @@ RendererBlinkPlatformImpl::CreateLocalStorageNamespace() {
           switches::kDisableMojoLocalStorage)) {
     if (!local_storage_cached_areas_) {
       local_storage_cached_areas_.reset(new LocalStorageCachedAreas(
-          RenderThreadImpl::current()->GetStoragePartitionService()));
+          RenderThreadImpl::current()->GetStoragePartitionService(),
+          renderer_scheduler_));
     }
     return std::make_unique<LocalStorageNamespace>(
         local_storage_cached_areas_.get());
@@ -569,6 +569,20 @@ RendererBlinkPlatformImpl::CreateLocalStorageNamespace() {
   return std::make_unique<WebStorageNamespaceImpl>();
 }
 
+std::unique_ptr<blink::WebStorageNamespace>
+RendererBlinkPlatformImpl::CreateSessionStorageNamespace(int64_t namespace_id) {
+  if (base::FeatureList::IsEnabled(features::kMojoSessionStorage)) {
+    if (!local_storage_cached_areas_) {
+      local_storage_cached_areas_.reset(new LocalStorageCachedAreas(
+          RenderThreadImpl::current()->GetStoragePartitionService(),
+          renderer_scheduler_));
+    }
+    return std::make_unique<SessionWebStorageNamespaceImpl>(
+        namespace_id, local_storage_cached_areas_.get());
+  }
+
+  return std::make_unique<WebStorageNamespaceImpl>(namespace_id);
+}
 
 //------------------------------------------------------------------------------
 
@@ -617,22 +631,25 @@ bool RendererBlinkPlatformImpl::FileUtilities::GetFileInfo(
 
 #if defined(OS_MACOSX)
 
-bool RendererBlinkPlatformImpl::SandboxSupport::LoadFont(NSFont* src_font,
+bool RendererBlinkPlatformImpl::SandboxSupport::LoadFont(CTFontRef src_font,
                                                          CGFontRef* out,
                                                          uint32_t* font_id) {
   uint32_t font_data_size;
-  FontDescriptor src_font_descriptor(src_font);
-  base::SharedMemoryHandle font_data;
-  if (!RenderThread::Get()->Send(new RenderProcessHostMsg_LoadFont(
-        src_font_descriptor, &font_data_size, &font_data, font_id))) {
+  base::ScopedCFTypeRef<CFStringRef> name_ref(
+      CTFontCopyPostScriptName(src_font));
+  base::string16 font_name = SysCFStringRefToUTF16(name_ref);
+  float font_point_size = CTFontGetSize(src_font);
+  mojo::ScopedSharedBufferHandle font_data;
+  if (!RenderThreadImpl::current()->render_message_filter()->LoadFont(
+          font_name, font_point_size, &font_data_size, &font_data, font_id)) {
     *out = NULL;
     *font_id = 0;
     return false;
   }
 
-  if (font_data_size == 0 || !font_data.IsValid() || *font_id == 0) {
-    LOG(ERROR) << "Bad response from RenderProcessHostMsg_LoadFont() for " <<
-        src_font_descriptor.font_name;
+  if (font_data_size == 0 || !font_data.is_valid() || *font_id == 0) {
+    LOG(ERROR) << "Bad response from RenderProcessHostMsg_LoadFont() for "
+               << font_name;
     *out = NULL;
     *font_id = 0;
     return false;
@@ -642,7 +659,8 @@ bool RendererBlinkPlatformImpl::SandboxSupport::LoadFont(NSFont* src_font,
   // isn't already activated, based on the font id.  If it's already
   // activated, don't reactivate it here - crbug.com/72727 .
 
-  return FontLoader::CGFontRefFromBuffer(font_data, font_data_size, out);
+  return FontLoader::CGFontRefFromBuffer(std::move(font_data), font_data_size,
+                                         out);
 }
 
 #elif defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
@@ -1378,7 +1396,7 @@ RendererBlinkPlatformImpl::CreateTrialTokenValidator() {
 //------------------------------------------------------------------------------
 
 blink::WebNotificationManager*
-RendererBlinkPlatformImpl::GetNotificationManager() {
+RendererBlinkPlatformImpl::GetWebNotificationManager() {
   if (!thread_safe_sender_.get() || !notification_dispatcher_.get())
     return nullptr;
 
@@ -1424,6 +1442,13 @@ void RendererBlinkPlatformImpl::InitializeWebDatabaseHostIfNeeded() {
 blink::mojom::WebDatabaseHost& RendererBlinkPlatformImpl::GetWebDatabaseHost() {
   InitializeWebDatabaseHostIfNeeded();
   return **web_database_host_;
+}
+
+mojom::ClipboardHost& RendererBlinkPlatformImpl::GetClipboardHost() {
+  if (!clipboard_host_) {
+    GetConnector()->BindInterface(mojom::kBrowserServiceName, &clipboard_host_);
+  }
+  return *clipboard_host_;
 }
 
 }  // namespace content

@@ -27,10 +27,10 @@
 
 #include <memory>
 #include <type_traits>
+#include "base/memory/scoped_refptr.h"
 #include "platform/wtf/LinkedHashSet.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/WTFTestHelper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -370,6 +370,18 @@ TYPED_TEST(ListOrLinkedHashSetTest, Swap) {
   }
   EXPECT_EQ(it1, set0.end());
   EXPECT_EQ(it2, set1.end());
+}
+
+TYPED_TEST(ListOrLinkedHashSetTest, IteratorsConvertToConstVersions) {
+  using Set = TypeParam;
+  Set set;
+  set.insert(42);
+  typename Set::iterator it = set.begin();
+  typename Set::const_iterator cit = it;
+  typename Set::reverse_iterator rit = set.rbegin();
+  typename Set::const_reverse_iterator crit = rit;
+  // Use the variables to make the compiler happy.
+  ASSERT_EQ(*cit, *crit);
 }
 
 class DummyRefCounted : public RefCounted<DummyRefCounted> {

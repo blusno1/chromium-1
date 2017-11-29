@@ -16,6 +16,7 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/test/test_render_view_host.h"
+#include "content/test/test_render_widget_host.h"
 #include "ui/base/page_transition_types.h"
 
 struct FrameHostMsg_DidCommitProvisionalLoad_Params;
@@ -57,6 +58,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // RenderFrameHostImpl overrides (same values, but in Test*/Mock* types)
   TestRenderViewHost* GetRenderViewHost() override;
   MockRenderProcessHost* GetProcess() override;
+  TestRenderWidgetHost* GetRenderWidgetHost() override;
   void AddMessageToConsole(ConsoleMessageLevel level,
                            const std::string& message) override;
 
@@ -166,6 +168,10 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // PlzNavigate
   void set_pending_commit(bool pending) { pending_commit_ = pending; }
   bool pending_commit() const { return pending_commit_; }
+
+  // Send a message with the sandbox flags and feature policy
+  void SendFramePolicy(blink::WebSandboxFlags sandbox_flags,
+                       const blink::ParsedFeaturePolicy& declared_policy);
 
   // Creates a WebBluetooth Service with a dummy InterfaceRequest.
   WebBluetoothServiceImpl* CreateWebBluetoothServiceForTesting();

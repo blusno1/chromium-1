@@ -335,6 +335,8 @@ void NGBoxFragmentPainter::PaintChildren(
     LayoutPoint child_offset = paint_offset + LayoutSize(fragment.Offset().left,
                                                          fragment.Offset().top);
     if (fragment.Type() == NGPhysicalFragment::kFragmentBox) {
+      if (child->HasSelfPaintingLayer())
+        continue;
       PaintInfo info(paint_info);
       if (RequiresLegacyFallback(fragment))
         fragment.GetLayoutObject()->Paint(info, child_offset);
@@ -378,6 +380,11 @@ void NGBoxFragmentPainter::PaintInlineBlock(const PaintInfo& paint_info,
 void NGBoxFragmentPainter::PaintText(const NGPaintFragment& text_fragment,
                                      const PaintInfo& paint_info,
                                      const LayoutPoint& paint_offset) {
+  if (DrawingRecorder::UseCachedDrawingIfPossible(
+          paint_info.context, text_fragment,
+          DisplayItem::PaintPhaseToDrawingType(paint_info.phase)))
+    return;
+
   DrawingRecorder recorder(
       paint_info.context, text_fragment,
       DisplayItem::PaintPhaseToDrawingType(paint_info.phase));

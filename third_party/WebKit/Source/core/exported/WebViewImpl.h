@@ -102,7 +102,7 @@ class CORE_EXPORT WebViewImpl final
       public WebScheduler::InterventionReporter,
       public WebViewScheduler::WebViewSchedulerDelegate {
  public:
-  static WebViewImpl* Create(WebViewClient*, WebPageVisibilityState);
+  static WebViewImpl* Create(WebViewClient*, mojom::PageVisibilityState);
   static HashSet<WebViewImpl*>& AllInstances();
   static const WebInputEvent* CurrentInputEvent();
   // Returns true if popup menus should be rendered by the browser, false if
@@ -131,7 +131,6 @@ class CORE_EXPORT WebViewImpl final
   void ThemeChanged() override;
   WebInputEventResult HandleInputEvent(const WebCoalescedInputEvent&) override;
   void SetCursorVisibilityState(bool is_visible) override;
-  bool HasTouchEventHandlersAt(const WebPoint&) override;
 
   void ApplyViewportDeltas(const WebFloatSize& visual_viewport_delta,
                            const WebFloatSize& layout_viewport_delta,
@@ -181,7 +180,7 @@ class CORE_EXPORT WebViewImpl final
   void FocusDocumentView(WebFrame*) override;
   void SetInitialFocus(bool reverse) override;
   void ClearFocusedElement() override;
-  bool ScrollFocusedEditableElementIntoRect(const WebRect&) override;
+  bool ScrollFocusedEditableElementIntoView() override;
   void SmoothScroll(int target_x, int target_y, long duration_ms) override;
   void ZoomToFindInPageRect(const WebRect&);
   void AdvanceFocus(bool reverse) override;
@@ -363,7 +362,7 @@ class CORE_EXPORT WebViewImpl final
   }
 
   WebViewScheduler* Scheduler() const override;
-  void SetVisibilityState(WebPageVisibilityState, bool) override;
+  void SetVisibilityState(mojom::PageVisibilityState, bool) override;
 
   bool HasOpenedPopup() const { return page_popup_.get(); }
 
@@ -462,8 +461,6 @@ class CORE_EXPORT WebViewImpl final
 
   FloatSize ElasticOverscroll() const { return elastic_overscroll_; }
 
-  double LastFrameTimeMonotonic() const { return last_frame_time_monotonic_; }
-
   class ChromeClient& GetChromeClient() const {
     return *chrome_client_.Get();
   }
@@ -511,7 +508,7 @@ class CORE_EXPORT WebViewImpl final
   friend class WebViewFrameWidget;
   friend class WTF::RefCounted<WebViewImpl>;
 
-  explicit WebViewImpl(WebViewClient*, WebPageVisibilityState);
+  explicit WebViewImpl(WebViewClient*, mojom::PageVisibilityState);
   ~WebViewImpl() override;
 
   void HideSelectPopup();
@@ -689,8 +686,6 @@ class CORE_EXPORT WebViewImpl final
   WebPageImportanceSignals page_importance_signals_;
 
   const std::unique_ptr<WebViewScheduler> scheduler_;
-
-  double last_frame_time_monotonic_;
 
   // TODO(lfg): This is used in order to disable compositor visibility while
   // the page is still visible. This is needed until the WebView and WebWidget

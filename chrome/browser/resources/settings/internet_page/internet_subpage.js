@@ -84,31 +84,24 @@ Polymer({
     },
   },
 
+  listeners: {'network-list-changed': 'getNetworkStateList_'},
+
   observers: ['deviceStateChanged_(networkingPrivate, deviceState)'],
 
   /** @private {number|null} */
   scanIntervalId_: null,
 
-  /**
-   * Listener function for chrome.networkingPrivate.onNetworkListChanged event.
-   * @type {?function(!Array<string>)}
-   * @private
-   */
-  networkListChangedListener_: null,
+  /** @private  {settings.InternetPageBrowserProxy} */
+  browserProxy_: null,
 
-  /** override */
-  attached: function() {
-    this.networkListChangedListener_ = this.networkListChangedListener_ ||
-        this.onNetworkListChangedEvent_.bind(this);
-    this.networkingPrivate.onNetworkListChanged.addListener(
-        this.networkListChangedListener_);
+  /** @override */
+  created: function() {
+    this.browserProxy_ = settings.InternetPageBrowserProxyImpl.getInstance();
   },
 
   /** override */
   detached: function() {
     this.stopScanning_();
-    this.networkingPrivate.onNetworkListChanged.removeListener(
-        assert(this.networkListChangedListener_));
   },
 
   /**
@@ -193,14 +186,6 @@ Polymer({
       return;
     window.clearInterval(this.scanIntervalId_);
     this.scanIntervalId_ = null;
-  },
-
-  /**
-   * networkingPrivate.onNetworkListChanged event callback.
-   * @private
-   */
-  onNetworkListChangedEvent_: function() {
-    this.getNetworkStateList_();
   },
 
   /** @private */
@@ -370,7 +355,7 @@ Polymer({
    */
   onAddThirdPartyVpnTap_: function(event) {
     var provider = event.model.item;
-    chrome.send('addNetwork', [CrOnc.Type.VPN, provider.ExtensionID]);
+    this.browserProxy_.addThirdPartyVpn(CrOnc.Type.VPN, provider.ExtensionID);
   },
 
   /**

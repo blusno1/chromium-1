@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
@@ -58,6 +59,14 @@ namespace {
 // Request ID for browser initiated requests. We start at -2 on the same lines
 // as ResourceDispatcherHostImpl.
 int g_next_request_id = -2;
+
+size_t GetCertificateChainsSizeInKB(const net::SSLInfo& ssl_info) {
+  base::Pickle cert_pickle;
+  ssl_info.cert->Persist(&cert_pickle);
+  base::Pickle unverified_cert_pickle;
+  ssl_info.unverified_cert->Persist(&unverified_cert_pickle);
+  return (cert_pickle.size() + unverified_cert_pickle.size()) / 1000;
+}
 
 WebContents* GetWebContentsFromFrameTreeNodeID(int frame_tree_node_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -165,8 +174,9 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
           webui_factory_ptr_.get(),
           GetContentClient()->browser()->CreateURLLoaderThrottles(
               web_contents_getter_),
-          frame_tree_node_id_, 0 /* request_id? */, mojom::kURLLoadOptionNone,
-          *resource_request_, this, kNavigationUrlLoaderTrafficAnnotation);
+          0 /* routing_id */, 0 /* request_id? */, mojom::kURLLoadOptionNone,
+          *resource_request_, this, kNavigationUrlLoaderTrafficAnnotation,
+          base::ThreadTaskRunnerHandle::Get());
       return;
     }
 
@@ -230,7 +240,8 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
           GetContentClient()->browser()->CreateURLLoaderThrottles(
               web_contents_getter_),
           frame_tree_node_id_, *resource_request_, this,
-          kNavigationUrlLoaderTrafficAnnotation);
+          kNavigationUrlLoaderTrafficAnnotation,
+          base::ThreadTaskRunnerHandle::Get());
 
       subresource_loader_params_ =
           handler->MaybeCreateSubresourceLoaderParams();
@@ -276,7 +287,7 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
     mojom::URLLoaderFactory* factory = nullptr;
     DCHECK_EQ(handlers_.size(), handler_index_);
     if (resource_request_->url.SchemeIs(url::kBlobScheme)) {
-      factory = default_url_loader_factory_getter_->GetBlobFactory()->get();
+      factory = default_url_loader_factory_getter_->GetBlobFactory();
     } else if (!IsURLHandledByNetworkService(resource_request_->url) &&
                !resource_request_->url.SchemeIs(url::kDataScheme)) {
       mojom::URLLoaderFactoryPtr& non_network_factory =
@@ -291,17 +302,21 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
       }
       factory = non_network_factory.get();
     } else {
-      factory = default_url_loader_factory_getter_->GetNetworkFactory()->get();
+      factory = default_url_loader_factory_getter_->GetNetworkFactory();
       default_loader_used_ = true;
     }
     url_chain_.push_back(resource_request_->url);
+    uint32_t options = mojom::kURLLoadOptionSendSSLInfoWithResponse |
+                       mojom::kURLLoadOptionSniffMimeType;
+    if (resource_request_->resource_type == RESOURCE_TYPE_MAIN_FRAME)
+      options |= mojom::kURLLoadOptionSendSSLInfoForCertificateError;
     url_loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
         factory,
         GetContentClient()->browser()->CreateURLLoaderThrottles(
             web_contents_getter_),
-        frame_tree_node_id_, 0 /* request_id? */,
-        mojom::kURLLoadOptionSendSSLInfo | mojom::kURLLoadOptionSniffMimeType,
-        *resource_request_, this, kNavigationUrlLoaderTrafficAnnotation);
+        frame_tree_node_id_, 0 /* request_id? */, options, *resource_request_,
+        this, kNavigationUrlLoaderTrafficAnnotation,
+        base::ThreadTaskRunnerHandle::Get());
   }
 
   void FollowRedirect() {
@@ -386,7 +401,8 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          const ResourceResponseHead& head) override {
     if (--redirect_limit_ == 0) {
-      OnComplete(network::URLLoaderStatus(net::ERR_TOO_MANY_REDIRECTS));
+      OnComplete(
+          network::URLLoaderCompletionStatus(net::ERR_TOO_MANY_REDIRECTS));
       return;
     }
 
@@ -425,7 +441,16 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
             owner_, base::Passed(&body)));
   }
 
-  void OnComplete(const network::URLLoaderStatus& status) override {
+  void OnComplete(const network::URLLoaderCompletionStatus& status) override {
+    UMA_HISTOGRAM_BOOLEAN(
+        "Navigation.URLLoaderNetworkService.OnCompleteHadSSLInfo",
+        status.ssl_info.has_value());
+    if (status.ssl_info.has_value()) {
+      UMA_HISTOGRAM_MEMORY_KB(
+          "Navigation.URLLoaderNetworkService.OnCompleteCertificateChainsSize",
+          GetCertificateChainsSizeInKB(status.ssl_info.value()));
+    }
+
     if (status.error_code != net::OK && !received_response_) {
       // If the default loader (network) was used to handle the URL load
       // request we need to see if the handlers want to potentially create a
@@ -508,7 +533,7 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
   // the case that the response is intercepted by download, and OnComplete() is
   // already called while we are transferring the |url_loader_| and response
   // body to download code.
-  base::Optional<network::URLLoaderStatus> status_;
+  base::Optional<network::URLLoaderCompletionStatus> status_;
 
   DISALLOW_COPY_AND_ASSIGN(URLLoaderRequestController);
 };
@@ -526,11 +551,12 @@ NavigationURLLoaderNetworkService::NavigationURLLoaderNetworkService(
       allow_download_(request_info->common_params.allow_download),
       weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  int frame_tree_node_id = request_info->frame_tree_node_id;
 
   TRACE_EVENT_ASYNC_BEGIN_WITH_TIMESTAMP1(
       "navigation", "Navigation timeToResponseStarted", this,
       request_info->common_params.navigation_start, "FrameTreeNode id",
-      request_info->frame_tree_node_id);
+      frame_tree_node_id);
 
   // TODO(scottmg): Port over stuff from RDHI::BeginNavigationRequest() here.
   auto new_request = std::make_unique<ResourceRequest>();
@@ -539,6 +565,7 @@ NavigationURLLoaderNetworkService::NavigationURLLoaderNetworkService(
   new_request->url = request_info->common_params.url;
   new_request->site_for_cookies = request_info->site_for_cookies;
   new_request->priority = net::HIGHEST;
+  new_request->render_frame_id = frame_tree_node_id;
 
   // The code below to set fields like request_initiator, referrer, etc has
   // been copied from ResourceDispatcherHostImpl. We did not refactor the
@@ -567,13 +594,12 @@ NavigationURLLoaderNetworkService::NavigationURLLoaderNetworkService(
   new_request->request_body = request_info->common_params.post_data.get();
   new_request->report_raw_headers = request_info->report_raw_headers;
   new_request->allow_download = allow_download_;
+  new_request->enable_load_timing = true;
 
   new_request->fetch_request_mode = network::mojom::FetchRequestMode::kNavigate;
   new_request->fetch_credentials_mode =
       network::mojom::FetchCredentialsMode::kInclude;
   new_request->fetch_redirect_mode = FetchRedirectMode::MANUAL_MODE;
-
-  int frame_tree_node_id = request_info->frame_tree_node_id;
 
   // Check if a web UI scheme wants to handle this request.
   FrameTreeNode* frame_tree_node =
@@ -688,7 +714,7 @@ void NavigationURLLoaderNetworkService::OnStartLoadingResponseBody(
 }
 
 void NavigationURLLoaderNetworkService::OnComplete(
-    const network::URLLoaderStatus& status) {
+    const network::URLLoaderCompletionStatus& status) {
   if (status.error_code == net::OK)
     return;
 
@@ -699,6 +725,7 @@ void NavigationURLLoaderNetworkService::OnComplete(
   // TODO(https://crbug.com/757633): Pass real values in the case of cert
   // errors.
   bool should_ssl_errors_be_fatal = true;
+  ssl_info_ = status.ssl_info;
 
   delegate_->OnRequestFailed(status.exists_in_cache, status.error_code,
                              ssl_info_, should_ssl_errors_be_fatal);

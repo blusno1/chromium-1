@@ -4,13 +4,13 @@
 
 #include "ash/accelerators/accelerator_controller.h"
 
+#include <string>
 #include <utility>
 
 #include "ash/accelerators/accelerator_commands.h"
 #include "ash/accelerators/accelerator_controller_delegate.h"
 #include "ash/accelerators/debug_commands.h"
 #include "ash/accessibility/accessibility_controller.h"
-#include "ash/accessibility/accessibility_delegate.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_move_window_util.h"
 #include "ash/focus_cycler.h"
@@ -42,6 +42,7 @@
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/web_notification/web_notification_tray.h"
 #include "ash/utility/screenshot_controller.h"
+#include "ash/voice_interaction/voice_interaction_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/screen_pinning_controller.h"
@@ -92,6 +93,7 @@ using message_center::SystemNotificationWarningLevel;
 // Toast id and duration for voice interaction shortcuts
 const char kSecondaryUserToastId[] = "voice_interaction_secondary_user";
 const char kUnsupportedLocaleToastId[] = "voice_interaction_locale_unsupported";
+const char kPolicyDisabledToastId[] = "voice_interaction_policy_disabled";
 const int kToastDurationMs = 2500;
 
 // The notification delegate that will be used to open the keyboard shortcut
@@ -99,7 +101,7 @@ const int kToastDurationMs = 2500;
 class DeprecatedAcceleratorNotificationDelegate
     : public message_center::NotificationDelegate {
  public:
-  DeprecatedAcceleratorNotificationDelegate() {}
+  DeprecatedAcceleratorNotificationDelegate() = default;
 
   // message_center::NotificationDelegate:
   void Click() override {
@@ -109,7 +111,7 @@ class DeprecatedAcceleratorNotificationDelegate
 
  private:
   // Private destructor since NotificationDelegate is ref-counted.
-  ~DeprecatedAcceleratorNotificationDelegate() override {}
+  ~DeprecatedAcceleratorNotificationDelegate() override = default;
 
   DISALLOW_COPY_AND_ASSIGN(DeprecatedAcceleratorNotificationDelegate);
 };
@@ -172,6 +174,11 @@ void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
   notification->set_clickable(true);
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));
+}
+
+void ShowToast(std::string id, const base::string16& text) {
+  ToastData toast(id, text, kToastDurationMs, base::nullopt);
+  Shell::Get()->toast_manager()->Show(toast);
 }
 
 ui::Accelerator CreateAccelerator(ui::KeyboardCode keycode,
@@ -257,22 +264,21 @@ void HandleMediaPrevTrack() {
   Shell::Get()->media_controller()->HandleMediaPrevTrack();
 }
 
-void HandleMoveWindowBetweenDisplays(const ui::Accelerator& accelerator) {
-  ui::KeyboardCode key_code = accelerator.key_code();
+void HandleMoveWindowBetweenDisplays(AcceleratorAction action) {
   DisplayMoveWindowDirection direction;
-  if (key_code == ui::VKEY_LEFT) {
-    base::RecordAction(UserMetricsAction("Accel_Move_Window_To_Left_Display"));
-    direction = DisplayMoveWindowDirection::kLeft;
-  } else if (key_code == ui::VKEY_UP) {
+  if (action == MOVE_WINDOW_TO_ABOVE_DISPLAY) {
     base::RecordAction(UserMetricsAction("Accel_Move_Window_To_Above_Display"));
     direction = DisplayMoveWindowDirection::kAbove;
-  } else if (key_code == ui::VKEY_RIGHT) {
-    base::RecordAction(UserMetricsAction("Accel_Move_Window_To_Right_Display"));
-    direction = DisplayMoveWindowDirection::kRight;
-  } else {
-    DCHECK(key_code == ui::VKEY_DOWN);
+  } else if (action == MOVE_WINDOW_TO_BELOW_DISPLAY) {
     base::RecordAction(UserMetricsAction("Accel_Move_Window_To_Below_Display"));
     direction = DisplayMoveWindowDirection::kBelow;
+  } else if (action == MOVE_WINDOW_TO_LEFT_DISPLAY) {
+    base::RecordAction(UserMetricsAction("Accel_Move_Window_To_Left_Display"));
+    direction = DisplayMoveWindowDirection::kLeft;
+  } else {
+    DCHECK(action == MOVE_WINDOW_TO_RIGHT_DISPLAY);
+    base::RecordAction(UserMetricsAction("Accel_Move_Window_To_Right_Display"));
+    direction = DisplayMoveWindowDirection::kRight;
   }
   HandleMoveWindowToDisplay(direction);
 }
@@ -498,7 +504,7 @@ bool CanHandleToggleAppList(const ui::Accelerator& accelerator,
     // When spoken feedback is enabled, we should neither toggle the list nor
     // consume the key since Search+Shift is one of the shortcuts the a11y
     // feature uses. crbug.com/132296
-    if (Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled())
+    if (Shell::Get()->accessibility_controller()->IsSpokenFeedbackEnabled())
       return false;
   }
   return true;
@@ -676,27 +682,36 @@ void HandleToggleVoiceInteraction(const ui::Accelerator& accelerator) {
         base::UserMetricsAction("VoiceInteraction.Started.Assistant"));
   }
 
-  // Show a toast if the active user is not primary.
-  if (Shell::Get()->session_controller()->GetPrimaryUserSession() !=
-      Shell::Get()->session_controller()->GetUserSession(0)) {
-    ash::ToastData toast(
-        kSecondaryUserToastId,
-        l10n_util::GetStringUTF16(
-            IDS_ASH_VOICE_INTERACTION_SECONDARY_USER_TOAST_MESSAGE),
-        kToastDurationMs, base::Optional<base::string16>());
-    ash::Shell::Get()->toast_manager()->Show(toast);
-    return;
-  }
-
-  // Show a toast if voice interaction is disabled due to unsupported locales.
-  if (!chromeos::switches::IsVoiceInteractionLocalesSupported()) {
-    ash::ToastData toast(
-        kUnsupportedLocaleToastId,
-        l10n_util::GetStringUTF16(
-            IDS_ASH_VOICE_INTERACTION_LOCALE_UNSUPPORTED_TOAST_MESSAGE),
-        kToastDurationMs, base::Optional<base::string16>());
-    ash::Shell::Get()->toast_manager()->Show(toast);
-    return;
+  switch (Shell::Get()->voice_interaction_controller()->allowed_state()) {
+    case mojom::AssistantAllowedState::DISALLOWED_BY_NONPRIMARY_USER:
+      // Show a toast if the active user is not primary.
+      ShowToast(kSecondaryUserToastId,
+                l10n_util::GetStringUTF16(
+                    IDS_ASH_VOICE_INTERACTION_SECONDARY_USER_TOAST_MESSAGE));
+      return;
+    case mojom::AssistantAllowedState::DISALLOWED_BY_LOCALE:
+      // Show a toast if voice interaction is disabled due to unsupported
+      // locales.
+      ShowToast(
+          kUnsupportedLocaleToastId,
+          l10n_util::GetStringUTF16(
+              IDS_ASH_VOICE_INTERACTION_LOCALE_UNSUPPORTED_TOAST_MESSAGE));
+      return;
+    case mojom::AssistantAllowedState::DISALLOWED_BY_ARC_POLICY:
+      // Show a toast if voice interaction is disabled due to enterprise policy.
+      ShowToast(kPolicyDisabledToastId,
+                l10n_util::GetStringUTF16(
+                    IDS_ASH_VOICE_INTERACTION_DISABLED_BY_POLICY_MESSAGE));
+      return;
+    case mojom::AssistantAllowedState::DISALLOWED_BY_ARC_DISALLOWED:
+    case mojom::AssistantAllowedState::DISALLOWED_BY_FLAG:
+    case mojom::AssistantAllowedState::DISALLOWED_BY_SUPERVISED_USER:
+    case mojom::AssistantAllowedState::DISALLOWED_BY_INCOGNITO:
+      // TODO(xiaohuic): show a specific toast.
+      return;
+    case mojom::AssistantAllowedState::ALLOWED:
+      // Nothing need to do if allowed.
+      break;
   }
 
   Shell::Get()->app_list()->ToggleVoiceInteractionSession();
@@ -811,8 +826,10 @@ void HandleToggleHighContrast() {
 void HandleToggleSpokenFeedback() {
   base::RecordAction(UserMetricsAction("Accel_Toggle_Spoken_Feedback"));
 
-  Shell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
-      A11Y_NOTIFICATION_SHOW);
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  controller->SetSpokenFeedbackEnabled(!controller->IsSpokenFeedbackEnabled(),
+                                       A11Y_NOTIFICATION_SHOW);
 }
 
 void HandleVolumeDown(mojom::VolumeController* volume_controller,
@@ -856,7 +873,7 @@ AcceleratorController::AcceleratorController(
   Init();
 }
 
-AcceleratorController::~AcceleratorController() {}
+AcceleratorController::~AcceleratorController() = default;
 
 void AcceleratorController::Register(
     const std::vector<ui::Accelerator>& accelerators,
@@ -1324,7 +1341,7 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case MOVE_WINDOW_TO_BELOW_DISPLAY:
     case MOVE_WINDOW_TO_LEFT_DISPLAY:
     case MOVE_WINDOW_TO_RIGHT_DISPLAY:
-      HandleMoveWindowBetweenDisplays(accelerator);
+      HandleMoveWindowBetweenDisplays(action);
       break;
     case NEW_INCOGNITO_WINDOW:
       HandleNewIncognitoWindow();

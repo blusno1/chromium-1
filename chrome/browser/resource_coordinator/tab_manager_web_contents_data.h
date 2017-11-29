@@ -67,7 +67,7 @@ class TabManager::WebContentsData
   bool IsDiscarded();
 
   // Sets/clears the discard state of the tab.
-  void SetDiscardState(bool state);
+  void SetDiscardState(bool is_discarded);
 
   // Returns the number of times the tab has been discarded.
   int DiscardCount();
@@ -146,6 +146,8 @@ class TabManager::WebContentsData
     return tab_data_.is_restored_in_foreground;
   }
 
+  int32_t id() const { return tab_data_.id; }
+
  private:
   // Needed to access tab_data_.
   FRIEND_TEST_ALL_PREFIXES(TabManagerWebContentsDataTest, CopyState);
@@ -156,6 +158,10 @@ class TabManager::WebContentsData
     bool operator==(const Data& right) const;
     bool operator!=(const Data& right) const;
 
+    // Unique ID associated with this tab. This stays constant through discards
+    // and reloads, and is independent of the underlying WebContents and
+    // TabStripModel index, both of which may change.
+    int32_t id;
     // Is the tab currently discarded?
     bool is_discarded;
     // Number of times the tab has been discarded.
@@ -174,8 +180,6 @@ class TabManager::WebContentsData
     base::TimeTicks last_reload_time;
     // The last time the tab switched from being active to inactive.
     base::TimeTicks last_inactive_time;
-    // Site Engagement score (set to -1 if not available).
-    double engagement_score;
     // Is tab eligible for auto discarding? Defaults to true.
     bool is_auto_discardable;
     // Current loading state of this tab.

@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/resource_type.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/common/webplugininfo_param_traits.h"
 #include "ipc/ipc_message_macros.h"
@@ -64,6 +65,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::EditingBehavior,
 IPC_ENUM_TRAITS_MAX_VALUE(WindowOpenDisposition,
                           WindowOpenDisposition::MAX_VALUE)
 IPC_ENUM_TRAITS_MAX_VALUE(net::RequestPriority, net::MAXIMUM_PRIORITY)
+IPC_ENUM_TRAITS_MAX_VALUE(content::ResourceType,
+                          content::RESOURCE_TYPE_LAST_TYPE - 1)
 IPC_ENUM_TRAITS_MAX_VALUE(content::V8CacheOptions,
                           content::V8_CACHE_OPTIONS_LAST)
 #if defined(OS_ANDROID)
@@ -124,7 +127,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(loads_images_automatically)
   IPC_STRUCT_TRAITS_MEMBER(images_enabled)
   IPC_STRUCT_TRAITS_MEMBER(plugins_enabled)
-  IPC_STRUCT_TRAITS_MEMBER(encrypted_media_enabled)
   IPC_STRUCT_TRAITS_MEMBER(dom_paste_enabled)
   IPC_STRUCT_TRAITS_MEMBER(shrinks_standalone_images_to_fit)
   IPC_STRUCT_TRAITS_MEMBER(text_areas_are_resizable)

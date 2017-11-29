@@ -50,7 +50,20 @@ InspectorTest.evaluateInPage = async function(code, callback)
         objectGroup: "console"
     });
     if (!response[Protocol.Error])
-        InspectorTest.safeWrap(callback)(InspectorTest.runtimeModel.createRemoteObject(response.result), response.exceptionDetails);
+        InspectorTest.safeWrap(callback)(response.result.value, response.exceptionDetails);
+}
+
+/**
+ * TestRunner.evaluateInPageRemoteObject inserts sourceURL by inspecting the call stack.
+ */
+InspectorTest.evaluateInPageRemoteObject = async function(code, callback)
+{
+    var response = await InspectorTest.RuntimeAgent.invoke_evaluate({
+        expression: code,
+        objectGroup: "console"
+    });
+    if (!response[Protocol.Error])
+        return InspectorTest.runtimeModel.createRemoteObject(response.result);
 }
 
 InspectorTest.addResult = function(text)
@@ -224,7 +237,7 @@ function runAfterIframeIsLoaded()
     setTimeout(step, 100);
 }
 
-function runTest(pixelTest, enableWatchDogWhileDebugging)
+function runTest(pixelTest)
 {
     if (!window.testRunner)
         return;
@@ -327,24 +340,15 @@ function runTest(pixelTest, enableWatchDogWhileDebugging)
         test = "function() { Protocol.InspectorBackend.Options.suppressRequestErrors = false; window.test = " + test.toString() + "; InspectorTest.addResult = window._originalConsoleLog; InspectorTest.completeTest = () => console.log('Test completed'); TestRunner.addResult = InspectorTest.addResult; TestRunner.completeTest = InspectorTest.completeTest; }";
     toEvaluate = "(" + runTestInFrontend + ")(" + test + ");";
     testRunner.evaluateInWebInspector(runTestCallId, toEvaluate);
-
-    if (enableWatchDogWhileDebugging) {
-        function watchDog()
-        {
-            console.log("Internal watchdog triggered at 20 seconds. Test timed out.");
-            closeInspectorAndNotifyDone();
-        }
-        window._watchDogTimer = setTimeout(watchDog, 20000);
-    }
 }
 
-function runTestAfterDisplay(enableWatchDogWhileDebugging)
+function runTestAfterDisplay()
 {
     if (!window.testRunner)
         return;
 
     testRunner.waitUntilDone();
-    requestAnimationFrame(runTest.bind(this, enableWatchDogWhileDebugging));
+    requestAnimationFrame(() => runTest());
 }
 
 function completeTest(results)
@@ -362,9 +366,6 @@ function flushResults(results)
 
 function closeInspectorAndNotifyDone()
 {
-    if (window._watchDogTimer)
-        clearTimeout(window._watchDogTimer);
-
     testRunner.closeWebInspector();
     setTimeout(function() {
         testRunner.notifyDone();

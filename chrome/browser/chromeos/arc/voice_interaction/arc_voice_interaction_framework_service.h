@@ -15,10 +15,9 @@
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "components/arc/common/voice_interaction_framework.mojom.h"
-#include "components/arc/instance_holder.h"
+#include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/session_manager/core/session_manager_observer.h"
-#include "mojo/public/cpp/bindings/binding.h"
 
 class KeyedServiceBaseFactory;
 
@@ -43,7 +42,7 @@ class ArcVoiceInteractionFrameworkService
     : public chromeos::CrasAudioHandler::AudioObserver,
       public KeyedService,
       public mojom::VoiceInteractionFrameworkHost,
-      public InstanceHolder<mojom::VoiceInteractionFrameworkInstance>::Observer,
+      public ConnectionObserver<mojom::VoiceInteractionFrameworkInstance>,
       public ArcSessionManager::Observer,
       public session_manager::SessionManagerObserver {
  public:
@@ -59,15 +58,12 @@ class ArcVoiceInteractionFrameworkService
                                       ArcBridgeService* bridge_service);
   ~ArcVoiceInteractionFrameworkService() override;
 
-  // InstanceHolder<mojom::VoiceInteractionFrameworkInstance> overrides.
-  void OnInstanceReady() override;
-  void OnInstanceClosed() override;
+  // ConnectionObserver<mojom::VoiceInteractionFrameworkInstance> overrides.
+  void OnConnectionReady() override;
+  void OnConnectionClosed() override;
 
   // mojom::VoiceInteractionFrameworkHost overrides.
   void CaptureFullscreen(CaptureFullscreenCallback callback) override;
-  // TODO(kaznacheev) remove usages of this obsolete method from the container.
-  void OnMetalayerClosed() override;
-  void SetMetalayerEnabled(bool enabled) override;
   void SetVoiceInteractionState(
       arc::mojom::VoiceInteractionState state) override;
 
@@ -154,7 +150,6 @@ class ArcVoiceInteractionFrameworkService
 
   content::BrowserContext* context_;
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager
-  mojo::Binding<mojom::VoiceInteractionFrameworkHost> binding_;
 
   // Whether there is a pending request to start/toggle voice interaction.
   bool is_request_pending_ = false;

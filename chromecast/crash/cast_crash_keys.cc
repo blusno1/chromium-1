@@ -37,6 +37,8 @@ size_t RegisterCastCrashKeys() {
       {gpu::crash_keys::kGPUDriverVersion, ::crash_keys::kSmallSize},
       {gpu::crash_keys::kGPUPixelShaderVersion, ::crash_keys::kSmallSize},
       {gpu::crash_keys::kGPUVertexShaderVersion, ::crash_keys::kSmallSize},
+      {gpu::crash_keys::kGPUVendor, ::crash_keys::kSmallSize},
+      {gpu::crash_keys::kGPURenderer, ::crash_keys::kSmallSize},
       {gpu::crash_keys::kGPUGLContextIsVirtual, ::crash_keys::kSmallSize},
 
       // content/:
@@ -49,15 +51,10 @@ size_t RegisterCastCrashKeys() {
       {"subresource_url", ::crash_keys::kLargeSize},
       {"total-discardable-memory-allocated", ::crash_keys::kSmallSize},
       {"input-event-filter-send-failure", ::crash_keys::kSmallSize},
-      // media/:
-      {::crash_keys::kBug464926CrashKey, ::crash_keys::kSmallSize},
       {"view-count", ::crash_keys::kSmallSize},
 
       // media/:
       {"zero-encode-details", ::crash_keys::kSmallSize},
-
-      // gin/:
-      {"v8-ignition", ::crash_keys::kSmallSize},
 
       // Site isolation.  These keys help debug renderer kills such as
       // https://crbug.com/773140.
@@ -80,6 +77,9 @@ size_t RegisterCastCrashKeys() {
 
       // Temporary for https://crbug.com/685996.
       {"user-cloud-policy-manager-connect-trace", ::crash_keys::kMediumSize},
+
+      // TODO(sunnyps): Remove after fixing crbug.com/724999.
+      {"gl-context-set-current-stack-trace", ::crash_keys::kMediumSize},
 
       // Accessibility keys. Temporary for http://crbug.com/765490.
       {"ax_tree_error", ::crash_keys::kSmallSize},

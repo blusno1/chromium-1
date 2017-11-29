@@ -15,6 +15,7 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/interfaces/network_change_manager.mojom.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 
 namespace content {
@@ -35,7 +36,7 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
     std::move(callback).Run();
   }
 
-  void SimulateNetworkChange(mojom::ConnectionType type,
+  void SimulateNetworkChange(network::mojom::ConnectionType type,
                              SimulateNetworkChangeCallback callback) override {
     DCHECK(net::NetworkChangeNotifier::HasNetworkChangeNotifier());
     net::NetworkChangeNotifier::NotifyObserversOfNetworkChangeForTests(
@@ -72,8 +73,10 @@ void NetworkServiceTestHelper::RegisterNetworkBinders(
                  base::Unretained(this)));
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (IsUnsandboxedSandboxType(
-          service_manager::SandboxTypeFromCommandLine(*command_line))) {
+  service_manager::SandboxType sandbox_type =
+      service_manager::SandboxTypeFromCommandLine(*command_line);
+  if (IsUnsandboxedSandboxType(sandbox_type) ||
+      sandbox_type == service_manager::SANDBOX_TYPE_NETWORK) {
     // Register the EmbeddedTestServer's certs, so that any SSL connections to
     // it succeed. Only do this when file I/O is allowed in the current process.
     net::EmbeddedTestServer::RegisterTestCerts();

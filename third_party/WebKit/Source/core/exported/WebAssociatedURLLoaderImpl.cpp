@@ -32,6 +32,8 @@
 
 #include <limits.h>
 #include <memory>
+
+#include "base/macros.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/Document.h"
 #include "core/loader/DocumentThreadableLoader.h"
@@ -63,8 +65,6 @@ namespace blink {
 namespace {
 
 class HTTPRequestHeaderValidator : public WebHTTPHeaderVisitor {
-  WTF_MAKE_NONCOPYABLE(HTTPRequestHeaderValidator);
-
  public:
   HTTPRequestHeaderValidator() : is_safe_(true) {}
   ~HTTPRequestHeaderValidator() override {}
@@ -74,6 +74,8 @@ class HTTPRequestHeaderValidator : public WebHTTPHeaderVisitor {
 
  private:
   bool is_safe_;
+
+  DISALLOW_COPY_AND_ASSIGN(HTTPRequestHeaderValidator);
 };
 
 void HTTPRequestHeaderValidator::VisitHeader(const WebString& name,
@@ -91,8 +93,6 @@ void HTTPRequestHeaderValidator::VisitHeader(const WebString& name,
 // WebAssociatedURLLoaderClient.
 class WebAssociatedURLLoaderImpl::ClientAdapter final
     : public DocumentThreadableLoaderClient {
-  WTF_MAKE_NONCOPYABLE(ClientAdapter);
-
  public:
   static std::unique_ptr<ClientAdapter> Create(
       WebAssociatedURLLoaderImpl*,
@@ -155,6 +155,8 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   TaskRunnerTimer<ClientAdapter> error_timer_;
   bool enable_error_notifications_;
   bool did_fail_;
+
+  DISALLOW_COPY_AND_ASSIGN(ClientAdapter);
 };
 
 std::unique_ptr<WebAssociatedURLLoaderImpl::ClientAdapter>
@@ -312,7 +314,7 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::EnableErrorNotifications() {
   // client after WebAssociatedURLLoader::loadAsynchronously has returned to the
   // caller.
   if (did_fail_)
-    error_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    error_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void WebAssociatedURLLoaderImpl::ClientAdapter::NotifyError(TimerBase* timer) {
@@ -362,11 +364,6 @@ WebAssociatedURLLoaderImpl::~WebAssociatedURLLoaderImpl() {
   Cancel();
 }
 
-STATIC_ASSERT_ENUM(WebAssociatedURLLoaderOptions::kConsiderPreflight,
-                   kConsiderPreflight);
-STATIC_ASSERT_ENUM(WebAssociatedURLLoaderOptions::kPreventPreflight,
-                   kPreventPreflight);
-
 void WebAssociatedURLLoaderImpl::LoadAsynchronously(
     const WebURLRequest& request,
     WebAssociatedURLLoaderClient* client) {
@@ -389,6 +386,8 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
       allow_load = validator.IsSafe();
     }
   }
+  new_request.ToMutableResourceRequest().SetCORSPreflightPolicy(
+      options_.preflight_policy);
 
   scoped_refptr<WebTaskRunner> task_runner;
   if (observer_) {
@@ -404,9 +403,6 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
 
   if (allow_load) {
     ThreadableLoaderOptions options;
-    options.preflight_policy =
-        static_cast<PreflightPolicy>(options_.preflight_policy);
-
     ResourceLoaderOptions resource_loader_options;
     resource_loader_options.data_buffering_policy = kDoNotBufferData;
 

@@ -4,10 +4,12 @@
 
 package org.chromium.chrome.browser.contextualsearch;
 
+import android.os.Build;
 import android.support.annotation.Nullable;
 import android.support.annotation.VisibleForTesting;
 import android.view.textclassifier.TextClassifier;
 
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.SelectionMetricsLogger;
@@ -41,7 +43,8 @@ public class SelectionClientManager {
      * @param contentViewCore The {@link ContentViewCore} that will show pupups for this client.
      */
     SelectionClientManager(ContentViewCore contentViewCore) {
-        if (!ContextualSearchFieldTrial.isSmartSelectionDisabled()) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SMART_SELECTION)
+                && Build.VERSION.SDK_INT > Build.VERSION_CODES.O) {
             assert contentViewCore != null;
             WebContents webContents = contentViewCore.getWebContents();
             assert webContents != null;

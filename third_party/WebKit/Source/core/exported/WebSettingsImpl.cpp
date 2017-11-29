@@ -276,10 +276,6 @@ void WebSettingsImpl::SetPluginsEnabled(bool enabled) {
   dev_tools_emulator_->SetPluginsEnabled(enabled);
 }
 
-void WebSettingsImpl::SetEncryptedMediaEnabled(bool enabled) {
-  settings_->SetEncryptedMediaEnabled(enabled);
-}
-
 void WebSettingsImpl::SetAvailablePointerTypes(int pointers) {
   dev_tools_emulator_->SetAvailablePointerTypes(pointers);
 }
@@ -690,12 +686,6 @@ void WebSettingsImpl::SetMainFrameResizesAreOrientationChanges(bool enabled) {
 
 void WebSettingsImpl::SetV8CacheOptions(V8CacheOptions options) {
   settings_->SetV8CacheOptions(static_cast<blink::V8CacheOptions>(options));
-}
-
-void WebSettingsImpl::SetV8CacheStrategiesForCacheStorage(
-    V8CacheStrategiesForCacheStorage strategies) {
-  settings_->SetV8CacheStrategiesForCacheStorage(
-      static_cast<blink::V8CacheStrategiesForCacheStorage>(strategies));
 }
 
 void WebSettingsImpl::SetViewportStyle(WebViewportStyle style) {

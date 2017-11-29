@@ -271,15 +271,13 @@ bool GetInnerWebContentsHelper(
   return false;
 }
 
-FrameTreeNode* FindOpener(const WebContents::CreateParams& params) {
-  FrameTreeNode* opener_node = nullptr;
+RenderFrameHostImpl* FindOpenerRFH(const WebContents::CreateParams& params) {
+  RenderFrameHostImpl* opener_rfh = nullptr;
   if (params.opener_render_frame_id != MSG_ROUTING_NONE) {
-    RenderFrameHostImpl* opener_rfh = RenderFrameHostImpl::FromID(
-        params.opener_render_process_id, params.opener_render_frame_id);
-    if (opener_rfh)
-      opener_node = opener_rfh->frame_tree_node();
+    opener_rfh = RenderFrameHostImpl::FromID(params.opener_render_process_id,
+                                             params.opener_render_frame_id);
   }
-  return opener_node;
+  return opener_rfh;
 }
 
 // Ensures that OnDialogClosed is only called once.
@@ -310,15 +308,18 @@ class CloseDialogCallbackWrapper
 }  // namespace
 
 WebContents* WebContents::Create(const WebContents::CreateParams& params) {
-  return WebContentsImpl::CreateWithOpener(params, FindOpener(params));
+  return WebContentsImpl::CreateWithOpener(params, FindOpenerRFH(params));
 }
 
 WebContents* WebContents::CreateWithSessionStorage(
     const WebContents::CreateParams& params,
     const SessionStorageNamespaceMap& session_storage_namespace_map) {
   WebContentsImpl* new_contents = new WebContentsImpl(params.browser_context);
-  new_contents->SetOpenerForNewContents(FindOpener(params),
-                                        params.opener_suppressed);
+  RenderFrameHostImpl* opener_rfh = FindOpenerRFH(params);
+  FrameTreeNode* opener = nullptr;
+  if (opener_rfh)
+    opener = opener_rfh->frame_tree_node();
+  new_contents->SetOpenerForNewContents(opener, params.opener_suppressed);
 
   for (SessionStorageNamespaceMap::const_iterator it =
            session_storage_namespace_map.begin();
@@ -682,8 +683,11 @@ WebContentsImpl::~WebContentsImpl() {
 
 WebContentsImpl* WebContentsImpl::CreateWithOpener(
     const WebContents::CreateParams& params,
-    FrameTreeNode* opener) {
+    RenderFrameHostImpl* opener_rfh) {
   TRACE_EVENT0("browser", "WebContentsImpl::CreateWithOpener");
+  FrameTreeNode* opener = nullptr;
+  if (opener_rfh)
+    opener = opener_rfh->frame_tree_node();
   WebContentsImpl* new_contents = new WebContentsImpl(params.browser_context);
   new_contents->SetOpenerForNewContents(opener, params.opener_suppressed);
 
@@ -694,8 +698,7 @@ WebContentsImpl* WebContentsImpl::CreateWithOpener(
   // See https://html.spec.whatwg.org/#attr-iframe-sandbox.
   FrameTreeNode* new_root = new_contents->GetFrameTree()->root();
   if (opener) {
-    blink::WebSandboxFlags opener_flags =
-        opener->effective_frame_policy().sandbox_flags;
+    blink::WebSandboxFlags opener_flags = opener_rfh->active_sandbox_flags();
     const blink::WebSandboxFlags inherit_flag =
         blink::WebSandboxFlags::kPropagatesToAuxiliaryBrowsingContexts;
     if ((opener_flags & inherit_flag) == inherit_flag) {
@@ -1696,8 +1699,11 @@ WebContents* WebContentsImpl::Clone() {
   // before.
   CreateParams create_params(GetBrowserContext(), GetSiteInstance());
   create_params.initial_size = GetContainerBounds().size();
-  WebContentsImpl* tc =
-      CreateWithOpener(create_params, frame_tree_.root()->opener());
+  FrameTreeNode* opener = frame_tree_.root()->opener();
+  RenderFrameHostImpl* opener_rfh = nullptr;
+  if (opener)
+    opener_rfh = opener->current_frame_host();
+  WebContentsImpl* tc = CreateWithOpener(create_params, opener_rfh);
   tc->GetController().CopyStateFrom(controller_, true);
   for (auto& observer : observers_)
     observer.DidCloneToNewWebContents(this, tc);
@@ -3233,17 +3239,7 @@ void WebContentsImpl::RestoreFocus() {
 }
 
 void WebContentsImpl::FocusThroughTabTraversal(bool reverse) {
-  if (ShowingInterstitialPage()) {
-    interstitial_page_->FocusThroughTabTraversal(reverse);
-    return;
-  }
-  RenderWidgetHostView* const fullscreen_view =
-      GetFullscreenRenderWidgetHostView();
-  if (fullscreen_view) {
-    fullscreen_view->Focus();
-    return;
-  }
-  GetRenderViewHost()->SetInitialFocus(reverse);
+  view_->FocusThroughTabTraversal(reverse);
 }
 
 bool WebContentsImpl::ShowingInterstitialPage() const {
@@ -3256,7 +3252,7 @@ void WebContentsImpl::AdjustPreviewsStateForNavigation(
     delegate_->AdjustPreviewsStateForNavigation(previews_state);
 }
 
-InterstitialPage* WebContentsImpl::GetInterstitialPage() const {
+InterstitialPageImpl* WebContentsImpl::GetInterstitialPage() const {
   return interstitial_page_;
 }
 
@@ -3394,19 +3390,18 @@ void WebContentsImpl::Close() {
   Close(GetRenderViewHost());
 }
 
-void WebContentsImpl::DragSourceEndedAt(int client_x,
-                                        int client_y,
-                                        int screen_x,
-                                        int screen_y,
+void WebContentsImpl::DragSourceEndedAt(float client_x,
+                                        float client_y,
+                                        float screen_x,
+                                        float screen_y,
                                         blink::WebDragOperation operation,
                                         RenderWidgetHost* source_rwh) {
   if (browser_plugin_embedder_.get())
     browser_plugin_embedder_->DragSourceEndedAt(
         client_x, client_y, screen_x, screen_y, operation);
   if (source_rwh) {
-    source_rwh->DragSourceEndedAt(gfx::Point(client_x, client_y),
-                                  gfx::Point(screen_x, screen_y),
-                                  operation);
+    source_rwh->DragSourceEndedAt(gfx::PointF(client_x, client_y),
+                                  gfx::PointF(screen_x, screen_y), operation);
   }
 }
 
@@ -3435,12 +3430,6 @@ void WebContentsImpl::DidGetResourceResponseStart(
 
   for (auto& observer : observers_)
     observer.DidGetResourceResponseStart(details);
-}
-
-void WebContentsImpl::DidGetRedirectForResourceRequest(
-  const ResourceRedirectDetails& details) {
-  for (auto& observer : observers_)
-    observer.DidGetRedirectForResourceRequest(details);
 }
 
 void WebContentsImpl::NotifyWebContentsFocused(
@@ -4727,7 +4716,7 @@ void WebContentsImpl::RunBeforeUnloadConfirm(
 
   if (dialog_manager_) {
     dialog_manager_->RunBeforeUnloadDialog(
-        this, is_reload,
+        this, render_frame_host, is_reload,
         base::BindOnce(&CloseDialogCallbackWrapper::Run, wrapper, false));
   }
 }

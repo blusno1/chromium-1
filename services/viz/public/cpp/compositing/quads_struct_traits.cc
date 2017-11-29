@@ -111,6 +111,7 @@ bool StructTraits<viz::mojom::SurfaceQuadStateDataView, viz::DrawQuad>::Read(
     viz::DrawQuad* out) {
   viz::SurfaceDrawQuad* quad = static_cast<viz::SurfaceDrawQuad*>(out);
   quad->default_background_color = data.default_background_color();
+  quad->stretch_content_to_fill_bounds = data.stretch_content_to_fill_bounds();
   return data.ReadPrimarySurfaceId(&quad->primary_surface_id) &&
          data.ReadFallbackSurfaceId(&quad->fallback_surface_id);
 }
@@ -164,39 +165,6 @@ bool StructTraits<viz::mojom::TileQuadStateDataView, viz::DrawQuad>::Read(
   return true;
 }
 
-viz::mojom::YUVColorSpace
-EnumTraits<viz::mojom::YUVColorSpace, viz::YUVVideoDrawQuad::ColorSpace>::
-    ToMojom(viz::YUVVideoDrawQuad::ColorSpace color_space) {
-  switch (color_space) {
-    case viz::YUVVideoDrawQuad::REC_601:
-      return viz::mojom::YUVColorSpace::REC_601;
-    case viz::YUVVideoDrawQuad::REC_709:
-      return viz::mojom::YUVColorSpace::REC_709;
-    case viz::YUVVideoDrawQuad::JPEG:
-      return viz::mojom::YUVColorSpace::JPEG;
-  }
-  NOTREACHED();
-  return viz::mojom::YUVColorSpace::JPEG;
-}
-
-// static
-bool EnumTraits<viz::mojom::YUVColorSpace, viz::YUVVideoDrawQuad::ColorSpace>::
-    FromMojom(viz::mojom::YUVColorSpace input,
-              viz::YUVVideoDrawQuad::ColorSpace* out) {
-  switch (input) {
-    case viz::mojom::YUVColorSpace::REC_601:
-      *out = viz::YUVVideoDrawQuad::REC_601;
-      return true;
-    case viz::mojom::YUVColorSpace::REC_709:
-      *out = viz::YUVVideoDrawQuad::REC_709;
-      return true;
-    case viz::mojom::YUVColorSpace::JPEG:
-      *out = viz::YUVVideoDrawQuad::JPEG;
-      return true;
-  }
-  return false;
-}
-
 // static
 bool StructTraits<viz::mojom::YUVVideoQuadStateDataView, viz::DrawQuad>::Read(
     viz::mojom::YUVVideoQuadStateDataView data,
@@ -222,8 +190,6 @@ bool StructTraits<viz::mojom::YUVVideoQuadStateDataView, viz::DrawQuad>::Read(
                 "The A plane resource should be the last resource ID.");
   quad->resources.count = data.a_plane_resource_id() ? 4 : 3;
 
-  if (!data.ReadColorSpace(&quad->color_space))
-    return false;
   quad->resource_offset = data.resource_offset();
   quad->resource_multiplier = data.resource_multiplier();
   quad->bits_per_channel = data.bits_per_channel();

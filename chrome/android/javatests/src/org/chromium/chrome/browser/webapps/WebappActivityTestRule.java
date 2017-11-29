@@ -8,6 +8,7 @@ import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
 import android.content.Intent;
 import android.net.Uri;
+import android.support.customtabs.TrustedWebUtils;
 import android.support.test.InstrumentationRegistry;
 import android.view.ViewGroup;
 
@@ -19,9 +20,11 @@ import org.junit.runners.model.Statement;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.EmbeddedTestServerRule;
 
 /**
@@ -74,8 +77,8 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
         super(WebappActivity0.class);
     }
 
-    public String getUrlFromTestServer(String relativeUrl) {
-        return mTestServerRule.getServer().getURL(relativeUrl);
+    public EmbeddedTestServer getTestServer() {
+        return mTestServerRule.getServer();
     }
 
     /**
@@ -93,6 +96,14 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
         intent.putExtra(ShortcutHelper.EXTRA_NAME, WEBAPP_NAME);
         intent.putExtra(ShortcutHelper.EXTRA_SHORT_NAME, WEBAPP_SHORT_NAME);
         return intent;
+    }
+
+    /** Adds a mock Custom Tab session token to the intent. */
+    public void addTwaExtrasToIntent(Intent intent) {
+        Intent cctIntent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+                InstrumentationRegistry.getTargetContext(), "about:blank");
+        intent.putExtras(cctIntent.getExtras());
+        intent.putExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, true);
     }
 
     @Override
@@ -169,7 +180,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
             throws Exception {
         // Reset the url to one that takes more time to load.
         // This is to make sure splash screen won't disappear during test.
-        intent.putExtra(ShortcutHelper.EXTRA_URL, getUrlFromTestServer("/slow?2"));
+        intent.putExtra(ShortcutHelper.EXTRA_URL, getTestServer().getURL("/slow?2"));
         launchActivity(intent);
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         CriteriaHelper.pollInstrumentationThread(new Criteria() {

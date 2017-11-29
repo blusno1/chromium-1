@@ -9,7 +9,7 @@
 #include "platform/bindings/RuntimeCallStats.h"
 #include "platform/heap/Handle.h"
 #include "platform/scheduler/renderer/web_view_scheduler.h"
-#include "platform/testing/TestingPlatformSupport.h"
+#include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
 #include "public/platform/Platform.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,7 +34,7 @@ class MockPendingScript : public PendingScript {
   MOCK_CONST_METHOD0(IsExternal, bool());
   MOCK_CONST_METHOD0(ErrorOccurred, bool());
   MOCK_CONST_METHOD0(WasCanceled, bool());
-  MOCK_CONST_METHOD0(UrlForClassicScript, KURL());
+  MOCK_CONST_METHOD0(UrlForTracing, KURL());
   MOCK_METHOD0(RemoveFromMemoryCache, void());
 
   MOCK_CONST_METHOD0(IsCurrentlyStreaming, bool());

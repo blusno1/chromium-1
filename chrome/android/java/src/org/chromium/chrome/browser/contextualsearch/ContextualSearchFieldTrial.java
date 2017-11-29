@@ -71,7 +71,6 @@ public class ContextualSearchFieldTrial {
     private static final String DISABLE_AMP_AS_SEPARATE_TAB = "disable_amp_as_separate_tab";
     // Disable logging for Machine Learning
     private static final String DISABLE_UKM_RANKER_LOGGING = "disable_ukm_ranker_logging";
-    private static final String DISABLE_SMART_SELECTION = "disable_smart_selection";
     private static final String DISABLE_SUPPRESS_FOR_SMART_SELECTION =
             "disable_suppress_for_smart_selection";
 
@@ -81,11 +80,6 @@ public class ContextualSearchFieldTrial {
     private static final String DISABLE_SEND_HOME_COUNTRY = "disable_send_home_country";
     private static final String DISABLE_PAGE_CONTENT_NOTIFICATION =
             "disable_page_content_notification";
-
-    // --------------------------------------
-    // Params that also exist in native code.
-    // --------------------------------------
-    private static final String ENABLE_RANKER_INTEGRATION = "enable_ranker_integration";
 
     // Cached values to avoid repeated and redundant JNI operations.
     // TODO(donnd): consider creating a single Map to cache these static values.
@@ -106,11 +100,9 @@ public class ContextualSearchFieldTrial {
     private static Boolean sIsOnlineDetectionDisabled;
     private static Boolean sIsAmpAsSeparateTabDisabled;
     private static Boolean sContextualSearchMlTapSuppressionEnabled;
-    private static Boolean sIsRankerIntegrationEnabled;
     private static Boolean sIsSendHomeCountryDisabled;
     private static Boolean sIsPageContentNotificationDisabled;
     private static Boolean sIsUkmRankerLoggingDisabled;
-    private static Boolean sIsSmartSelectionDisabled;
     private static Boolean sIsSuppressForSmartSelectionDisabled;
     private static Integer sWaitAfterTapDelayMs;
     private static Integer sTapDurationThresholdMs;
@@ -349,19 +341,6 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * Determines whether Smart Selection is disabled for Chrome.
-     * This is a safety disable-switch to allow shutoff if some future version of Android has a
-     * behavior change that existing versions of Chrome cannot tolerate.
-     * @return Whether Chrome should not allow the Android O Smart Selection feature.
-     */
-    static boolean isSmartSelectionDisabled() {
-        if (sIsSmartSelectionDisabled == null) {
-            sIsSmartSelectionDisabled = getBooleanParam(DISABLE_SMART_SELECTION);
-        }
-        return sIsSmartSelectionDisabled;
-    }
-
-    /**
      * Determines whether the Contextual Search UI is suppressed when Smart Select is active.
      * This applies to long-press activation of a UI for Smart Select and/or Contextual Search. If
      * this returns true, the Contextual Search Bar will be allowed to show in response to a
@@ -374,30 +353,6 @@ public class ContextualSearchFieldTrial {
                     getBooleanParam(DISABLE_SUPPRESS_FOR_SMART_SELECTION);
         }
         return sIsSuppressForSmartSelectionDisabled;
-    }
-
-    /**
-     * Whether Ranker integration is enabled or not, to apply machine intelligence for Tap gestures.
-     * This controls whether we call the Ranker logic to produce an inference or not, and may have
-     * no user-visible effect.  There's a similar user-visible flag for whether Tap suppression is
-     * enabled or not, so call {@link #isRankerIntegrationOrMlTapSuppressionEnabled} in order to
-     * check if either is enabled.
-     * @return Whether Ranker will be used or not in this session, even for internal ranking.
-     */
-    private static boolean isRankerIntegrationEnabled() {
-        if (sIsRankerIntegrationEnabled == null) {
-            sIsRankerIntegrationEnabled = getBooleanParam(ENABLE_RANKER_INTEGRATION);
-        }
-        return sIsRankerIntegrationEnabled;
-    }
-
-    /**
-     * Whether Ranker integration or the user-visible flag for whether ML-based Tap suppression is
-     * enabled or not.
-     * @return Whether to apply Ranker ML in this session, even if only for internal ranking.
-     */
-    static boolean isRankerIntegrationOrMlTapSuppressionEnabled() {
-        return isRankerIntegrationEnabled() || isContextualSearchMlTapSuppressionEnabled();
     }
 
     /**
@@ -450,7 +405,6 @@ public class ContextualSearchFieldTrial {
             sContextualSearchMlTapSuppressionEnabled = ChromeFeatureList.isEnabled(
                     ChromeFeatureList.CONTEXTUAL_SEARCH_ML_TAP_SUPPRESSION);
         }
-
         return sContextualSearchMlTapSuppressionEnabled;
     }
 

@@ -41,8 +41,6 @@
 
 #include "widevine_cdm_version.h"  //  In SHARED_INTERMEDIATE_DIR.
 
-namespace chrome {
-
 // Available key systems.
 const char kClearKeyKeySystem[] = "org.w3.clearkey";
 const char kExternalClearKeyKeySystem[] = "org.chromium.externalclearkey";
@@ -508,7 +506,7 @@ class EncryptedMediaTest
 
   void DisableEncryptedMedia() {
     PrefService* pref_service = browser()->profile()->GetPrefs();
-    pref_service->SetBoolean(prefs::kWebKitEncryptedMediaEnabled, false);
+    pref_service->SetBoolean(prefs::kEnableEncryptedMedia, false);
   }
 
  protected:
@@ -854,5 +852,3 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, MultipleCdmTypes) {
 }
 
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
-
-}  // namespace chrome

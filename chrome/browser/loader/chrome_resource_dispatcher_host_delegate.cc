@@ -86,6 +86,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/url_request/url_request.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/protobuf/src/google/protobuf/repeated_field.h"
 
 #if BUILDFLAG(ENABLE_NACL)
@@ -268,8 +269,8 @@ void AppendComponentUpdaterThrottles(
     content::ResourceContext* resource_context,
     ResourceType resource_type,
     std::vector<std::unique_ptr<content::ResourceThrottle>>* throttles) {
-  bool is_prerendering =
-      info.GetVisibilityState() == blink::kWebPageVisibilityStatePrerender;
+  bool is_prerendering = info.GetVisibilityState() ==
+                         blink::mojom::PageVisibilityState::kPrerender;
   if (is_prerendering)
     return;
 
@@ -674,7 +675,8 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
 #endif
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
-  if (info->GetVisibilityState() == blink::kWebPageVisibilityStatePrerender) {
+  if (info->GetVisibilityState() ==
+      blink::mojom::PageVisibilityState::kPrerender) {
     throttles->push_back(
         base::MakeUnique<prerender::PrerenderResourceThrottle>(request));
   }
@@ -799,6 +801,27 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
   if (io_data->loading_predictor_observer())
     io_data->loading_predictor_observer()->OnResponseStarted(
         request, info->GetWebContentsGetterForRequest());
+
+  // Update the PreviewsState for main frame response if needed.
+  // TODO(dougarnett): Add more comprehensive update for crbug.com/782922
+  if (info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME &&
+      request->url().SchemeIsHTTPOrHTTPS()) {
+    content::PreviewsState previews_state = response->head.previews_state;
+    if (previews_state != 0) {
+      if (!request->url().SchemeIs(url::kHttpsScheme)) {
+        // Clear https-only previews types.
+        previews_state &= ~(content::NOSCRIPT_ON);
+      }
+      if (previews_state != response->head.previews_state) {
+        // Update previews state in response to renderer.
+        response->head.previews_state = previews_state;
+        // Update previews state in nav data to UI.
+        ChromeNavigationData* data =
+            ChromeNavigationData::GetDataAndCreateIfNecessary(request);
+        data->set_previews_state(previews_state);
+      }
+    }
+  }
 
   mod_pagespeed::RecordMetrics(info->GetResourceType(), request->url(),
                                request->response_headers());
@@ -948,13 +971,6 @@ ChromeResourceDispatcherHostDelegate::GetNavigationData(
       ChromeNavigationData::GetDataAndCreateIfNecessary(request);
   if (!request)
     return data;
-
-  // Update the previews state from the navigation data.
-  const content::ResourceRequestInfo* info =
-      content::ResourceRequestInfo::ForRequest(request);
-  if (info) {
-    data->set_previews_state(info->GetPreviewsState());
-  }
 
   data_reduction_proxy::DataReductionProxyData* data_reduction_proxy_data =
       data_reduction_proxy::DataReductionProxyData::GetData(*request);

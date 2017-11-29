@@ -7,11 +7,11 @@
 
 #include <string>
 
+#include "ash/app_list/model/app_list_model.h"
+#include "ash/app_list/model/search_box_model_observer.h"
 #include "base/macros.h"
 #include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/app_list_view_delegate_observer.h"
-#include "ui/app_list/search_box_model_observer.h"
 #include "ui/app_list/speech_ui_model_observer.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/views/controls/button/image_button.h"
@@ -64,9 +64,6 @@ class APP_LIST_EXPORT SearchBoxView : public views::WidgetDelegateView,
   void ModelChanged();
   bool HasSearch() const;
   void ClearSearch();
-
-  // Sets the shadow border of the search box.
-  void SetShadow(const gfx::ShadowValue& shadow);
 
   // Returns the bounds to use for the view (including the shadow) given the
   // desired bounds of the search box contents.
@@ -244,9 +241,6 @@ class APP_LIST_EXPORT SearchBoxView : public views::WidgetDelegateView,
 
   // Owned by |content_container_|. It is deleted when the view is deleted.
   views::BoxLayout* box_layout_ = nullptr;
-
-  // Whether the fullscreen app list feature is enabled.
-  const bool is_fullscreen_app_list_enabled_;
 
   // Whether the app list focus is enabled.
   const bool is_app_list_focus_enabled_;

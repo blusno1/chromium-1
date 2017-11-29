@@ -66,7 +66,7 @@
 namespace blink {
 
 struct SameSizeAsLayoutText : public LayoutObject {
-  uint32_t bitfields : 16;
+  uint32_t bitfields : 11;
   float widths[4];
   String text;
   void* pointers[2];
@@ -160,6 +160,8 @@ LayoutText::LayoutText(Node* node, scoped_refptr<StringImpl> str)
       lines_dirty_(false),
       contains_reversed_text_(false),
       known_to_have_no_overflow_and_no_fallback_fonts_(false),
+      contains_only_whitespace_or_nbsp_(
+          static_cast<unsigned>(OnlyWhitespaceOrNbsp::kUnknown)),
       min_width_(-1),
       max_width_(-1),
       first_line_min_width_(0),
@@ -300,6 +302,14 @@ void LayoutText::DeleteTextBoxes() {
     }
     first_text_box_ = last_text_box_ = nullptr;
   }
+}
+
+Optional<FloatPoint> LayoutText::GetUpperLeftCorner() const {
+  DCHECK(!IsBR());
+  if (!HasTextBoxes())
+    return WTF::nullopt;
+  return FloatPoint(LinesBoundingBox().X(),
+                    FirstTextBox()->Root().LineTop().ToFloat());
 }
 
 scoped_refptr<StringImpl> LayoutText::OriginalText() const {
@@ -1068,6 +1078,8 @@ void LayoutText::ComputePreferredLogicalWidths(
   has_breakable_start_ = false;
   has_breakable_end_ = false;
   has_end_white_space_ = false;
+  contains_only_whitespace_or_nbsp_ =
+      static_cast<unsigned>(OnlyWhitespaceOrNbsp::kYes);
 
   const ComputedStyle& style_to_use = StyleRef();
   const Font& f = style_to_use.GetFont();  // FIXME: This ignores first-line.
@@ -1156,8 +1168,14 @@ void LayoutText::ComputePreferredLogicalWidths(
       } else {
         is_space = true;
       }
+    } else if (c == kSpaceCharacter) {
+      is_space = true;
+    } else if (c == kNoBreakSpaceCharacter) {
+      is_space = false;
     } else {
-      is_space = c == kSpaceCharacter;
+      is_space = false;
+      contains_only_whitespace_or_nbsp_ =
+          static_cast<unsigned>(OnlyWhitespaceOrNbsp::kNo);
     }
 
     bool is_breakable_location =
@@ -1532,6 +1550,12 @@ static inline bool IsInlineFlowOrEmptyText(const LayoutObject* o) {
   return ToLayoutText(o)->GetText().IsEmpty();
 }
 
+OnlyWhitespaceOrNbsp LayoutText::ContainsOnlyWhitespaceOrNbsp() const {
+  return PreferredLogicalWidthsDirty() ? OnlyWhitespaceOrNbsp::kUnknown
+                                       : static_cast<OnlyWhitespaceOrNbsp>(
+                                             contains_only_whitespace_or_nbsp_);
+}
+
 UChar LayoutText::PreviousCharacter() const {
   // find previous text layoutObject if one exists
   const LayoutObject* previous_text = PreviousInPreOrder();
@@ -1874,7 +1898,7 @@ LayoutRect LayoutText::LocalSelectionRect() const {
 
   // Now calculate startPos and endPos for painting selection.
   // We include a selection while endPos > 0
-  int start_pos, end_pos;
+  unsigned start_pos, end_pos;
   if (GetSelectionState() == SelectionState::kInside) {
     // We are fully selected.
     start_pos = 0;
@@ -1962,6 +1986,8 @@ Optional<unsigned> LayoutText::CaretOffsetForPosition(
 }
 
 int LayoutText::CaretMinOffset() const {
+  DCHECK(!GetDocument().NeedsLayoutTreeUpdate());
+
   if (auto* mapping = GetNGOffsetMapping()) {
     const Position first_position = PositionForCaretOffset(0);
     if (first_position.IsNull())
@@ -1984,6 +2010,8 @@ int LayoutText::CaretMinOffset() const {
 }
 
 int LayoutText::CaretMaxOffset() const {
+  DCHECK(!GetDocument().NeedsLayoutTreeUpdate());
+
   if (auto* mapping = GetNGOffsetMapping()) {
     const Position last_position = PositionForCaretOffset(TextLength());
     if (last_position.IsNull())

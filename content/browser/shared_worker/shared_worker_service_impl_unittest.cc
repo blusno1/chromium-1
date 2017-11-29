@@ -92,7 +92,8 @@ class SharedWorkerServiceImplTest : public testing::Test {
   void SetUp() override {}
 
   void TearDown() override {
-    SharedWorkerServiceImpl::GetInstance()->ResetForTesting();
+    static_cast<SharedWorkerServiceImpl*>(SharedWorkerService::GetInstance())
+        ->ResetForTesting();
   }
 
   TestBrowserThreadBundle browser_thread_bundle_;
@@ -126,7 +127,7 @@ std::vector<uint8_t> StringPieceToVector(base::StringPiece s) {
 void BlockingReadFromMessagePort(MessagePortChannel port,
                                  std::vector<uint8_t>* message) {
   base::RunLoop run_loop;
-  port.SetCallback(run_loop.QuitClosure());
+  port.SetCallback(run_loop.QuitClosure(), base::ThreadTaskRunnerHandle::Get());
   run_loop.Run();
 
   std::vector<MessagePortChannel> should_be_empty;

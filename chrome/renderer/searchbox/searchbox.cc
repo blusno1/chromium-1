@@ -19,10 +19,10 @@
 #include "chrome/renderer/searchbox/searchbox_extension.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/favicon_base/favicon_url_parser.h"
-#include "content/public/common/associated_interface_provider.h"
-#include "content/public/common/associated_interface_registry.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPerformance.h"
@@ -230,13 +230,10 @@ SearchBox::SearchBox(content::RenderFrame* render_frame)
 SearchBox::~SearchBox() = default;
 
 void SearchBox::LogEvent(NTPLoggingEventType event) {
-  // navigation_start in ms.
-  uint64_t start =
-      1000 * (render_frame()->GetWebFrame()->Performance().NavigationStart());
-  uint64_t now =
-      (base::TimeTicks::Now() - base::TimeTicks::UnixEpoch()).InMilliseconds();
-  DCHECK(now >= start);
-  base::TimeDelta delta = base::TimeDelta::FromMilliseconds(now - start);
+  base::Time navigation_start = base::Time::FromDoubleT(
+      render_frame()->GetWebFrame()->Performance().NavigationStart());
+  base::Time now = base::Time::Now();
+  base::TimeDelta delta = now - navigation_start;
   embedded_search_service_->LogEvent(page_seq_no_, event, delta);
 }
 

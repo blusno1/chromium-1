@@ -67,12 +67,13 @@
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
 #include "third_party/WebKit/common/feature_policy/feature_policy.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/media_engagement.mojom.h"
+#include "third_party/WebKit/public/platform/modules/manifest/manifest_manager.mojom.h"
 #include "third_party/WebKit/public/platform/site_engagement.mojom.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebDocumentLoader.h"
@@ -143,7 +144,7 @@ class ExternalPopupMenu;
 class HistoryEntry;
 class ManifestManager;
 class MediaPermissionDispatcher;
-class MediaStreamDispatcher;
+class MediaStreamDeviceObserver;
 class NavigationState;
 class PepperPluginInstanceImpl;
 class PresentationDispatcher;
@@ -423,7 +424,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // May return NULL in some cases, especially if userMediaClient() returns
   // NULL.
-  MediaStreamDispatcher* GetMediaStreamDispatcher();
+  MediaStreamDeviceObserver* GetMediaStreamDeviceObserver();
 
   void ScriptedPrint(bool user_initiated);
 
@@ -461,8 +462,8 @@ class CONTENT_EXPORT RenderFrameImpl
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle interface_pipe) override;
   service_manager::InterfaceProvider* GetRemoteInterfaces() override;
-  AssociatedInterfaceRegistry* GetAssociatedInterfaceRegistry() override;
-  AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override;
+  blink::AssociatedInterfaceRegistry* GetAssociatedInterfaceRegistry() override;
+  blink::AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override;
 #if BUILDFLAG(ENABLE_PLUGINS)
   void RegisterPeripheralPlugin(
       const url::Origin& content_origin,
@@ -490,7 +491,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void SetPreviewsState(PreviewsState previews_state) override;
   PreviewsState GetPreviewsState() const override;
   bool IsPasting() const override;
-  blink::WebPageVisibilityState GetVisibilityState() const override;
+  blink::mojom::PageVisibilityState GetVisibilityState() const override;
   bool IsBrowserSideNavigationPending() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(
       blink::TaskType task_type) override;
@@ -523,7 +524,8 @@ class CONTENT_EXPORT RenderFrameImpl
       const CommonNavigationParams& common_params,
       const RequestNavigationParams& request_params,
       mojo::ScopedDataPipeConsumerHandle body_data,
-      base::Optional<URLLoaderFactoryBundle> subresource_loaders) override;
+      base::Optional<URLLoaderFactoryBundle> subresource_loaders,
+      const base::UnguessableToken& devtools_navigation_token) override;
 
   // mojom::HostZoom implementation:
   void SetHostZoomLevel(const GURL& url, double zoom_level) override;
@@ -551,6 +553,8 @@ class CONTENT_EXPORT RenderFrameImpl
   std::unique_ptr<blink::WebServiceWorkerProvider> CreateServiceWorkerProvider()
       override;
   service_manager::InterfaceProvider* GetInterfaceProvider() override;
+  blink::AssociatedInterfaceProvider* GetRemoteNavigationAssociatedInterfaces()
+      override;
   void DidAccessInitialDocument() override;
   blink::WebLocalFrame* CreateChildFrame(
       blink::WebLocalFrame* parent,
@@ -573,7 +577,8 @@ class CONTENT_EXPORT RenderFrameImpl
       blink::WebFrame* child_frame,
       blink::WebSandboxFlags flags,
       const blink::ParsedFeaturePolicy& container_policy) override;
-  void DidSetFeaturePolicyHeader(
+  void DidSetFramePolicyHeaders(
+      blink::WebSandboxFlags flags,
       const blink::ParsedFeaturePolicy& parsed_header) override;
   void DidAddContentSecurityPolicies(
       const blink::WebVector<blink::WebContentSecurityPolicy>&) override;
@@ -673,6 +678,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void DidObserveLoadingBehavior(
       blink::WebLoadingBehaviorFlag behavior) override;
   void DidObserveNewFeatureUsage(blink::mojom::WebFeature feature) override;
+  bool ShouldTrackUseCounter(const blink::WebURL& url) override;
   void DidCreateScriptContext(v8::Local<v8::Context> context,
                               int world_id) override;
   void WillReleaseScriptContext(v8::Local<v8::Context> context,
@@ -724,7 +730,7 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebString& sink_id,
       const blink::WebSecurityOrigin& security_origin,
       blink::WebSetSinkIdCallbacks* web_callbacks) override;
-  blink::WebPageVisibilityState VisibilityState() const override;
+  blink::mojom::PageVisibilityState VisibilityState() const override;
   std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
   void DraggableRegionsChanged() override;
   // |rect_to_scroll| is with respect to this frame's origin. |rect_to_scroll|
@@ -759,7 +765,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void BindFrameNavigationControl(
       mojom::FrameNavigationControlAssociatedRequest request);
 
-  ManifestManager* manifest_manager();
+  blink::mojom::ManifestManager& GetManifestManager();
 
   // TODO(creis): Remove when the only caller, the HistoryController, is no
   // more.
@@ -841,6 +847,9 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Sets the custom URLLoaderFactory instance to be used for network requests.
   void SetCustomURLLoaderFactory(mojom::URLLoaderFactoryPtr factory);
+
+  void ScrollFocusedEditableElementIntoRect(const gfx::Rect& rect);
+  void DidChangeVisibleViewport();
 
  protected:
   explicit RenderFrameImpl(CreateParams params);
@@ -1094,7 +1103,8 @@ class CONTENT_EXPORT RenderFrameImpl
       const StartNavigationParams& start_params,
       const RequestNavigationParams& request_params,
       std::unique_ptr<StreamOverrideParameters> stream_params,
-      base::Optional<URLLoaderFactoryBundle> subresource_loader_factories);
+      base::Optional<URLLoaderFactoryBundle> subresource_loader_factories,
+      const base::UnguessableToken& devtools_navigation_token);
 
   // Returns a URLLoaderFactoryBundle which can be used to request subresources
   // for this frame. Only valid to call when the Network Service is enabled.
@@ -1232,6 +1242,11 @@ class CONTENT_EXPORT RenderFrameImpl
   void GetInterface(const std::string& interface_name,
                     mojo::ScopedMessagePipeHandle interface_pipe) override;
 
+  // Whether to allow the use of Encrypted Media Extensions (EME), except for
+  // the use of Clear Key key systems, which is always allowed as required by
+  // the spec.
+  bool IsEncryptedMediaEnabled() const;
+
   // Send |callback| our AndroidOverlay routing token when it arrives.  We may
   // call |callback| before returning.
   void RequestOverlayRoutingToken(media::RoutingTokenCallback callback);
@@ -1249,6 +1264,9 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Whether or not a navigation in this frame consumes user gestures.
   bool ConsumeGestureOnNavigation() const;
+
+  // Whether or not the frame is controlled by a service worker.
+  bool IsControlledByServiceWorker();
 
   mojom::URLLoaderFactory* custom_url_loader_factory() {
     return custom_url_loader_factory_.get();
@@ -1423,7 +1441,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // The Manifest Manager handles the manifest requests from the browser
   // process.
-  ManifestManager* manifest_manager_;
+  std::unique_ptr<ManifestManager> manifest_manager_;
 
   // The current accessibility mode.
   ui::AXMode accessibility_mode_;
@@ -1576,6 +1594,11 @@ class CONTENT_EXPORT RenderFrameImpl
   // |devtools_frame_token_| is only defined by the browser and is never
   // sent back from the renderer in the control calls.
   blink::WebString devtools_frame_token_;
+
+  // Bookkeeping to suppress redundant scroll and focus requests for an already
+  // scrolled and focused editable node.
+  bool has_scrolled_focused_editable_node_into_rect_ = false;
+  gfx::Rect rect_for_scrolled_focused_editable_node_;
 
   base::WeakPtrFactory<RenderFrameImpl> weak_factory_;
 

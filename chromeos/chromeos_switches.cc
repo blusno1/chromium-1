@@ -528,8 +528,9 @@ const char kEnterpriseDisableLicenseTypeSelection[] =
 // Disables per-user timezone.
 const char kDisablePerUserTimezone[] = "disable-per-user-timezone";
 
-// Enables a rename action for external drive such as USB and SD.
-const char kEnableExternalDriveRename[] = "enable-external-drive-rename";
+// Disables fine grained time zone detection.
+const char kDisableFineGrainedTimeZoneDetection[] =
+    "disable-fine-grained-time-zone-detection";
 
 bool WakeOnWifiEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(kDisableWakeOnWifi);
@@ -624,9 +625,9 @@ bool IsVoiceInteractionEnabled() {
 }
 
 bool IsZipArchiverUnpackerEnabled() {
-  // Enabled by default.
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      kDisableZipArchiverUnpacker);
+  // Disabled by default.
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kEnableZipArchiverUnpacker);
 }
 
 }  // namespace switches

@@ -8,6 +8,8 @@
 #include <set>
 #include <string>
 
+#include "ash/app_list/model/app_list_folder_item.h"
+#include "ash/app_list/model/app_list_item.h"
 #include "base/guid.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -15,8 +17,6 @@
 #include "build/build_config.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_folder_item.h"
-#include "ui/app_list/app_list_item.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_util.h"
 #include "ui/app_list/app_list_view_delegate.h"
@@ -40,6 +40,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
@@ -261,6 +262,43 @@ bool IsOEMFolderItem(AppListItem* item) {
              AppListFolderItem::FOLDER_TYPE_OEM;
 }
 
+class PaginationAnimationMetricsReporter : public ui::AnimationMetricsReporter {
+ public:
+  PaginationAnimationMetricsReporter() = default;
+  ~PaginationAnimationMetricsReporter() override = default;
+
+  // ui::AnimationMetricsReporter:
+  void Report(int value) override {
+    UMA_HISTOGRAM_PERCENTAGE("Apps.PaginationTransition.AnimationSmoothness",
+                             value);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PaginationAnimationMetricsReporter);
+};
+
+int GetCompositorActivatedFrameCount(ui::Layer* layer) {
+  const ui::Compositor* compositor = layer->GetCompositor();
+  return compositor ? compositor->activated_frame_count() : 0;
+}
+
+float GetCompositorRefreshRate(ui::Layer* layer) {
+  const ui::Compositor* compositor = layer->GetCompositor();
+  return compositor ? compositor->refresh_rate() : 60.0f;
+}
+
+int CalculateAnimationSmoothness(int actual_frames,
+                                 base::TimeDelta ideal_duration,
+                                 ui::Layer* layer) {
+  int smoothness = 100;
+  const int ideal_frames = ideal_duration.InMillisecondsF() /
+                           base::Time::kMillisecondsPerSecond *
+                           GetCompositorRefreshRate(layer);
+  if (ideal_frames > actual_frames)
+    smoothness = 100 * actual_frames / ideal_frames;
+  return smoothness;
+}
+
 }  // namespace
 
 // A layer delegate used for AppsGridView's mask layer, with top and bottom
@@ -302,7 +340,6 @@ class AppsGridView::FadeoutLayerDelegate : public ui::LayerDelegate {
         SK_ColorTRANSPARENT));
     canvas->DrawRect(bottom_rect, flags);
   }
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override {}
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                   float new_device_scale_factor) override {}
 
@@ -320,7 +357,10 @@ AppsGridView::AppsGridView(ContentsView* contents_view,
       is_app_list_focus_enabled_(features::IsAppListFocusEnabled()),
       page_flip_delay_in_ms_(is_fullscreen_app_list_enabled_
                                  ? kPageFlipDelayInMsFullscreen
-                                 : kPageFlipDelayInMs) {
+                                 : kPageFlipDelayInMs),
+      pagination_animation_metrics_reporter_(
+          std::make_unique<PaginationAnimationMetricsReporter>()),
+      pagination_animation_start_frame_number_(0) {
   DCHECK(contents_view_);
   SetPaintToLayer();
   // Clip any icons that are outside the grid view's bounds. These icons would
@@ -707,7 +747,8 @@ AppListItemView* AppsGridView::GetItemViewAt(int index) const {
 
 void AppsGridView::SetTopItemViewsVisible(bool visible) {
   int top_item_count =
-      std::min(static_cast<int>(kNumFolderTopItems), view_model_.view_size());
+      std::min(static_cast<int>(FolderImage::kNumFolderTopItems),
+               view_model_.view_size());
   for (int i = 0; i < top_item_count; ++i)
     GetItemViewAt(i)->icon()->SetVisible(visible);
 }
@@ -826,7 +867,7 @@ gfx::Size AppsGridView::CalculatePreferredSize() const {
         gfx::Size(kAppsGridPreferredWidth, kAppsGridPreferredHeight);
     // Add padding to both side of the apps grid to keep it horizontally
     // centered since we place page switcher on the right side.
-    size.Enlarge(kAppsGridLeftRightPaddingFullscreen * 2, 0);
+    size.Enlarge(kAppsGridLeftRightPadding * 2, 0);
     return size;
   }
 
@@ -866,7 +907,7 @@ void AppsGridView::Layout() {
   if (is_fullscreen_app_list_enabled_) {
     if (fadeout_layer_delegate_)
       fadeout_layer_delegate_->layer()->SetBounds(layer()->bounds());
-    rect.Inset(0, kSearchBoxFullscreenBottomPadding, 0, 0);
+    rect.Inset(0, kSearchBoxBottomPadding, 0, 0);
   }
 
   gfx::Rect indicator_rect(rect);
@@ -1702,9 +1743,7 @@ bool AppsGridView::CalculateFolderDropTarget(const gfx::Point& point,
   // Items can only be dropped into non-folders (which have no children) or
   // folders that have fewer than the max allowed items.
   // The OEM folder does not allow drag/drop of other items into it.
-  if (target_item->ChildItemCount() >= (is_fullscreen_app_list_enabled_
-                                            ? kMaxFolderItemsFullscreen
-                                            : kMaxFolderItems) ||
+  if (target_item->ChildItemCount() >= kMaxFolderItems ||
       IsOEMFolderItem(target_item)) {
     return false;
   }
@@ -2599,6 +2638,8 @@ void AppsGridView::SelectedPageChanged(int old_selected, int new_selected) {
 
 void AppsGridView::TransitionStarted() {
   CancelContextMenusOnCurrentPage();
+  pagination_animation_start_frame_number_ =
+      GetCompositorActivatedFrameCount(layer());
 }
 
 void AppsGridView::TransitionChanged() {
@@ -2608,6 +2649,18 @@ void AppsGridView::TransitionChanged() {
       pagination_model_.transition();
   if (pagination_model_.is_valid_page(transition.target_page))
     Layout();
+}
+
+void AppsGridView::TransitionEnded() {
+  const base::TimeDelta duration =
+      pagination_model_.GetTransitionAnimationSlideDuration();
+  const int end_frame_number = GetCompositorActivatedFrameCount(layer());
+  if (end_frame_number > pagination_animation_start_frame_number_ &&
+      !duration.is_zero()) {
+    pagination_animation_metrics_reporter_->Report(CalculateAnimationSmoothness(
+        end_frame_number - pagination_animation_start_frame_number_, duration,
+        layer()));
+  }
 }
 
 void AppsGridView::OnAppListModelStatusChanged() {
@@ -2673,20 +2726,19 @@ int AppsGridView::GetHeightOnTopOfAllAppsTiles(int page) const {
 
   if (page == 0) {
     DCHECK(suggestions_container_ && all_apps_indicator_);
-    return kSearchBoxFullscreenBottomPadding +
+    return kSearchBoxBottomPadding +
            suggestions_container_->GetPreferredSize().height() +
            kSuggestionsAllAppsIndicatorPadding +
            all_apps_indicator_->GetPreferredSize().height() +
            kAllAppsIndicatorBottomPadding - kTileVerticalPadding;
   }
-  return kSearchBoxFullscreenBottomPadding - kTileVerticalPadding;
+  return kSearchBoxBottomPadding - kTileVerticalPadding;
 }
 
 gfx::Rect AppsGridView::GetExpectedTileBounds(const Index& index) const {
   gfx::Rect bounds(GetContentsBounds());
   if (is_fullscreen_app_list_enabled_) {
-    bounds.Offset(kAppsGridLeftRightPaddingFullscreen - kTileHorizontalPadding,
-                  0);
+    bounds.Offset(kAppsGridLeftRightPadding - kTileHorizontalPadding, 0);
   }
   bounds.Inset(0, GetHeightOnTopOfAllAppsTiles(index.page), 0, 0);
   int row = index.slot / cols_;

@@ -41,6 +41,7 @@ import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsClient.AwWebResourceRequest;
 import org.chromium.android_webview.AwWebResourceResponse;
 import org.chromium.android_webview.test.AwActivityTestRule.TestDependencyFactory;
+import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
@@ -65,6 +66,18 @@ import java.util.concurrent.TimeoutException;
 @MinAndroidSdkLevel(Build.VERSION_CODES.O)
 @SuppressLint("NewApi")
 public class AwAutofillTest {
+    public static final boolean DEBUG = false;
+    public static final String TAG = "AutofillTest";
+
+    public static final String FILE = "/login.html";
+    public static final String FILE_URL = "file:///android_asset/autofill.html";
+
+    public final static int AUTOFILL_VIEW_ENTERED = 1;
+    public final static int AUTOFILL_VIEW_EXITED = 2;
+    public final static int AUTOFILL_VALUE_CHANGED = 3;
+    public final static int AUTOFILL_COMMIT = 4;
+    public final static int AUTOFILL_CANCEL = 5;
+
     /**
      * This class only implements the necessary methods of ViewStructure for testing.
      */
@@ -416,18 +429,21 @@ public class AwAutofillTest {
 
         @Override
         public void notifyVirtualViewEntered(View parent, int childId, Rect absBounds) {
+            if (DEBUG) Log.i(TAG, "notifyVirtualViewEntered");
             mEventQueue.add(AUTOFILL_VIEW_ENTERED);
             mCallbackHelper.notifyCalled();
         }
 
         @Override
         public void notifyVirtualViewExited(View parent, int childId) {
+            if (DEBUG) Log.i(TAG, "notifyVirtualViewExited");
             mEventQueue.add(AUTOFILL_VIEW_EXITED);
             mCallbackHelper.notifyCalled();
         }
 
         @Override
         public void notifyVirtualValueChanged(View parent, int childId, AutofillValue value) {
+            if (DEBUG) Log.i(TAG, "notifyVirtualValueChanged");
             if (mTestValues.changedValues == null) {
                 mTestValues.changedValues = new ArrayList<Pair<Integer, AutofillValue>>();
             }
@@ -438,12 +454,14 @@ public class AwAutofillTest {
 
         @Override
         public void commit() {
+            if (DEBUG) Log.i(TAG, "commit");
             mEventQueue.add(AUTOFILL_COMMIT);
             mCallbackHelper.notifyCalled();
         }
 
         @Override
         public void cancel() {
+            if (DEBUG) Log.i(TAG, "cancel");
             mEventQueue.add(AUTOFILL_CANCEL);
             mCallbackHelper.notifyCalled();
         }
@@ -470,15 +488,6 @@ public class AwAutofillTest {
             return super.shouldInterceptRequest(request);
         }
     }
-
-    public static final String FILE = "/login.html";
-    public static final String FILE_URL = "file:///android_asset/autofill.html";
-
-    public final static int AUTOFILL_VIEW_ENTERED = 1;
-    public final static int AUTOFILL_VIEW_EXITED = 2;
-    public final static int AUTOFILL_VALUE_CHANGED = 3;
-    public final static int AUTOFILL_COMMIT = 4;
-    public final static int AUTOFILL_CANCEL = 5;
 
     @Rule
     public AwActivityTestRule mRule = new AwActivityTestRule();
@@ -557,6 +566,7 @@ public class AwAutofillTest {
     public void testBasicAutofill() throws Throwable {
         TestWebServer webServer = TestWebServer.start();
         final String data = "<html><head></head><body><form action='a.html' name='formname'>"
+                + "<label>User Name:</label>"
                 + "<input type='text' id='text1' name='username'"
                 + " placeholder='placeholder@placeholder.com' autocomplete='username name'>"
                 + "<input type='checkbox' id='checkbox1' name='showpassword'>"
@@ -609,7 +619,9 @@ public class AwAutofillTest {
             assertEquals("name", child0.getAutofillHints()[1]);
             TestViewStructure.AwHtmlInfo htmlInfo0 = child0.getHtmlInfo();
             assertEquals("text", htmlInfo0.getAttribute("type"));
+            assertEquals("text1", htmlInfo0.getAttribute("id"));
             assertEquals("username", htmlInfo0.getAttribute("name"));
+            assertEquals("User Name:", htmlInfo0.getAttribute("label"));
 
             // Verify checkbox control filled correctly in ViewStructure.
             TestViewStructure child1 = viewStructure.getChild(1);
@@ -618,7 +630,9 @@ public class AwAutofillTest {
             assertNull(child1.getAutofillHints());
             TestViewStructure.AwHtmlInfo htmlInfo1 = child1.getHtmlInfo();
             assertEquals("checkbox", htmlInfo1.getAttribute("type"));
+            assertEquals("checkbox1", htmlInfo1.getAttribute("id"));
             assertEquals("showpassword", htmlInfo1.getAttribute("name"));
+            assertEquals("", htmlInfo1.getAttribute("label"));
 
             // Verify select control filled correctly in ViewStructure.
             TestViewStructure child2 = viewStructure.getChild(2);
@@ -627,6 +641,7 @@ public class AwAutofillTest {
             assertNull(child2.getAutofillHints());
             TestViewStructure.AwHtmlInfo htmlInfo2 = child2.getHtmlInfo();
             assertEquals("month", htmlInfo2.getAttribute("name"));
+            assertEquals("select1", htmlInfo2.getAttribute("id"));
             CharSequence[] options = child2.getAutofillOptions();
             assertEquals("Jan", options[0]);
             assertEquals("Feb", options[1]);
@@ -971,12 +986,22 @@ public class AwAutofillTest {
     }
 
     private void invokeOnProvideAutoFillVirtualStructure() {
-        mTestValues.testViewStructure = new TestViewStructure();
-        mAwContents.onProvideAutoFillVirtualStructure(mTestValues.testViewStructure, 1);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mTestValues.testViewStructure = new TestViewStructure();
+                mAwContents.onProvideAutoFillVirtualStructure(mTestValues.testViewStructure, 1);
+            }
+        });
     }
 
     private void invokeAutofill(SparseArray<AutofillValue> values) {
-        mAwContents.autofill(values);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mAwContents.autofill(values);
+            }
+        });
     }
 
     private int getCallbackCount() {

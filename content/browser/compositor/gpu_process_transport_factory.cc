@@ -30,7 +30,6 @@
 #include "components/viz/host/renderer_settings_creation.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
-#include "components/viz/service/display/texture_mailbox_deleter.h"
 #include "components/viz/service/display_embedder/compositing_mode_reporter_impl.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
@@ -61,6 +60,7 @@
 #include "services/service_manager/runner/common/client_util.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/layer.h"
@@ -243,7 +243,7 @@ GpuProcessTransportFactory::CreateSoftwareOutputDevice(
     return base::WrapUnique(new viz::SoftwareOutputDevice);
 
 #if defined(USE_AURA)
-  if (IsUsingMus()) {
+  if (switches::IsMusHostingViz()) {
     NOTREACHED();
     return nullptr;
   }
@@ -576,7 +576,8 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
       synthetic_begin_frame_source =
           std::make_unique<viz::DelayBasedBeginFrameSource>(
               std::make_unique<viz::DelayBasedTimeSource>(
-                  compositor->task_runner().get()));
+                  compositor->task_runner().get()),
+              viz::BeginFrameSource::kNotRestartableId);
       begin_frame_source = synthetic_begin_frame_source.get();
     }
   } else {
@@ -613,8 +614,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
       viz::ServerSharedBitmapManager::current(), GetGpuMemoryBufferManager(),
       renderer_settings_, compositor->frame_sink_id(),
       std::move(display_output_surface), std::move(scheduler),
-      std::make_unique<viz::TextureMailboxDeleter>(
-          compositor->task_runner().get()));
+      compositor->task_runner());
   GetFrameSinkManager()->RegisterBeginFrameSource(begin_frame_source,
                                                   compositor->frame_sink_id());
   // Note that we are careful not to destroy prior BeginFrameSource objects

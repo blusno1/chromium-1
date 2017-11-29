@@ -181,11 +181,11 @@ class QuicPacketGeneratorTest : public QuicTest {
 
  protected:
   QuicRstStreamFrame* CreateRstStreamFrame() {
-    return new QuicRstStreamFrame(1, QUIC_STREAM_NO_ERROR, 0);
+    return new QuicRstStreamFrame(1, 1, QUIC_STREAM_NO_ERROR, 0);
   }
 
   QuicGoAwayFrame* CreateGoAwayFrame() {
-    return new QuicGoAwayFrame(QUIC_NO_ERROR, 1, string());
+    return new QuicGoAwayFrame(2, QUIC_NO_ERROR, 1, string());
   }
 
   void CheckPacketContains(const PacketContents& contents,
@@ -1074,10 +1074,14 @@ TEST_F(QuicPacketGeneratorTest, ConnectionCloseFrameLargerThanPacketSize) {
   char buf[2000] = {};
   QuicStringPiece error_details(buf, 2000);
   frame->error_details = error_details.as_string();
-  EXPECT_CALL(delegate_,
-              OnUnrecoverableError(QUIC_FAILED_TO_SERIALIZE_PACKET,
-                                   "Single frame cannot fit into a packet", _));
-  EXPECT_QUIC_BUG(generator_.AddControlFrame(QuicFrame(frame)), "");
+  if (FLAGS_quic_reloadable_flag_quic_truncate_long_details) {
+    generator_.AddControlFrame(QuicFrame(frame));
+  } else {
+    EXPECT_CALL(delegate_, OnUnrecoverableError(
+                               QUIC_FAILED_TO_SERIALIZE_PACKET,
+                               "Single frame cannot fit into a packet", _));
+    EXPECT_QUIC_BUG(generator_.AddControlFrame(QuicFrame(frame)), "");
+  }
   EXPECT_TRUE(generator_.HasQueuedFrames());
   EXPECT_TRUE(generator_.HasRetransmittableFrames());
 }

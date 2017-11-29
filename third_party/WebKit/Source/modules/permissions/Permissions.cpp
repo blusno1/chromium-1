@@ -65,6 +65,10 @@ PermissionDescriptorPtr ParsePermission(ScriptState* script_state,
   const String& name = permission.name();
   if (name == "geolocation")
     return CreatePermissionDescriptor(PermissionName::GEOLOCATION);
+  if (name == "camera")
+    return CreatePermissionDescriptor(PermissionName::VIDEO_CAPTURE);
+  if (name == "microphone")
+    return CreatePermissionDescriptor(PermissionName::AUDIO_CAPTURE);
   if (name == "notifications")
     return CreatePermissionDescriptor(PermissionName::NOTIFICATIONS);
   if (name == "push") {
@@ -85,7 +89,7 @@ PermissionDescriptorPtr ParsePermission(ScriptState* script_state,
       return nullptr;
     }
 
-    return CreatePermissionDescriptor(PermissionName::PUSH_NOTIFICATIONS);
+    return CreatePermissionDescriptor(PermissionName::NOTIFICATIONS);
   }
   if (name == "midi") {
     MidiPermissionDescriptor midi_permission =

@@ -1153,11 +1153,18 @@ HttpStreamFactoryImpl::JobController::GetAlternativeServiceInfoInternal(
     QuicServerId server_id(mapped_origin, request_info.privacy_mode);
 
     HostPortPair destination(alternative_service_info.host_port_pair());
+    if (server_id.host() != destination.host() &&
+        !session_->params().quic_allow_remote_alt_svc) {
+      continue;
+    }
     ignore_result(ApplyHostMappingRules(original_url, &destination));
 
     if (session_->quic_stream_factory()->CanUseExistingSession(server_id,
                                                                destination))
       return alternative_service_info;
+
+    if (!IsQuicWhitelistedForHost(destination.host()))
+      continue;
 
     // Cache this entry if we don't have a non-broken Alt-Svc yet.
     if (first_alternative_service_info.protocol() == kProtoUnknown)
@@ -1309,6 +1316,8 @@ int HttpStreamFactoryImpl::JobController::ReconsiderProxyAfterError(Job* job,
     // Abandon all Jobs and start over.
     job_bound_ = false;
     bound_job_ = nullptr;
+    main_job_is_resumed_ = false;
+    main_job_is_blocked_ = false;
     alternative_job_.reset();
     main_job_.reset();
     next_state_ = STATE_RESOLVE_PROXY_COMPLETE;
@@ -1320,6 +1329,17 @@ int HttpStreamFactoryImpl::JobController::ReconsiderProxyAfterError(Job* job,
     rv = error;
   }
   return rv;
+}
+
+bool HttpStreamFactoryImpl::JobController::IsQuicWhitelistedForHost(
+    const std::string& host) {
+  const base::flat_set<std::string>& host_whitelist =
+      session_->params().quic_host_whitelist;
+  if (host_whitelist.empty())
+    return true;
+
+  std::string lowered_host = base::ToLowerASCII(host);
+  return base::ContainsKey(host_whitelist, lowered_host);
 }
 
 }  // namespace net

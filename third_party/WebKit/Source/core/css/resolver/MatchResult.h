@@ -24,10 +24,11 @@
 #ifndef MatchResult_h
 #define MatchResult_h
 
+#include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "core/css/RuleSet.h"
 #include "core/css/SelectorChecker.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -87,11 +88,10 @@ class MatchedPropertiesRange {
 };
 
 class CORE_EXPORT MatchResult {
-  WTF_MAKE_NONCOPYABLE(MatchResult);
   STACK_ALLOCATED();
 
  public:
-  MatchResult() {}
+  MatchResult() = default;
 
   void AddMatchedProperties(const CSSPropertyValueSet* properties,
                             unsigned link_match_type = CSSSelector::kMatchAll,
@@ -148,6 +148,7 @@ class CORE_EXPORT MatchResult {
   Vector<unsigned, 16> author_range_ends_;
   unsigned ua_range_end_ = 0;
   bool is_cacheable_ = true;
+  DISALLOW_COPY_AND_ASSIGN(MatchResult);
 };
 
 class ImportantUserRangeIterator {

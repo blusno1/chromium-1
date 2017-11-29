@@ -42,8 +42,6 @@ TestWebState::TestWebState()
 TestWebState::~TestWebState() {
   for (auto& observer : observers_)
     observer.WebStateDestroyed(this);
-  for (auto& observer : observers_)
-    observer.ResetWebState();
 };
 
 WebStateDelegate* TestWebState::GetDelegate() {
@@ -255,6 +253,13 @@ void TestWebState::OnRenderProcessGone() {
 void TestWebState::OnFormActivity(const FormActivityParams& params) {
   for (auto& observer : observers_) {
     observer.FormActivityRegistered(this, params);
+  }
+}
+
+void TestWebState::OnDocumentSubmitted(const std::string& form_name,
+                                       bool user_initiated) {
+  for (auto& observer : observers_) {
+    observer.DocumentSubmitted(this, form_name, user_initiated);
   }
 }
 

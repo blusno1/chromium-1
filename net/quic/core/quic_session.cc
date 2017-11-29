@@ -54,7 +54,13 @@ QuicSession::QuicSession(QuicConnection* connection,
                        perspective() == Perspective::IS_SERVER,
                        nullptr),
       currently_writing_stream_id_(0),
-      can_use_slices_(FLAGS_quic_reloadable_flag_quic_use_mem_slices) {}
+      can_use_slices_(FLAGS_quic_reloadable_flag_quic_use_mem_slices),
+      allow_multiple_acks_for_data_(
+          FLAGS_quic_reloadable_flag_quic_allow_multiple_acks_for_data2) {
+  if (allow_multiple_acks_for_data_) {
+    QUIC_FLAG_COUNT(quic_reloadable_flag_quic_allow_multiple_acks_for_data2);
+  }
+}
 
 void QuicSession::Initialize() {
   connection_->set_visitor(this);
@@ -83,6 +89,20 @@ QuicSession::~QuicSession() {
 void QuicSession::OnStreamFrame(const QuicStreamFrame& frame) {
   // TODO(rch) deal with the error case of stream id 0.
   QuicStreamId stream_id = frame.stream_id;
+  if (stream_id == kInvalidStreamId) {
+    connection()->CloseConnection(
+        QUIC_INVALID_STREAM_ID, "Recevied data for an invalid stream",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
+
+  if (frame.fin && QuicContainsKey(static_stream_map_, stream_id)) {
+    connection()->CloseConnection(
+        QUIC_INVALID_STREAM_ID, "Attempt to close a static stream",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
+
   QuicStream* stream = GetOrCreateStream(stream_id);
   if (!stream) {
     // The stream no longer exists, but we may still be interested in the
@@ -98,7 +118,15 @@ void QuicSession::OnStreamFrame(const QuicStreamFrame& frame) {
 }
 
 void QuicSession::OnRstStream(const QuicRstStreamFrame& frame) {
-  if (QuicContainsKey(static_stream_map_, frame.stream_id)) {
+  QuicStreamId stream_id = frame.stream_id;
+  if (stream_id == kInvalidStreamId) {
+    connection()->CloseConnection(
+        QUIC_INVALID_STREAM_ID, "Recevied data for an invalid stream",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
+
+  if (QuicContainsKey(static_stream_map_, stream_id)) {
     connection()->CloseConnection(
         QUIC_INVALID_STREAM_ID, "Attempt to reset a static stream",
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
@@ -109,7 +137,7 @@ void QuicSession::OnRstStream(const QuicRstStreamFrame& frame) {
     visitor_->OnRstStreamReceived(frame);
   }
 
-  QuicStream* stream = GetOrCreateDynamicStream(frame.stream_id);
+  QuicStream* stream = GetOrCreateDynamicStream(stream_id);
   if (!stream) {
     HandleRstOnValidNonexistentStream(frame);
     return;  // Errors are handled by GetOrCreateStream.
@@ -118,9 +146,7 @@ void QuicSession::OnRstStream(const QuicRstStreamFrame& frame) {
   stream->OnStreamReset(frame);
 }
 
-void QuicSession::OnGoAway(const QuicGoAwayFrame& frame) {
-  DCHECK(frame.last_good_stream_id < next_outgoing_stream_id_);
-}
+void QuicSession::OnGoAway(const QuicGoAwayFrame& frame) {}
 
 void QuicSession::OnConnectionClosed(QuicErrorCode error,
                                      const string& error_details,
@@ -162,6 +188,16 @@ void QuicSession::OnWriteBlocked() {
 
 void QuicSession::OnSuccessfulVersionNegotiation(
     const QuicTransportVersion& /*version*/) {}
+
+void QuicSession::OnConnectivityProbeReceived(
+    const QuicSocketAddress& self_address,
+    const QuicSocketAddress& peer_address) {
+  if (perspective() == Perspective::IS_SERVER) {
+    // Server only sends back a connectivity probe after received a
+    // connectivity probe from a new peer address.
+    connection_->SendConnectivityProbingPacket(nullptr, peer_address);
+  }
+}
 
 void QuicSession::OnPathDegrading() {}
 
@@ -928,7 +964,8 @@ void QuicSession::OnStreamFrameAcked(const QuicStreamFrame& frame,
   QuicStream* stream = GetStream(frame.stream_id);
   // Stream can already be reset when sent frame gets acked.
   if (stream != nullptr) {
-    stream->OnStreamFrameAcked(frame, ack_delay_time);
+    stream->OnStreamFrameAcked(frame.offset, frame.data_length, frame.fin,
+                               ack_delay_time);
   }
 }
 
@@ -942,7 +979,7 @@ void QuicSession::OnStreamFrameRetransmitted(const QuicStreamFrame& frame) {
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
     return;
   }
-  stream->OnStreamFrameRetransmitted(frame);
+  stream->OnStreamFrameRetransmitted(frame.offset, frame.data_length);
 }
 
 void QuicSession::OnStreamFrameDiscarded(const QuicStreamFrame& frame) {
@@ -955,7 +992,7 @@ void QuicSession::OnStreamFrameDiscarded(const QuicStreamFrame& frame) {
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
     return;
   }
-  stream->OnStreamFrameDiscarded(frame);
+  stream->OnStreamFrameDiscarded(frame.offset, frame.data_length, frame.fin);
 }
 
 bool QuicSession::WriteStreamData(QuicStreamId id,

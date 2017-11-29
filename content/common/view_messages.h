@@ -212,6 +212,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(use_custom_colors)
   IPC_STRUCT_TRAITS_MEMBER(enable_referrers)
   IPC_STRUCT_TRAITS_MEMBER(enable_do_not_track)
+  IPC_STRUCT_TRAITS_MEMBER(enable_encrypted_media)
   IPC_STRUCT_TRAITS_MEMBER(webrtc_ip_handling_policy)
   IPC_STRUCT_TRAITS_MEMBER(webrtc_udp_min_port)
   IPC_STRUCT_TRAITS_MEMBER(webrtc_udp_max_port)
@@ -556,6 +557,11 @@ IPC_MESSAGE_ROUTED1(ViewMsg_SetViewportIntersection,
 
 // Sets the inert bit on an out-of-process iframe.
 IPC_MESSAGE_ROUTED1(ViewMsg_SetIsInert, bool /* inert */)
+
+// Toggles render throttling for an out-of-process iframe.
+IPC_MESSAGE_ROUTED2(ViewMsg_UpdateRenderThrottlingStatus,
+                    bool /* is_throttled */,
+                    bool /* subtree_throttled */)
 
 // -----------------------------------------------------------------------------
 // Messages sent from the renderer to the browser.

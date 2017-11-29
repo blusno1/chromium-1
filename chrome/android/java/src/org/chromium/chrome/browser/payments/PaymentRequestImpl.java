@@ -476,8 +476,8 @@ public class PaymentRequestImpl
         // Checks whether the merchant supports autofill payment instrument before show is called.
         mMerchantSupportsAutofillPaymentInstruments =
                 AutofillPaymentApp.merchantSupportsAutofillPaymentInstruments(mMethodData);
-        PaymentAppFactory.getInstance().create(mWebContents,
-                Collections.unmodifiableSet(mMethodData.keySet()), this /* callback */);
+        PaymentAppFactory.getInstance().create(
+                mWebContents, Collections.unmodifiableMap(mMethodData), this /* callback */);
 
         // Log the various types of payment methods that were requested by the merchant.
         boolean requestedMethodGoogle = false;
@@ -1809,8 +1809,7 @@ public class PaymentRequestImpl
      * onAddressNormalized or onCouldNotNormalize which will send the result to the merchant.
      */
     private void startShippingAddressChangeNormalization(AutofillAddress address) {
-        PersonalDataManager.getInstance().normalizeAddress(
-                address.getProfile(), AutofillAddress.getCountryCode(address.getProfile()), this);
+        PersonalDataManager.getInstance().normalizeAddress(address.getProfile(), this);
     }
 
     /**

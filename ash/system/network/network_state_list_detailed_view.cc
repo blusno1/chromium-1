@@ -111,8 +111,8 @@ class NetworkStateListDetailedView::InfoBubble
 // Special layout to overlap the scanning throbber and the info button.
 class InfoThrobberLayout : public views::LayoutManager {
  public:
-  InfoThrobberLayout() {}
-  ~InfoThrobberLayout() override {}
+  InfoThrobberLayout() = default;
+  ~InfoThrobberLayout() override = default;
 
   // views::LayoutManager
   void Layout(views::View* host) override {
@@ -308,6 +308,10 @@ bool NetworkStateListDetailedView::ResetInfoBubble() {
 
 void NetworkStateListDetailedView::OnInfoBubbleDestroyed() {
   info_bubble_ = nullptr;
+
+  // Widget of info bubble is activated while info bubble is shown. To move
+  // focus back to the widget of this view, activate it again here.
+  GetWidget()->Activate();
 }
 
 views::View* NetworkStateListDetailedView::CreateNetworkInfoView() {

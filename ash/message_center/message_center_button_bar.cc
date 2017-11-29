@@ -13,6 +13,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
@@ -44,6 +45,7 @@ constexpr SkColor kButtonSeparatorColor = SkColorSetARGB(0x1F, 0x0, 0x0, 0x0);
 constexpr int kTextFontSize = 14;
 constexpr int kSeparatorHeight = 24;
 constexpr gfx::Insets kSeparatorPadding(12, 0, 12, 0);
+constexpr gfx::Insets kButtonBarBorder(4, 18, 4, 0);
 
 void SetDefaultButtonStyle(views::Button* button) {
   button->SetFocusForPlatform();
@@ -82,6 +84,7 @@ MessageCenterButtonBar::MessageCenterButtonBar(
   SetPaintToLayer();
   SetBackground(
       views::CreateSolidBackground(message_center_style::kBackgroundColor));
+  SetBorder(views::CreateEmptyBorder(kButtonBarBorder));
 
   notification_label_ = new views::Label(title);
   notification_label_->SetAutoColorReadabilityEnabled(false);
@@ -94,6 +97,9 @@ MessageCenterButtonBar::MessageCenterButtonBar(
   AddChildView(notification_label_);
 
   button_container_ = new views::View;
+  button_container_->SetPaintToLayer();
+  button_container_->SetBackground(
+      views::CreateSolidBackground(message_center_style::kBackgroundColor));
   button_container_->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kHorizontal));
   close_all_button_ = new views::ImageButton(this);
@@ -133,6 +139,9 @@ MessageCenterButtonBar::MessageCenterButtonBar(
   button_container_->AddChildView(CreateVerticalSeparator());
 
   collapse_button_ = new views::ImageButton(this);
+  collapse_button_->SetBackground(
+      views::CreateSolidBackground(message_center_style::kBackgroundColor));
+  collapse_button_->SetPaintToLayer();
   collapse_button_->SetImage(
       views::Button::STATE_NORMAL,
       gfx::CreateVectorIcon(kNotificationCenterCollapseIcon,
@@ -154,43 +163,13 @@ MessageCenterButtonBar::MessageCenterButtonBar(
   SetDefaultButtonStyle(settings_button_);
   button_container_->AddChildView(settings_button_);
 
+  AddChildView(button_container_);
+
   SetCloseAllButtonEnabled(!settings_initially_visible);
   SetBackArrowVisible(settings_initially_visible);
-  ViewVisibilityChanged();
 }
 
-void MessageCenterButtonBar::ViewVisibilityChanged() {
-  // TODO(tetsui): Remove GridLayout and use BoxLayout.
-  // The view will be simple enough for BoxLayout after back arrow removal.
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
-  views::ColumnSet* column = layout->AddColumnSet(0);
-  constexpr int kFooterLeftMargin = 18;
-  column->AddPaddingColumn(0, kFooterLeftMargin);
-
-  // Column for the label "Notifications".
-  column->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 0.0f,
-                    views::GridLayout::USE_PREF, 0, 0);
-
-  // Fills in the remaining space between "Notifications" and buttons.
-  column->AddPaddingColumn(1.0f, 0);
-
-  // The button area column.
-  column->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 0.0f,
-                    views::GridLayout::USE_PREF, 0, 0);
-
-  constexpr int kFooterTopMargin = 4;
-  layout->AddPaddingRow(0, kFooterTopMargin);
-  layout->StartRow(0, 0, message_center_style::kActionIconSize);
-  layout->AddView(notification_label_);
-  if (button_container_->visible())
-    layout->AddView(button_container_);
-  else if (collapse_button_->visible())
-    layout->AddView(collapse_button_);
-  constexpr int kFooterBottomMargin = 4;
-  layout->AddPaddingRow(0, kFooterBottomMargin);
-}
-
-MessageCenterButtonBar::~MessageCenterButtonBar() {}
+MessageCenterButtonBar::~MessageCenterButtonBar() = default;
 
 void MessageCenterButtonBar::SetSettingsAndQuietModeButtonsEnabled(
     bool enabled) {
@@ -216,10 +195,49 @@ views::Button* MessageCenterButtonBar::GetSettingsButtonForTest() const {
 }
 
 void MessageCenterButtonBar::SetBackArrowVisible(bool visible) {
-  collapse_button_->SetVisible(visible);
-  button_container_->SetVisible(!visible);
-  ViewVisibilityChanged();
-  Layout();
+  if (collapse_button_visible_ == visible)
+    return;
+
+  collapse_button_visible_ = visible;
+
+  collapse_button_->SetVisible(true);
+  button_container_->SetVisible(true);
+
+  collapse_button_->layer()->SetOpacity(visible ? 0.0 : 1.0);
+  button_container_->layer()->SetOpacity(visible ? 1.0 : 0.0);
+
+  ui::ScopedLayerAnimationSettings collapse_settings(
+      collapse_button_->layer()->GetAnimator());
+  collapse_settings.AddObserver(this);
+  collapse_settings.SetTweenType(gfx::Tween::EASE_IN_OUT);
+  collapse_settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(
+      message_center_style::kSettingsTransitionDurationMs));
+
+  ui::ScopedLayerAnimationSettings container_settings(
+      button_container_->layer()->GetAnimator());
+  container_settings.SetTweenType(gfx::Tween::EASE_IN_OUT);
+  container_settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(
+      message_center_style::kSettingsTransitionDurationMs));
+
+  collapse_button_->layer()->SetOpacity(visible ? 1.0 : 0.0);
+  button_container_->layer()->SetOpacity(visible ? 0.0 : 1.0);
+}
+
+void MessageCenterButtonBar::OnImplicitAnimationsCompleted() {
+  bool settings_focused =
+      GetFocusManager() &&
+      (GetFocusManager()->GetFocusedView() == collapse_button_ ||
+       GetFocusManager()->GetFocusedView() == settings_button_);
+
+  if (settings_focused) {
+    if (collapse_button_visible_)
+      collapse_button_->RequestFocus();
+    else
+      settings_button_->RequestFocus();
+  }
+
+  collapse_button_->SetVisible(collapse_button_visible_);
+  button_container_->SetVisible(!collapse_button_visible_);
 }
 
 void MessageCenterButtonBar::SetTitle(const base::string16& title) {
@@ -233,7 +251,6 @@ void MessageCenterButtonBar::SetButtonsVisible(bool visible) {
   if (close_all_button_)
     close_all_button_->SetVisible(visible);
 
-  ViewVisibilityChanged();
   Layout();
 }
 
@@ -243,6 +260,32 @@ void MessageCenterButtonBar::SetQuietModeState(bool is_quiet_mode) {
 
 void MessageCenterButtonBar::ChildVisibilityChanged(views::View* child) {
   InvalidateLayout();
+}
+
+void MessageCenterButtonBar::Layout() {
+  gfx::Rect child_area = GetContentsBounds();
+
+  notification_label_->SetBounds(
+      child_area.x(), child_area.y(),
+      notification_label_->GetPreferredSize().width(), child_area.height());
+
+  int button_container_width = button_container_->GetPreferredSize().width();
+  button_container_->SetBounds(child_area.right() - button_container_width,
+                               child_area.y(), button_container_width,
+                               child_area.height());
+
+  int collapse_button_width = collapse_button_->GetPreferredSize().width();
+  collapse_button_->SetBounds(child_area.right() - collapse_button_width,
+                              child_area.y(), collapse_button_width,
+                              child_area.height());
+}
+
+gfx::Size MessageCenterButtonBar::CalculatePreferredSize() const {
+  int preferred_height =
+      std::max(button_container_->GetPreferredSize().height(),
+               collapse_button_->GetPreferredSize().height()) +
+      GetInsets().height();
+  return gfx::Size(0, preferred_height);
 }
 
 void MessageCenterButtonBar::ButtonPressed(views::Button* sender,

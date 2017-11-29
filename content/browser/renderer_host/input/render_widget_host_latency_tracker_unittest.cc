@@ -96,9 +96,7 @@ class RenderWidgetHostLatencyTrackerTestBrowserClient
 class RenderWidgetHostLatencyTrackerTest
     : public RenderViewHostImplTestHarness {
  public:
-  RenderWidgetHostLatencyTrackerTest()
-      : tracker_(false), old_browser_client_(nullptr) {
-    tracker_.Initialize(kTestRoutingId, kTestProcessId);
+  RenderWidgetHostLatencyTrackerTest() : old_browser_client_(nullptr) {
     ResetHistograms();
   }
 
@@ -197,7 +195,7 @@ class RenderWidgetHostLatencyTrackerTest
     }
   }
 
-  RenderWidgetHostLatencyTracker* tracker() { return &tracker_; }
+  RenderWidgetHostLatencyTracker* tracker() { return tracker_.get(); }
   void ResetHistograms() {
     histogram_tester_.reset(new base::HistogramTester());
   }
@@ -209,7 +207,9 @@ class RenderWidgetHostLatencyTrackerTest
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
     old_browser_client_ = SetBrowserClientForTesting(&test_browser_client_);
-    tracker_.SetDelegate(contents());
+    tracker_ =
+        std::make_unique<RenderWidgetHostLatencyTracker>(false, contents());
+    tracker_->Initialize(kTestRoutingId, kTestProcessId);
   }
 
   void TearDown() override {
@@ -223,10 +223,67 @@ class RenderWidgetHostLatencyTrackerTest
   const int kTestRoutingId = 3;
   const int kTestProcessId = 1;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
-  RenderWidgetHostLatencyTracker tracker_;
+  std::unique_ptr<RenderWidgetHostLatencyTracker> tracker_;
   RenderWidgetHostLatencyTrackerTestBrowserClient test_browser_client_;
   ContentBrowserClient* old_browser_client_;
 };
+
+TEST_F(RenderWidgetHostLatencyTrackerTest, TestValidEventTiming) {
+  base::TimeTicks now = base::TimeTicks::Now();
+
+  ui::LatencyInfo latency_info;
+  latency_info.set_trace_id(kTraceEventId);
+  latency_info.set_source_event_type(ui::SourceEventType::WHEEL);
+
+  latency_info.AddLatencyNumberWithTimestamp(
+      ui::INPUT_EVENT_LATENCY_FIRST_SCROLL_UPDATE_ORIGINAL_COMPONENT, 0, 0,
+      now + base::TimeDelta::FromMilliseconds(60), 1);
+
+  latency_info.AddLatencyNumberWithTimestamp(
+      ui::INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_IMPL_COMPONENT, 0, 0,
+      now + base::TimeDelta::FromMilliseconds(50), 1);
+
+  latency_info.AddLatencyNumberWithTimestamp(
+      ui::INPUT_EVENT_LATENCY_RENDERER_SWAP_COMPONENT, 0, 0,
+      now + base::TimeDelta::FromMilliseconds(40), 1);
+
+  latency_info.AddLatencyNumberWithTimestamp(
+      ui::DISPLAY_COMPOSITOR_RECEIVED_FRAME_COMPONENT, 0, 0,
+      now + base::TimeDelta::FromMilliseconds(30), 1);
+
+  latency_info.AddLatencyNumberWithTimestamp(
+      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
+      tracker()->latency_component_id(), 0,
+      now + base::TimeDelta::FromMilliseconds(20), 1);
+
+  latency_info.AddLatencyNumberWithTimestamp(
+      ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, 0, 0,
+      now + base::TimeDelta::FromMilliseconds(10), 1);
+
+  latency_info.AddLatencyNumberWithTimestamp(
+      ui::INPUT_EVENT_LATENCY_TERMINATED_FRAME_SWAP_COMPONENT, 0, 0, now, 1);
+
+  tracker()->OnGpuSwapBuffersCompleted(latency_info);
+
+  // When last_event_time of the end_component is less than the first_event_time
+  // of the start_component, zero is recorded instead of a negative value.
+  histogram_tester().ExpectUniqueSample(
+      "Event.Latency.ScrollBegin.Wheel.TimeToScrollUpdateSwapBegin2", 0, 1);
+  histogram_tester().ExpectUniqueSample(
+      "Event.Latency.Scroll.Wheel.TimeToScrollUpdateSwapBegin2", 0, 1);
+  histogram_tester().ExpectUniqueSample(
+      "Event.Latency.ScrollBegin.Wheel.TimeToHandled2_Impl", 0, 1);
+  histogram_tester().ExpectUniqueSample(
+      "Event.Latency.Scroll.Wheel.TimeToHandled2_Impl", 0, 1);
+  histogram_tester().ExpectUniqueSample(
+      "Event.Latency.ScrollBegin.Wheel.HandledToRendererSwap2_Impl", 0, 1);
+  histogram_tester().ExpectUniqueSample(
+      "Event.Latency.ScrollBegin.Wheel.RendererSwapToBrowserNotified2", 0, 1);
+  histogram_tester().ExpectUniqueSample(
+      "Event.Latency.ScrollBegin.Wheel.BrowserNotifiedToBeforeGpuSwap2", 0, 1);
+  histogram_tester().ExpectUniqueSample(
+      "Event.Latency.ScrollBegin.Wheel.GpuSwap2", 0, 1);
+}
 
 TEST_F(RenderWidgetHostLatencyTrackerTest, TestWheelToFirstScrollHistograms) {
   const GURL url(kUrl);
@@ -761,7 +818,6 @@ TEST_F(RenderWidgetHostLatencyTrackerTest,
     EXPECT_TRUE(touch_latency.FindLatency(
         ui::INPUT_EVENT_LATENCY_TERMINATED_NO_SWAP_COMPONENT, 0, nullptr));
     EXPECT_TRUE(touch_latency.terminated());
-    tracker()->OnGpuSwapBuffersCompleted(touch_latency);
   }
 
   {
@@ -1138,6 +1194,8 @@ TEST_F(RenderWidgetHostLatencyTrackerTest, KeyUILatency) {
           base::TimeDelta::FromMicroseconds(event_timestamps_microseconds[0]),
       1);
 
+  // Add the BEGIN_RWH component explicitly here with a timestamp, instead of
+  // calling tracker()->OnInputEvent().
   latency_info.AddLatencyNumberWithTimestamp(
       ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
       tracker()->latency_component_id(), 0,
@@ -1145,7 +1203,6 @@ TEST_F(RenderWidgetHostLatencyTrackerTest, KeyUILatency) {
           base::TimeDelta::FromMicroseconds(event_timestamps_microseconds[1]),
       1);
 
-  tracker()->OnInputEvent(event, &latency_info);
   tracker()->OnInputEventAck(event, &latency_info,
                              InputEventAckState::INPUT_EVENT_ACK_STATE_UNKNOWN);
   EXPECT_THAT(
@@ -1166,6 +1223,8 @@ TEST_F(RenderWidgetHostLatencyTrackerTest, KeyAckedLatency) {
   latency_info.set_trace_id(kTraceEventId);
   latency_info.set_source_event_type(ui::SourceEventType::KEY_PRESS);
 
+  // Add the BEGIN_RWH component explicitly here with a timestamp, instead of
+  // calling tracker()->OnInputEvent().
   latency_info.AddLatencyNumberWithTimestamp(
       ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
       tracker()->latency_component_id(), 0,
@@ -1173,13 +1232,14 @@ TEST_F(RenderWidgetHostLatencyTrackerTest, KeyAckedLatency) {
           base::TimeDelta::FromMicroseconds(event_timestamps_microseconds[0]),
       1);
 
+  // Add the ACK_RWH component explicitly here with a timestamp, instead of
+  // calling tracker()->OnInputEventAck().
   latency_info.AddLatencyNumberWithTimestamp(
       ui::INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT, 0, 0,
       base::TimeTicks() +
           base::TimeDelta::FromMicroseconds(event_timestamps_microseconds[1]),
       1);
 
-  tracker()->OnInputEvent(event, &latency_info);
   // Call ComputeInputLatencyHistograms directly to avoid OnInputEventAck
   // overwriting components.
   tracker()->ComputeInputLatencyHistograms(

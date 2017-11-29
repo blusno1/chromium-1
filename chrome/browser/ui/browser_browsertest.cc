@@ -1246,7 +1246,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_TabClosingWhenRemovingExtension) {
       browser()->profile())->extension_service();
   service->UninstallExtension(GetExtension()->id(),
                               extensions::UNINSTALL_REASON_FOR_TESTING,
-                              base::Bind(&base::DoNothing),
                               NULL);
   EXPECT_EQ(1, observer.closing_count());
 
@@ -2000,11 +1999,49 @@ IN_PROC_BROWSER_TEST_F(BrowserTest2, NoTabsInPopups) {
 }
 #endif
 
-IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose1) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kDisablePopupBlocking);
   GURL url = ui_test_utils::GetTestUrl(
       base::FilePath(), base::FilePath().AppendASCII("window.close.html"));
+  GURL::Replacements add_query;
+  std::string query("test1");
+  add_query.SetQuery(query.c_str(), url::Component(0, query.length()));
+  url = url.ReplaceComponents(add_query);
+
+  base::string16 title = ASCIIToUTF16("Title Of Awesomeness");
+  content::TitleWatcher title_watcher(
+      browser()->tab_strip_model()->GetActiveWebContents(), title);
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(browser(), url, 2);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose2) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisablePopupBlocking);
+  GURL url = ui_test_utils::GetTestUrl(
+      base::FilePath(), base::FilePath().AppendASCII("window.close.html"));
+  GURL::Replacements add_query;
+  std::string query("test2");
+  add_query.SetQuery(query.c_str(), url::Component(0, query.length()));
+  url = url.ReplaceComponents(add_query);
+
+  base::string16 title = ASCIIToUTF16("Title Of Awesomeness");
+  content::TitleWatcher title_watcher(
+      browser()->tab_strip_model()->GetActiveWebContents(), title);
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(browser(), url, 2);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose3) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisablePopupBlocking);
+  GURL url = ui_test_utils::GetTestUrl(
+      base::FilePath(), base::FilePath().AppendASCII("window.close.html"));
+  GURL::Replacements add_query;
+  std::string query("test3");
+  add_query.SetQuery(query.c_str(), url::Component(0, query.length()));
+  url = url.ReplaceComponents(add_query);
 
   base::string16 title = ASCIIToUTF16("Title Of Awesomeness");
   content::TitleWatcher title_watcher(
@@ -2015,18 +2052,15 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose) {
 
 // TODO(linux_aura) http://crbug.com/163931
 // Mac disabled: http://crbug.com/169820
-#if !defined(OS_MACOSX) && \
-    !(defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA))
+#if !defined(OS_MACOSX) && !(defined(OS_LINUX) && !defined(OS_CHROMEOS))
 IN_PROC_BROWSER_TEST_F(BrowserTest, FullscreenBookmarkBar) {
   chrome::ToggleBookmarkBar(browser());
   EXPECT_EQ(BookmarkBar::SHOW, browser()->bookmark_bar_state());
   chrome::ToggleFullscreenMode(browser());
   EXPECT_TRUE(browser()->window()->IsFullscreen());
-#if defined(OS_MACOSX)
-  EXPECT_EQ(BookmarkBar::SHOW, browser()->bookmark_bar_state());
-#elif defined(OS_CHROMEOS)
-  // TODO(jamescook): If immersive fullscreen is disabled by default, test
-  // for BookmarkBar::HIDDEN.
+#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
+  // Mac and Chrome OS both have an "immersive style" fullscreen where the
+  // bookmark bar is visible when the top views slide down.
   EXPECT_EQ(BookmarkBar::SHOW, browser()->bookmark_bar_state());
 #else
   EXPECT_EQ(BookmarkBar::HIDDEN, browser()->bookmark_bar_state());

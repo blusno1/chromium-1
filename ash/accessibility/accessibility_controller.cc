@@ -14,6 +14,7 @@
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/system/tray/system_tray_notifier.h"
+#include "chromeos/audio/cras_audio_handler.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -28,13 +29,10 @@ using session_manager::SessionState;
 namespace ash {
 namespace {
 
-void NotifyAccessibilityStatusChanged() {
+void NotifyAccessibilityStatusChanged(
+    AccessibilityNotificationVisibility notification_visibility) {
   Shell::Get()->system_tray_notifier()->NotifyAccessibilityStatusChanged(
-      A11Y_NOTIFICATION_NONE);
-}
-
-PrefService* GetActivePrefService() {
-  return Shell::Get()->session_controller()->GetActivePrefService();
+      notification_visibility);
 }
 
 }  // namespace
@@ -54,28 +52,45 @@ void AccessibilityController::RegisterProfilePrefs(PrefRegistrySimple* registry,
                                                    bool for_test) {
   if (for_test) {
     // In tests there is no remote pref service. Make ash own the prefs.
+    registry->RegisterBooleanPref(prefs::kAccessibilityHighContrastEnabled,
+                                  false);
     registry->RegisterBooleanPref(prefs::kAccessibilityLargeCursorEnabled,
                                   false);
     registry->RegisterIntegerPref(prefs::kAccessibilityLargeCursorDipSize,
                                   kDefaultLargeCursorSize);
-    registry->RegisterBooleanPref(prefs::kAccessibilityHighContrastEnabled,
-                                  false);
+    registry->RegisterBooleanPref(prefs::kAccessibilityMonoAudioEnabled, false);
     registry->RegisterBooleanPref(prefs::kAccessibilityScreenMagnifierEnabled,
+                                  false);
+    registry->RegisterBooleanPref(prefs::kAccessibilitySpokenFeedbackEnabled,
                                   false);
     return;
   }
 
   // In production the prefs are owned by chrome.
   // TODO(jamescook): Move ownership to ash.
+  registry->RegisterForeignPref(prefs::kAccessibilityHighContrastEnabled);
   registry->RegisterForeignPref(prefs::kAccessibilityLargeCursorEnabled);
   registry->RegisterForeignPref(prefs::kAccessibilityLargeCursorDipSize);
-  registry->RegisterForeignPref(prefs::kAccessibilityHighContrastEnabled);
+  registry->RegisterForeignPref(prefs::kAccessibilityMonoAudioEnabled);
   registry->RegisterForeignPref(prefs::kAccessibilityScreenMagnifierEnabled);
+  registry->RegisterForeignPref(prefs::kAccessibilitySpokenFeedbackEnabled);
 }
 
 void AccessibilityController::BindRequest(
     mojom::AccessibilityControllerRequest request) {
   binding_.Bind(std::move(request));
+}
+
+void AccessibilityController::SetHighContrastEnabled(bool enabled) {
+  PrefService* prefs = GetActivePrefService();
+  if (!prefs)
+    return;
+  prefs->SetBoolean(prefs::kAccessibilityHighContrastEnabled, enabled);
+  prefs->CommitPendingWrite();
+}
+
+bool AccessibilityController::IsHighContrastEnabled() const {
+  return high_contrast_enabled_;
 }
 
 void AccessibilityController::SetLargeCursorEnabled(bool enabled) {
@@ -90,16 +105,32 @@ bool AccessibilityController::IsLargeCursorEnabled() const {
   return large_cursor_enabled_;
 }
 
-void AccessibilityController::SetHighContrastEnabled(bool enabled) {
+void AccessibilityController::SetMonoAudioEnabled(bool enabled) {
   PrefService* prefs = GetActivePrefService();
   if (!prefs)
     return;
-  prefs->SetBoolean(prefs::kAccessibilityHighContrastEnabled, enabled);
+  prefs->SetBoolean(prefs::kAccessibilityMonoAudioEnabled, enabled);
   prefs->CommitPendingWrite();
 }
 
-bool AccessibilityController::IsHighContrastEnabled() const {
-  return high_contrast_enabled_;
+bool AccessibilityController::IsMonoAudioEnabled() const {
+  return mono_audio_enabled_;
+}
+
+void AccessibilityController::SetSpokenFeedbackEnabled(
+    bool enabled,
+    AccessibilityNotificationVisibility notify) {
+  PrefService* prefs = GetActivePrefService();
+  if (!prefs)
+    return;
+  spoken_feedback_notification_ = notify;
+  prefs->SetBoolean(prefs::kAccessibilitySpokenFeedbackEnabled, enabled);
+  prefs->CommitPendingWrite();
+  spoken_feedback_notification_ = A11Y_NOTIFICATION_NONE;
+}
+
+bool AccessibilityController::IsSpokenFeedbackEnabled() const {
+  return spoken_feedback_enabled_;
 }
 
 void AccessibilityController::TriggerAccessibilityAlert(
@@ -123,6 +154,11 @@ void AccessibilityController::OnActiveUserPrefServiceChanged(
   ObservePrefs(prefs);
 }
 
+void AccessibilityController::SetPrefServiceForTest(PrefService* prefs) {
+  pref_service_for_test_ = prefs;
+  ObservePrefs(prefs);
+}
+
 void AccessibilityController::FlushMojoForTest() {
   client_.FlushForTesting();
 }
@@ -132,6 +168,10 @@ void AccessibilityController::ObservePrefs(PrefService* prefs) {
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(prefs);
   pref_change_registrar_->Add(
+      prefs::kAccessibilityHighContrastEnabled,
+      base::Bind(&AccessibilityController::UpdateHighContrastFromPref,
+                 base::Unretained(this)));
+  pref_change_registrar_->Add(
       prefs::kAccessibilityLargeCursorEnabled,
       base::Bind(&AccessibilityController::UpdateLargeCursorFromPref,
                  base::Unretained(this)));
@@ -140,13 +180,52 @@ void AccessibilityController::ObservePrefs(PrefService* prefs) {
       base::Bind(&AccessibilityController::UpdateLargeCursorFromPref,
                  base::Unretained(this)));
   pref_change_registrar_->Add(
-      prefs::kAccessibilityHighContrastEnabled,
-      base::Bind(&AccessibilityController::UpdateHighContrastFromPref,
+      prefs::kAccessibilityMonoAudioEnabled,
+      base::Bind(&AccessibilityController::UpdateMonoAudioFromPref,
+                 base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kAccessibilitySpokenFeedbackEnabled,
+      base::Bind(&AccessibilityController::UpdateSpokenFeedbackFromPref,
                  base::Unretained(this)));
 
   // Load current state.
-  UpdateLargeCursorFromPref();
   UpdateHighContrastFromPref();
+  UpdateLargeCursorFromPref();
+  UpdateMonoAudioFromPref();
+  UpdateSpokenFeedbackFromPref();
+}
+
+PrefService* AccessibilityController::GetActivePrefService() const {
+  if (pref_service_for_test_)
+    return pref_service_for_test_;
+  return Shell::Get()->session_controller()->GetActivePrefService();
+}
+
+void AccessibilityController::UpdateHighContrastFromPref() {
+  PrefService* prefs = GetActivePrefService();
+  const bool enabled =
+      prefs->GetBoolean(prefs::kAccessibilityHighContrastEnabled);
+
+  if (high_contrast_enabled_ == enabled)
+    return;
+
+  high_contrast_enabled_ = enabled;
+
+  NotifyAccessibilityStatusChanged(A11Y_NOTIFICATION_NONE);
+
+  // Under mash the UI service (window server) handles high contrast mode.
+  if (Shell::GetAshConfig() == Config::MASH) {
+    if (!connector_)  // Null in tests.
+      return;
+    ui::mojom::AccessibilityManagerPtr accessibility_ptr;
+    connector_->BindInterface(ui::mojom::kServiceName, &accessibility_ptr);
+    accessibility_ptr->SetHighContrastMode(enabled);
+    return;
+  }
+
+  // Under classic ash high contrast mode is handled internally.
+  Shell::Get()->high_contrast_controller()->SetEnabled(enabled);
+  Shell::Get()->UpdateCursorCompositingEnabled();
 }
 
 void AccessibilityController::UpdateLargeCursorFromPref() {
@@ -164,7 +243,7 @@ void AccessibilityController::UpdateLargeCursorFromPref() {
   large_cursor_enabled_ = enabled;
   large_cursor_size_in_dip_ = size;
 
-  NotifyAccessibilityStatusChanged();
+  NotifyAccessibilityStatusChanged(A11Y_NOTIFICATION_NONE);
 
   ShellPort::Get()->SetCursorSize(
       large_cursor_enabled_ ? ui::CursorSize::kLarge : ui::CursorSize::kNormal);
@@ -172,31 +251,33 @@ void AccessibilityController::UpdateLargeCursorFromPref() {
   Shell::Get()->UpdateCursorCompositingEnabled();
 }
 
-void AccessibilityController::UpdateHighContrastFromPref() {
+void AccessibilityController::UpdateMonoAudioFromPref() {
+  PrefService* prefs = GetActivePrefService();
+  const bool enabled = prefs->GetBoolean(prefs::kAccessibilityMonoAudioEnabled);
+
+  if (mono_audio_enabled_ == enabled)
+    return;
+
+  mono_audio_enabled_ = enabled;
+
+  NotifyAccessibilityStatusChanged(A11Y_NOTIFICATION_NONE);
+  chromeos::CrasAudioHandler::Get()->SetOutputMonoEnabled(enabled);
+}
+
+void AccessibilityController::UpdateSpokenFeedbackFromPref() {
   PrefService* prefs = GetActivePrefService();
   const bool enabled =
-      prefs->GetBoolean(prefs::kAccessibilityHighContrastEnabled);
+      prefs->GetBoolean(prefs::kAccessibilitySpokenFeedbackEnabled);
 
-  if (high_contrast_enabled_ == enabled)
+  if (spoken_feedback_enabled_ == enabled)
     return;
 
-  high_contrast_enabled_ = enabled;
+  spoken_feedback_enabled_ = enabled;
 
-  NotifyAccessibilityStatusChanged();
-
-  // Under mash the UI service (window server) handles high contrast mode.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    if (!connector_)  // Null in tests.
-      return;
-    ui::mojom::AccessibilityManagerPtr accessibility_ptr;
-    connector_->BindInterface(ui::mojom::kServiceName, &accessibility_ptr);
-    accessibility_ptr->SetHighContrastMode(enabled);
-    return;
-  }
-
-  // Under classic ash high contrast mode is handled internally.
-  Shell::Get()->high_contrast_controller()->SetEnabled(enabled);
-  Shell::Get()->UpdateCursorCompositingEnabled();
+  NotifyAccessibilityStatusChanged(spoken_feedback_notification_);
+  // TODO(warx): Chrome observes prefs change and turns on/off spoken feedback.
+  // Define a mojo call to control toggling spoken feedback (ChromeVox) once
+  // prefs ownership and registration is moved to ash.
 }
 
 }  // namespace ash

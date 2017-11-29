@@ -28,6 +28,10 @@
 #include "services/service_manager/sandbox/linux/bpf_gpu_policy_linux.h"
 #include "services/service_manager/sandbox/linux/sandbox_linux.h"
 
+#if BUILDFLAG(USE_VAAPI)
+#include <va/va_version.h>
+#endif
+
 using sandbox::bpf_dsl::Policy;
 using sandbox::syscall_broker::BrokerFilePermission;
 using sandbox::syscall_broker::BrokerProcess;
@@ -77,6 +81,14 @@ inline bool UseV4L2Codec() {
 
 inline bool UseLibV4L2() {
 #if BUILDFLAG(USE_LIBV4L2)
+  return true;
+#else
+  return false;
+#endif
+}
+
+inline bool IsLibVAVersion2() {
+#if BUILDFLAG(USE_VAAPI) && VA_MAJOR_VERSION == 1
   return true;
 #else
   return false;
@@ -171,7 +183,7 @@ void AddStandardGpuWhiteList(std::vector<BrokerFilePermission>* permissions) {
 
   // For shared memory.
   permissions->push_back(
-      BrokerFilePermission::ReadWriteCreateUnlinkRecursive(kDevShm));
+      BrokerFilePermission::ReadWriteCreateTemporaryRecursive(kDevShm));
 
   // For DRI cards.
   for (int i = 0; i <= 9; ++i) {
@@ -226,7 +238,12 @@ bool LoadAmdGpuLibraries() {
     LOG(ERROR) << "dlopen(libglapi.so) failed with error: " << dlerror();
     return false;
   }
-  if (nullptr == dlopen("/usr/lib64/dri/radeonsi_dri.so", dlopen_flag)) {
+
+  const char* radeonsi_lib = "/usr/lib64/dri/radeonsi_dri.so";
+#if defined(DRI_DRIVER_DIR)
+  radeonsi_lib = DRI_DRIVER_DIR "/radeonsi_dri.so";
+#endif
+  if (nullptr == dlopen(radeonsi_lib, dlopen_flag)) {
     LOG(ERROR) << "dlopen(radeonsi_dri.so) failed with error: " << dlerror();
     return false;
   }
@@ -249,23 +266,40 @@ void LoadStandardLibraries(
     // inside the sandbox, so preload them now.
     if (options.vaapi_accelerated_video_encode_enabled ||
         options.accelerated_video_decode_enabled) {
-      const char* I965DrvVideoPath = nullptr;
-      const char* I965HybridDrvVideoPath = nullptr;
-      if (IsArchitectureX86_64()) {
-        I965DrvVideoPath = "/usr/lib64/va/drivers/i965_drv_video.so";
-        I965HybridDrvVideoPath = "/usr/lib64/va/drivers/hybrid_drv_video.so";
-      } else if (IsArchitectureI386()) {
-        I965DrvVideoPath = "/usr/lib/va/drivers/i965_drv_video.so";
-      }
-      dlopen(I965DrvVideoPath, dlopen_flag);
-      if (I965HybridDrvVideoPath)
-        dlopen(I965HybridDrvVideoPath, dlopen_flag);
-      dlopen("libva.so.1", dlopen_flag);
+      if (IsLibVAVersion2()) {
+        if (IsArchitectureX86_64()) {
+          dlopen("/usr/lib64/va/drivers/i965_drv_video.so", dlopen_flag);
+          dlopen("/usr/lib64/va/drivers/hybrid_drv_video.so", dlopen_flag);
+        } else if (IsArchitectureI386()) {
+          dlopen("/usr/lib/va/drivers/i965_drv_video.so", dlopen_flag);
+        }
+        dlopen("libva.so.2", dlopen_flag);
 #if defined(USE_OZONE)
-      dlopen("libva-drm.so.1", dlopen_flag);
-#elif defined(USE_X11)
-      dlopen("libva-x11.so.1", dlopen_flag);
+        dlopen("libva-drm.so.2", dlopen_flag);
 #endif
+      } else {
+        // If we are linked against libva 1, we have two cases to handle:
+        // - the sysroot includes both libva 1 and 2, in which case the drivers
+        //   are in /usr/lib{64}/va1/
+        // - the sysroot only includes libva 1, in which case the drivers are
+        //   are in /usr/lib{64}/va/
+        // This is ugly, but temporary until all builds have switched to libva 2.
+        if (IsArchitectureX86_64()) {
+          if (!dlopen("/usr/lib64/va1/drivers/i965_drv_video.so", dlopen_flag))
+            dlopen("/usr/lib64/va/drivers/i965_drv_video.so", dlopen_flag);
+          if (!dlopen("/usr/lib64/va1/drivers/hybrid_drv_video.so", dlopen_flag))
+            dlopen("/usr/lib64/va/drivers/hybrid_drv_video.so", dlopen_flag);
+        } else if (IsArchitectureI386()) {
+          if (!dlopen("/usr/lib/va1/drivers/i965_drv_video.so", dlopen_flag))
+            dlopen("/usr/lib/va/drivers/i965_drv_video.so", dlopen_flag);
+        }
+        dlopen("libva.so.1", dlopen_flag);
+#if defined(USE_OZONE)
+        dlopen("libva-drm.so.1", dlopen_flag);
+#elif defined(USE_X11)
+        dlopen("libva-x11.so.1", dlopen_flag);
+#endif
+      }
     }
   }
 }
@@ -300,12 +334,17 @@ bool BrokerProcessPreSandboxHook(
 
 bool GpuProcessPreSandboxHook(service_manager::BPFBasePolicy* policy,
                               service_manager::SandboxLinux::Options options) {
-  service_manager::SandboxLinux::GetInstance()->StartBrokerProcess(
-      policy, FilePermissionsForGpu(options),
-      base::BindOnce(BrokerProcessPreSandboxHook), options);
+  auto* instance = service_manager::SandboxLinux::GetInstance();
+  instance->StartBrokerProcess(policy, FilePermissionsForGpu(options),
+                               base::BindOnce(BrokerProcessPreSandboxHook),
+                               options);
 
   if (!LoadLibrariesForGpu(options))
     return false;
+
+  // TODO(tsepez): enable once we can proxy the stat(), readlink() syscalls.
+  if (!IsChromeOS() || !options.use_amd_specific_policies)
+    instance->EngageNamespaceSandbox(false /* from_zygote */);
 
   errno = 0;
   return true;

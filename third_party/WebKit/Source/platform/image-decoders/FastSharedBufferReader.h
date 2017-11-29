@@ -31,11 +31,11 @@
 #ifndef FastSharedBufferReader_h
 #define FastSharedBufferReader_h
 
+#include "base/memory/scoped_refptr.h"
 #include "platform/PlatformExport.h"
 #include "platform/image-decoders/SegmentReader.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Noncopyable.h"
-#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
@@ -68,7 +68,7 @@ class PLATFORM_EXPORT FastSharedBufferReader final {
   // Returns a byte at |data_position|.
   // Caller must ensure there are enough bytes in |data_|.
   inline char GetOneByte(size_t data_position) const {
-    return *GetConsecutiveData(data_position, 1, 0);
+    return *GetConsecutiveData(data_position, 1, nullptr);
   }
 
   size_t size() const { return data_->size(); }

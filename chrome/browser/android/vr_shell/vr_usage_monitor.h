@@ -54,11 +54,12 @@ class SessionTimer {
 // This class is not thread-safe and must only be used from the main thread.
 class VrMetricsHelper : public content::WebContentsObserver {
  public:
-  explicit VrMetricsHelper(content::WebContents* contents);
+  explicit VrMetricsHelper(content::WebContents* contents, VRMode initial_mode);
   ~VrMetricsHelper() override;
 
   void SetWebVREnabled(bool is_webvr_presenting);
   void SetVRActive(bool is_vr_enabled);
+  void RecordVoiceSearchStarted();
 
  private:
   // WebContentObserver
@@ -90,6 +91,7 @@ class VrMetricsHelper : public content::WebContentsObserver {
   int num_videos_playing_ = 0;
   int num_session_navigation_ = 0;
   int num_session_video_playback_ = 0;
+  int num_voice_search_started_ = 0;
 
   GURL origin_;
 };

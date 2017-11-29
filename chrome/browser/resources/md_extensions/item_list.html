@@ -14,8 +14,10 @@
       }
 
       #container {
+        box-sizing: border-box;
         height: 100%;
         overflow: overlay;
+        padding: 24px 60px 64px;
       }
 
       .empty-list-message {
@@ -37,7 +39,6 @@
         margin: auto;
         max-width: calc(var(--extensions-card-width) * var(--max-columns) +
             var(--grid-gutter) * var(--max-columns));
-        padding: calc(var(--grid-gutter) / 2);
       }
 
       extensions-item {
@@ -47,6 +48,7 @@
 
       #app-title {
         @apply(--cr-title-text);
+        margin-bottom: 6px;
         margin-top: 20px;
       }
     </style>
@@ -73,8 +75,8 @@
             filter="[[computeFilter_(filter)]]"
             rendered-item-count="{{shownExtensionsCount_::dom-change}}"
             notify-dom-change>
-          <extensions-item data="[[item]]" delegate="[[delegate]]"
-              in-dev-mode="[[inDevMode]]">
+          <extensions-item id="[[item.id]]" data="[[item]]"
+              delegate="[[delegate]]" in-dev-mode="[[inDevMode]]">
           </extensions-item>
         </template>
       </div>
@@ -87,8 +89,8 @@
               filter="[[computeFilter_(filter)]]"
               rendered-item-count="{{shownAppsCount_::dom-change}}"
               notify-dom-change>
-            <extensions-item data="[[item]]" delegate="[[delegate]]"
-                in-dev-mode="[[inDevMode]]">
+            <extensions-item id="[[item.id]]" data="[[item]]"
+                delegate="[[delegate]]" in-dev-mode="[[inDevMode]]">
             </extensions-item>
           </template>
         </div>

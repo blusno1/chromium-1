@@ -5,6 +5,7 @@
 #include "services/ui/public/cpp/gpu/gpu.h"
 
 #include "base/callback_helpers.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/scoped_task_environment.h"
@@ -42,7 +43,7 @@ class TestGpuImpl : public mojom::Gpu {
   }
 
   void CreateJpegDecodeAccelerator(
-      media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) override {}
+      media::mojom::JpegDecodeAcceleratorRequest jda_request) override {}
 
   void CreateVideoEncodeAcceleratorProvider(
       media::mojom::VideoEncodeAcceleratorProviderRequest request) override {}

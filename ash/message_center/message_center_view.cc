@@ -62,7 +62,6 @@ bool MessageCenterView::disable_animation_for_testing = false;
 
 namespace {
 
-constexpr int kDefaultAnimationDurationMs = 500;
 constexpr int kMinScrollViewHeight = 77;
 constexpr int kEmptyViewHeight = 96;
 constexpr gfx::Insets kEmptyViewPadding(0, 0, 24, 0);
@@ -471,6 +470,14 @@ void MessageCenterView::ClickOnNotificationButton(
   message_center_->ClickOnNotificationButton(notification_id, button_index);
 }
 
+void MessageCenterView::ClickOnNotificationButtonWithReply(
+    const std::string& notification_id,
+    int button_index,
+    const base::string16& reply) {
+  message_center_->ClickOnNotificationButtonWithReply(notification_id,
+                                                      button_index, reply);
+}
+
 void MessageCenterView::ClickOnSettingsButton(
     const std::string& notification_id) {
   message_center_->ClickOnSettingsButton(notification_id);
@@ -501,6 +508,8 @@ void MessageCenterView::AnimationEnded(const gfx::Animation* animation) {
   }
   if (target_view_)
     target_view_->SetVisible(true);
+  if (settings_transition_animation_)
+    NotifyAnimationState(false /* animating */);
   settings_transition_animation_.reset();
   PreferredSizeChanged();
   Layout();
@@ -616,8 +625,11 @@ void MessageCenterView::SetVisibilityMode(Mode mode, bool animate) {
     return;
   }
 
+  NotifyAnimationState(true /* animating */);
+
   settings_transition_animation_ = std::make_unique<gfx::SlideAnimation>(this);
-  settings_transition_animation_->SetSlideDuration(kDefaultAnimationDurationMs);
+  settings_transition_animation_->SetSlideDuration(
+      message_center_style::kSettingsTransitionDurationMs);
   settings_transition_animation_->SetTweenType(gfx::Tween::EASE_IN_OUT);
   settings_transition_animation_->Show();
 }
@@ -680,6 +692,21 @@ void MessageCenterView::UpdateNotification(const std::string& id) {
 
   // Notify accessibility that the contents have changed.
   view->NotifyAccessibilityEvent(ui::AX_EVENT_CHILDREN_CHANGED, false);
+}
+
+void MessageCenterView::NotifyAnimationState(bool animating) {
+  size_t count = message_list_view_->GetNotificationCount();
+  for (size_t i = 0; i < count; ++i) {
+    MessageView* view = message_list_view_->GetNotificationAt(i);
+
+    if (animating)
+      view->OnContainerAnimationStarted();
+    else
+      view->OnContainerAnimationEnded();
+
+    // Ensure that a notification is not removed or added during iteration.
+    DCHECK_EQ(count, message_list_view_->GetNotificationCount());
+  }
 }
 
 int MessageCenterView::GetSettingsHeightForWidth(int width) const {

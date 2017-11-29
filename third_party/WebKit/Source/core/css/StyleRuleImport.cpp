@@ -49,7 +49,7 @@ StyleRuleImport::StyleRuleImport(const String& href,
     media_queries_ = MediaQuerySet::Create(String());
 }
 
-StyleRuleImport::~StyleRuleImport() {}
+StyleRuleImport::~StyleRuleImport() = default;
 
 void StyleRuleImport::Dispose() {
   if (resource_)
@@ -75,7 +75,12 @@ void StyleRuleImport::SetCSSStyleSheet(
     style_sheet_->ClearOwnerRule();
 
   Document* document = nullptr;
-  const CSSParserContext* context = StrictCSSParserContext();
+
+  // Fallback to an insecure context parser if we don't have a parent style
+  // sheet.
+  const CSSParserContext* context =
+      StrictCSSParserContext(SecureContextMode::kInsecureContext);
+
   if (parent_style_sheet_) {
     document = parent_style_sheet_->SingleOwnerDocument();
     context = parent_style_sheet_->ParserContext();

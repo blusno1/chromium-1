@@ -181,6 +181,7 @@ ResourceProvider::ResourceProvider(
       tracing_id_(g_next_resource_provider_tracing_id.GetNext()) {
   DCHECK(resource_settings.texture_id_allocation_chunk_size);
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK_GT(next_id_, viz::kInvalidResourceId);
 
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
   // Don't register a dump provider in these cases.
@@ -472,31 +473,6 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
   if (!lost_resource && resource->origin == viz::internal::Resource::INTERNAL)
     WaitSyncTokenInternal(resource);
 
-  if (resource->origin == viz::internal::Resource::EXTERNAL) {
-    gpu::SyncToken sync_token = resource->sync_token();
-    if (resource->is_gpu_resource_type()) {
-      DCHECK(!resource->mailbox.IsZero());
-      GLES2Interface* gl = ContextGL();
-      DCHECK(gl);
-      if (resource->gl_id) {
-        DCHECK_NE(viz::internal::Resource::NEEDS_WAIT,
-                  resource->synchronization_state());
-        gl->DeleteTextures(1, &resource->gl_id);
-        resource->gl_id = 0;
-        if (!lost_resource) {
-          const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
-          gl->ShallowFlushCHROMIUM();
-          gl->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
-        }
-      }
-    } else {
-      DCHECK(resource->shared_bitmap);
-      resource->shared_bitmap = nullptr;
-      resource->pixels = nullptr;
-    }
-    resource->release_callback.Run(sync_token, lost_resource);
-  }
-
   if (resource->image_id) {
     DCHECK_EQ(resource->origin, viz::internal::Resource::INTERNAL);
     GLES2Interface* gl = ContextGL();
@@ -512,7 +488,6 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
   }
 
   if (resource->owned_shared_bitmap) {
-    DCHECK_NE(resource->origin, viz::internal::Resource::EXTERNAL);
     DCHECK_EQ(viz::ResourceType::kBitmap, resource->type);
     resource->shared_bitmap = nullptr;
     resource->pixels = nullptr;
@@ -520,7 +495,6 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
   }
 
   if (resource->gpu_memory_buffer) {
-    DCHECK_NE(resource->origin, viz::internal::Resource::EXTERNAL);
     DCHECK_EQ(viz::ResourceType::kGpuMemoryBuffer, resource->type);
     resource->gpu_memory_buffer = nullptr;
   }
@@ -653,7 +627,7 @@ bool ResourceProvider::IsBackedBySurfaceTexture(viz::ResourceId id) {
   return resource->is_backed_by_surface_texture;
 }
 
-bool ResourceProvider::WantsPromotionHint(viz::ResourceId id) {
+bool ResourceProvider::WantsPromotionHintForTesting(viz::ResourceId id) {
   return wants_promotion_hints_set_.count(id) > 0;
 }
 
@@ -1056,12 +1030,6 @@ GLenum ResourceProvider::GetImageTextureTarget(
       viz::BufferToTextureTargetKey(usage, buffer_format));
   DCHECK(found != buffer_to_texture_target_map_.end());
   return found->second;
-}
-
-void ResourceProvider::ValidateResource(viz::ResourceId id) const {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(id);
-  DCHECK(resources_.find(id) != resources_.end());
 }
 
 GLES2Interface* ResourceProvider::ContextGL() const {

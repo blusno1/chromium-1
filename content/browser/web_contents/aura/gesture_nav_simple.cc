@@ -138,7 +138,6 @@ class Arrow : public ui::LayerDelegate {
  private:
   // ui::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override;
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override;
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                   float new_device_scale_factor) override;
 
@@ -184,8 +183,6 @@ void Arrow::OnPaintLayer(const ui::PaintContext& context) {
   gfx::Canvas* canvas = recorder.canvas();
   canvas->DrawImageInt(image, 0, 0);
 }
-
-void Arrow::OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) {}
 
 void Arrow::OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                        float new_device_scale_factor) {}
@@ -242,7 +239,6 @@ class Affordance : public ui::LayerDelegate, public gfx::AnimationDelegate {
 
   // ui::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override;
-  void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override;
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                   float new_device_scale_factor) override;
 
@@ -378,9 +374,14 @@ void Affordance::UpdatePaintedLayer() {
 }
 
 void Affordance::UpdateArrowLayer() {
-  const float progress = std::min(1.f, GetAffordanceProgress());
+  const float progress = GetAffordanceProgress();
+  const float capped_progress = std::min(1.f, progress);
   gfx::Transform transform;
   if (mode_ == OVERSCROLL_SOUTH) {
+    // For pull-to-refresh, the arrow should rotate starting from
+    // |kReloadArrowInitialRotation| until it reaches 0 when |progress| reaches
+    // 1; i.e., activation threshold. The arrow will continue rotation after
+    // activation threshold.
     gfx::Vector2dF offset(kArrowSize / 2.f, kArrowSize / 2.f);
     transform.Translate(offset);
     transform.Rotate(kReloadArrowInitialRotation * (1 - progress));
@@ -388,7 +389,7 @@ void Affordance::UpdateArrowLayer() {
   } else {
     // Calculate the offset for the arrow relative to its final position.
     const float offset =
-        (1 - progress) * (-kBackgroundRadius + kArrowSize / 2.f);
+        (1 - capped_progress) * (-kBackgroundRadius + kArrowSize / 2.f);
     transform.Translate(
         gfx::Vector2dF(mode_ == OVERSCROLL_EAST ? offset : -offset, 0));
   }
@@ -398,10 +399,10 @@ void Affordance::UpdateArrowLayer() {
   // kArrowOpacityProgressThreshold and after that increases linearly to 1;
   // essentially, making a quick bump at the end.
   float opacity = kArrowInitialOpacity;
-  if (progress > kArrowOpacityProgressThreshold) {
+  if (capped_progress > kArrowOpacityProgressThreshold) {
     const float max_opacity_bump = kArrowFullOpacity - kArrowInitialOpacity;
     const float opacity_bump_ratio =
-        std::min(1.f, (progress - kArrowOpacityProgressThreshold) /
+        std::min(1.f, (capped_progress - kArrowOpacityProgressThreshold) /
                           (1.f - kArrowOpacityProgressThreshold));
     opacity += opacity_bump_ratio * max_opacity_bump;
   }
@@ -503,8 +504,6 @@ void Affordance::OnPaintLayer(const ui::PaintContext& context) {
   bg_flags.setLooper(gfx::CreateShadowDrawLooper(shadow));
   canvas->DrawCircle(center_point, kBackgroundRadius, bg_flags);
 }
-
-void Affordance::OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) {}
 
 void Affordance::OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                             float new_device_scale_factor) {}

@@ -253,12 +253,12 @@ void WebURLRequest::SetRequestorID(int requestor_id) {
   resource_request_->SetRequestorID(requestor_id);
 }
 
-int WebURLRequest::RequestorProcessID() const {
-  return resource_request_->RequestorProcessID();
+int WebURLRequest::GetPluginChildID() const {
+  return resource_request_->GetPluginChildID();
 }
 
-void WebURLRequest::SetRequestorProcessID(int requestor_process_id) {
-  resource_request_->SetRequestorProcessID(requestor_process_id);
+void WebURLRequest::SetPluginChildID(int plugin_child_id) {
+  resource_request_->SetPluginChildID(plugin_child_id);
 }
 
 int WebURLRequest::AppCacheHostID() const {
@@ -400,6 +400,11 @@ void WebURLRequest::SetUiStartTime(double time_seconds) {
 
 bool WebURLRequest::IsExternalRequest() const {
   return resource_request_->IsExternalRequest();
+}
+
+network::mojom::CORSPreflightPolicy WebURLRequest::GetCORSPreflightPolicy()
+    const {
+  return resource_request_->CORSPreflightPolicy();
 }
 
 WebURLRequest::LoadingIPCType WebURLRequest::GetLoadingIPCType() const {

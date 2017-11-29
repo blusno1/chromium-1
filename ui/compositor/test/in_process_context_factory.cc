@@ -22,7 +22,6 @@
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/output_surface_client.h"
 #include "components/viz/service/display/output_surface_frame.h"
-#include "components/viz/service/display/texture_mailbox_deleter.h"
 #include "components/viz/service/frame_sinks/direct_layer_tree_frame_sink.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "gpu/command_buffer/client/context_support.h"
@@ -201,8 +200,9 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
     }
   }
   if (!shared_worker_context_provider_ || shared_worker_context_provider_lost) {
+    constexpr bool support_locking = true;
     shared_worker_context_provider_ = InProcessContextProvider::CreateOffscreen(
-        &gpu_memory_buffer_manager_, &image_factory_, nullptr);
+        &gpu_memory_buffer_manager_, &image_factory_, nullptr, support_locking);
     auto result = shared_worker_context_provider_->BindToCurrentThread();
     if (result != gpu::ContextResult::kSuccess)
       shared_worker_context_provider_ = nullptr;
@@ -223,11 +223,12 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
   if (!data)
     data = CreatePerCompositorData(compositor.get());
 
+  constexpr bool support_locking = false;
   scoped_refptr<InProcessContextProvider> context_provider =
       InProcessContextProvider::Create(
           attribs, shared_worker_context_provider_.get(),
           &gpu_memory_buffer_manager_, &image_factory_, data->surface_handle,
-          "UICompositor");
+          "UICompositor", support_locking);
 
   std::unique_ptr<viz::OutputSurface> display_output_surface;
   if (use_test_surface_) {
@@ -252,7 +253,7 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
         base::TimeDelta::FromMicroseconds(base::Time::kMicrosecondsPerSecond /
                                           refresh_rate_));
     begin_frame_source = std::make_unique<viz::DelayBasedBeginFrameSource>(
-        std::move(time_source));
+        std::move(time_source), viz::BeginFrameSource::kNotRestartableId);
   }
   auto scheduler = std::make_unique<viz::DisplayScheduler>(
       begin_frame_source.get(), compositor->task_runner().get(),
@@ -261,9 +262,7 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
   data->display = std::make_unique<viz::Display>(
       &shared_bitmap_manager_, &gpu_memory_buffer_manager_, renderer_settings_,
       compositor->frame_sink_id(), std::move(display_output_surface),
-      std::move(scheduler),
-      std::make_unique<viz::TextureMailboxDeleter>(
-          compositor->task_runner().get()));
+      std::move(scheduler), compositor->task_runner());
   GetFrameSinkManager()->RegisterBeginFrameSource(begin_frame_source.get(),
                                                   compositor->frame_sink_id());
   // Note that we are careful not to destroy a prior |data->begin_frame_source|
@@ -297,8 +296,9 @@ InProcessContextFactory::SharedMainThreadContextProvider() {
           GL_NO_ERROR)
     return shared_main_thread_contexts_;
 
+  constexpr bool support_locking = false;
   shared_main_thread_contexts_ = InProcessContextProvider::CreateOffscreen(
-      &gpu_memory_buffer_manager_, &image_factory_, nullptr);
+      &gpu_memory_buffer_manager_, &image_factory_, nullptr, support_locking);
   auto result = shared_main_thread_contexts_->BindToCurrentThread();
   if (result != gpu::ContextResult::kSuccess)
     shared_main_thread_contexts_ = NULL;

@@ -128,6 +128,7 @@ class ChromeContentRendererClient
   bool HasErrorPage(int http_status_code) override;
   bool ShouldSuppressErrorPage(content::RenderFrame* render_frame,
                                const GURL& url) override;
+  bool ShouldTrackUseCounter(const GURL& url) override;
   void GetNavigationErrorStrings(content::RenderFrame* render_frame,
                                  const blink::WebURLRequest& failed_request,
                                  const blink::WebURLError& error,
@@ -167,7 +168,7 @@ class ChromeContentRendererClient
   blink::WebPrescientNetworking* GetPrescientNetworking() override;
   bool ShouldOverridePageVisibilityState(
       const content::RenderFrame* render_frame,
-      blink::WebPageVisibilityState* override_state) override;
+      blink::mojom::PageVisibilityState* override_state) override;
   bool IsExternalPepperPlugin(const std::string& module_name) override;
   std::unique_ptr<blink::WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle() override;
@@ -238,7 +239,8 @@ class ChromeContentRendererClient
 
 #if BUILDFLAG(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
   static bool IsExtensionOrSharedModuleWhitelisted(
-      const GURL& url, const std::set<std::string>& whitelist);
+      const GURL& url,
+      const std::set<std::string>& whitelist);
 #endif
 
  private:

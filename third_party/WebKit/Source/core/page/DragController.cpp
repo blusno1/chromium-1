@@ -28,6 +28,7 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "build/build_config.h"
 #include "core/clipboard/DataObject.h"
@@ -85,8 +86,7 @@
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CurrentTime.h"
-#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebDragData.h"
 #include "public/platform/WebDragOperation.h"

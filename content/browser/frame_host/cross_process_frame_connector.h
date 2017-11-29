@@ -9,6 +9,7 @@
 
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
+#include "components/viz/common/surfaces/surface_id.h"
 #include "content/browser/renderer_host/frame_connector_delegate.h"
 #include "content/common/content_export.h"
 
@@ -77,7 +78,6 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   void RenderProcessGone() override;
   void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
                             const viz::SurfaceSequence& sequence) override;
-  gfx::Rect ChildFrameRect() override;
   void UpdateCursor(const WebCursor& cursor) override;
   gfx::PointF TransformPointToRootCoordSpace(
       const gfx::PointF& point,
@@ -100,6 +100,8 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   void UnlockMouse() override;
   bool IsInert() const override;
   bool IsHidden() const override;
+  bool IsThrottled() const override;
+  bool IsSubtreeThrottled() const override;
 #if defined(USE_AURA)
   void EmbedRendererWindowTreeClientInParent(
       ui::mojom::WindowTreeClientPtr window_tree_client) override;
@@ -110,6 +112,8 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   // Set the visibility of immediate child views, i.e. views whose parent view
   // is |view_|.
   void SetVisibilityForChildViews(bool visible) const override;
+
+  void SetRect(const gfx::Rect& frame_rect_in_pixels) override;
 
   // Exposed for tests.
   RenderWidgetHostViewBase* GetRootRenderWidgetHostViewForTesting() {
@@ -127,15 +131,15 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   void OnUpdateResizeParams(const gfx::Rect& frame_rect,
                             const ScreenInfo& screen_info,
                             uint64_t sequence_number,
-                            const viz::LocalSurfaceId& local_surface_id);
+                            const viz::SurfaceId& surface_id);
   void OnUpdateViewportIntersection(const gfx::Rect& viewport_intersection);
   void OnVisibilityChanged(bool visible);
   void OnSetIsInert(bool);
+  void OnUpdateRenderThrottlingStatus(bool is_throttled,
+                                      bool subtree_throttled);
   void OnSatisfySequence(const viz::SurfaceSequence& sequence);
   void OnRequireSequence(const viz::SurfaceId& id,
                          const viz::SurfaceSequence& sequence);
-
-  void SetRect(const gfx::Rect& frame_rect);
 
   // The RenderFrameProxyHost that routes messages to the parent frame's
   // renderer process.
@@ -144,15 +148,22 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   // The RenderWidgetHostView for the frame. Initially NULL.
   RenderWidgetHostViewChildFrame* view_;
 
-  gfx::Rect frame_rect_;
-  gfx::Rect frame_rect_in_dip_;
   bool is_inert_ = false;
+
+  bool is_throttled_ = false;
+  bool subtree_throttled_ = false;
 
   // Visibility state of the corresponding frame owner element in parent process
   // which is set through CSS.
   bool is_hidden_ = false;
 
   bool is_scroll_bubbling_;
+
+  // The last frame rect received from the parent renderer.
+  // |last_received_frame_rect_| may be in DIP if use zoom for DSF is off.
+  gfx::Rect last_received_frame_rect_;
+
+  DISALLOW_COPY_AND_ASSIGN(CrossProcessFrameConnector);
 };
 
 }  // namespace content

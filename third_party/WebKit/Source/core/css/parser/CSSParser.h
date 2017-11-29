@@ -15,7 +15,6 @@ namespace blink {
 
 class Color;
 class CSSParserObserver;
-class CSSParserTokenRange;
 class CSSSelectorList;
 class Element;
 class ImmutableCSSPropertyValueSet;
@@ -23,6 +22,7 @@ class StyleRuleBase;
 class StyleRuleKeyframe;
 class StyleSheetContents;
 class CSSValue;
+enum class SecureContextMode;
 
 // This class serves as the public API for the css/parser subsystem
 class CORE_EXPORT CSSParser {
@@ -51,12 +51,14 @@ class CORE_EXPORT CSSParser {
       MutableCSSPropertyValueSet*,
       CSSPropertyID unresolved_property,
       const String&,
-      bool important);
+      bool important,
+      SecureContextMode);
   static MutableCSSPropertyValueSet::SetResult ParseValue(
       MutableCSSPropertyValueSet*,
       CSSPropertyID unresolved_property,
       const String&,
       bool important,
+      SecureContextMode,
       StyleSheetContents*);
 
   static MutableCSSPropertyValueSet::SetResult ParseValueForCustomProperty(
@@ -65,16 +67,14 @@ class CORE_EXPORT CSSParser {
       const PropertyRegistry*,
       const String& value,
       bool important,
+      SecureContextMode,
       StyleSheetContents*,
       bool is_animation_tainted);
-  static ImmutableCSSPropertyValueSet* ParseCustomPropertySet(
-      CSSParserTokenRange);
 
   // This is for non-shorthands only
-  static const CSSValue* ParseSingleValue(
-      CSSPropertyID,
-      const String&,
-      const CSSParserContext* = StrictCSSParserContext());
+  static const CSSValue* ParseSingleValue(CSSPropertyID,
+                                          const String&,
+                                          const CSSParserContext*);
 
   static const CSSValue* ParseFontFaceDescriptor(CSSPropertyID,
                                                  const String&,
@@ -88,7 +88,7 @@ class CORE_EXPORT CSSParser {
   static StyleRuleKeyframe* ParseKeyframeRule(const CSSParserContext*,
                                               const String&);
 
-  static bool ParseSupportsCondition(const String&);
+  static bool ParseSupportsCondition(const String&, SecureContextMode);
 
   // The color will only be changed when string contains a valid CSS color, so
   // callers can set it to a default color and ignore the boolean result.

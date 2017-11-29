@@ -37,7 +37,7 @@
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
-#include "services/network/public/cpp/url_loader_status.h"
+#include "services/network/public/cpp/url_loader_completion_status.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "url/gurl.h"
@@ -173,7 +173,7 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
         shared_memory->handle().Duplicate();
     EXPECT_TRUE(duplicate_handle.IsValid());
     EXPECT_TRUE(dispatcher_->OnMessageReceived(ResourceMsg_SetDataBuffer(
-        request_id, duplicate_handle, shared_memory->requested_size(), 0)));
+        request_id, duplicate_handle, shared_memory->requested_size())));
   }
 
   void NotifyDataReceived(int request_id, const std::string& data) {
@@ -193,7 +193,7 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
   }
 
   void NotifyRequestComplete(int request_id, size_t total_size) {
-    network::URLLoaderStatus status;
+    network::URLLoaderCompletionStatus status;
     status.error_code = net::OK;
     status.exists_in_cache = false;
     status.encoded_data_length = total_size;
@@ -398,8 +398,12 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
 
   std::unique_ptr<RequestPeer> OnReceivedResponse(
       std::unique_ptr<RequestPeer> current_peer,
-      const std::string& mime_type,
-      const GURL& url) override {
+      int render_frame_id,
+      const GURL& url,
+      const GURL& referrer,
+      const std::string& method,
+      ResourceType resource_type,
+      const ResourceResponseHead& response_head) override {
     return std::make_unique<WrapperPeer>(std::move(current_peer));
   }
 
@@ -426,7 +430,8 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
     }
     void OnTransferSizeUpdated(int transfer_size_diff) override {}
 
-    void OnCompletedRequest(const network::URLLoaderStatus& status) override {
+    void OnCompletedRequest(
+        const network::URLLoaderCompletionStatus& status) override {
       original_peer_->OnReceivedResponse(response_info_);
       if (!data_.empty()) {
         original_peer_->OnReceivedData(

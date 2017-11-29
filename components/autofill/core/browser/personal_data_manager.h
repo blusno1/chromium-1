@@ -28,7 +28,6 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
 #include "components/webdata/common/web_data_service_consumer.h"
-#include "net/url_request/url_request_context_getter.h"
 
 class AccountTrackerService;
 class Browser;
@@ -80,7 +79,7 @@ class PersonalDataManager : public KeyedService,
 
   // Called once the sync service is known to be instantiated. Note that it may
   // not be started, but it's preferences can be queried.
-  void OnSyncServiceInitialized(syncer::SyncService* sync_service);
+  virtual void OnSyncServiceInitialized(syncer::SyncService* sync_service);
 
   // WebDataServiceConsumer:
   void OnWebDataServiceRequestDone(
@@ -284,18 +283,6 @@ class PersonalDataManager : public KeyedService,
 
   // Notifies test observers that personal data has changed.
   void NotifyPersonalDataChangedForTest() { NotifyPersonalDataChanged(); }
-
-  // Sets the URL request context getter to be used when normalizing addresses
-  // with libaddressinput's address validator.
-  void SetURLRequestContextGetter(
-      net::URLRequestContextGetter* context_getter) {
-    context_getter_ = context_getter;
-  }
-
-  // Returns the class used to fetch the address validation rules.
-  net::URLRequestContextGetter* GetURLRequestContextGetter() const {
-    return context_getter_.get();
-  }
 
   // This function assumes |credit_card| contains the full PAN. Returns |true|
   // if the card number of |credit_card| is equal to any local card or any
@@ -626,10 +613,6 @@ class PersonalDataManager : public KeyedService,
   // True if test data has been created this session.
   bool has_created_test_addresses_ = false;
   bool has_created_test_credit_cards_ = false;
-
-  // The context for the request to be used to fetch libaddressinput's address
-  // validation rules.
-  scoped_refptr<net::URLRequestContextGetter> context_getter_;
 
   DISALLOW_COPY_AND_ASSIGN(PersonalDataManager);
 };

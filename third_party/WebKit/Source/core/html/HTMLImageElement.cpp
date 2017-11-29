@@ -51,6 +51,7 @@
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/api/LayoutImageItem.h"
+#include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/loader/resource/ImageResourceContent.h"
 #include "core/media_type_names.h"
 #include "core/page/ChromeClient.h"
@@ -274,8 +275,8 @@ void HTMLImageElement::ParseAttribute(
       UseCounter::Count(GetDocument(),
                         WebFeature::kHTMLImageElementReferrerPolicyAttribute);
     }
-  } else if (name == asyncAttr &&
-             RuntimeEnabledFeatures::ImageAsyncAttributeEnabled()) {
+  } else if (name == decodingAttr &&
+             RuntimeEnabledFeatures::ImageDecodingAttributeEnabled()) {
     decoding_mode_ = ParseImageDecodingMode(params.new_value);
   } else {
     HTMLElement::ParseAttribute(params);
@@ -355,7 +356,9 @@ LayoutObject* HTMLImageElement::CreateLayoutObject(const ComputedStyle& style) {
 
   switch (layout_disposition_) {
     case LayoutDisposition::kFallbackContent:
-      return new LayoutBlockFlow(this);
+      if (!RuntimeEnabledFeatures::LayoutNGEnabled())
+        return new LayoutBlockFlow(this);
+      return new LayoutNGBlockFlow(this);
     case LayoutDisposition::kPrimaryContent: {
       LayoutImage* image = new LayoutImage(this);
       image->SetImageResource(LayoutImageResource::Create());
@@ -633,18 +636,18 @@ bool HTMLImageElement::IsInteractiveContent() const {
 
 FloatSize HTMLImageElement::DefaultDestinationSize(
     const FloatSize& default_object_size) const {
-  ImageResourceContent* image = CachedImage();
-  if (!image)
+  ImageResourceContent* image_content = CachedImage();
+  if (!image_content)
     return FloatSize();
 
-  if (image->GetImage() && image->GetImage()->IsSVGImage())
-    return ToSVGImage(CachedImage()->GetImage())
-        ->ConcreteObjectSize(default_object_size);
+  Image* image = image_content->GetImage();
+  if (image->IsSVGImage())
+    return ToSVGImage(image)->ConcreteObjectSize(default_object_size);
 
-  LayoutSize size(image->IntrinsicSize(
+  LayoutSize size(image_content->IntrinsicSize(
       LayoutObject::ShouldRespectImageOrientation(GetLayoutObject())));
   if (GetLayoutObject() && GetLayoutObject()->IsLayoutImage() &&
-      image->GetImage() && !image->GetImage()->HasRelativeSize())
+      !image->HasRelativeSize())
     size.Scale(ToLayoutImage(GetLayoutObject())->ImageDevicePixelRatio());
   return FloatSize(size);
 }

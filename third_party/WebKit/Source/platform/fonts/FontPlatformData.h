@@ -33,18 +33,17 @@
 
 #include "SkPaint.h"
 #include "SkTypeface.h"
+#include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "platform/PlatformExport.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontOrientation.h"
 #include "platform/fonts/SmallCapsIterator.h"
-#include "platform/fonts/opentype/OpenTypeVerticalData.h"
 #include "platform/graphics/paint/PaintFont.h"
 #include "platform/graphics/paint/PaintTypeface.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashTableDeletedValueType.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/StringImpl.h"
@@ -154,9 +153,6 @@ class PLATFORM_EXPORT FontPlatformData {
   bool IsHashTableDeletedValue() const { return is_hash_table_deleted_value_; }
   bool FontContainsCharacter(UChar32 character);
 
-  scoped_refptr<OpenTypeVerticalData> VerticalData() const;
-  Vector<char> OpenTypeTable(SkFontTableTag) const;
-
 #if defined(OS_LINUX) || defined(OS_ANDROID)
   // The returned styles are all actual styles without
   // FontRenderStyle::NoPreference.
@@ -164,7 +160,7 @@ class PLATFORM_EXPORT FontPlatformData {
 #endif
   void SetupPaintFont(PaintFont*,
                       float device_scale_factor = 1,
-                      const Font* = 0) const;
+                      const Font* = nullptr) const;
   const PaintTypeface& GetPaintTypeface() const;
 
 #if defined(OS_WIN)

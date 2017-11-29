@@ -15,6 +15,7 @@
 #include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "components/crash/core/common/crash_key.h"
 #include "content/common/content_constants_internal.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/common/content_switches.h"
@@ -38,7 +39,6 @@
 #include "gpu/config/gpu_switches.h"
 #include "ipc/ipc_features.h"
 #include "media/base/media_switches.h"
-#include "media/base/mime_util.h"
 #include "net/cookies/cookie_monster.h"
 #include "ppapi/features/features.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -236,12 +236,6 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
 
     command_line.AppendSwitch(switches::kDisallowNonExactResourceReuse);
 
-    // Unless/until WebM files are added to the media layout tests, we need to
-    // avoid removing MP4/H264/AAC so that layout tests can run on Android.
-#if !defined(OS_ANDROID)
-    media::RemoveProprietaryMediaTypesAndCodecsForTests();
-#endif
-
     // Always run with fake media devices.
     command_line.AppendSwitch(switches::kUseFakeUIForMediaStream);
     command_line.AppendSwitch(switches::kUseFakeDeviceForMediaStream);
@@ -292,6 +286,8 @@ void ShellMainDelegate::PreSandboxStartup() {
 #endif  // defined(OS_ANDROID)
   }
 #endif  // !defined(OS_FUCHSIA)
+
+  crash_reporter::InitializeCrashKeys();
 
   InitializeResourceBundle();
 }

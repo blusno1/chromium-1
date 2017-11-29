@@ -55,8 +55,6 @@ class KURL;
 class LocalFrameClient;
 class ScrollableArea;
 class SharedWorkerRepositoryClientImpl;
-class TextCheckerClient;
-class TextCheckerClientImpl;
 class TextFinder;
 class WebAssociatedURLLoader;
 struct WebAssociatedURLLoaderOptions;
@@ -256,10 +254,11 @@ class CORE_EXPORT WebLocalFrameImpl final
   WebURLRequest RequestForReload(WebFrameLoadType,
                                  const WebURL&) const override;
   void Load(const WebURLRequest&,
-            WebFrameLoadType = WebFrameLoadType::kStandard,
-            const WebHistoryItem& = WebHistoryItem(),
-            WebHistoryLoadType = kWebHistoryDifferentDocumentLoad,
-            bool is_client_redirect = false) override;
+            WebFrameLoadType,
+            const WebHistoryItem&,
+            WebHistoryLoadType,
+            bool is_client_redirect,
+            const base::UnguessableToken& devtools_navigation_token) override;
   void LoadData(const WebData&,
                 const WebString& mime_type,
                 const WebString& text_encoding,
@@ -363,7 +362,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   WebViewImpl* ViewImpl() const;
 
   LocalFrameView* GetFrameView() const {
-    return GetFrame() ? GetFrame()->View() : 0;
+    return GetFrame() ? GetFrame()->View() : nullptr;
   }
 
   WebDevToolsAgentImpl* DevToolsAgentImpl() const {
@@ -399,8 +398,9 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   void SetInputEventsScaleForEmulation(float);
 
-  TextCheckerClient& GetTextCheckerClient() const;
-  WebTextCheckClient* TextCheckClient() const { return text_check_client_; }
+  WebTextCheckClient* GetTextCheckerClient() const {
+    return text_check_client_;
+  }
 
   WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const override {
     return spell_check_panel_host_client_;
@@ -505,8 +505,6 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   WebInputMethodControllerImpl input_method_controller_;
 
-  // Stores the TextCheckerClient to bridge SpellChecker and WebTextCheckClient.
-  Member<TextCheckerClientImpl> text_checker_client_;
   WebTextCheckClient* text_check_client_;
 
   WebSpellCheckPanelHostClient* spell_check_panel_host_client_;

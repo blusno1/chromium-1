@@ -67,13 +67,6 @@ class WebSettings {
     kV8CacheOptionsCode,
   };
 
-  enum class V8CacheStrategiesForCacheStorage {
-    kDefault,
-    kNone,
-    kNormal,
-    kAggressive,
-  };
-
   enum class ProgressBarCompletion {
     kLoadEvent,
     kResourcesBeforeDCL,
@@ -229,7 +222,6 @@ class WebSettings {
   virtual void SetPictographFontFamily(const WebString&,
                                        UScriptCode = USCRIPT_COMMON) = 0;
   virtual void SetPluginsEnabled(bool) = 0;
-  virtual void SetEncryptedMediaEnabled(bool) = 0;
   virtual void SetPresentationReceiver(bool) = 0;
   virtual void SetAvailablePointerTypes(int) = 0;
   virtual void SetPrimaryPointerType(PointerType) = 0;
@@ -292,8 +284,6 @@ class WebSettings {
   virtual void SetUseSolidColorScrollbars(bool) = 0;
   virtual void SetUseWideViewport(bool) = 0;
   virtual void SetV8CacheOptions(V8CacheOptions) = 0;
-  virtual void SetV8CacheStrategiesForCacheStorage(
-      V8CacheStrategiesForCacheStorage) = 0;
   virtual void SetValidationMessageTimerMagnification(int) = 0;
   virtual void SetViewportEnabled(bool) = 0;
   virtual void SetViewportMetaEnabled(bool) = 0;

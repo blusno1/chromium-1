@@ -1470,7 +1470,7 @@ void WebGLRenderingContextBase::SetIsHidden(bool hidden) {
   if (!hidden && isContextLost() && restore_allowed_ &&
       auto_recovery_method_ == kAuto) {
     DCHECK(!restore_timer_.IsActive());
-    restore_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    restore_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
   }
 }
 
@@ -2243,6 +2243,12 @@ void WebGLRenderingContextBase::deleteBuffer(WebGLBuffer* buffer) {
 
 void WebGLRenderingContextBase::deleteFramebuffer(
     WebGLFramebuffer* framebuffer) {
+  // Don't allow the application to delete an opaque framebuffer.
+  if (framebuffer && framebuffer->Opaque()) {
+    SynthesizeGLError(GL_INVALID_OPERATION, "deleteFramebuffer",
+                      "cannot delete an opaque framebuffer");
+    return;
+  }
   if (!DeleteObject(framebuffer))
     return;
   if (framebuffer == framebuffer_binding_) {
@@ -2560,6 +2566,12 @@ void WebGLRenderingContextBase::framebufferRenderbuffer(
                       "no framebuffer bound");
     return;
   }
+  // Don't allow modifications to opaque framebuffer attachements.
+  if (framebuffer_binding && framebuffer_binding->Opaque()) {
+    SynthesizeGLError(GL_INVALID_OPERATION, "framebufferRenderbuffer",
+                      "opaque framebuffer bound");
+    return;
+  }
   framebuffer_binding->SetAttachmentForBoundFramebuffer(target, attachment,
                                                         buffer);
   ApplyStencilTest();
@@ -2585,6 +2597,12 @@ void WebGLRenderingContextBase::framebufferTexture2D(GLenum target,
   if (!framebuffer_binding || !framebuffer_binding->Object()) {
     SynthesizeGLError(GL_INVALID_OPERATION, "framebufferTexture2D",
                       "no framebuffer bound");
+    return;
+  }
+  // Don't allow modifications to opaque framebuffer attachements.
+  if (framebuffer_binding && framebuffer_binding->Opaque()) {
+    SynthesizeGLError(GL_INVALID_OPERATION, "framebufferTexture2D",
+                      "opaque framebuffer bound");
     return;
   }
   framebuffer_binding->SetAttachmentForBoundFramebuffer(
@@ -2843,6 +2861,12 @@ ScriptValue WebGLRenderingContextBase::getFramebufferAttachmentParameter(
   if (!framebuffer_binding_ || !framebuffer_binding_->Object()) {
     SynthesizeGLError(GL_INVALID_OPERATION, "getFramebufferAttachmentParameter",
                       "no framebuffer bound");
+    return ScriptValue::CreateNull(script_state);
+  }
+
+  if (framebuffer_binding_ && framebuffer_binding_->Opaque()) {
+    SynthesizeGLError(GL_INVALID_OPERATION, "getFramebufferAttachmentParameter",
+                      "cannot query parameters of an opaque framebuffer");
     return ScriptValue::CreateNull(script_state);
   }
 
@@ -6306,7 +6330,7 @@ void WebGLRenderingContextBase::LoseContextImpl(
 
   // Always defer the dispatch of the context lost event, to implement
   // the spec behavior of queueing a task.
-  dispatch_context_lost_event_timer_.StartOneShot(0, BLINK_FROM_HERE);
+  dispatch_context_lost_event_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void WebGLRenderingContextBase::ForceRestoreContext() {
@@ -6324,7 +6348,7 @@ void WebGLRenderingContextBase::ForceRestoreContext() {
   }
 
   if (!restore_timer_.IsActive())
-    restore_timer_.StartOneShot(0, BLINK_FROM_HERE);
+    restore_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 uint32_t WebGLRenderingContextBase::NumberOfContextLosses() const {
@@ -7469,7 +7493,7 @@ void WebGLRenderingContextBase::DispatchContextLostEvent(TimerBase*) {
   restore_allowed_ = event->defaultPrevented();
   if (restore_allowed_ && !is_hidden_) {
     if (auto_recovery_method_ == kAuto)
-      restore_timer_.StartOneShot(0, BLINK_FROM_HERE);
+      restore_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
   }
 }
 
@@ -7797,13 +7821,12 @@ void WebGLRenderingContextBase::TraceWrappers(
   CanvasRenderingContext::TraceWrappers(visitor);
 }
 
-int WebGLRenderingContextBase::ExternallyAllocatedBytesPerPixel() {
+int WebGLRenderingContextBase::ExternallyAllocatedBufferCountPerPixel() {
   if (isContextLost())
     return 0;
 
-  int bytes_per_pixel = 4;
-  int total_bytes_per_pixel =
-      bytes_per_pixel * 2;  // WebGL's front and back color buffers.
+  int buffer_count = 1;
+  buffer_count *= 2;  // WebGL's front and back color buffers.
   int samples = GetDrawingBuffer() ? GetDrawingBuffer()->SampleCount() : 0;
   Nullable<WebGLContextAttributes> attribs;
   getContextAttributes(attribs);
@@ -7814,16 +7837,14 @@ int WebGLRenderingContextBase::ExternallyAllocatedBytesPerPixel() {
     if (attribs.Get().antialias() && samples > 0 &&
         GetDrawingBuffer()->ExplicitResolveOfMultisampleData()) {
       if (attribs.Get().depth() || attribs.Get().stencil())
-        total_bytes_per_pixel +=
-            samples * bytes_per_pixel;  // depth/stencil multisample buffer
-      total_bytes_per_pixel +=
-          samples * bytes_per_pixel;  // color multisample buffer
+        buffer_count += samples;  // depth/stencil multisample buffer
+      buffer_count += samples;    // color multisample buffer
     } else if (attribs.Get().depth() || attribs.Get().stencil()) {
-      total_bytes_per_pixel += bytes_per_pixel;  // regular depth/stencil buffer
+      buffer_count += 1;  // regular depth/stencil buffer
     }
   }
 
-  return total_bytes_per_pixel;
+  return buffer_count;
 }
 
 DrawingBuffer* WebGLRenderingContextBase::GetDrawingBuffer() const {

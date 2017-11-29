@@ -48,7 +48,6 @@
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/AutoReset.h"
-#include "platform/wtf/ListHashSet.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/web/WebDocument.h"
@@ -98,6 +97,12 @@ class CORE_EXPORT StyleEngine final
   const HeapVector<TraceWrapperMember<StyleSheet>>&
   StyleSheetsForStyleSheetList(TreeScope&);
 
+  const HeapVector<
+      std::pair<WebStyleSheetId, TraceWrapperMember<CSSStyleSheet>>>&
+  InjectedAuthorStyleSheets() const {
+    return injected_author_style_sheets_;
+  }
+
   CSSStyleSheet* InspectorStyleSheet() const { return inspector_style_sheet_; }
 
   const ActiveStyleSheetVector ActiveStyleSheetsForInspector();
@@ -113,8 +118,10 @@ class CORE_EXPORT StyleEngine final
   void ViewportRulesChanged();
   void HtmlImportAddedOrRemoved();
 
-  WebStyleSheetId AddUserSheet(StyleSheetContents*);
-  void RemoveUserSheet(WebStyleSheetId);
+  WebStyleSheetId InjectSheet(StyleSheetContents*,
+                              WebDocument::CSSOrigin =
+                                  WebDocument::kAuthorOrigin);
+  void RemoveInjectedSheet(WebStyleSheetId);
   CSSStyleSheet& EnsureInspectorStyleSheet();
   RuleSet* WatchedSelectorsRuleSet() {
     DCHECK(IsMaster());
@@ -435,10 +442,13 @@ class CORE_EXPORT StyleEngine final
   unsigned style_for_element_count_ = 0;
 
   HeapVector<std::pair<WebStyleSheetId, TraceWrapperMember<CSSStyleSheet>>>
-      user_style_sheets_;
+      injected_user_style_sheets_;
+  HeapVector<std::pair<WebStyleSheetId, TraceWrapperMember<CSSStyleSheet>>>
+      injected_author_style_sheets_;
+
   ActiveStyleSheetVector active_user_style_sheets_;
 
-  WebStyleSheetId user_sheets_id_count_ = 0;
+  WebStyleSheetId injected_sheets_id_count_ = 0;
 
   using KeyframesRuleMap =
       HeapHashMap<AtomicString, Member<StyleRuleKeyframes>>;

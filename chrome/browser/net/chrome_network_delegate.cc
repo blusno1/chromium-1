@@ -462,7 +462,7 @@ bool ChromeNetworkDelegate::OnCanGetCookies(
 }
 
 bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
-                                           const std::string& cookie_line,
+                                           const net::CanonicalCookie& cookie,
                                            net::CookieOptions* options) {
   // nullptr during tests, or when we're running in the system context.
   if (!cookie_settings_.get())
@@ -477,8 +477,7 @@ bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(&TabSpecificContentSettings::CookieChanged,
                        info->GetWebContentsGetterForRequest(), request.url(),
-                       request.site_for_cookies(), cookie_line, *options,
-                       !allow));
+                       request.site_for_cookies(), cookie, *options, !allow));
   }
 
   return allow;

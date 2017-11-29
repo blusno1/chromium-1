@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
+#include "chrome/common/chrome_features.h"
 #include "device/vr/features/features.h"
 
 #if defined(OS_ANDROID)
@@ -35,7 +36,8 @@ VRDeviceManager* VRDeviceManager::GetInstance() {
 #endif
 
 #if BUILDFLAG(ENABLE_OPENVR)
-    providers.emplace_back(std::make_unique<device::OpenVRDeviceProvider>());
+    if (base::FeatureList::IsEnabled(features::kOpenVR))
+      providers.emplace_back(std::make_unique<device::OpenVRDeviceProvider>());
 #endif
     new VRDeviceManager(std::move(providers));
   }
@@ -48,7 +50,6 @@ bool VRDeviceManager::HasInstance() {
 
 VRDeviceManager::VRDeviceManager(ProviderList providers)
     : providers_(std::move(providers)) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   CHECK(!g_vr_device_manager);
   g_vr_device_manager = this;
 }
@@ -58,7 +59,9 @@ VRDeviceManager::~VRDeviceManager() {
   g_vr_device_manager = nullptr;
 }
 
-void VRDeviceManager::AddService(VRServiceImpl* service) {
+void VRDeviceManager::AddService(
+    VRServiceImpl* service,
+    device::mojom::VRService::SetClientCallback callback) {
   // Loop through any currently active devices and send Connected messages to
   // the service. Future devices that come online will send a Connected message
   // when they are created.
@@ -81,6 +84,8 @@ void VRDeviceManager::AddService(VRServiceImpl* service) {
   }
 
   services_.insert(service);
+
+  std::move(callback).Run();
 }
 
 void VRDeviceManager::RemoveService(VRServiceImpl* service) {

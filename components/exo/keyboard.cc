@@ -7,7 +7,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/exo/keyboard_delegate.h"
 #include "components/exo/keyboard_device_configuration_delegate.h"
-#include "components/exo/shell_surface.h"
+#include "components/exo/seat.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
 #include "ui/aura/client/focus_client.h"
@@ -126,17 +126,18 @@ bool IsReservedAccelerator(const ui::KeyEvent* event) {
 ////////////////////////////////////////////////////////////////////////////////
 // Keyboard, public:
 
-Keyboard::Keyboard(KeyboardDelegate* delegate)
+Keyboard::Keyboard(KeyboardDelegate* delegate, Seat* seat)
     : delegate_(delegate),
+      seat_(seat),
       expiration_delay_for_pending_key_acks_(base::TimeDelta::FromMilliseconds(
           kExpirationDelayForPendingKeyAcksMs)),
       weak_ptr_factory_(this) {
   auto* helper = WMHelper::GetInstance();
   AddEventHandler();
-  helper->AddFocusObserver(this);
+  seat_->AddObserver(this);
   helper->AddTabletModeObserver(this);
   helper->AddInputDeviceEventObserver(this);
-  OnWindowFocused(helper->GetFocusedWindow(), nullptr);
+  OnSurfaceFocused(seat_->GetFocusedSurface());
 }
 
 Keyboard::~Keyboard() {
@@ -146,7 +147,7 @@ Keyboard::~Keyboard() {
     focus_->RemoveSurfaceObserver(this);
   auto* helper = WMHelper::GetInstance();
   RemoveEventHandler();
-  helper->RemoveFocusObserver(this);
+  seat_->RemoveObserver(this);
   helper->RemoveTabletModeObserver(this);
   helper->RemoveInputDeviceEventObserver(this);
 }
@@ -197,8 +198,9 @@ void Keyboard::AckKeyboardKey(uint32_t serial, bool handled) {
 // ui::EventHandler overrides:
 
 void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
-  // These modifiers reflect what Wayland is aware of.  For example,
-  // EF_SCROLL_LOCK_ON is missing because Wayland doesn't support scroll lock.
+  // These modifiers reflect what clients are supposed to be aware of.
+  // I.e. EF_SCROLL_LOCK_ON is missing because clients are not supposed
+  // to be aware scroll lock.
   const int kModifierMask = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
                             ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN |
                             ui::EF_ALTGR_DOWN | ui::EF_MOD3_DOWN |
@@ -216,44 +218,32 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
   bool consumed_by_ime = focus_ ? ConsumedByIme(focus_, event) : false;
 
   switch (event->type()) {
-    case ui::ET_KEY_PRESSED: {
-      auto it =
-          std::find(pressed_keys_.begin(), pressed_keys_.end(), event->code());
-      if (it == pressed_keys_.end()) {
-        if (focus_ && !consumed_by_ime && !IsReservedAccelerator(event)) {
-          uint32_t serial = delegate_->OnKeyboardKey(event->time_stamp(),
-                                                     event->code(), true);
-          if (are_keyboard_key_acks_needed_) {
-            pending_key_acks_.insert(
-                {serial,
-                 {*event, base::TimeTicks::Now() +
-                              expiration_delay_for_pending_key_acks_}});
-            event->SetHandled();
-          }
+    case ui::ET_KEY_PRESSED:
+      if (focus_ && !consumed_by_ime && !IsReservedAccelerator(event)) {
+        uint32_t serial =
+            delegate_->OnKeyboardKey(event->time_stamp(), event->code(), true);
+        if (are_keyboard_key_acks_needed_) {
+          pending_key_acks_.insert(
+              {serial,
+               {*event, base::TimeTicks::Now() +
+                            expiration_delay_for_pending_key_acks_}});
+          event->SetHandled();
         }
-
-        pressed_keys_.push_back(event->code());
       }
-    } break;
-    case ui::ET_KEY_RELEASED: {
-      auto it =
-          std::find(pressed_keys_.begin(), pressed_keys_.end(), event->code());
-      if (it != pressed_keys_.end()) {
-        if (focus_ && !consumed_by_ime && !IsReservedAccelerator(event)) {
-          uint32_t serial = delegate_->OnKeyboardKey(event->time_stamp(),
-                                                     event->code(), false);
-          if (are_keyboard_key_acks_needed_) {
-            pending_key_acks_.insert(
-                {serial,
-                 {*event, base::TimeTicks::Now() +
-                              expiration_delay_for_pending_key_acks_}});
-            event->SetHandled();
-          }
+      break;
+    case ui::ET_KEY_RELEASED:
+      if (focus_ && !consumed_by_ime && !IsReservedAccelerator(event)) {
+        uint32_t serial =
+            delegate_->OnKeyboardKey(event->time_stamp(), event->code(), false);
+        if (are_keyboard_key_acks_needed_) {
+          pending_key_acks_.insert(
+              {serial,
+               {*event, base::TimeTicks::Now() +
+                            expiration_delay_for_pending_key_acks_}});
+          event->SetHandled();
         }
-
-        pressed_keys_.erase(it);
       }
-    } break;
+      break;
     default:
       NOTREACHED();
       break;
@@ -268,35 +258,11 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// aura::client::FocusChangeObserver overrides:
-
-void Keyboard::OnWindowFocused(aura::Window* gained_focus,
-                               aura::Window* lost_focus) {
-  Surface* gained_focus_surface =
-      gained_focus ? GetEffectiveFocus(gained_focus) : nullptr;
-  if (gained_focus_surface != focus_) {
-    if (focus_) {
-      delegate_->OnKeyboardLeave(focus_);
-      focus_->RemoveSurfaceObserver(this);
-      focus_ = nullptr;
-      pending_key_acks_.clear();
-    }
-    if (gained_focus_surface) {
-      delegate_->OnKeyboardModifiers(modifier_flags_);
-      delegate_->OnKeyboardEnter(gained_focus_surface, pressed_keys_);
-      focus_ = gained_focus_surface;
-      focus_->AddSurfaceObserver(this);
-    }
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // SurfaceObserver overrides:
 
 void Keyboard::OnSurfaceDestroying(Surface* surface) {
   DCHECK(surface == focus_);
-  focus_ = nullptr;
-  surface->RemoveSurfaceObserver(this);
+  SetFocus(nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -323,20 +289,35 @@ void Keyboard::OnTabletModeEnded() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// SeatObserver overrides:
+
+void Keyboard::OnSurfaceFocusing(Surface* gaining_focus) {}
+
+void Keyboard::OnSurfaceFocused(Surface* gained_focus) {
+  Surface* gained_focus_surface =
+      gained_focus && delegate_->CanAcceptKeyboardEventsForSurface(gained_focus)
+          ? gained_focus
+          : nullptr;
+  if (gained_focus_surface != focus_)
+    SetFocus(gained_focus_surface);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Keyboard, private:
 
-Surface* Keyboard::GetEffectiveFocus(aura::Window* window) const {
-  // Use window surface as effective focus.
-  Surface* focus = Surface::AsSurface(window);
-  if (!focus) {
-    // Fallback to main surface.
-    aura::Window* top_level_window = window->GetToplevelWindow();
-    if (top_level_window)
-      focus = ShellSurface::GetMainSurface(top_level_window);
+void Keyboard::SetFocus(Surface* surface) {
+  if (focus_) {
+    delegate_->OnKeyboardLeave(focus_);
+    focus_->RemoveSurfaceObserver(this);
+    focus_ = nullptr;
+    pending_key_acks_.clear();
   }
-
-  return focus && delegate_->CanAcceptKeyboardEventsForSurface(focus) ? focus
-                                                                      : nullptr;
+  if (surface) {
+    delegate_->OnKeyboardModifiers(modifier_flags_);
+    delegate_->OnKeyboardEnter(surface, seat_->pressed_keys());
+    focus_ = surface;
+    focus_->AddSurfaceObserver(this);
+  }
 }
 
 void Keyboard::ProcessExpiredPendingKeyAcks() {

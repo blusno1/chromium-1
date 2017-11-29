@@ -403,7 +403,6 @@ component("color_space") {
     "color_space_win.h",
     "icc_profile.cc",
     "icc_profile.h",
-    "icc_profile_mac.mm",
     "skia_color_space_util.cc",
     "skia_color_space_util.h",
   ]
@@ -670,6 +669,7 @@ test("gfx_unittests") {
       "color_space_unittest.cc",
       "color_transform_unittest.cc",
       "color_utils_unittest.cc",
+      "font_fallback_linux_unittest.cc",
       "font_fallback_mac_unittest.cc",
       "font_list_unittest.cc",
       "geometry/axis_transform2d_unittest.cc",

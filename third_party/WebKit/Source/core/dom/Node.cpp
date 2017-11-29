@@ -61,7 +61,6 @@
 #include "core/dom/UserActionElementSet.h"
 #include "core/dom/V0InsertionPoint.h"
 #include "core/dom/events/Event.h"
-#include "core/dom/events/EventDispatchMediator.h"
 #include "core/dom/events/EventDispatcher.h"
 #include "core/dom/events/EventListener.h"
 #include "core/editing/EditingUtilities.h"
@@ -748,6 +747,9 @@ bool Node::MayContainLegacyNodeTreeWhereDistributionShouldBeSupported() const {
   if (!RuntimeEnabledFeatures::IncrementalShadowDOMEnabled())
     return true;
   if (isConnected() && !GetDocument().MayContainV0Shadow()) {
+    // TODO(crbug.com/787717): Some built-in elements still use <content>
+    // elements in their user-agent shadow roots. DCHECK() fails if such an
+    // element is used.
     DCHECK(!GetDocument().ChildNeedsDistributionRecalc());
     return false;
   }
@@ -1679,7 +1681,7 @@ std::ostream& operator<<(std::ostream& ostream, const Node& node) {
   if (node.IsShadowRoot()) {
     // nodeName of ShadowRoot is #document-fragment.  It's confused with
     // DocumentFragment.
-    return ostream << "#shadow-root";
+    return ostream << "#shadow-root(" << ToShadowRoot(node).GetType() << ")";
   }
   if (node.IsDocumentTypeNode())
     return ostream << "DOCTYPE " << node.nodeName().Utf8().data();
@@ -2220,11 +2222,11 @@ void Node::HandleLocalEvents(Event& event) {
 
 void Node::DispatchScopedEvent(Event* event) {
   event->SetTrusted(true);
-  EventDispatcher::DispatchScopedEvent(*this, event->CreateMediator());
+  EventDispatcher::DispatchScopedEvent(*this, event);
 }
 
 DispatchEventResult Node::DispatchEventInternal(Event* event) {
-  return EventDispatcher::DispatchEvent(*this, event->CreateMediator());
+  return EventDispatcher::DispatchEvent(*this, event);
 }
 
 void Node::DispatchSubtreeModifiedEvent() {
@@ -2405,11 +2407,6 @@ void Node::DefaultEventHandler(Event* event) {
           frame->GetEventHandler().StartMiddleClickAutoscroll(layout_object);
       }
     }
-  } else if (event->type() == EventTypeNames::webkitEditableContentChanged) {
-    // TODO(chongz): Remove after shipped.
-    // New InputEvent are dispatched in Editor::appliedEditing, etc.
-    if (!RuntimeEnabledFeatures::InputEventEnabled())
-      DispatchInputEvent();
   }
 }
 

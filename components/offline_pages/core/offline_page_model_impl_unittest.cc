@@ -330,9 +330,9 @@ std::unique_ptr<OfflinePageTestArchiver>
 OfflinePageModelImplTest::BuildArchiver(
     const GURL& url,
     OfflinePageArchiver::ArchiverResult result) {
-  return std::unique_ptr<OfflinePageTestArchiver>(
-      new OfflinePageTestArchiver(this, url, result, kTestTitle, kTestFileSize,
-                                  base::ThreadTaskRunnerHandle::Get()));
+  return std::unique_ptr<OfflinePageTestArchiver>(new OfflinePageTestArchiver(
+      this, url, result, kTestTitle, kTestFileSize, std::string(),
+      base::ThreadTaskRunnerHandle::Get()));
 }
 
 std::unique_ptr<OfflinePageMetadataStore>
@@ -1468,7 +1468,7 @@ TEST_F(OfflinePageModelImplTest, StoreLoadFailurePersists) {
 
   // Model will 'load' but the store underneath it is not functional and
   // will silently fail all sql operations.
-  EXPECT_TRUE(model()->is_loaded());
+  EXPECT_TRUE(model()->is_loaded_);
   EXPECT_EQ(StoreState::FAILED_LOADING, GetStore()->state());
   EXPECT_EQ(0UL, offline_pages.size());
 

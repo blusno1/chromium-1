@@ -48,7 +48,6 @@
 #include "platform/graphics/TouchAction.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/ResourceError.h"
-#include "platform/text/TextCheckerClient.h"
 #include "platform/wtf/Forward.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebFocusType.h"
@@ -209,6 +208,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void UpdateEventRectsForSubframeIfNecessary(LocalFrame* frame) override {}
   void SetHasScrollEventHandlers(LocalFrame*, bool) override {}
   void SetNeedsLowLatencyInput(LocalFrame*, bool) override {}
+  void RequestUnbufferedInputEvents(LocalFrame*) override {}
   void SetTouchAction(LocalFrame*, TouchAction) override {}
 
   void DidAssociateFormControlsAfterLoad(LocalFrame*) override {}
@@ -239,13 +239,13 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
 
   bool InShadowTree() const override { return false; }
 
-  Frame* Opener() const override { return 0; }
+  Frame* Opener() const override { return nullptr; }
   void SetOpener(Frame*) override {}
 
-  Frame* Parent() const override { return 0; }
-  Frame* Top() const override { return 0; }
-  Frame* NextSibling() const override { return 0; }
-  Frame* FirstChild() const override { return 0; }
+  Frame* Parent() const override { return nullptr; }
+  Frame* Top() const override { return nullptr; }
+  Frame* NextSibling() const override { return nullptr; }
+  Frame* FirstChild() const override { return nullptr; }
   void WillBeDetached() override {}
   void Detached(FrameDetachType) override {}
   void FrameFocused() const override {}
@@ -294,10 +294,12 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
                    const String& suggested_name) override {}
   void LoadErrorPage(int reason) override {}
 
-  DocumentLoader* CreateDocumentLoader(LocalFrame*,
-                                       const ResourceRequest&,
-                                       const SubstituteData&,
-                                       ClientRedirectPolicy) override;
+  DocumentLoader* CreateDocumentLoader(
+      LocalFrame*,
+      const ResourceRequest&,
+      const SubstituteData&,
+      ClientRedirectPolicy,
+      const base::UnguessableToken& devtools_navigation_token) override;
 
   String UserAgent() override { return ""; }
 
@@ -346,7 +348,7 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   }
   bool AllowScriptExtensions() override { return false; }
 
-  WebCookieJar* CookieJar() const override { return 0; }
+  WebCookieJar* CookieJar() const override { return nullptr; }
 
   service_manager::InterfaceProvider* GetInterfaceProvider() override {
     return &interface_provider_;
@@ -362,7 +364,7 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
       WebApplicationCacheHostClient*) override;
 
-  TextCheckerClient& GetTextCheckerClient() const override;
+  WebTextCheckClient* GetTextCheckerClient() const override;
   std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() override {
     return Platform::Current()->CreateDefaultURLLoaderFactory();
   }
@@ -375,18 +377,6 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
 
   ContentSettingsClient content_settings_client_;
   service_manager::InterfaceProvider interface_provider_;
-};
-
-class CORE_EXPORT EmptyTextCheckerClient : public TextCheckerClient {
-  WTF_MAKE_NONCOPYABLE(EmptyTextCheckerClient);
-  USING_FAST_MALLOC(EmptyTextCheckerClient);
-
- public:
-  EmptyTextCheckerClient() {}
-
-  void CheckSpellingOfString(const String&, int*, int*) override {}
-  void RequestCheckingOfString(TextCheckingRequest*) override;
-  void CancelAllPendingRequests() override;
 };
 
 class EmptySpellCheckPanelHostClient : public WebSpellCheckPanelHostClient {
@@ -453,6 +443,8 @@ class CORE_EXPORT EmptyRemoteFrameClient : public RemoteFrameClient {
   void AdvanceFocus(WebFocusType, LocalFrame* source) override {}
   void VisibilityChanged(bool visible) override {}
   void SetIsInert(bool) override {}
+  void UpdateRenderThrottlingStatus(bool is_throttled,
+                                    bool subtree_throttled) override {}
 
   // FrameClient implementation.
   bool InShadowTree() const override { return false; }

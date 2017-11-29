@@ -162,10 +162,13 @@ bool TextControlElement::IsPlaceholderEmpty() const {
 
 bool TextControlElement::PlaceholderShouldBeVisible() const {
   return SupportsPlaceholder() && InnerEditorValue().IsEmpty() &&
-         (!IsPlaceholderEmpty() || !IsEmptySuggestedValue());
+         !IsPlaceholderEmpty() && SuggestedValue().IsEmpty();
 }
 
 HTMLElement* TextControlElement::PlaceholderElement() const {
+  if (!SupportsPlaceholder())
+    return nullptr;
+  DCHECK(UserAgentShadowRoot());
   return ToHTMLElementOrDie(
       UserAgentShadowRoot()->getElementById(ShadowElementNames::Placeholder()));
 }
@@ -179,13 +182,19 @@ void TextControlElement::UpdatePlaceholderVisibility() {
 
   bool place_holder_was_visible = IsPlaceholderVisible();
   SetPlaceholderVisibility(PlaceholderShouldBeVisible());
-  if (place_holder_was_visible == IsPlaceholderVisible())
-    return;
 
-  PseudoStateChanged(CSSSelector::kPseudoPlaceholderShown);
   placeholder->SetInlineStyleProperty(
-      CSSPropertyDisplay, IsPlaceholderVisible() ? CSSValueBlock : CSSValueNone,
+      CSSPropertyDisplay,
+      IsPlaceholderVisible() || !SuggestedValue().IsEmpty() ? CSSValueBlock
+                                                            : CSSValueNone,
       true);
+
+  // If there was a visibility change not caused by the suggested value, set
+  // that the pseudo state changed.
+  if (place_holder_was_visible != IsPlaceholderVisible() &&
+      SuggestedValue().IsEmpty()) {
+    PseudoStateChanged(CSSSelector::kPseudoPlaceholderShown);
+  }
 }
 
 void TextControlElement::setSelectionStart(unsigned start) {
@@ -807,6 +816,8 @@ void TextControlElement::SetInnerEditorValue(const String& value) {
   if (!IsTextControl() || OpenShadowRoot())
     return;
 
+  DCHECK(InnerEditorElement());
+
   bool text_is_changed = value != InnerEditorValue();
   HTMLElement* inner_editor = InnerEditorElement();
   if (!text_is_changed && inner_editor->HasChildren())
@@ -897,6 +908,7 @@ String TextControlElement::ValueWithHardLineBreaks() const {
   if (!layout_object)
     return value();
 
+  DCHECK(CanUseInlineBox(*layout_object));
   Node* break_node;
   unsigned break_offset;
   RootInlineBox* line = layout_object->FirstRootBox();
@@ -995,13 +1007,16 @@ void TextControlElement::SetSuggestedValue(const String& value) {
   HTMLElement* placeholder = PlaceholderElement();
   if (!placeholder)
     return;
+
   UpdatePlaceholderVisibility();
 
-  // Change the pseudo-id to set the style for suggested values or reset the
-  // placeholder style depending on if there is a suggested value.
-  placeholder->SetShadowPseudoId(
-      AtomicString(suggested_value_.IsEmpty() ? "-webkit-input-placeholder"
-                                              : "-internal-input-suggested"));
+  if (suggested_value_.IsEmpty()) {
+    // Reset the pseudo-id for placeholders to use the appropriated style
+    placeholder->SetShadowPseudoId(AtomicString("-webkit-input-placeholder"));
+  } else {
+    // Set the pseudo-id for suggested values to use the appropriated style.
+    placeholder->SetShadowPseudoId(AtomicString("-internal-input-suggested"));
+  }
 }
 
 HTMLElement* TextControlElement::CreateInnerEditorElement() {

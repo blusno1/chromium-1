@@ -488,11 +488,6 @@
         <item name="android:textColor">@color/light_active_color</item>
     </style>
 
-    <!-- Bookmarks -->
-    <style name="BookmarkMenuStyle" parent="Widget.AppCompat.ListPopupWindow">
-        <item name="android:popupBackground">@drawable/menu_bg</item>
-    </style>
-
     <!-- Contextual Search styles -->
     <style name="ContextualSearchTextViewLayout">
         <item name="android:layout_width">match_parent</item>
@@ -602,14 +597,18 @@
     </style>
     <style name="ToolbarButton">
         <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:layout_width">@dimen/toolbar_button_width</item>
+        <item name="android:layout_height">56dp</item>
         <item name="android:scaleType">center</item>
     </style>
     <style name="ToolbarMenuButtonPhone" parent="ToolbarButton">
         <item name="android:layout_gravity">top</item>
+        <item name="android:layout_width">42dp</item>
         <item name="android:paddingEnd">4dp</item>
         <item name="android:background">@null</item>
     </style>
     <style name="ToolbarMenuButtonTablet" parent="ToolbarButton">
+        <item name="android:layout_width">43dp</item>
         <item name="android:paddingEnd">3.5dp</item>
     </style>
     <style name="AppMenuItem">
@@ -665,6 +664,9 @@
         <item name="android:layout_height">match_parent</item>
         <item name="android:background">@null</item>
         <item name="android:scaleType">center</item>
+    </style>
+    <style name="ListMenuStyle" parent="Widget.AppCompat.ListPopupWindow">
+        <item name="android:popupBackground">@drawable/menu_bg</item>
     </style>
 
     <!-- Download Home -->

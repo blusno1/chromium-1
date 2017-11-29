@@ -121,6 +121,11 @@ class LayoutSVGShape : public LayoutSVGModelObject {
   virtual bool ShapeDependentFillContains(const FloatPoint&,
                                           const WindRule) const;
 
+  // Compute an approximation of the bounding box that this stroke geometry
+  // would generate when applied to a shape with the (tight-fitting) bounding
+  // box |shape_bbox|.
+  FloatRect ApproximateStrokeBoundingBox(const FloatRect& shape_bbox) const;
+
   FloatRect fill_bounding_box_;
   FloatRect stroke_bounding_box_;
   LayoutSVGShapeRareData& EnsureRareData() const;
@@ -163,6 +168,7 @@ class LayoutSVGShape : public LayoutSVGModelObject {
   bool needs_boundaries_update_ : 1;
   bool needs_shape_update_ : 1;
   bool needs_transform_update_ : 1;
+  bool affected_by_miter_ : 1;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSVGShape, IsSVGShape());

@@ -215,7 +215,7 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     WebRuntimeFeatures::EnableWebVR(true);
 
   WebRuntimeFeatures::EnableWebVRExperimentalRendering(
-      base::FeatureList::IsEnabled(features::kWebVRExperimentalRendering));
+      base::FeatureList::IsEnabled(features::kWebVrExperimentalRendering));
 
   if (command_line.HasSwitch(switches::kDisablePresentationAPI))
     WebRuntimeFeatures::EnablePresentationAPI(false);
@@ -291,6 +291,10 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableServiceWorkerScriptStreaming(
       base::FeatureList::IsEnabled(features::kServiceWorkerScriptStreaming));
 
+  WebRuntimeFeatures::EnableServiceWorkerScriptFullCodeCache(
+      base::FeatureList::IsEnabled(
+          features::kServiceWorkerScriptFullCodeCache));
+
   WebRuntimeFeatures::EnableOffMainThreadFetch(
       base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
 
@@ -321,6 +325,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kLoadingWithMojo) ||
       base::FeatureList::IsEnabled(features::kNetworkService))
     WebRuntimeFeatures::EnableLoadingWithMojo(true);
+
+  if (base::FeatureList::IsEnabled(features::kNotificationsWithMojo))
+    WebRuntimeFeatures::EnableNotificationsWithMojo(true);
 
   if (base::FeatureList::IsEnabled(features::kOutOfBlinkCORS))
     WebRuntimeFeatures::EnableOutOfBlinkCORS(true);

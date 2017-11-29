@@ -28,6 +28,7 @@
           "blink::mojom::OffscreenCanvasProvider",
           "blink::mojom::ReportingServiceProxy",
           "blink::mojom::WebDatabaseHost",
+          "content::mojom::ClipboardHost",
           "content::mojom::FieldTrialRecorder",
           "content::mojom::FileUtilitiesHost",
           "content::mojom::FrameSinkProvider",
@@ -35,6 +36,7 @@
           "content::mojom::MemoryCoordinatorHandle",
           "content::mojom::PushMessaging",
           "content::mojom::RendererHost",
+          "content::mojom::ReportingServiceProxy",
           "content::mojom::ServiceWorkerDispatcherHost",
           "content::mojom::StoragePartitionService",
           "content::mojom::URLLoaderFactory",
@@ -69,7 +71,7 @@
         "content_plugin": [ "browser" ],
         "content_renderer": [ "browser" ],
         "content_utility": [ "browser" ],
-        "data_decoder": [ "image_decoder", "json_parser" ],
+        "data_decoder": [ "image_decoder", "json_parser", "xml_parser" ],
         "device": [
           "device:battery_monitor",
           "device:generic_sensor",
@@ -90,7 +92,7 @@
           "url_loader"
         ],
         "patch_service": [ "patch_file" ],
-        "ui": [ "display_output_protection", "video_detector" ],
+        "ui": [ "arc_manager", "display_output_protection", "video_detector" ],
         "service_manager": [
           "service_manager:client_process",
           "service_manager:instance_name",
@@ -125,6 +127,7 @@
           "blink::mojom::InsecureInputService",
           "blink::mojom::KeyboardLockService",
           "blink::mojom::MediaSessionService",
+          "blink::mojom::NotificationService",
           "blink::mojom::PermissionService",
           "blink::mojom::PresentationService",
           "blink::mojom::TextSuggestionHost",
@@ -173,6 +176,7 @@
     "navigation:dedicated_worker": {
       "provides": {
         "renderer": [
+          "blink::mojom::NotificationService",
           "blink::mojom::PermissionService",
           "payments::mojom::PaymentManager",
           "shape_detection::mojom::BarcodeDetection",
@@ -184,6 +188,7 @@
     "navigation:service_worker": {
       "provides": {
         "renderer": [
+          "blink::mojom::NotificationService",
           "blink::mojom::PermissionService",
           "blink::mojom::WebSocket",
           "payments::mojom::PaymentManager",
@@ -196,6 +201,7 @@
     "navigation:shared_worker": {
       "provides": {
         "renderer": [
+          "blink::mojom::NotificationService",
           "blink::mojom::PermissionService",
           "blink::mojom::WebSocket",
           "payments::mojom::PaymentManager",

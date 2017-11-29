@@ -15,6 +15,7 @@
 #include "base/run_loop.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_traits.h"
+#include "build/build_config.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/patch_service/public/cpp/patch.h"
 #include "components/update_client/component_patcher_operation.h"

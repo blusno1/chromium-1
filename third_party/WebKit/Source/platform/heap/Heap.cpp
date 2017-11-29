@@ -45,10 +45,10 @@
 #include "platform/instrumentation/tracing/web_memory_allocator_dump.h"
 #include "platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/DataLog.h"
 #include "platform/wtf/LeakAnnotations.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/allocator/Partitions.h"
 #include "public/platform/Platform.h"
 
@@ -229,7 +229,7 @@ Address ThreadHeap::CheckAndMarkPointer(
 #endif
 
 void ThreadHeap::PushTraceCallback(void* object, TraceCallback callback) {
-  DCHECK(thread_state_->IsInGC());
+  DCHECK(thread_state_->IsInGC() || thread_state_->IsIncrementalMarking());
 
   CallbackStack::Item* slot = marking_stack_->AllocateEntry();
   *slot = CallbackStack::Item(object, callback);

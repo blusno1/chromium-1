@@ -15,7 +15,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/Histogram.h"
-#include "platform/bindings/ConditionalFeatures.h"
+#include "platform/bindings/OriginTrialFeatures.h"
 #include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Vector.h"
@@ -97,11 +97,18 @@ const char* OriginTrialContext::SupplementName() {
 }
 
 // static
-OriginTrialContext* OriginTrialContext::From(ExecutionContext* context,
-                                             CreateMode create) {
-  OriginTrialContext* origin_trials = static_cast<OriginTrialContext*>(
+const OriginTrialContext* OriginTrialContext::From(
+    const ExecutionContext* context) {
+  return static_cast<const OriginTrialContext*>(
       Supplement<ExecutionContext>::From(context, SupplementName()));
-  if (!origin_trials && create == kCreateIfNotExists) {
+}
+
+// static
+OriginTrialContext* OriginTrialContext::FromOrCreate(
+    ExecutionContext* context) {
+  OriginTrialContext* origin_trials = const_cast<OriginTrialContext*>(
+      From(static_cast<const ExecutionContext*>(context)));
+  if (!origin_trials) {
     origin_trials = new OriginTrialContext(
         *context, Platform::Current()->CreateTrialTokenValidator());
     Supplement<ExecutionContext>::ProvideTo(*context, SupplementName(),
@@ -143,16 +150,16 @@ void OriginTrialContext::AddTokens(ExecutionContext* context,
                                    const Vector<String>* tokens) {
   if (!tokens || tokens->IsEmpty())
     return;
-  From(context)->AddTokens(*tokens);
+  FromOrCreate(context)->AddTokens(*tokens);
 }
 
 // static
 std::unique_ptr<Vector<String>> OriginTrialContext::GetTokens(
     ExecutionContext* execution_context) {
-  OriginTrialContext* context = From(execution_context, kDontCreateIfNotExists);
+  const OriginTrialContext* context = From(execution_context);
   if (!context || context->tokens_.IsEmpty())
     return nullptr;
-  return std::unique_ptr<Vector<String>>(new Vector<String>(context->tokens_));
+  return std::make_unique<Vector<String>>(context->tokens_);
 }
 
 void OriginTrialContext::AddToken(const String& token) {
@@ -201,7 +208,7 @@ void OriginTrialContext::InitializePendingFeatures() {
   for (auto enabled_trial : enabled_trials_) {
     if (installed_trials_.Contains(enabled_trial))
       continue;
-    InstallPendingConditionalFeature(enabled_trial, script_state);
+    InstallPendingOriginTrialFeature(enabled_trial, script_state);
     installed_trials_.insert(enabled_trial);
   }
 }
@@ -211,7 +218,7 @@ void OriginTrialContext::AddFeature(const String& feature) {
   InitializePendingFeatures();
 }
 
-bool OriginTrialContext::IsTrialEnabled(const String& trial_name) {
+bool OriginTrialContext::IsTrialEnabled(const String& trial_name) const {
   if (!RuntimeEnabledFeatures::OriginTrialsEnabled())
     return false;
 

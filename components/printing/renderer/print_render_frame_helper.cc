@@ -36,6 +36,7 @@
 #include "printing/metafile_skia_wrapper.h"
 #include "printing/pdf_metafile_skia.h"
 #include "printing/units.h"
+#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/common/sandbox_flags.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebDoubleSize.h"
@@ -582,8 +583,8 @@ void PrintRenderFrameHelper::PrintHeaderAndFooter(
                            page_layout.margin_top + page_layout.margin_bottom +
                                page_layout.content_height);
 
-  blink::WebView* web_view =
-      blink::WebView::Create(nullptr, blink::kWebPageVisibilityStateVisible);
+  blink::WebView* web_view = blink::WebView::Create(
+      nullptr, blink::mojom::PageVisibilityState::kVisible);
   web_view->GetSettings()->SetJavaScriptEnabled(true);
 
   class HeaderAndFooterClient final : public blink::WebFrameClient {
@@ -826,7 +827,7 @@ void PrepareFrameAndViewForPrint::CopySelection(
   prefs.javascript_enabled = false;
 
   blink::WebView* web_view =
-      blink::WebView::Create(this, blink::kWebPageVisibilityStateVisible);
+      blink::WebView::Create(this, blink::mojom::PageVisibilityState::kVisible);
   owns_web_view_ = true;
   content::RenderView::ApplyWebPreferences(prefs, web_view);
   blink::WebLocalFrame* main_frame =
@@ -933,12 +934,6 @@ bool PrintRenderFrameHelper::Delegate::IsAskPrintSettingsEnabled() {
 bool PrintRenderFrameHelper::Delegate::IsScriptedPrintEnabled() {
   return true;
 }
-
-#if defined(OS_MACOSX)
-bool PrintRenderFrameHelper::Delegate::UseSingleMetafile() {
-  return false;
-}
-#endif
 
 PrintRenderFrameHelper::PrintRenderFrameHelper(
     content::RenderFrame* render_frame,
@@ -1160,7 +1155,7 @@ void PrintRenderFrameHelper::OnPrintForPrintPreview(
   // has content in correct position taking into account page size and printable
   // area.
   // TODO(vitalybuka) : Make this consistent on all platform. This change
-  // affects Windows only. On Linux and OSX RenderPagesForPrint does not use
+  // affects Windows only. Linux and OSX RenderPagesForPrint do not use
   // printable_area. Also we can't change printable_area deeper inside
   // RenderPagesForPrint for Windows, because it's used also by native
   // printing and it expects real printable_area value.
@@ -1408,7 +1403,7 @@ bool PrintRenderFrameHelper::RenderPreviewPage(
   PrintPageInternal(print_params, page_number,
                     print_preview_context_.total_page_count(),
                     print_preview_context_.prepared_frame(),
-                    initial_render_metafile, nullptr, nullptr, nullptr);
+                    initial_render_metafile, nullptr, nullptr);
   print_preview_context_.RenderedPreviewPage(base::TimeTicks::Now() -
                                              begin_time);
   if (draft_metafile.get()) {
@@ -1669,6 +1664,58 @@ void PrintRenderFrameHelper::PrintPages() {
   }
 }
 
+#if defined(OS_MACOSX) || defined(OS_WIN)
+bool PrintRenderFrameHelper::PrintPagesNative(blink::WebLocalFrame* frame,
+                                              int page_count) {
+  const PrintMsg_PrintPages_Params& params = *print_pages_params_;
+  const PrintMsg_Print_Params& print_params = params.params;
+
+  std::vector<int> printed_pages = GetPrintedPages(params, page_count);
+  if (printed_pages.empty())
+    return false;
+
+  PdfMetafileSkia metafile(print_params.printed_doc_type);
+  CHECK(metafile.Init());
+
+  std::vector<gfx::Size> page_size_in_dpi(printed_pages.size());
+  std::vector<gfx::Rect> content_area_in_dpi(printed_pages.size());
+  for (size_t i = 0; i < printed_pages.size(); ++i) {
+    PrintPageInternal(print_params, printed_pages[i], page_count, frame,
+                      &metafile, &page_size_in_dpi[i], &content_area_in_dpi[i]);
+  }
+
+  // blink::printEnd() for PDF should be called before metafile is closed.
+  FinishFramePrinting();
+
+  metafile.FinishDocument();
+
+  PrintHostMsg_DidPrintPage_Params page_params;
+  if (!CopyMetafileDataToSharedMem(metafile,
+                                   &page_params.metafile_data_handle)) {
+    return false;
+  }
+
+  page_params.data_size = metafile.GetDataSize();
+  page_params.document_cookie = print_params.document_cookie;
+#if defined(OS_WIN)
+  page_params.physical_offsets = printer_printable_area_.origin();
+#endif
+  for (size_t i = 0; i < printed_pages.size(); ++i) {
+    page_params.page_number = printed_pages[i];
+    page_params.page_size = page_size_in_dpi[i];
+    page_params.content_area = content_area_in_dpi[i];
+    Send(new PrintHostMsg_DidPrintPage(routing_id(), page_params));
+    // Send the rest of the pages with an invalid metafile handle.
+    // TODO(erikchen): Fix semantics. See https://crbug.com/640840
+    if (page_params.metafile_data_handle.IsValid()) {
+      page_params.metafile_data_handle = base::SharedMemoryHandle();
+      page_params.data_size = 0;
+    }
+  }
+  return true;
+}
+#endif  // defined(OS_MACOSX) || defined(OS_WIN)
+
 void PrintRenderFrameHelper::FinishFramePrinting() {
   prep_frame_view_.reset();
 }
@@ -1917,39 +1964,33 @@ void PrintRenderFrameHelper::PrintPageInternal(
     blink::WebLocalFrame* frame,
     PdfMetafileSkia* metafile,
     gfx::Size* page_size_in_dpi,
-    gfx::Rect* content_area_in_dpi,
-    gfx::Rect* printable_area_in_dpi) {
-  PageSizeMargins page_layout_in_points;
-
-  double css_scale_factor = 1.0f;
-  if (params.scale_factor >= kEpsilon)
-    css_scale_factor = params.scale_factor;
+    gfx::Rect* content_area_in_dpi) {
+  double css_scale_factor =
+      params.scale_factor >= kEpsilon ? params.scale_factor : 1.0f;
 
   // Save the original page size here to avoid rounding errors incurred by
   // converting to pixels and back and by scaling the page for reflow and
   // scaling back. Windows uses |page_size_in_dpi| for the actual page size
   // so requires an accurate value.
   gfx::Size original_page_size = params.page_size;
+  PageSizeMargins page_layout_in_points;
   ComputePageLayoutInPointsForCss(frame, page_number, params,
                                   ignore_css_margins_, &css_scale_factor,
                                   &page_layout_in_points);
+
   gfx::Size page_size;
   gfx::Rect content_area;
   GetPageSizeAndContentAreaFromPageLayout(page_layout_in_points, &page_size,
                                           &content_area);
 
   // Calculate the actual page size and content area in dpi.
-  if (page_size_in_dpi) {
+  if (page_size_in_dpi)
     *page_size_in_dpi = original_page_size;
-  }
 
   if (content_area_in_dpi) {
     // Output PDF matches paper size and should be printer edge to edge.
     *content_area_in_dpi =
         gfx::Rect(0, 0, page_size_in_dpi->width(), page_size_in_dpi->height());
-  }
-  if (printable_area_in_dpi) {
-    *printable_area_in_dpi = printer_printable_area_;
   }
 
   gfx::Rect canvas_area =
@@ -1989,8 +2030,8 @@ void PrintRenderFrameHelper::PrintPageInternal(
   DCHECK_GT(webkit_scale_factor, 0.0f);
 
   // Done printing. Close the canvas to retrieve the compiled metafile.
-  if (!metafile->FinishPage())
-    NOTREACHED() << "metafile failed";
+  bool ret = metafile->FinishPage();
+  DCHECK(ret);
 }
 #endif  // !defined(OS_MACOSX)
 

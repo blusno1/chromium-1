@@ -4,8 +4,8 @@
 
 #include "ash/metrics/login_metrics_recorder.h"
 
-#include "ash/login/lock_screen_controller.h"
-#include "ash/login/mock_lock_screen_client.h"
+#include "ash/login/login_screen_controller.h"
+#include "ash/login/mock_login_screen_client.h"
 #include "ash/login/ui/lock_contents_view.h"
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/login_auth_user_view.h"
@@ -14,6 +14,7 @@
 #include "ash/public/cpp/config.h"
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
@@ -92,7 +93,7 @@ class LoginMetricsRecorderTest : public LoginTestBase {
 
 // Verifies that different unlock attempts get recorded in UMA.
 TEST_F(LoginMetricsRecorderTest, UnlockAttempts) {
-  std::unique_ptr<MockLockScreenClient> client = BindMockLockScreenClient();
+  std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
   client->set_authenticate_user_callback_result(false);
   auto* contents = new LockContentsView(mojom::TrayActionState::kNotAvailable,
                                         data_dispatcher());
@@ -116,7 +117,7 @@ TEST_F(LoginMetricsRecorderTest, UnlockAttempts) {
   generator.PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
 
   // Run the loop to get the system salt and flush
-  // LockScreenClient::AuthenticateUser mojo call.
+  // LoginScreenClient::AuthenticateUser mojo call.
   base::RunLoop().RunUntilIdle();
   histogram_tester_->ExpectTotalCount(kAuthMethodUsageAsClamShellHistogramName,
                                       1);
@@ -138,7 +139,7 @@ TEST_F(LoginMetricsRecorderTest, UnlockAttempts) {
   generator.PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
 
   // Run the loop to get the system salt and flush
-  // LockScreenClient::AuthenticateUser mojo call.
+  // LoginScreenClient::AuthenticateUser mojo call.
   base::RunLoop().RunUntilIdle();
   histogram_tester_->ExpectTotalCount(kAuthMethodUsageAsClamShellHistogramName,
                                       2);
@@ -158,8 +159,8 @@ TEST_F(LoginMetricsRecorderTest, UnlockAttempts) {
                             .CenterPoint());
   generator.ClickLeftButton();
 
-  // Flush LockScreenClient::AttemptUnlock mojo call.
-  Shell::Get()->lock_screen_controller()->FlushForTesting();
+  // Flush LoginScreenClient::AttemptUnlock mojo call.
+  Shell::Get()->login_screen_controller()->FlushForTesting();
   histogram_tester_->ExpectTotalCount(kAuthMethodUsageAsClamShellHistogramName,
                                       3);
   histogram_tester_->ExpectBucketCount(

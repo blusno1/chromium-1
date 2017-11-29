@@ -29,6 +29,7 @@ const char kSignInPromoQueryKeySource[] = "source";
 const char kSignInPromoQueryKeyConstrained[] = "constrained";
 const char kSignInPromoQueryKeyShowAccountManagement[] =
     "showAccountManagement";
+const char kSigninPromoLandingURLSuccessPage[] = "success.html";
 
 // Returns true if we should show the sign in promo at startup.
 bool ShouldShowPromoAtStartup(Profile* profile, bool is_new_profile);
@@ -80,9 +81,6 @@ GURL GetReauthURLForDialog(signin_metrics::AccessPoint access_point,
 GURL GetReauthURLWithEmailForDialog(signin_metrics::AccessPoint access_point,
                                     signin_metrics::Reason reason,
                                     const std::string& email);
-
-// Gets the next page URL from the query portion of the sign in promo URL.
-GURL GetNextPageURLForPromoURL(const GURL& url);
 
 // Gets the partition URL for the embedded sign in frame/webview.
 GURL GetSigninPartitionURL();

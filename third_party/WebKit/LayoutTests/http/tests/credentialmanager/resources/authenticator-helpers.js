@@ -21,7 +21,8 @@ class MockAuthenticator {
       let response = new webauth.mojom.AuthenticatorResponse(
           { attestationObject: this.attestationObject_,
             authenticatorData: this.authenticatorData_,
-            signature: this.signature_
+            signature: this.signature_,
+            userHandle: this.userHandle_
           });
       info = new webauth.mojom.PublicKeyCredentialInfo(
           { id: this.id_,
@@ -39,13 +40,14 @@ class MockAuthenticator {
 
   // Resets state of mock Authenticator.
   reset() {
-    this.status_ = webauth.mojom.AuthenticatorStatus.NOT_IMPLEMENTED;
+    this.status_ = webauth.mojom.AuthenticatorStatus.UNKNOWN_ERROR;
     this.id_ = null;
     this.rawId_ = new Uint8Array(0);
     this.clientDataJson_ = new Uint8Array(0);
     this.attestationObject_ = new Uint8Array(0);
     this.authenticatorData_ = new Uint8Array(0);
     this.signature_ = new Uint8Array(0);
+    this.userHandle = new Uint8Array(0);
   }
 
   setAuthenticatorStatus(status) {
@@ -74,6 +76,10 @@ class MockAuthenticator {
 
   setSignature(signature) {
     this.signature_ = signature;
+  }
+
+  setUserHandle(userHandle) {
+    this.userHandle = userHandle;
   }
 }
 

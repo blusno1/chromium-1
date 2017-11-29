@@ -42,6 +42,7 @@
 #include "sandbox/linux/suid/client/setuid_sandbox_client.h"
 #include "sandbox/linux/syscall_broker/broker_process.h"
 #include "sandbox/sandbox_features.h"
+#include "services/service_manager/sandbox/linux/bpf_broker_policy_linux.h"
 #include "services/service_manager/sandbox/linux/sandbox_seccomp_bpf_linux.h"
 #include "services/service_manager/sandbox/sandbox.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
@@ -56,14 +57,6 @@ using sandbox::Yama;
 namespace service_manager {
 
 namespace {
-
-struct FDCloser {
-  inline void operator()(int* fd) const {
-    DCHECK(fd);
-    PCHECK(0 == IGNORE_EINTR(close(*fd)));
-    *fd = -1;
-  }
-};
 
 void LogSandboxStarted(const std::string& sandbox_name) {
   const std::string process_type =
@@ -118,9 +111,7 @@ bool UpdateProcessTypeAndEnableSandbox(
       command_line->GetSwitchValueASCII(switches::kProcessType)
           .append("-broker"));
 
-  std::unique_ptr<BPFBasePolicy> broker_side_policy =
-      client_sandbox_policy->GetBrokerSandboxPolicy();
-
+  auto broker_side_policy = std::make_unique<BrokerProcessPolicy>();
   if (broker_side_hook)
     CHECK(std::move(broker_side_hook).Run(broker_side_policy.get(), options));
 
@@ -133,7 +124,7 @@ bool UpdateProcessTypeAndEnableSandbox(
 SandboxLinux::SandboxLinux()
     : proc_fd_(-1),
       seccomp_bpf_started_(false),
-      sandbox_status_flags_(Sandbox::kInvalid),
+      sandbox_status_flags_(kInvalid),
       pre_initialized_(false),
       seccomp_bpf_supported_(false),
       seccomp_bpf_with_tsync_supported_(false),
@@ -199,15 +190,18 @@ void SandboxLinux::PreinitializeSandbox() {
   pre_initialized_ = true;
 }
 
-void SandboxLinux::EngageNamespaceSandbox() {
+void SandboxLinux::EngageNamespaceSandbox(bool from_zygote) {
   CHECK(pre_initialized_);
-  // Check being in a new PID namespace created by the namespace sandbox and
-  // being the init process.
-  CHECK(sandbox::NamespaceSandbox::InNewPidNamespace());
-  const pid_t pid = getpid();
-  CHECK_EQ(1, pid);
+  if (from_zygote) {
+    // Check being in a new PID namespace created by the namespace sandbox and
+    // being the init process.
+    CHECK(sandbox::NamespaceSandbox::InNewPidNamespace());
+    const pid_t pid = getpid();
+    CHECK_EQ(1, pid);
+  }
 
   CHECK(sandbox::Credentials::MoveToNewUserNS());
+
   // Note: this requires SealSandbox() to be called later in this process to be
   // safe, as this class is keeping a file descriptor to /proc/.
   CHECK(sandbox::Credentials::DropFileSystemAccess(proc_fd_));
@@ -231,35 +225,35 @@ int SandboxLinux::GetStatus() {
   if (!pre_initialized_) {
     return 0;
   }
-  if (sandbox_status_flags_ == Sandbox::kInvalid) {
+  if (sandbox_status_flags_ == kInvalid) {
     // Initialize sandbox_status_flags_.
     sandbox_status_flags_ = 0;
     if (setuid_sandbox_client_->IsSandboxed()) {
-      sandbox_status_flags_ |= Sandbox::kSUID;
+      sandbox_status_flags_ |= kSUID;
       if (setuid_sandbox_client_->IsInNewPIDNamespace())
-        sandbox_status_flags_ |= Sandbox::kPIDNS;
+        sandbox_status_flags_ |= kPIDNS;
       if (setuid_sandbox_client_->IsInNewNETNamespace())
-        sandbox_status_flags_ |= Sandbox::kNetNS;
+        sandbox_status_flags_ |= kNetNS;
     } else if (sandbox::NamespaceSandbox::InNewUserNamespace()) {
-      sandbox_status_flags_ |= Sandbox::kUserNS;
+      sandbox_status_flags_ |= kUserNS;
       if (sandbox::NamespaceSandbox::InNewPidNamespace())
-        sandbox_status_flags_ |= Sandbox::kPIDNS;
+        sandbox_status_flags_ |= kPIDNS;
       if (sandbox::NamespaceSandbox::InNewNetNamespace())
-        sandbox_status_flags_ |= Sandbox::kNetNS;
+        sandbox_status_flags_ |= kNetNS;
     }
 
     // We report whether the sandbox will be activated when renderers, workers
     // and PPAPI plugins go through sandbox initialization.
     if (seccomp_bpf_supported()) {
-      sandbox_status_flags_ |= Sandbox::kSeccompBPF;
+      sandbox_status_flags_ |= kSeccompBPF;
     }
 
     if (seccomp_bpf_with_tsync_supported()) {
-      sandbox_status_flags_ |= Sandbox::kSeccompTSYNC;
+      sandbox_status_flags_ |= kSeccompTSYNC;
     }
 
     if (yama_is_enforcing_) {
-      sandbox_status_flags_ |= Sandbox::kYama;
+      sandbox_status_flags_ |= kYama;
     }
   }
 
@@ -388,7 +382,7 @@ bool SandboxLinux::InitializeSandbox(SandboxType sandbox_type,
 
   // Turn on the namespace sandbox if the zygote hasn't done so already.
   if (options.engage_namespace_sandbox)
-    EngageNamespaceSandbox();
+    EngageNamespaceSandbox(false /* from_zygote */);
 
   DCHECK(!HasOpenDirectories())
       << "InitializeSandbox() called after unexpected directories have been "
@@ -520,8 +514,7 @@ void SandboxLinux::CheckForBrokenPromises(SandboxType sandbox_type) {
   }
   // Make sure that any promise made with GetStatus() wasn't broken.
   bool promised_seccomp_bpf_would_start =
-      (sandbox_status_flags_ != Sandbox::kInvalid) &&
-      (GetStatus() & Sandbox::kSeccompBPF);
+      (sandbox_status_flags_ != kInvalid) && (GetStatus() & kSeccompBPF);
   CHECK(!promised_seccomp_bpf_would_start || seccomp_bpf_started_);
 }
 

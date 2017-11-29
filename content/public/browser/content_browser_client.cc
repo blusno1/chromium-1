@@ -18,6 +18,7 @@
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_loader_throttle.h"
+#include "device/geolocation/public/cpp/location_provider.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/cdm_factory.h"
 #include "media/media_features.h"
@@ -63,8 +64,13 @@ WebContentsViewDelegate* ContentBrowserClient::GetWebContentsViewDelegate(
   return nullptr;
 }
 
+bool ContentBrowserClient::AllowGpuLaunchRetryOnIOThread() {
+  return true;
+}
+
 GURL ContentBrowserClient::GetEffectiveURL(BrowserContext* browser_context,
-                                           const GURL& url) {
+                                           const GURL& url,
+                                           bool is_isolated_origin) {
   return url;
 }
 
@@ -211,6 +217,15 @@ bool ContentBrowserClient::AllowServiceWorker(
   return true;
 }
 
+bool ContentBrowserClient::AllowSharedWorker(const GURL& worker_url,
+                                             const GURL& main_frame_url,
+                                             const std::string& name,
+                                             BrowserContext* context,
+                                             int render_process_id,
+                                             int render_frame_id) {
+  return true;
+}
+
 bool ContentBrowserClient::IsDataSaverEnabled(BrowserContext* context) {
   return false;
 }
@@ -233,7 +248,7 @@ bool ContentBrowserClient::AllowGetCookie(const GURL& url,
 
 bool ContentBrowserClient::AllowSetCookie(const GURL& url,
                                           const GURL& first_party,
-                                          const std::string& cookie_line,
+                                          const net::CanonicalCookie& cookie,
                                           ResourceContext* context,
                                           int render_process_id,
                                           int render_frame_id,
@@ -301,6 +316,11 @@ void ContentBrowserClient::SelectClientCertificate(
 
 net::URLRequestContext* ContentBrowserClient::OverrideRequestContextForURL(
     const GURL& url, ResourceContext* context) {
+  return nullptr;
+}
+
+std::unique_ptr<device::LocationProvider>
+ContentBrowserClient::OverrideSystemLocationProvider() {
   return nullptr;
 }
 

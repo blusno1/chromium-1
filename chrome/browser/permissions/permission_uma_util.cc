@@ -86,8 +86,6 @@ std::string GetPermissionRequestString(PermissionRequestType type) {
       return "Notifications";
     case PermissionRequestType::PERMISSION_PROTECTED_MEDIA_IDENTIFIER:
       return "ProtectedMedia";
-    case PermissionRequestType::PERMISSION_PUSH_MESSAGING:
-      return "PushMessaging";
     case PermissionRequestType::PERMISSION_FLASH:
       return "Flash";
     case PermissionRequestType::PERMISSION_MEDIASTREAM_MIC:
@@ -134,12 +132,10 @@ PermissionReportInfo::PermissionReportInfo(
     PermissionAction action,
     PermissionSourceUI source_ui,
     PermissionRequestGestureType gesture_type,
-    PermissionPersistDecision persist_decision,
     int num_prior_dismissals,
     int num_prior_ignores)
     : origin(origin), permission(permission), action(action),
       source_ui(source_ui), gesture_type(gesture_type),
-      persist_decision(persist_decision),
       num_prior_dismissals(num_prior_dismissals),
       num_prior_ignores(num_prior_ignores) {}
 
@@ -430,99 +426,6 @@ void PermissionUmaUtil::RecordPermissionPromptPriorCount(
       ->Add(count);
 }
 
-void PermissionUmaUtil::PermissionPromptAcceptedWithPersistenceToggle(
-    ContentSettingsType permission,
-    bool toggle_enabled) {
-  switch (permission) {
-    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Accepted.Persisted.Geolocation",
-                            toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
-      UMA_HISTOGRAM_BOOLEAN(
-          "Permissions.Prompt.Accepted.Persisted.Notifications",
-          toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Accepted.Persisted.MidiSysEx",
-                            toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
-      UMA_HISTOGRAM_BOOLEAN(
-          "Permissions.Prompt.Accepted.Persisted.PushMessaging",
-          toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
-      UMA_HISTOGRAM_BOOLEAN(
-          "Permissions.Prompt.Accepted.Persisted.ProtectedMedia",
-          toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
-      UMA_HISTOGRAM_BOOLEAN(
-          "Permissions.Prompt.Accepted.Persisted.AudioCapture", toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-      UMA_HISTOGRAM_BOOLEAN(
-          "Permissions.Prompt.Accepted.Persisted.VideoCapture", toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_PLUGINS:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Accepted.Persisted.Flash",
-                            toggle_enabled);
-      break;
-    // The user is not prompted for these permissions, thus there is no accept
-    // recorded for them.
-    default:
-      NOTREACHED() << "PERMISSION "
-                   << PermissionUtil::GetPermissionString(permission)
-                   << " not accounted for";
-  }
-}
-
-void PermissionUmaUtil::PermissionPromptDeniedWithPersistenceToggle(
-    ContentSettingsType permission,
-    bool toggle_enabled) {
-  switch (permission) {
-    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.Geolocation",
-                            toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.Notifications",
-                            toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.MidiSysEx",
-                            toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.PushMessaging",
-                            toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
-      UMA_HISTOGRAM_BOOLEAN(
-          "Permissions.Prompt.Denied.Persisted.ProtectedMedia", toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.AudioCapture",
-                            toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.VideoCapture",
-                            toggle_enabled);
-      break;
-    case CONTENT_SETTINGS_TYPE_PLUGINS:
-      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.Flash",
-                            toggle_enabled);
-      break;
-    // The user is not prompted for these permissions, thus there is no deny
-    // recorded for them.
-    default:
-      NOTREACHED() << "PERMISSION "
-                   << PermissionUtil::GetPermissionString(permission)
-                   << " not accounted for";
-  }
-}
-
 #if defined(OS_ANDROID)
 void PermissionUmaUtil::RecordWithBatteryBucket(const std::string& histogram) {
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -591,11 +494,8 @@ void PermissionUmaUtil::RecordPermissionAction(
   if (IsOptedIntoPermissionActionReporting(profile)) {
     PermissionDecisionAutoBlocker* autoblocker =
         PermissionDecisionAutoBlocker::GetForProfile(profile);
-    // TODO(kcarattini): Pass in the actual persist decision when it becomes
-    // available.
     PermissionReportInfo report_info(
         requesting_origin, permission, action, source_ui, gesture_type,
-        PermissionPersistDecision::UNSPECIFIED,
         autoblocker->GetDismissCount(requesting_origin, permission),
         autoblocker->GetIgnoreCount(requesting_origin, permission));
     g_browser_process->safe_browsing_service()
@@ -620,10 +520,6 @@ void PermissionUmaUtil::RecordPermissionAction(
       break;
     case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       UMA_HISTOGRAM_ENUMERATION("Permissions.Action.MidiSysEx", action,
-                                PermissionAction::NUM);
-      break;
-    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
-      UMA_HISTOGRAM_ENUMERATION("Permissions.Action.PushMessaging", action,
                                 PermissionAction::NUM);
       break;
     case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:

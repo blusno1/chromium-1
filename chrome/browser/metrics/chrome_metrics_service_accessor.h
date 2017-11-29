@@ -25,11 +25,12 @@ class CrashesDOMHandler;
 class FlashDOMHandler;
 }
 
-namespace chrome {
-void AttemptRestart();
 namespace android {
 class ExternalDataUseObserverBridge;
 }
+
+namespace chrome {
+void AttemptRestart();
 }
 
 namespace domain_reliability {
@@ -49,6 +50,10 @@ class BrowserOptionsHandler;
 
 namespace prerender {
 bool IsOmniboxEnabled(Profile* profile);
+}
+
+namespace profiling {
+class BackgroundProfilingTriggers;
 }
 
 namespace safe_browsing {
@@ -90,7 +95,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ::FlashDOMHandler;
   friend class BrowserProcessImpl;
   friend void chrome::AttemptRestart();
-  friend class chrome::android::ExternalDataUseObserverBridge;
+  friend class ::android::ExternalDataUseObserverBridge;
   // For ChromeWinClang.
   friend class ChromeBrowserMainExtraPartsMetrics;
   // For StackSamplingConfiguration.
@@ -108,6 +113,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
       const OnMetricsReportingCallbackType&);
   friend class options::BrowserOptionsHandler;
   friend bool prerender::IsOmniboxEnabled(Profile* profile);
+  friend class profiling::BackgroundProfilingTriggers;
   friend class settings::MetricsReportingHandler;
   friend class speech::ChromeSpeechRecognitionManagerDelegate;
   friend class system_logs::ChromeInternalLogSource;

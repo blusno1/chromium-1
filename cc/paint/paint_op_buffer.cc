@@ -16,17 +16,9 @@
 #include "third_party/skia/include/core/SkAnnotation.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkRegion.h"
+#include "third_party/skia/include/core/SkWriteBuffer.h"
 
 namespace cc {
-namespace {
-SkIRect RoundOutRect(const SkRect& rect) {
-  SkIRect result;
-  rect.roundOut(&result);
-  return result;
-}
-
-}  // namespace
-
 #define TYPES(M)      \
   M(AnnotateOp)       \
   M(ClipPathOp)       \
@@ -155,6 +147,11 @@ using DeserializeFunction =
 #define M(T) &T::Deserialize,
 static const DeserializeFunction g_deserialize_functions[kNumOpTypes] = {
     TYPES(M)};
+#undef M
+
+using EqualsFunction = bool (*)(const PaintOp* left, const PaintOp* right);
+#define M(T) &T::AreEqual,
+static const EqualsFunction g_equals_operator[kNumOpTypes] = {TYPES(M)};
 #undef M
 
 // Most state ops (matrix, clip, save, restore) have a trivial destructor.
@@ -330,7 +327,10 @@ size_t DrawDRRectOp::Serialize(const PaintOp* base_op,
                                const SerializeOptions& options) {
   auto* op = static_cast<const DrawDRRectOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->outer);
   helper.Write(op->inner);
   return helper.size();
@@ -342,7 +342,10 @@ size_t DrawImageOp::Serialize(const PaintOp* base_op,
                               const SerializeOptions& options) {
   auto* op = static_cast<const DrawImageOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->image, options.image_provider);
   helper.Write(op->left);
   helper.Write(op->top);
@@ -355,7 +358,10 @@ size_t DrawImageRectOp::Serialize(const PaintOp* base_op,
                                   const SerializeOptions& options) {
   auto* op = static_cast<const DrawImageRectOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->image, options.image_provider);
   helper.Write(op->src);
   helper.Write(op->dst);
@@ -369,7 +375,10 @@ size_t DrawIRectOp::Serialize(const PaintOp* base_op,
                               const SerializeOptions& options) {
   auto* op = static_cast<const DrawIRectOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->rect);
   return helper.size();
 }
@@ -380,7 +389,10 @@ size_t DrawLineOp::Serialize(const PaintOp* base_op,
                              const SerializeOptions& options) {
   auto* op = static_cast<const DrawLineOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->x0);
   helper.Write(op->y0);
   helper.Write(op->x1);
@@ -394,7 +406,10 @@ size_t DrawOvalOp::Serialize(const PaintOp* base_op,
                              const SerializeOptions& options) {
   auto* op = static_cast<const DrawOvalOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->oval);
   return helper.size();
 }
@@ -405,7 +420,10 @@ size_t DrawPathOp::Serialize(const PaintOp* base_op,
                              const SerializeOptions& options) {
   auto* op = static_cast<const DrawPathOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->path);
   return helper.size();
 }
@@ -426,7 +444,10 @@ size_t DrawRectOp::Serialize(const PaintOp* base_op,
                              const SerializeOptions& options) {
   auto* op = static_cast<const DrawRectOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->rect);
   return helper.size();
 }
@@ -437,7 +458,10 @@ size_t DrawRRectOp::Serialize(const PaintOp* base_op,
                               const SerializeOptions& options) {
   auto* op = static_cast<const DrawRRectOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->rrect);
   return helper.size();
 }
@@ -448,7 +472,10 @@ size_t DrawTextBlobOp::Serialize(const PaintOp* base_op,
                                  const SerializeOptions& options) {
   auto* op = static_cast<const DrawTextBlobOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->x);
   helper.Write(op->y);
   helper.Write(op->blob);
@@ -489,7 +516,10 @@ size_t SaveLayerOp::Serialize(const PaintOp* base_op,
                               const SerializeOptions& options) {
   auto* op = static_cast<const SaveLayerOp*>(base_op);
   PaintOpWriter helper(memory, size);
-  helper.Write(op->flags);
+  const auto* serialized_flags = options.flags_to_serialize;
+  if (!serialized_flags)
+    serialized_flags = &op->flags;
+  helper.Write(*serialized_flags);
   helper.Write(op->bounds);
   return helper.size();
 }
@@ -1054,8 +1084,11 @@ void DrawImageRectOp::RasterWithFlags(const DrawImageRectOp* op,
   matrix.setRectToRect(op->src, op->dst, SkMatrix::kFill_ScaleToFit);
   matrix.postConcat(canvas->getTotalMatrix());
 
+  SkIRect int_src_rect;
+  op->src.roundOut(&int_src_rect);
+
   DrawImage draw_image(
-      op->image, RoundOutRect(op->src),
+      op->image, int_src_rect,
       flags ? flags->getFilterQuality() : kNone_SkFilterQuality, matrix);
   auto scoped_decoded_draw_image =
       params.image_provider->GetDecodedDrawImage(draw_image);
@@ -1205,12 +1238,383 @@ void TranslateOp::Raster(const TranslateOp* op,
   canvas->translate(op->dx, op->dy);
 }
 
+static bool AreSkMatricesEqual(const SkMatrix& left, const SkMatrix& right) {
+  // Compare the 3x3 matrix values.
+  if (left != right)
+    return false;
+
+  // If a serialized matrix says it is identity, then the original must have
+  // those values, as the serialization process clobbers the matrix values.
+  if (left.isIdentity()) {
+    if (SkMatrix::I() != left)
+      return false;
+    if (SkMatrix::I() != right)
+      return false;
+  }
+
+  if (left.getType() != right.getType())
+    return false;
+
+  return true;
+}
+
+bool AnnotateOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const AnnotateOp*>(base_left);
+  auto* right = static_cast<const AnnotateOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->annotation_type != right->annotation_type)
+    return false;
+  if (left->rect != right->rect)
+    return false;
+  if (!left->data != !right->data)
+    return false;
+  if (left->data) {
+    if (left->data->size() != right->data->size())
+      return false;
+    if (0 !=
+        memcmp(left->data->data(), right->data->data(), right->data->size()))
+      return false;
+  }
+  return true;
+}
+
+bool ClipPathOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const ClipPathOp*>(base_left);
+  auto* right = static_cast<const ClipPathOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->path != right->path)
+    return false;
+  if (left->op != right->op)
+    return false;
+  if (left->antialias != right->antialias)
+    return false;
+  return true;
+}
+
+bool ClipRectOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const ClipRectOp*>(base_left);
+  auto* right = static_cast<const ClipRectOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->rect != right->rect)
+    return false;
+  if (left->op != right->op)
+    return false;
+  if (left->antialias != right->antialias)
+    return false;
+  return true;
+}
+
+bool ClipRRectOp::AreEqual(const PaintOp* base_left,
+                           const PaintOp* base_right) {
+  auto* left = static_cast<const ClipRRectOp*>(base_left);
+  auto* right = static_cast<const ClipRRectOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->rrect != right->rrect)
+    return false;
+  if (left->op != right->op)
+    return false;
+  if (left->antialias != right->antialias)
+    return false;
+  return true;
+}
+
+bool ConcatOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const ConcatOp*>(base_left);
+  auto* right = static_cast<const ConcatOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  return AreSkMatricesEqual(left->matrix, right->matrix);
+}
+
+bool DrawColorOp::AreEqual(const PaintOp* base_left,
+                           const PaintOp* base_right) {
+  auto* left = static_cast<const DrawColorOp*>(base_left);
+  auto* right = static_cast<const DrawColorOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  return left->color == right->color;
+}
+
+bool DrawDRRectOp::AreEqual(const PaintOp* base_left,
+                            const PaintOp* base_right) {
+  auto* left = static_cast<const DrawDRRectOp*>(base_left);
+  auto* right = static_cast<const DrawDRRectOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  if (left->outer != right->outer)
+    return false;
+  if (left->inner != right->inner)
+    return false;
+  return true;
+}
+
+bool DrawImageOp::AreEqual(const PaintOp* base_left,
+                           const PaintOp* base_right) {
+  auto* left = static_cast<const DrawImageOp*>(base_left);
+  auto* right = static_cast<const DrawImageOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  // TODO(enne): Test PaintImage equality once implemented
+  if (left->left != right->left)
+    return false;
+  if (left->top != right->top)
+    return false;
+  return true;
+}
+
+bool DrawImageRectOp::AreEqual(const PaintOp* base_left,
+                               const PaintOp* base_right) {
+  auto* left = static_cast<const DrawImageRectOp*>(base_left);
+  auto* right = static_cast<const DrawImageRectOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  // TODO(enne): Test PaintImage equality once implemented
+  if (left->src != right->src)
+    return false;
+  if (left->dst != right->dst)
+    return false;
+  return true;
+}
+
+bool DrawIRectOp::AreEqual(const PaintOp* base_left,
+                           const PaintOp* base_right) {
+  auto* left = static_cast<const DrawIRectOp*>(base_left);
+  auto* right = static_cast<const DrawIRectOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  if (left->rect != right->rect)
+    return false;
+  return true;
+}
+
+bool DrawLineOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const DrawLineOp*>(base_left);
+  auto* right = static_cast<const DrawLineOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  if (left->x0 != right->x0)
+    return false;
+  if (left->y0 != right->y0)
+    return false;
+  if (left->x1 != right->x1)
+    return false;
+  if (left->y1 != right->y1)
+    return false;
+  return true;
+}
+
+bool DrawOvalOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const DrawOvalOp*>(base_left);
+  auto* right = static_cast<const DrawOvalOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  if (left->oval != right->oval)
+    return false;
+  return true;
+}
+
+bool DrawPathOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const DrawPathOp*>(base_left);
+  auto* right = static_cast<const DrawPathOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  if (left->path != right->path)
+    return false;
+  return true;
+}
+
+bool DrawRecordOp::AreEqual(const PaintOp* base_left,
+                            const PaintOp* base_right) {
+  auto* left = static_cast<const DrawRecordOp*>(base_left);
+  auto* right = static_cast<const DrawRecordOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (!left->record != !right->record)
+    return false;
+  if (*left->record != *right->record)
+    return false;
+  return true;
+}
+
+bool DrawRectOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const DrawRectOp*>(base_left);
+  auto* right = static_cast<const DrawRectOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  if (left->rect != right->rect)
+    return false;
+  return true;
+}
+
+bool DrawRRectOp::AreEqual(const PaintOp* base_left,
+                           const PaintOp* base_right) {
+  auto* left = static_cast<const DrawRRectOp*>(base_left);
+  auto* right = static_cast<const DrawRRectOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  if (left->rrect != right->rrect)
+    return false;
+  return true;
+}
+
+bool DrawTextBlobOp::AreEqual(const PaintOp* base_left,
+                              const PaintOp* base_right) {
+  auto* left = static_cast<const DrawTextBlobOp*>(base_left);
+  auto* right = static_cast<const DrawTextBlobOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  if (left->x != right->x)
+    return false;
+  if (left->y != right->y)
+    return false;
+
+  DCHECK(*left->blob);
+  DCHECK(*right->blob);
+
+  SkBinaryWriteBuffer left_flattened;
+  left->blob->ToSkTextBlob()->flatten(left_flattened);
+  std::vector<char> left_mem(left_flattened.bytesWritten());
+  left_flattened.writeToMemory(left_mem.data());
+
+  SkBinaryWriteBuffer right_flattened;
+  right->blob->ToSkTextBlob()->flatten(right_flattened);
+  std::vector<char> right_mem(right_flattened.bytesWritten());
+  right_flattened.writeToMemory(right_mem.data());
+
+  if (left_mem.size() != right_mem.size())
+    return false;
+  if (left_mem != right_mem)
+    return false;
+  return true;
+}
+
+bool NoopOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  return true;
+}
+
+bool RestoreOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  return true;
+}
+
+bool RotateOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const RotateOp*>(base_left);
+  auto* right = static_cast<const RotateOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->degrees != right->degrees)
+    return false;
+  return true;
+}
+
+bool SaveOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  return true;
+}
+
+bool SaveLayerOp::AreEqual(const PaintOp* base_left,
+                           const PaintOp* base_right) {
+  auto* left = static_cast<const SaveLayerOp*>(base_left);
+  auto* right = static_cast<const SaveLayerOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->flags != right->flags)
+    return false;
+  if (left->bounds != right->bounds)
+    return false;
+  return true;
+}
+
+bool SaveLayerAlphaOp::AreEqual(const PaintOp* base_left,
+                                const PaintOp* base_right) {
+  auto* left = static_cast<const SaveLayerAlphaOp*>(base_left);
+  auto* right = static_cast<const SaveLayerAlphaOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->bounds != right->bounds)
+    return false;
+  if (left->alpha != right->alpha)
+    return false;
+  if (left->preserve_lcd_text_requests != right->preserve_lcd_text_requests)
+    return false;
+  return true;
+}
+
+bool ScaleOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const ScaleOp*>(base_left);
+  auto* right = static_cast<const ScaleOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->sx != right->sx)
+    return false;
+  if (left->sy != right->sy)
+    return false;
+  return true;
+}
+
+bool SetMatrixOp::AreEqual(const PaintOp* base_left,
+                           const PaintOp* base_right) {
+  auto* left = static_cast<const SetMatrixOp*>(base_left);
+  auto* right = static_cast<const SetMatrixOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (!AreSkMatricesEqual(left->matrix, right->matrix))
+    return false;
+  return true;
+}
+
+bool TranslateOp::AreEqual(const PaintOp* base_left,
+                           const PaintOp* base_right) {
+  auto* left = static_cast<const TranslateOp*>(base_left);
+  auto* right = static_cast<const TranslateOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (left->dx != right->dx)
+    return false;
+  if (left->dy != right->dy)
+    return false;
+  return true;
+}
+
 bool PaintOp::IsDrawOp() const {
   return g_is_draw_op[type];
 }
 
 bool PaintOp::IsPaintOpWithFlags() const {
   return g_has_paint_flags[type];
+}
+
+bool PaintOp::operator==(const PaintOp& other) const {
+  if (GetType() != other.GetType())
+    return false;
+  return g_equals_operator[type](this, &other);
+}
+
+// static
+bool PaintOp::TypeHasFlags(PaintOpType type) {
+  return g_has_paint_flags[static_cast<uint8_t>(type)];
 }
 
 void PaintOp::Raster(SkCanvas* canvas, const PlaybackParams& params) const {
@@ -1443,20 +1847,25 @@ bool DrawRecordOp::HasNonAAPaint() const {
   return record->HasNonAAPaint();
 }
 
-AnnotateOp::AnnotateOp() = default;
+AnnotateOp::AnnotateOp() : PaintOp(kType) {}
 
 AnnotateOp::AnnotateOp(PaintCanvas::AnnotationType annotation_type,
                        const SkRect& rect,
                        sk_sp<SkData> data)
-    : annotation_type(annotation_type), rect(rect), data(std::move(data)) {}
+    : PaintOp(kType),
+      annotation_type(annotation_type),
+      rect(rect),
+      data(std::move(data)) {}
 
 AnnotateOp::~AnnotateOp() = default;
+
+DrawImageOp::DrawImageOp() : PaintOpWithFlags(kType) {}
 
 DrawImageOp::DrawImageOp(const PaintImage& image,
                          SkScalar left,
                          SkScalar top,
                          const PaintFlags* flags)
-    : PaintOpWithFlags(flags ? *flags : PaintFlags()),
+    : PaintOpWithFlags(kType, flags ? *flags : PaintFlags()),
       image(image),
       left(left),
       top(top) {}
@@ -1469,14 +1878,14 @@ bool DrawImageOp::HasDiscardableImages() const {
 
 DrawImageOp::~DrawImageOp() = default;
 
-DrawImageRectOp::DrawImageRectOp() = default;
+DrawImageRectOp::DrawImageRectOp() : PaintOpWithFlags(kType) {}
 
 DrawImageRectOp::DrawImageRectOp(const PaintImage& image,
                                  const SkRect& src,
                                  const SkRect& dst,
                                  const PaintFlags* flags,
                                  PaintCanvas::SrcRectConstraint constraint)
-    : PaintOpWithFlags(flags ? *flags : PaintFlags()),
+    : PaintOpWithFlags(kType, flags ? *flags : PaintFlags()),
       image(image),
       src(src),
       dst(dst),
@@ -1488,10 +1897,8 @@ bool DrawImageRectOp::HasDiscardableImages() const {
 
 DrawImageRectOp::~DrawImageRectOp() = default;
 
-DrawRecordOp::DrawRecordOp() = default;
-
 DrawRecordOp::DrawRecordOp(sk_sp<const PaintRecord> record)
-    : record(std::move(record)) {}
+    : PaintOp(kType), record(std::move(record)) {}
 
 DrawRecordOp::~DrawRecordOp() = default;
 
@@ -1503,13 +1910,13 @@ bool DrawRecordOp::HasDiscardableImages() const {
   return record->HasDiscardableImages();
 }
 
-DrawTextBlobOp::DrawTextBlobOp() = default;
+DrawTextBlobOp::DrawTextBlobOp() : PaintOpWithFlags(kType) {}
 
 DrawTextBlobOp::DrawTextBlobOp(scoped_refptr<PaintTextBlob> paint_blob,
                                SkScalar x,
                                SkScalar y,
                                const PaintFlags& flags)
-    : PaintOpWithFlags(flags), blob(std::move(paint_blob)), x(x), y(y) {}
+    : PaintOpWithFlags(kType, flags), blob(std::move(paint_blob)), x(x), y(y) {}
 
 DrawTextBlobOp::~DrawTextBlobOp() = default;
 
@@ -1605,8 +2012,6 @@ PaintOpBuffer::PlaybackFoldingIterator::PlaybackFoldingIterator(
     const std::vector<size_t>* offsets)
     : iter_(buffer, offsets),
       folded_draw_color_(SK_ColorTRANSPARENT, SkBlendMode::kSrcOver) {
-  // PaintOps don't set their type in their ctor.
-  folded_draw_color_.type = static_cast<uint8_t>(PaintOpType::DrawColor);
   FindNextOp();
 }
 
@@ -1721,10 +2126,19 @@ void PaintOpBuffer::Playback(SkCanvas* canvas,
 
     if (op->IsPaintOpWithFlags()) {
       const auto* flags_op = static_cast<const PaintOpWithFlags*>(op);
-      ScopedImageFlags scoped_flags(params.image_provider, &flags_op->flags,
-                                    canvas->getTotalMatrix(), iter.alpha());
-      if (scoped_flags.flags())
-        flags_op->RasterWithFlags(canvas, scoped_flags.flags(), params);
+      base::Optional<ScopedImageFlags> scoped_flags;
+      const bool needs_flag_override =
+          iter.alpha() != 255 ||
+          (flags_op->flags.HasDiscardableImages() && params.image_provider);
+      if (needs_flag_override) {
+        scoped_flags.emplace(params.image_provider, &flags_op->flags,
+                             canvas->getTotalMatrix(), iter.alpha());
+      }
+
+      const PaintFlags* raster_flags =
+          scoped_flags ? scoped_flags->flags() : &flags_op->flags;
+      if (raster_flags)
+        flags_op->RasterWithFlags(canvas, raster_flags, params);
       continue;
     }
 
@@ -1814,6 +2228,31 @@ void PaintOpBuffer::ShrinkToFit() {
   } else {
     ReallocBuffer(used_);
   }
+}
+
+bool PaintOpBuffer::operator==(const PaintOpBuffer& other) const {
+  if (op_count_ != other.op_count_)
+    return false;
+  if (num_slow_paths_ != other.num_slow_paths_)
+    return false;
+  if (subrecord_bytes_used_ != other.subrecord_bytes_used_)
+    return false;
+  if (has_non_aa_paint_ != other.has_non_aa_paint_)
+    return false;
+  if (has_discardable_images_ != other.has_discardable_images_)
+    return false;
+
+  auto left_iter = Iterator(this);
+  auto right_iter = Iterator(&other);
+
+  for (; left_iter != left_iter.end(); ++left_iter, ++right_iter) {
+    if (**left_iter != **right_iter)
+      return false;
+  }
+
+  DCHECK(left_iter == left_iter.end());
+  DCHECK(right_iter == right_iter.end());
+  return true;
 }
 
 }  // namespace cc

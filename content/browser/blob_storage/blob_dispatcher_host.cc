@@ -170,6 +170,7 @@ void BlobDispatcherHost::OnRegisterBlob(
         // originally created by other processes? If so, is that cool?
         break;
       }
+      case storage::DataElement::TYPE_RAW_FILE:
       case storage::DataElement::TYPE_UNKNOWN:
       case storage::DataElement::TYPE_DATA_PIPE:
       case storage::DataElement::TYPE_DISK_CACHE_ENTRY: {
@@ -181,6 +182,7 @@ void BlobDispatcherHost::OnRegisterBlob(
 
   HostedBlobState hosted_state(transport_host_.StartBuildingBlob(
       uuid, content_type, content_disposition, descriptions, context,
+      file_system_context_,
       base::Bind(&BlobDispatcherHost::SendMemoryRequest, base::Unretained(this),
                  uuid),
       base::Bind(&BlobDispatcherHost::SendFinalBlobStatus,

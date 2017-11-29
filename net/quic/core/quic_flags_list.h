@@ -101,7 +101,7 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_rate_recovery, false)
 
 // Adds a QuicPacketNumberQueue that is based on a deque and does not support
 // costly AddRange arguments.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_frames_deque3, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_frames_deque3, true)
 
 // If true, enable QUIC v42.
 QUIC_FLAG(bool, FLAGS_quic_enable_version_42, false)
@@ -127,7 +127,7 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_enable_version_41, true)
 
 // If true, QUIC can take ownership of data provided in a reference counted
 // memory to avoid data copy.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_use_mem_slices, true)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_use_mem_slices, false)
 
 // Allow QUIC to accept initial packet numbers that are random, not 1.
 QUIC_FLAG(bool, FLAGS_quic_restart_flag_quic_enable_accept_random_ipn, false)
@@ -158,7 +158,7 @@ QUIC_FLAG(bool,
 
 // If true, allow a new BBR connection option to use a slower STARTUP once loss
 // occurs
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_slower_startup, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_slower_startup, true)
 
 // Deprecate QuicAckFrame.largest_observed since it is redundant.
 QUIC_FLAG(bool,
@@ -167,7 +167,7 @@ QUIC_FLAG(bool,
 
 // Fully drain the queue in QUIC BBR at least once per cycle(8 rounds) when
 // activated by the BBR3 connection option.
-QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_fully_drain_queue, false)
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_fully_drain_queue, true)
 
 // When true, allows connection options to be sent to completely disable packet
 // conservation in QUIC BBR STARTUP or make it more aggressive.
@@ -193,3 +193,25 @@ QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_explicit_close_after_tlp, false)
 
 // Enables 3 new connection options to make PROBE_RTT more aggressive
 QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_bbr_less_probe_rtt, false)
+
+// If true, server will send a connectivity probing to the source address of the
+// received connectivity probing. Otherwise, server will treat connectivity
+// probing packet as normal packet
+QUIC_FLAG(bool,
+          FLAGS_quic_reloadable_flag_quic_server_reply_to_connectivity_probing,
+          true)
+
+// If true, truncates QUIC error strings to 256 characters before writing them
+// to the wire.
+QUIC_FLAG(bool, FLAGS_quic_reloadable_flag_quic_truncate_long_details, true)
+
+// If true, allow stream data and control frames to be acked multiple times.
+QUIC_FLAG(bool,
+          FLAGS_quic_reloadable_flag_quic_allow_multiple_acks_for_data2,
+          false)
+
+// If true, calculate stream sequencer buffer block count in a way that
+// guaranteed to be 2048.
+QUIC_FLAG(bool,
+          FLAGS_quic_reloadable_flag_quic_fix_sequencer_buffer_block_count2,
+          false)

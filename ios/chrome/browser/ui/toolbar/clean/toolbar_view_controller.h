@@ -7,27 +7,27 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/history_popup/requirements/tab_history_positioner.h"
-#import "ios/chrome/browser/ui/history_popup/requirements/tab_history_ui_updater.h"
+#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
+#import "ios/chrome/browser/ui/bubble/bubble_view_anchor_point_provider.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_consumer.h"
 
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
 @class ToolbarButtonFactory;
-@class ToolbarConfiguration;
+@class ToolbarButtonUpdater;
+@class ToolbarToolsMenuButton;
 
 // View controller for a toolbar, which will show a horizontal row of
 // controls and/or labels.
-// This view controller will fill its container; it is up to the containing
-// view controller or presentation controller to configure an appropriate
-// height for it.
-@interface ToolbarViewController : UIViewController<TabHistoryPositioner,
-                                                    TabHistoryUIUpdater,
-                                                    ToolbarConsumer>
+@interface ToolbarViewController
+    : UIViewController<ActivityServicePositioner,
+                       BubbleViewAnchorPointProvider,
+                       ToolbarConsumer>
 
 - (instancetype)initWithDispatcher:
                     (id<ApplicationCommands, BrowserCommands>)dispatcher
                      buttonFactory:(ToolbarButtonFactory*)buttonFactory
+                     buttonUpdater:(ToolbarButtonUpdater*)buttonUpdater
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -37,8 +37,20 @@
 
 // The dispatcher for this view controller.
 @property(nonatomic, weak) id<ApplicationCommands, BrowserCommands> dispatcher;
+// The location bar view, containing the omnibox.
+@property(nonatomic, strong) UIView* locationBarView;
+// The ToolsMenu button.
+@property(nonatomic, strong, readonly) ToolbarToolsMenuButton* toolsMenuButton;
 
-@property(nonatomic, strong) UIViewController* locationBarViewController;
+// Animates the toolbar so the omnibox is shrinking to its standard state.
+- (void)contractOmnibox;
+// Expands the omnibox to its expanded state, |animated| or not.
+- (void)expandOmniboxAnimated:(BOOL)animated;
+// Updates the view so a snapshot can be taken. It needs to be adapted,
+// depending on if it is a snapshot displayed |onNTP| or not.
+- (void)updateForSideSwipeSnapshotOnNTP:(BOOL)onNTP;
+// Resets the view after taking a snapshot for a side swipe.
+- (void)resetAfterSideSwipeSnapshot;
 
 @end
 

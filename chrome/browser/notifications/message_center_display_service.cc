@@ -29,10 +29,12 @@ class PassThroughDelegate : public message_center::NotificationDelegate {
  public:
   PassThroughDelegate(Profile* profile,
                       const message_center::Notification& notification,
-                      NotificationCommon::Type notification_type)
+                      NotificationHandler::Type notification_type)
       : profile_(profile),
         notification_(notification),
-        notification_type_(notification_type) {}
+        notification_type_(notification_type) {
+    DCHECK_NE(notification_type, NotificationHandler::Type::TRANSIENT);
+  }
 
   void Close(bool by_user) override {
     NotificationDisplayServiceFactory::GetForProfile(profile_)
@@ -64,7 +66,7 @@ class PassThroughDelegate : public message_center::NotificationDelegate {
  private:
   Profile* profile_;
   message_center::Notification notification_;
-  NotificationCommon::Type notification_type_;
+  NotificationHandler::Type notification_type_;
 
   DISALLOW_COPY_AND_ASSIGN(PassThroughDelegate);
 };
@@ -77,13 +79,9 @@ MessageCenterDisplayService::MessageCenterDisplayService(Profile* profile)
 MessageCenterDisplayService::~MessageCenterDisplayService() {}
 
 void MessageCenterDisplayService::Display(
-    NotificationCommon::Type notification_type,
+    NotificationHandler::Type notification_type,
     const message_center::Notification& notification,
     std::unique_ptr<NotificationCommon::Metadata> metadata) {
-  // TODO(miguelg): MCDS should stop relying on the |notification|'s delegate
-  // for Close/Click operations once the Notification object becomes a mojom
-  // type.
-
   // This can be called when the browser is shutting down and the
   // NotificationUiManager has already destructed.
   NotificationUIManager* ui_manager =
@@ -95,7 +93,8 @@ void MessageCenterDisplayService::Display(
   if (handler)
     handler->OnShow(profile_, notification.id());
 
-  if (notification.delegate()) {
+  if (notification.delegate() ||
+      notification_type == NotificationHandler::Type::TRANSIENT) {
     ui_manager->Add(notification, profile_);
     return;
   }
@@ -109,7 +108,7 @@ void MessageCenterDisplayService::Display(
 }
 
 void MessageCenterDisplayService::Close(
-    NotificationCommon::Type notification_type,
+    NotificationHandler::Type notification_type,
     const std::string& notification_id) {
   // This can be called when the browser is shutting down and the
   // NotificationUiManager has already destructed.

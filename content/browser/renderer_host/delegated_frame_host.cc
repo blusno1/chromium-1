@@ -17,7 +17,6 @@
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/gl_helper.h"
 #include "components/viz/common/quads/compositor_frame.h"
-#include "components/viz/common/quads/texture_mailbox.h"
 #include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/common/surfaces/stub_surface_reference_factory.h"
 #include "components/viz/common/switches.h"
@@ -31,6 +30,8 @@
 #include "content/browser/renderer_host/compositor_resize_lock.h"
 #include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
 #include "content/public/common/content_switches.h"
+#include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "skia/ext/image_operations.h"
@@ -291,16 +292,11 @@ void DelegatedFrameHost::WasResized() {
   }
 
   if (enable_surface_synchronization_) {
-    ui::Layer* layer = client_->DelegatedFrameHostGetLayer();
     current_frame_size_in_dip_ = client_->DelegatedFrameHostDesiredSizeInDIP();
-    gfx::Size desired_size_in_pixels = gfx::ConvertSizeToPixel(
-        layer->device_scale_factor(), current_frame_size_in_dip_);
 
     viz::SurfaceId surface_id(frame_sink_id_, client_->GetLocalSurfaceId());
-    viz::SurfaceInfo surface_info(surface_id, layer->device_scale_factor(),
-                                  desired_size_in_pixels);
     client_->DelegatedFrameHostGetLayer()->SetShowPrimarySurface(
-        surface_info, GetSurfaceReferenceFactory());
+        surface_id, current_frame_size_in_dip_, GetSurfaceReferenceFactory());
     has_primary_surface_ = true;
     frame_evictor_->SwappedFrame(client_->DelegatedFrameHostIsVisible());
     if (compositor_)
@@ -425,10 +421,9 @@ void DelegatedFrameHost::AttemptFrameSubscriberCapture(
   // screenshots) since those copy requests do not specify |frame_subscriber()|
   // as a source.
   request->set_source(frame_subscriber()->GetSourceIdForCopyRequest());
-  if (subscriber_texture.get()) {
-    request->SetTextureMailbox(viz::TextureMailbox(
-        subscriber_texture->mailbox(), subscriber_texture->sync_token(),
-        subscriber_texture->target()));
+  if (subscriber_texture) {
+    request->SetMailbox(subscriber_texture->mailbox(),
+                        subscriber_texture->sync_token());
   }
 
   // To avoid unnecessary browser composites, try to go directly to the Surface
@@ -466,11 +461,6 @@ void DelegatedFrameHost::SubmitCompositorFrame(
   gfx::Size frame_size_in_dip =
       gfx::ConvertSizeToDIP(frame_device_scale_factor, frame_size);
 
-  gfx::Rect damage_rect = root_pass->damage_rect;
-  damage_rect.Intersect(gfx::Rect(frame_size));
-  gfx::Rect damage_rect_in_dip =
-      gfx::ConvertRectToDIP(frame_device_scale_factor, damage_rect);
-
   if (ShouldSkipFrame(frame_size_in_dip)) {
     std::vector<viz::ReturnedResource> resources =
         viz::TransferableResource::ReturnResources(frame.resource_list);
@@ -495,12 +485,10 @@ void DelegatedFrameHost::SubmitCompositorFrame(
 
   if (skipped_frames_) {
     skipped_frames_ = false;
-    damage_rect = gfx::Rect(frame_size);
-    damage_rect_in_dip = gfx::Rect(frame_size_in_dip);
 
     // Give the same damage rect to the compositor.
     viz::RenderPass* root_pass = frame.render_pass_list.back().get();
-    root_pass->damage_rect = damage_rect;
+    root_pass->damage_rect = gfx::Rect(frame_size);
   }
 
   background_color_ = frame.metadata.root_background_color;
@@ -523,13 +511,7 @@ void DelegatedFrameHost::SubmitCompositorFrame(
     DCHECK(enable_surface_synchronization_ || has_primary_surface_);
   }
 
-  // TODO(fsamuel): This is used to detect video. We need to develop an
-  // alternative mechanism to detect video in a frame for Viz.
   if (!enable_surface_synchronization_) {
-    if (!damage_rect_in_dip.IsEmpty()) {
-      client_->DelegatedFrameHostGetLayer()->OnDelegatedFrameDamage(
-          damage_rect_in_dip);
-    }
     if (has_primary_surface_)
       frame_evictor_->SwappedFrame(client_->DelegatedFrameHostIsVisible());
     // Note: the frame may have been evicted immediately.
@@ -574,9 +556,12 @@ void DelegatedFrameHost::OnBeginFramePausedChanged(bool paused) {
 
 void DelegatedFrameHost::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
+  gfx::Size frame_size_in_dip = gfx::ConvertSizeToDIP(
+      surface_info.device_scale_factor(), surface_info.size_in_pixels());
+
   if (!enable_surface_synchronization_) {
     client_->DelegatedFrameHostGetLayer()->SetShowPrimarySurface(
-        surface_info, GetSurfaceReferenceFactory());
+        surface_info.id(), frame_size_in_dip, GetSurfaceReferenceFactory());
     has_primary_surface_ = true;
   }
 
@@ -594,12 +579,14 @@ void DelegatedFrameHost::OnFirstSurfaceActivation(
     return;
 
   released_front_lock_ = nullptr;
-  gfx::Size frame_size_in_dip = gfx::ConvertSizeToDIP(
-      surface_info.device_scale_factor(), surface_info.size_in_pixels());
   current_frame_size_in_dip_ = frame_size_in_dip;
   CheckResizeLock();
 
   UpdateGutters();
+}
+
+void DelegatedFrameHost::OnFrameTokenChanged(uint32_t frame_token) {
+  client_->OnFrameTokenChanged(frame_token);
 }
 
 void DelegatedFrameHost::OnBeginFrame(const viz::BeginFrameArgs& args) {
@@ -716,6 +703,8 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
     return;
   }
 
+  DCHECK_EQ(result->format(), viz::CopyOutputResult::Format::RGBA_TEXTURE);
+
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   viz::GLHelper* gl_helper = factory->GetGLHelper();
   if (!gl_helper)
@@ -723,14 +712,10 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
   if (subscriber_texture.get() && !subscriber_texture->texture_id())
     return;
 
-  viz::TextureMailbox texture_mailbox;
-  std::unique_ptr<viz::SingleReleaseCallback> release_callback;
-  if (auto* mailbox = result->GetTextureMailbox()) {
-    texture_mailbox = *mailbox;
-    release_callback = result->TakeTextureOwnership();
-  }
-  if (!texture_mailbox.IsTexture())
-    return;
+  gpu::Mailbox mailbox = result->GetTextureResult()->mailbox;
+  gpu::SyncToken sync_token = result->GetTextureResult()->sync_token;
+  std::unique_ptr<viz::SingleReleaseCallback> release_callback =
+      result->TakeTextureOwnership();
 
   if (!dfh->yuv_readback_pipeline_) {
     dfh->yuv_readback_pipeline_ =
@@ -781,8 +766,7 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
       video_frame, dfh->AsWeakPtr(), base::Bind(callback, region_in_frame),
       subscriber_texture, base::Passed(&release_callback));
   yuv_readback_pipeline->ReadbackYUV(
-      texture_mailbox.mailbox(), texture_mailbox.sync_token(), result->size(),
-      gfx::Rect(region_in_frame.size()),
+      mailbox, sync_token, result->size(), gfx::Rect(region_in_frame.size()),
       video_frame->stride(media::VideoFrame::kYPlane),
       video_frame->data(media::VideoFrame::kYPlane),
       video_frame->stride(media::VideoFrame::kUPlane),

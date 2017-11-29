@@ -74,11 +74,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '1662257bdaaaf26b016bf2a3e329c34f7f5ed581',
+  'skia_revision': 'e819e5f81e76fa88955b19467edc83b7ca6a4ff9',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '414f4942add607cf6602bbae29307882684722ab',
+  'v8_revision': 'e7c39d16a5a1be62cfd68e579c3c99b43fa21293',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -86,11 +86,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'f4f293effbc6ccba0b6462743d3f5bd9c794d75d',
+  'angle_revision': '5201ce127afea0ef1d34e161ead085fe50e73da4',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': '93a751e41bd93e373548759c6c5453bd95b6f35e',
+  'buildtools_revision': '505de88083136eefd056e5ee4ca0f01fe9b33de8',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling SwiftShader
   # and whatever else without interference from each other.
@@ -98,7 +98,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'ccf206a7731e0df773a4c5941736953446ec4d9d',
+  'pdfium_revision': '1ff9b7ffa653de1d25c5e013d731054815b13e86',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -106,7 +106,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': '6cc352e216938d78b65fb8ccbeebfc1f7f7486c4',
+  'boringssl_revision': '8793942c5c7f4a46dcadea3a686c50f2b1c312ed',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
@@ -126,11 +126,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype
   # and whatever else without interference from each other.
-  'freetype_revision': '8f5568bfc4fd5fe707f0e41915b57affc1bff0e3',
+  'freetype_revision': 'bec14f688925467be708f01378fbbf82e6b19b42',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'c44654bacfc5866bbafe00b7fac50f87c82a4103',
+  'catapult_revision': '11d7efb857ae77eff1cea4640e3f3d9ac49cba0a',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -244,7 +244,7 @@ deps = {
   },
 
   'src/third_party/android_tools': {
-      'url': Var('chromium_git') + '/android_tools.git' + '@' + '9914c5704717424998c69e837be3631914d787cc',
+      'url': Var('chromium_git') + '/android_tools.git' + '@' + 'a2e9bc7c1b41d983577907df51d339fb1e0fd02f',
       'condition': 'checkout_android',
   },
 
@@ -283,7 +283,7 @@ deps = {
 
   # Build tools for Chrome OS. Note: This depends on third_party/pyelftools.
   'src/third_party/chromite': {
-      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + 'ef632e4a473bfe196707200bc315293b59a121f7',
+      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '575c52b3e1f9e893254d02f073e61437f99bf3a9',
       'condition': 'checkout_linux',
   },
 
@@ -298,17 +298,17 @@ deps = {
 
   # For Linux and Chromium OS.
   'src/third_party/cros_system_api': {
-      'url': Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '5fc40ab72e45c14f5d98b3b2498224079b574ebb',
+      'url': Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '9b6a22544458fc178095b3e9be90edfc6b0aa7ab',
       'condition': 'checkout_linux',
   },
 
   'src/third_party/custom_tabs_client/src': {
-      'url': Var('chromium_git') + '/external/github.com/GoogleChrome/custom-tabs-client.git' + '@' + 'cff061038b852d647f7044d828a9df78aa135f38',
+      'url': Var('chromium_git') + '/custom-tabs-client.git' + '@' + 'afe8a13457103292fb1ba49877a0b0e5abdc2f36',
       'condition': 'checkout_android',
   },
 
   'src/third_party/depot_tools':
-    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + 'a0e6b95cbb47b33f47265e32cbf74766b9c1edbb',
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '9e51906ffb13222de7215293dac7a8031d538c0e',
 
   # DevTools node modules. Used on Linux buildbots only.
   'src/third_party/devtools-node-modules': {
@@ -325,12 +325,12 @@ deps = {
   },
 
   'src/third_party/errorprone/lib': {
-      'url': Var('chromium_git') + '/chromium/third_party/errorprone.git' + '@' + '16b8b7298b183312a2fcac99fb1b594ccf7749d0',
+      'url': Var('chromium_git') + '/chromium/third_party/errorprone.git' + '@' + '635c410fc42614b48518ae6818105bc83af88497',
       'condition': 'checkout_android',
   },
 
   'src/third_party/ffmpeg':
-    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'c99db0ab53a43f09e65caf0b546c8a4b19a36f60',
+    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '18c815f81428e3b41e6f4efc6cb0cbe5b846d1c2',
 
   'src/third_party/findbugs': {
       'url': Var('chromium_git') + '/chromium/deps/findbugs.git' + '@' + '4275d9ac8610db6b1bc9a5e887f97e41b33fac67',
@@ -381,7 +381,7 @@ deps = {
   },
 
   'src/third_party/gvr-android-sdk/src': {
-      'url': Var('chromium_git') + '/external/github.com/googlevr/gvr-android-sdk.git' + '@' + 'ee5cb1c6138d0be57e82ddafc1b54d7d3e3e5560',
+      'url': Var('chromium_git') + '/external/github.com/googlevr/gvr-android-sdk.git' + '@' + '6aef4ab34276aac81ee38f1cb1d034de7fc4a4eb',
       'condition': 'checkout_android',
   },
 
@@ -389,7 +389,7 @@ deps = {
     Var('chromium_git') + '/chromium/deps/hunspell_dictionaries.git' + '@' + 'a9bac57ce6c9d390a52ebaad3259f5fdb871210e',
 
   'src/third_party/icu':
-    Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '5ed26985c0171755d7542e7ad6bce12cde4dccfb',
+    Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '741688ebf328da9adc52505248bf4e2ef868722c',
 
   'src/third_party/jsoncpp/source':
     Var('chromium_git') + '/external/github.com/open-source-parsers/jsoncpp.git' + '@' + 'f572e8e42e22cfcf5ab0aea26574f408943edfa4', # from svn 248
@@ -416,10 +416,10 @@ deps = {
     Var('chromium_git') + '/chromium/llvm-project/compiler-rt/lib/fuzzer.git' + '@' +  Var('libfuzzer_revision'),
 
   'src/third_party/libaddressinput/src':
-    Var('chromium_git') + '/external/libaddressinput.git' + '@' + '2a7c3d38915138189f4ac78e1188b58b2fbf5219',
+    Var('chromium_git') + '/external/libaddressinput.git' + '@' + 'a575c63de328d0c72237c55d1a05e191c245122a',
 
   'src/third_party/libaom/source/libaom': {
-    'url': Var('aomedia_git') + '/aom.git' + '@' +  '08b26a8a257e54210d8bbdba799980bc291f368e',
+    'url': Var('aomedia_git') + '/aom.git' + '@' +  'cccda0db727c2282375b174104294b40911d1447',
     'condition': 'checkout_libaom',
   },
 
@@ -459,13 +459,13 @@ deps = {
   },
 
   'src/third_party/libvpx/source/libvpx':
-    Var('chromium_git') + '/webm/libvpx.git' + '@' +  '8c7213bc00b56143b4374b1b8b8e1300331475b5',
+    Var('chromium_git') + '/webm/libvpx.git' + '@' +  'cbe62b9c2d2b006aba52c8eebe7d842e59166fe4',
 
   'src/third_party/libwebm/source':
     Var('chromium_git') + '/webm/libwebm.git' + '@' + '4956b2dec65352af32dc71bab553acb631c64177',
 
   'src/third_party/libyuv':
-    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + '8fa02df3c0591754958a50cc2896aafae319f3bc',  # from r1675
+    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + '12c904a97c81c3ef4cab0fc8fb1f0485b4ec4e8c',  # from r1678
 
   'src/third_party/lighttpd': {
       'url': Var('chromium_git') + '/chromium/deps/lighttpd.git' + '@' + Var('lighttpd_revision'),
@@ -621,10 +621,10 @@ deps = {
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
 
   'src/third_party/webgl/src':
-    Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '12192b948daa2d83269ab46cbf03d65e9f2a48a3',
+    Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + 'e4919fa03c74bd561dcabf3e61668fa3c7e54353',
 
   'src/third_party/webrtc':
-    Var('webrtc_git') + '/src.git' + '@' + 'cba3d274daaf57b3c6e8bc6cd10b959cf2ec73bf', # commit position 20628
+    Var('webrtc_git') + '/src.git' + '@' + 'aede67a199ae0552074bfec4bb03cc9a6a5fba0f', # commit position 20628
 
   'src/third_party/xdg-utils': {
       'url': Var('chromium_git') + '/chromium/deps/xdg-utils.git' + '@' + 'd80274d5869b17b8c9067a1022e4416ee7ed5e0d',
@@ -647,7 +647,7 @@ deps = {
     Var('chromium_git') + '/v8/v8.git' + '@' +  Var('v8_revision'),
 
   'src-internal': {
-    'url': 'https://chrome-internal.googlesource.com/chrome/src-internal.git@28ccedb58718adda0813585b1ef5d4be6d3cb807',
+    'url': 'https://chrome-internal.googlesource.com/chrome/src-internal.git@d638a44a623a5b63de31f3217fb5ecb40413f037',
     'condition': 'checkout_src_internal',
   },
 }
@@ -764,7 +764,7 @@ hooks = [
     'name': 'mac_toolchain',
     'pattern': '.',
     'condition': 'checkout_ios or checkout_mac',
-    'action': ['vpython', 'src/build/mac_toolchain.py'],
+    'action': ['python', 'src/build/mac_toolchain.py'],
   },
   # Pull binutils for linux, enabled debug fission for faster linking /
   # debugging when used with clang on Ubuntu Precise.
@@ -927,6 +927,18 @@ hooks = [
                 '--no_auth',
                 '--bucket', 'chromium-browser-clang/rc',
                 '-s', 'src/build/toolchain/win/rc/linux64/rc.sha1',
+    ]
+  },
+  {
+    'name': 'content_shell_fonts',
+    'pattern': '.',
+    'action': [ 'download_from_google_storage',
+                '--no_resume',
+                '--platform=linux*',
+                '--extract',
+                '--no_auth',
+                '--bucket', 'chromium-fonts',
+                '-s', 'src/third_party/content_shell_fonts/content_shell_test_fonts.tar.gz.sha1',
     ],
   },
   # Pull order files for the win/clang build.
@@ -1062,7 +1074,7 @@ hooks = [
                 '--no_resume',
                 '--extract',
                 '--no_auth',
-                '--bucket', 'chromium-nodejs/6.9.4',
+                '--bucket', 'chromium-nodejs/8.9.1',
                 '-s', 'src/third_party/node/linux/node-linux-x64.tar.gz.sha1',
     ],
   },
@@ -1075,7 +1087,7 @@ hooks = [
                 '--no_resume',
                 '--extract',
                 '--no_auth',
-                '--bucket', 'chromium-nodejs/6.9.4',
+                '--bucket', 'chromium-nodejs/8.9.1',
                 '-s', 'src/third_party/node/mac/node-darwin-x64.tar.gz.sha1',
     ],
   },
@@ -1087,7 +1099,7 @@ hooks = [
                 'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--no_auth',
-                '--bucket', 'chromium-nodejs/6.9.4',
+                '--bucket', 'chromium-nodejs/8.9.1',
                 '-s', 'src/third_party/node/win/node.exe.sha1',
     ],
   },
@@ -1153,6 +1165,22 @@ hooks = [
                 '--num_threads=4',
                 '--bucket', 'chromium-tools-traffic_annotation',
                 '-d', 'src/tools/traffic_annotation/bin/linux64',
+    ],
+  },
+
+# This is used to ensure that all network operations are properly
+# annotated so we can document what they're for.
+  {
+    'name': 'tools_traffic_annotation_windows',
+    'pattern': '.',
+    'condition': 'host_os == "windows" and checkout_traffic_annotation_tools',
+    'action': [ 'vpython',
+                'src/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--num_threads=4',
+                '--bucket', 'chromium-tools-traffic_annotation',
+                '-d', 'src/tools/traffic_annotation/bin/win32',
     ],
   },
 
@@ -1269,6 +1297,16 @@ hooks = [
       'vpython',
       'src/build/fuchsia/update_sdk.py',
       '1a7e46683da9638f5bff44930f307043927c665f',
+    ],
+  },
+
+  {
+    'name': 'Fuchsia QEMU ensure',
+    'pattern': '.',
+    'condition': 'checkout_fuchsia',
+    'action': ['src/build/cipd/cipd_wrapper.py',
+               '--chromium-root', 'src',
+               '--ensure-file', 'src/build/cipd/fuchsia/qemu.ensure',
     ],
   },
 

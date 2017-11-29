@@ -19,7 +19,7 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoadPriority.h"
 #include "platform/network/NetworkStateNotifier.h"
-#include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebEffectiveConnectionType.h"
 
@@ -49,7 +49,7 @@ RemoteFontFaceSource::RemoteFontFaceSource(CSSFontFace* css_font_face,
   font_->AddClient(this);
 }
 
-RemoteFontFaceSource::~RemoteFontFaceSource() {}
+RemoteFontFaceSource::~RemoteFontFaceSource() = default;
 
 void RemoteFontFaceSource::Dispose() {
   if (font_) {

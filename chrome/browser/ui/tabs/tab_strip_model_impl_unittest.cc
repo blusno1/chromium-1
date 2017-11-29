@@ -614,7 +614,7 @@ TEST_F(TabStripModelTest, TestBasicAPI) {
 
   // Test UpdateWebContentsStateAt
   {
-    tabstrip.UpdateWebContentsStateAt(0, TabStripModelObserver::ALL);
+    tabstrip.UpdateWebContentsStateAt(0, TabChangeType::kAll);
     EXPECT_EQ(1, observer.GetStateCount());
     State s1(contents2, 0, MockTabStripModelObserver::CHANGE);
     EXPECT_TRUE(observer.StateEquals(0, s1));
@@ -2155,6 +2155,8 @@ TEST_F(TabStripModelTest, MoveWebContentsAtWithPinned) {
   EXPECT_EQ("2p 1p 0p 4 3 5", GetTabStripStateString(strip));
   strip.MoveWebContentsAt(2, 0, true);
   EXPECT_EQ("0p 2p 1p 4 3 5", GetTabStripStateString(strip));
+
+  strip.CloseAllTabs();
 }
 
 TEST_F(TabStripModelTest, MoveSelectedTabsTo) {

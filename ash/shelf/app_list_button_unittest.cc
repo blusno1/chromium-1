@@ -5,6 +5,7 @@
 #include "ash/shelf/app_list_button.h"
 
 #include <memory>
+#include <string>
 
 #include "ash/public/cpp/config.h"
 #include "ash/root_window_controller.h"
@@ -34,8 +35,8 @@ ui::GestureEvent CreateGestureEvent(ui::GestureEventDetails details) {
 
 class AppListButtonTest : public AshTestBase {
  public:
-  AppListButtonTest() {}
-  ~AppListButtonTest() override {}
+  AppListButtonTest() = default;
+  ~AppListButtonTest() override = default;
 
   // AshTestBase:
   void SetUp() override {
@@ -127,7 +128,7 @@ TEST_F(AppListButtonTest, SwipeUpToOpenFullscreenAppList) {
 
 class VoiceInteractionAppListButtonTest : public AppListButtonTest {
  public:
-  VoiceInteractionAppListButtonTest() {}
+  VoiceInteractionAppListButtonTest() = default;
 
   // AppListButtonTest:
   void SetUp() override {
@@ -162,9 +163,9 @@ TEST_F(VoiceInteractionAppListButtonTest,
 }
 
 TEST_F(VoiceInteractionAppListButtonTest, LongPressGestureWithSecondaryUser) {
-  // Simulate two user with secondary user as active.
-  SimulateUserLogin("user1@test.com");
-  SimulateUserLogin("user2@test.com");
+  // Disallowed by secondary user.
+  Shell::Get()->voice_interaction_controller()->NotifyFeatureAllowed(
+      mojom::AssistantAllowedState::DISALLOWED_BY_NONPRIMARY_USER);
 
   // Enable voice interaction in system settings.
   Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(true);
@@ -229,7 +230,7 @@ class BackButtonAppListButtonTest : public AppListButtonTest,
                                     public testing::WithParamInterface<bool> {
  public:
   BackButtonAppListButtonTest() : is_rtl_(GetParam()) {}
-  ~BackButtonAppListButtonTest() override {}
+  ~BackButtonAppListButtonTest() override = default;
 
   void SetUp() override {
     if (is_rtl_) {

@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/accessibility_delegate.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -151,10 +152,6 @@ void BackdropController::OnAppListVisibilityChanged(bool shown,
   if (container_->GetRootWindow() != root_window)
     return;
 
-  // Hide or update backdrop only for fullscreen app list.
-  if (!app_list::features::IsFullscreenAppListEnabled())
-    return;
-
   if (shown)
     AddForceHidden();
   else
@@ -194,7 +191,7 @@ void BackdropController::UpdateAccessibilityMode() {
     return;
 
   bool enabled =
-      Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled();
+      Shell::Get()->accessibility_controller()->IsSpokenFeedbackEnabled();
   if (enabled) {
     if (!backdrop_event_handler_) {
       backdrop_event_handler_ = std::make_unique<BackdropEventHandler>();
@@ -232,7 +229,7 @@ bool BackdropController::WindowShouldHaveBackdrop(aura::Window* window) {
   if (window->GetProperty(aura::client::kAppType) ==
           static_cast<int>(AppType::ARC_APP) &&
       wm::IsActiveWindow(window) &&
-      Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled()) {
+      Shell::Get()->accessibility_controller()->IsSpokenFeedbackEnabled()) {
     return true;
   }
 

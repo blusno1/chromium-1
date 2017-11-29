@@ -504,7 +504,7 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   if (decision == kIgnoreObject)
     return true;
 
-  if (layout_object_->IsAnonymousBlock())
+  if (layout_object_->IsAnonymousBlock() && !IsEditable())
     return true;
 
   // If this element is within a parent that cannot have children, it should not
@@ -1351,9 +1351,11 @@ void AXLayoutObject::AriaDescribedbyElements(
 bool AXLayoutObject::AriaHasPopup() const {
   const AtomicString& has_popup =
       GetAOMPropertyOrARIAAttribute(AOMStringProperty::kHasPopUp);
+  if (!has_popup.IsNull())
+    return !has_popup.IsEmpty() && !EqualIgnoringASCIICase(has_popup, "false");
 
-  return !has_popup.IsNull() && !has_popup.IsEmpty() &&
-         !EqualIgnoringASCIICase(has_popup, "false");
+  return RoleValue() == kComboBoxMenuButtonRole ||
+         RoleValue() == kTextFieldWithComboBoxRole;
 }
 
 bool AXLayoutObject::SupportsARIADragging() const {
@@ -1917,7 +1919,7 @@ int AXLayoutObject::IndexForVisiblePosition(
     // TODO(chromium-accessibility): We reach here only when passing a position
     // outside of the node range. This shouldn't happen, but is happening as
     // found in crbug.com/756435.
-    NOTREACHED();
+    LOG(WARNING) << "AX position out of node range";
     return 0;
   }
 
@@ -2493,8 +2495,10 @@ void AXLayoutObject::AddTextFieldChildren() {
     return;
 
   HTMLInputElement& input = ToHTMLInputElement(*node);
-  Element* spin_button_element = input.UserAgentShadowRoot()->getElementById(
-      ShadowElementNames::SpinButton());
+  Element* spin_button_element =
+      input.UserAgentShadowRoot() ? input.UserAgentShadowRoot()->getElementById(
+                                        ShadowElementNames::SpinButton())
+                                  : nullptr;
   if (!spin_button_element || !spin_button_element->IsSpinButtonElement())
     return;
 

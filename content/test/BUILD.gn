@@ -169,6 +169,8 @@ static_library("test_support") {
     "../public/test/text_input_test_utils_mac.mm",
     "../public/test/unittest_test_suite.cc",
     "../public/test/unittest_test_suite.h",
+    "../public/test/url_loader_interceptor.cc",
+    "../public/test/url_loader_interceptor.h",
     "../public/test/web_contents_binding_set_test_binder.h",
     "../public/test/web_contents_tester.cc",
     "../public/test/web_contents_tester.h",
@@ -254,6 +256,10 @@ static_library("test_support") {
     "test_render_view_host.h",
     "test_render_view_host_factory.cc",
     "test_render_view_host_factory.h",
+    "test_render_widget_host.cc",
+    "test_render_widget_host.h",
+    "test_render_widget_host_factory.cc",
+    "test_render_widget_host_factory.h",
     "test_web_contents.cc",
     "test_web_contents.h",
     "test_web_contents_factory.cc",
@@ -375,8 +381,6 @@ static_library("test_support") {
     sources += [
       "../renderer/media/mock_data_channel_impl.cc",
       "../renderer/media/mock_data_channel_impl.h",
-      "../renderer/media/mock_media_stream_dispatcher.cc",
-      "../renderer/media/mock_media_stream_dispatcher.h",
       "../renderer/media/mock_mojo_media_stream_dispatcher_host.cc",
       "../renderer/media/mock_mojo_media_stream_dispatcher_host.h",
       "../renderer/media/mock_peer_connection_impl.cc",
@@ -804,6 +808,7 @@ test("content_browsertests") {
     "../renderer/webclipboard_impl_browsertest.cc",
     "../test/browser_test_utils_browsertest.cc",
     "../test/content_browser_test_test.cc",
+    "../test/url_loader_interceptor_test.cc",
     "../test/webui_resource_browsertest.cc",
   ]
 
@@ -872,6 +877,7 @@ test("content_browsertests") {
     "//testing/gtest",
     "//third_party/WebKit/public:blink",
     "//third_party/leveldatabase",
+    "//third_party/libaom:av1_features",
     "//third_party/mesa:osmesa",
     "//third_party/zlib",
     "//ui/accessibility",
@@ -1325,7 +1331,7 @@ test("content_unittests") {
     "../browser/payments/payment_manager_unittest.cc",
     "../browser/permissions/permission_service_impl_unittest.cc",
     "../browser/presentation/presentation_service_impl_unittest.cc",
-    "../browser/renderer_host/clipboard_message_filter_unittest.cc",
+    "../browser/renderer_host/clipboard_host_impl_unittest.cc",
     "../browser/renderer_host/compositor_resize_lock_unittest.cc",
     "../browser/renderer_host/cursor_manager_unittest.cc",
     "../browser/renderer_host/dwrite_font_proxy_message_filter_win_unittest.cc",
@@ -1438,11 +1444,9 @@ test("content_unittests") {
     "../browser/web_contents/web_contents_view_mac_unittest.mm",
     "../browser/web_contents/web_drag_dest_mac_unittest.mm",
     "../browser/web_contents/web_drag_source_mac_unittest.mm",
-    "../browser/webauth/authenticator_impl_unittest.cc",
     "../browser/webauth/cbor/cbor_values_unittest.cc",
     "../browser/webauth/cbor/cbor_writer_unittest.cc",
     "../browser/websockets/websocket_manager_unittest.cc",
-    "../browser/webui/i18n_source_stream_unittest.cc",
     "../browser/webui/url_data_manager_backend_unittest.cc",
     "../browser/webui/web_ui_data_source_unittest.cc",
     "../browser/webui/web_ui_message_handler_unittest.cc",
@@ -1470,7 +1474,6 @@ test("content_unittests") {
     "../common/input/touch_event_stream_validator_unittest.cc",
     "../common/inter_process_time_ticks_converter_unittest.cc",
     "../common/mac/attributed_string_coder_unittest.mm",
-    "../common/mac/font_descriptor_unittest.mm",
     "../common/manifest_util_unittest.cc",
     "../common/media/media_devices_unittest.cc",
     "../common/origin_util_unittest.cc",
@@ -1549,6 +1552,7 @@ test("content_unittests") {
     "../renderer/media/audio_renderer_sink_cache_unittest.cc",
     "../renderer/media/mock_audio_device_factory.cc",
     "../renderer/media/mock_audio_device_factory.h",
+    "../renderer/media/mojo_audio_input_ipc_unittest.cc",
     "../renderer/media/mojo_audio_output_ipc_unittest.cc",
     "../renderer/media/render_media_log_unittest.cc",
     "../renderer/media/renderer_webaudiodevice_impl_unittest.cc",
@@ -1565,6 +1569,7 @@ test("content_unittests") {
     "../renderer/service_worker/service_worker_dispatcher_unittest.cc",
     "../renderer/service_worker/service_worker_provider_context_unittest.cc",
     "../renderer/service_worker/service_worker_subresource_loader_unittest.cc",
+    "../renderer/service_worker/service_worker_timeout_timer_unittest.cc",
     "../renderer/service_worker/thread_safe_script_container_unittest.cc",
     "../renderer/service_worker/web_service_worker_installed_scripts_manager_impl_unittest.cc",
     "../renderer/skia_benchmarking_extension_unittest.cc",
@@ -1714,6 +1719,7 @@ test("content_unittests") {
     "//ui/gfx/ipc/skia",
     "//ui/gl",
     "//ui/gl:test_support",
+    "//ui/latency:test_support",
   ]
 
   data_deps = [
@@ -1733,6 +1739,7 @@ test("content_unittests") {
     # Put WebRTC-related plugins sources in the "enable_webrtc &&
     # enable_plugins" section below.
     sources += [
+      "../browser/plugin_service_impl_unittest.cc",
       "../browser/renderer_host/pepper/browser_ppapi_host_test.cc",
       "../browser/renderer_host/pepper/browser_ppapi_host_test.h",
       "../browser/renderer_host/pepper/pepper_file_system_browser_host_unittest.cc",
@@ -1779,7 +1786,7 @@ test("content_unittests") {
       "../renderer/media/media_stream_constraints_util_unittest.cc",
       "../renderer/media/media_stream_constraints_util_video_content_unittest.cc",
       "../renderer/media/media_stream_constraints_util_video_device_unittest.cc",
-      "../renderer/media/media_stream_dispatcher_unittest.cc",
+      "../renderer/media/media_stream_device_observer_unittest.cc",
       "../renderer/media/media_stream_video_capturer_source_unittest.cc",
       "../renderer/media/media_stream_video_renderer_sink_unittest.cc",
       "../renderer/media/media_stream_video_source_unittest.cc",
@@ -1810,6 +1817,7 @@ test("content_unittests") {
       "../renderer/media/webrtc/webrtc_media_stream_adapter_unittest.cc",
       "../renderer/media/webrtc/webrtc_media_stream_track_adapter_map_unittest.cc",
       "../renderer/media/webrtc/webrtc_media_stream_track_adapter_unittest.cc",
+      "../renderer/media/webrtc/webrtc_set_remote_description_observer_unittest.cc",
       "../renderer/media/webrtc/webrtc_video_capturer_adapter_unittest.cc",
       "../renderer/media/webrtc_audio_renderer_unittest.cc",
       "../renderer/media/webrtc_local_audio_source_provider_unittest.cc",
@@ -1829,6 +1837,7 @@ test("content_unittests") {
       "//third_party/webrtc/api:libjingle_peerconnection",
       "//third_party/webrtc/api:rtc_stats_api",
       "//third_party/webrtc/api:video_frame_api",
+      "//third_party/webrtc/api:video_frame_api_i420",
       "//third_party/webrtc/api/video_codecs:video_codecs_api",
       "//third_party/webrtc/media:rtc_media",
       "//third_party/webrtc/modules/desktop_capture:primitives",
@@ -1938,6 +1947,7 @@ test("content_unittests") {
       "../browser/speech/endpointer/endpointer_unittest.cc",
       "../browser/speech/speech_recognition_engine_unittest.cc",
       "../browser/speech/speech_recognizer_impl_unittest.cc",
+      "../browser/webauth/authenticator_impl_unittest.cc",
     ]
     deps += [ "//third_party/libvpx" ]
   }

@@ -31,12 +31,12 @@
 #ifndef LocalWindowProxy_h
 #define LocalWindowProxy_h
 
+#include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/frame/LocalFrame.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "v8/include/v8.h"
 
@@ -81,6 +81,9 @@ class LocalWindowProxy final : public WindowProxy {
   // prototype chain do not get fully initialized yet, e.g. the window
   // wrapper is not yet associated with the native DOMWindow object.
   void CreateContext();
+
+  // Installs conditionally enabled features, if necessary.
+  void InstallConditionalFeatures();
 
   // Associates the window wrapper and its prototype chain with the native
   // DOMWindow object. Also does some more Window-specific initialization.

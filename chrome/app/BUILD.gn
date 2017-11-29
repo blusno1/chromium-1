@@ -341,7 +341,6 @@ static_library("test_support") {
     # TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
     deps += [
       "//components/crash/content/app",
-      "//components/crash/content/app:lib",
       "//components/crash/content/app:test_support",
     ]
   }
@@ -415,7 +414,10 @@ if (is_chromeos) {
 }
 
 if (is_win) {
-  chrome_packaged_services += [ "//chrome/services/util_win:manifest" ]
+  chrome_packaged_services += [
+    "//chrome/services/util_win:manifest",
+    "//chrome/services/wifi_util_win:manifest",
+  ]
 }
 
 if (!is_android) {
@@ -442,7 +444,7 @@ service_manifest("chrome_content_packaged_services_manifest_overlay") {
   if (is_chromeos) {
     packaged_services += [
       "//ash/autoclick/mus:manifest",
-      "//ash/mus:manifest",
+      "//ash:manifest",
       "//ash/touch_hud/mus:manifest",
       "//components/font_service:manifest",
     ]

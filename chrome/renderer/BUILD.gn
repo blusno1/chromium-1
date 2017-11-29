@@ -89,8 +89,6 @@ static_library("renderer") {
     "prerender/prerenderer_client.h",
     "sandbox_status_extension_android.cc",
     "sandbox_status_extension_android.h",
-    "searchbox/search_bouncer.cc",
-    "searchbox/search_bouncer.h",
     "security_filter_peer.cc",
     "security_filter_peer.h",
     "tts_dispatcher.cc",
@@ -108,7 +106,6 @@ static_library("renderer") {
     "//chrome:strings",
     "//chrome/common",
     "//chrome/common:mojo_bindings",
-    "//chrome/common:search_mojom",
     "//chrome/common/net",
     "//components/autofill/content/renderer",
     "//components/cdm/renderer",
@@ -250,6 +247,8 @@ static_library("renderer") {
       "extensions/app_bindings_core.h",
       "extensions/app_hooks_delegate.cc",
       "extensions/app_hooks_delegate.h",
+      "extensions/automation_ax_tree_wrapper.cc",
+      "extensions/automation_ax_tree_wrapper.h",
       "extensions/automation_internal_custom_bindings.cc",
       "extensions/automation_internal_custom_bindings.h",
       "extensions/chrome_extensions_dispatcher_delegate.cc",
@@ -258,6 +257,8 @@ static_library("renderer") {
       "extensions/chrome_extensions_renderer_client.h",
       "extensions/chrome_v8_extension_handler.cc",
       "extensions/chrome_v8_extension_handler.h",
+      "extensions/extension_hooks_delegate.cc",
+      "extensions/extension_hooks_delegate.h",
       "extensions/extension_localization_peer.cc",
       "extensions/extension_localization_peer.h",
       "extensions/media_galleries_custom_bindings.cc",
@@ -396,7 +397,10 @@ static_library("renderer") {
   }
 
   if (!is_android) {
+    deps += [ "//chrome/common:search_mojom" ]
     sources += [
+      "searchbox/search_bouncer.cc",
+      "searchbox/search_bouncer.h",
       "searchbox/searchbox.cc",
       "searchbox/searchbox.h",
       "searchbox/searchbox_extension.cc",

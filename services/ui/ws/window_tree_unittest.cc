@@ -129,7 +129,7 @@ WindowTree* CreateTreeViaFactory(WindowServer* window_server,
                                  const UserId& user_id,
                                  TestWindowTreeBinding** binding) {
   WindowTree* tree = new WindowTree(window_server, user_id, nullptr,
-                                    base::MakeUnique<DefaultAccessPolicy>());
+                                    std::make_unique<DefaultAccessPolicy>());
   *binding = new TestWindowTreeBinding(tree);
   window_server->AddTree(base::WrapUnique(tree), base::WrapUnique(*binding),
                          nullptr);
@@ -292,6 +292,26 @@ TEST_F(WindowTreeTest, BasicInputEventTarget) {
   EXPECT_EQ("InputEvent window=0," + std::to_string(kEmbedTreeWindowId) +
                 " event_action=16",
             ChangesToDescription1(*embed_client->tracker()->changes())[0]);
+}
+
+TEST_F(WindowTreeTest, EventDispatcherMouseCursorSourceWindowResetOnRemove) {
+  TestWindowTreeClient* embed_client = nullptr;
+  WindowTree* tree = nullptr;
+  ServerWindow* window = nullptr;
+  EXPECT_NO_FATAL_FAILURE(SetupEventTargeting(&embed_client, &tree, &window));
+
+  window->SetBounds(gfx::Rect(0, 0, 100, 100));
+
+  DispatchEventAndAckImmediately(CreatePointerDownEvent(21, 22));
+
+  WindowManagerState* wms =
+      display()->GetActiveWindowManagerDisplayRoot()->window_manager_state();
+  EXPECT_EQ(window, wms->event_dispatcher()->mouse_cursor_source_window());
+
+  window->parent()->Remove(window);
+  // The remove should reset the mouse_cursor_source_window(). The important
+  // thing is it changes to something other than |window|.
+  EXPECT_NE(window, wms->event_dispatcher()->mouse_cursor_source_window());
 }
 
 // Verifies SetChildModalParent() works correctly.
@@ -1191,7 +1211,7 @@ TEST_F(WindowTreeTest, SetOpacityFailsOnUnknownWindow) {
   ServerWindow* window = nullptr;
   EXPECT_NO_FATAL_FAILURE(SetupEventTargeting(&embed_client, &tree, &window));
 
-  TestServerWindowDelegate delegate(window_server()->GetHostFrameSinkManager());
+  TestServerWindowDelegate delegate(window_server()->GetVizHostProxy());
   WindowId window_id(42, 1337);
   ServerWindow unknown_window(&delegate, window_id);
   const float new_opacity = 0.5f;

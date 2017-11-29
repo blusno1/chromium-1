@@ -23,11 +23,12 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "components/exo/layer_tree_frame_sink_holder.h"
 #include "components/viz/common/gpu/context_provider.h"
-#include "components/viz/common/quads/texture_mailbox.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/single_release_callback.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "ui/aura/env.h"
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -81,10 +82,10 @@ unsigned CreateGLTexture(gpu::gles2::GLES2Interface* gles2, GLenum target) {
   return texture_id;
 }
 
-void CreateGLTextureMailbox(gpu::gles2::GLES2Interface* gles2,
-                            unsigned texture_id,
-                            GLenum target,
-                            gpu::Mailbox* mailbox) {
+void CreateGLMailbox(gpu::gles2::GLES2Interface* gles2,
+                     unsigned texture_id,
+                     GLenum target,
+                     gpu::Mailbox* mailbox) {
   gles2->ActiveTexture(GL_TEXTURE0);
   gles2->BindTexture(target, texture_id);
   gles2->GenMailboxCHROMIUM(mailbox->name);
@@ -179,7 +180,7 @@ Buffer::Texture::Texture(ui::ContextFactory* context_factory,
   gpu::gles2::GLES2Interface* gles2 = context_provider_->ContextGL();
   texture_id_ = CreateGLTexture(gles2, texture_target_);
   // Generate a crypto-secure random mailbox name.
-  CreateGLTextureMailbox(gles2, texture_id_, texture_target_, &mailbox_);
+  CreateGLMailbox(gles2, texture_id_, texture_target_, &mailbox_);
   // Provides a notification when |context_provider_| is lost.
   context_factory_->AddObserver(this);
 }
@@ -256,7 +257,7 @@ gpu::SyncToken Buffer::Texture::BindTexImage() {
     gles2->BindTexImage2DCHROMIUM(texture_target_, image_id_);
     // Generate a crypto-secure random mailbox name if not already done.
     if (mailbox_.IsZero())
-      CreateGLTextureMailbox(gles2, texture_id_, texture_target_, &mailbox_);
+      CreateGLMailbox(gles2, texture_id_, texture_target_, &mailbox_);
     // Create and return a sync token that can be used to ensure that the
     // BindTexImage2DCHROMIUM call is processed before issuing any commands
     // that will read from the texture on a different context.

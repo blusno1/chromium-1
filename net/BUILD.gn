@@ -287,7 +287,7 @@ component("net") {
     "http/http_response_info.h",
     "http/http_security_headers.cc",
     "http/http_security_headers.h",
-    "http/http_status_code_list",
+    "http/http_status_code_list.h",
     "http/http_util.cc",
     "http/http_util.h",
     "http/http_vary_data.cc",
@@ -379,6 +379,7 @@ component("net") {
   }
 
   public_deps = [
+    ":net_nqe_proto",
     ":net_quic_proto",
     ":traffic_annotation",
     "//crypto",
@@ -565,6 +566,8 @@ component("net") {
       "cert/internal/trust_store_nss.h",
       "cert/jwk_serializer.cc",
       "cert/jwk_serializer.h",
+      "cert/known_roots.cc",
+      "cert/known_roots.h",
       "cert/known_roots_mac.cc",
       "cert/known_roots_mac.h",
       "cert/known_roots_nss.cc",
@@ -587,6 +590,7 @@ component("net") {
       "cert/nss_cert_database_chromeos.h",
       "cert/nss_profile_filter_chromeos.cc",
       "cert/nss_profile_filter_chromeos.h",
+      "cert/root_cert_list_generated.h",
       "cert/test_keychain_search_list_mac.cc",
       "cert/test_keychain_search_list_mac.h",
       "cert/test_root_certs.cc",
@@ -994,6 +998,7 @@ component("net") {
       "nqe/event_creator.cc",
       "nqe/event_creator.h",
       "nqe/external_estimate_provider.h",
+      "nqe/network_id.cc",
       "nqe/network_id.h",
       "nqe/network_qualities_prefs_manager.cc",
       "nqe/network_qualities_prefs_manager.h",
@@ -1123,6 +1128,8 @@ component("net") {
       "quic/chromium/quic_clock_skew_detector.h",
       "quic/chromium/quic_connection_logger.cc",
       "quic/chromium/quic_connection_logger.h",
+      "quic/chromium/quic_connectivity_probing_manager.cc",
+      "quic/chromium/quic_connectivity_probing_manager.h",
       "quic/chromium/quic_crypto_client_stream_factory.cc",
       "quic/chromium/quic_crypto_client_stream_factory.h",
       "quic/chromium/quic_http_stream.cc",
@@ -1244,6 +1251,7 @@ component("net") {
       "quic/core/frames/quic_blocked_frame.h",
       "quic/core/frames/quic_connection_close_frame.cc",
       "quic/core/frames/quic_connection_close_frame.h",
+      "quic/core/frames/quic_control_frame.h",
       "quic/core/frames/quic_frame.cc",
       "quic/core/frames/quic_frame.h",
       "quic/core/frames/quic_goaway_frame.cc",
@@ -1251,6 +1259,7 @@ component("net") {
       "quic/core/frames/quic_mtu_discovery_frame.h",
       "quic/core/frames/quic_padding_frame.cc",
       "quic/core/frames/quic_padding_frame.h",
+      "quic/core/frames/quic_ping_frame.cc",
       "quic/core/frames/quic_ping_frame.h",
       "quic/core/frames/quic_rst_stream_frame.cc",
       "quic/core/frames/quic_rst_stream_frame.h",
@@ -1287,6 +1296,8 @@ component("net") {
       "quic/core/quic_connection_stats.h",
       "quic/core/quic_constants.cc",
       "quic/core/quic_constants.h",
+      "quic/core/quic_control_frame_manager.cc",
+      "quic/core/quic_control_frame_manager.h",
       "quic/core/quic_crypto_client_handshaker.cc",
       "quic/core/quic_crypto_client_handshaker.h",
       "quic/core/quic_crypto_client_stream.cc",
@@ -1455,6 +1466,7 @@ component("net") {
       "quic/quartc/quartc_clock_interface.h",
       "quic/quartc/quartc_factory.cc",
       "quic/quartc/quartc_factory.h",
+      "quic/quartc/quartc_factory_interface.cc",
       "quic/quartc/quartc_factory_interface.h",
       "quic/quartc/quartc_packet_writer.cc",
       "quic/quartc/quartc_packet_writer.h",
@@ -1489,6 +1501,8 @@ component("net") {
       "socket/socket_options.h",
       "socket/socket_posix.cc",
       "socket/socket_posix.h",
+      "socket/socket_tag.cc",
+      "socket/socket_tag.h",
       "socket/socks5_client_socket.cc",
       "socket/socks5_client_socket.h",
       "socket/socks_client_socket.cc",
@@ -1660,8 +1674,6 @@ component("net") {
       "url_request/data_protocol_handler.cc",
       "url_request/data_protocol_handler.h",
       "url_request/http_user_agent_settings.h",
-      "url_request/network_error_logging_delegate.cc",
-      "url_request/network_error_logging_delegate.h",
       "url_request/redirect_info.cc",
       "url_request/redirect_info.h",
       "url_request/redirect_util.cc",
@@ -1745,6 +1757,8 @@ component("net") {
 
     if (enable_reporting) {
       sources += [
+        "network_error_logging/network_error_logging_service.cc",
+        "network_error_logging/network_error_logging_service.h",
         "reporting/reporting_browsing_data_remover.cc",
         "reporting/reporting_browsing_data_remover.h",
         "reporting/reporting_cache.cc",
@@ -1779,6 +1793,8 @@ component("net") {
         "reporting/reporting_service.h",
         "reporting/reporting_uploader.cc",
         "reporting/reporting_uploader.h",
+        "url_request/network_error_logging_delegate.cc",
+        "url_request/network_error_logging_delegate.h",
       ]
     }
 
@@ -2176,6 +2192,21 @@ grit("net_resources") {
     "grit/net_resources.h",
     "net_resources.pak",
   ]
+}
+
+proto_library("net_nqe_proto") {
+  visibility = [ ":net" ]
+
+  sources = [
+    "nqe/proto/network_id_proto.proto",
+  ]
+  cc_generator_options = "dllexport_decl=NET_EXPORT_PRIVATE:"
+  cc_include = "net/base/net_export.h"
+  component_build_force_source_set = true
+
+  defines = [ "NET_IMPLEMENTATION" ]
+
+  extra_configs = [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
 proto_library("net_quic_proto") {
@@ -4691,6 +4722,7 @@ test("net_unittests") {
     "cert/internal/verify_name_match_unittest.cc",
     "cert/internal/verify_signed_data_unittest.cc",
     "cert/jwk_serializer_unittest.cc",
+    "cert/known_roots_unittest.cc",
     "cert/merkle_audit_proof_unittest.cc",
     "cert/merkle_tree_leaf_unittest.cc",
     "cert/multi_log_ct_verifier_unittest.cc",
@@ -4909,6 +4941,7 @@ test("net_unittests") {
     "log/trace_net_log_observer_unittest.cc",
     "nqe/effective_connection_type_unittest.cc",
     "nqe/event_creator_unittest.cc",
+    "nqe/network_id_unittest.cc",
     "nqe/network_qualities_prefs_manager_unittest.cc",
     "nqe/network_quality_estimator_params_unittest.cc",
     "nqe/network_quality_estimator_unittest.cc",
@@ -4959,6 +4992,7 @@ test("net_unittests") {
     "quic/chromium/quic_chromium_client_stream_test.cc",
     "quic/chromium/quic_chromium_connection_helper_test.cc",
     "quic/chromium/quic_clock_skew_detector_test.cc",
+    "quic/chromium/quic_connectivity_probing_manager_test.cc",
     "quic/chromium/quic_end_to_end_unittest.cc",
     "quic/chromium/quic_http_stream_test.cc",
     "quic/chromium/quic_http_utils_test.cc",
@@ -5020,6 +5054,7 @@ test("net_unittests") {
     "quic/core/quic_client_push_promise_index_test.cc",
     "quic/core/quic_config_test.cc",
     "quic/core/quic_connection_test.cc",
+    "quic/core/quic_control_frame_manager_test.cc",
     "quic/core/quic_crypto_client_stream_test.cc",
     "quic/core/quic_crypto_server_stream_test.cc",
     "quic/core/quic_crypto_stream_test.cc",
@@ -5078,6 +5113,7 @@ test("net_unittests") {
     "socket/mock_client_socket_pool_manager.h",
     "socket/sequenced_socket_data_unittest.cc",
     "socket/socket_bio_adapter_unittest.cc",
+    "socket/socket_tag_unittest.cc",
     "socket/socks5_client_socket_unittest.cc",
     "socket/socks_client_socket_pool_unittest.cc",
     "socket/socks_client_socket_unittest.cc",
@@ -5234,6 +5270,7 @@ test("net_unittests") {
 
   if (enable_reporting) {
     sources += [
+      "network_error_logging/network_error_logging_service_unittest.cc",
       "reporting/reporting_browsing_data_remover_unittest.cc",
       "reporting/reporting_cache_unittest.cc",
       "reporting/reporting_delivery_agent_unittest.cc",
@@ -6218,6 +6255,7 @@ fuzzer_test("net_spdy_session_fuzzer") {
     ":test_support",
     "//base",
     "//net",
+    "//net/data/ssl/certificates:generate_fuzzer_cert_includes",
   ]
   dict = "data/fuzzer_dictionaries/net_spdy_session_fuzzer.dict"
   seed_corpus = "data/fuzzer_data/net_spdy_session_fuzzer/"
@@ -6290,5 +6328,6 @@ fuzzer_test("net_quic_stream_factory_fuzzer") {
     ":quic_test_tools",
     ":test_support",
     "//net",
+    "//net/data/ssl/certificates:generate_fuzzer_cert_includes",
   ]
 }

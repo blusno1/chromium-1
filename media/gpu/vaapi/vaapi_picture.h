@@ -13,10 +13,10 @@
 #include <stdint.h>
 
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
+#include "media/gpu/media_gpu_export.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -26,30 +26,18 @@ class VASurface;
 class VaapiWrapper;
 
 // Picture is native pixmap abstraction (X11/Ozone).
-class VaapiPicture {
+class MEDIA_GPU_EXPORT VaapiPicture {
  public:
-  // Create a VaapiPicture of |size| to be associated with |picture_buffer_id|.
-  // If provided, bind it to |texture_id|, as well as to |client_texture_id|
-  // using |bind_image_cb|.
-  static linked_ptr<VaapiPicture> CreatePicture(
-      const scoped_refptr<VaapiWrapper>& vaapi_wrapper,
-      const MakeGLContextCurrentCallback& make_context_current_cb,
-      const BindGLImageCallback& bind_image_cb,
-      int32_t picture_buffer_id,
-      const gfx::Size& size,
-      uint32_t texture_id,
-      uint32_t client_texture_id);
-
   virtual ~VaapiPicture();
 
-  // Use the buffer of |format|, pointed to by |gpu_memory_buffer_handle| as the
-  // backing storage for this picture. This takes ownership of the handle and
-  // will close it even on failure. Return true on success, false otherwise.
+  // Uses the buffer of |format|, pointed to by |gpu_memory_buffer_handle| as
+  // the backing storage for this picture. This takes ownership of the handle
+  // and will close it even on failure. Return true on success, false otherwise.
   virtual bool ImportGpuMemoryBufferHandle(
       gfx::BufferFormat format,
       const gfx::GpuMemoryBufferHandle& gpu_memory_buffer_handle) = 0;
 
-  // Allocate a buffer of |format| to use as backing storage for this picture.
+  // Allocates a buffer of |format| to use as backing storage for this picture.
   // Return true on success.
   virtual bool Allocate(gfx::BufferFormat format) = 0;
 
@@ -61,10 +49,6 @@ class VaapiPicture {
   // it if needed.
   virtual bool DownloadFromSurface(
       const scoped_refptr<VASurface>& va_surface) = 0;
-
-  // Get the texture target used to bind EGLImages (either
-  // GL_TEXTURE_2D on X11 or GL_TEXTURE_EXTERNAL_OES on DRM).
-  static uint32_t GetGLTextureTarget();
 
  protected:
   VaapiPicture(const scoped_refptr<VaapiWrapper>& vaapi_wrapper,

@@ -57,21 +57,21 @@ void GeoNotifier::SetFatalError(PositionError* error) {
   fatal_error_ = error;
   // An existing timer may not have a zero timeout.
   timer_.Stop();
-  timer_.StartOneShot(0, BLINK_FROM_HERE);
+  timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void GeoNotifier::SetUseCachedPosition() {
   use_cached_position_ = true;
-  timer_.StartOneShot(0, BLINK_FROM_HERE);
+  timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
 }
 
 void GeoNotifier::RunSuccessCallback(Geoposition* position) {
-  success_callback_->call(nullptr, position);
+  success_callback_->InvokeAndReportException(nullptr, position);
 }
 
 void GeoNotifier::RunErrorCallback(PositionError* error) {
   if (error_callback_)
-    error_callback_->call(nullptr, error);
+    error_callback_->InvokeAndReportException(nullptr, error);
 }
 
 void GeoNotifier::StartTimer() {
@@ -102,10 +102,11 @@ void GeoNotifier::TimerFired(TimerBase*) {
     return;
   }
 
-  if (error_callback_)
-    error_callback_->call(
+  if (error_callback_) {
+    error_callback_->InvokeAndReportException(
         nullptr,
         PositionError::Create(PositionError::kTimeout, "Timeout expired"));
+  }
 
   DEFINE_STATIC_LOCAL(CustomCountHistogram, timeout_expired_histogram,
                       ("Geolocation.TimeoutExpired", 0,
