@@ -28,8 +28,6 @@ source_set("experimental_mojo") {
     "//device/bluetooth/public/interfaces/gatt_result_type_converter.h",
     "adapter.cc",
     "adapter.h",
-    "adapter_factory.cc",
-    "adapter_factory.h",
     "device.cc",
     "device.h",
     "discovery_session.cc",
@@ -51,7 +49,8 @@ source_set("experimental_mojo") {
     # Experimental implementation not ready for production use yet. See
     # public/interfaces/README.md
     "//device:device_unittests",
-# bluetooth_internals is linked in chrome/browser/ui
+
+    # bluetooth_internals is linked in chrome/browser/ui
     "//chrome/browser/ui:ui",
     "//chrome/browser/ui/webui/bluetooth_internals:*",
   ]
