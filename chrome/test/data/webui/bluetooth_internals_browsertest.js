@@ -52,7 +52,7 @@ BluetoothInternalsTest.prototype = {
           'getAdapter',
         ]);
 
-        this.binding = new mojo.Binding(bluetooth.mojom.AdapterFactory, this);
+        this.binding = new mojo.Binding(mojom.BluetoothInternalsHandler, this);
         this.adapter = new TestAdapterProxy();
         this.adapterBinding_ = new mojo.Binding(bluetooth.mojom.Adapter,
                                                 this.adapter);
@@ -165,7 +165,7 @@ BluetoothInternalsTest.prototype = {
 
     window.setupFn = () => {
       this.adapterInterceptor = new MojoInterfaceInterceptor(
-          bluetooth.mojom.AdapterFactory.name);
+          mojom.BluetoothInternalsHandler.name);
       this.adapterInterceptor.oninterfacerequest = (e) => {
         this.adapterFactory = new TestAdapterFactoryProxy();
         this.adapterFactory.binding.bind(e.handle);
