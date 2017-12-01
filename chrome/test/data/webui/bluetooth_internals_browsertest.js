@@ -166,9 +166,9 @@ BluetoothInternalsTest.prototype = {
     }
 
     window.setupFn = () => {
-      this.adapterInterceptor = new MojoInterfaceInterceptor(
+      this.bluetoothInternalsHandlerInterceptor = new MojoInterfaceInterceptor(
           mojom.BluetoothInternalsHandler.name);
-      this.adapterInterceptor.oninterfacerequest = (e) => {
+      this.bluetoothInternalsHandlerInterceptor.oninterfacerequest = (e) => {
         this.adapterFactory = new TestAdapterFactoryProxy();
         this.adapterFactory.binding.bind(e.handle);
 
@@ -187,7 +187,7 @@ BluetoothInternalsTest.prototype = {
               ]);
             }, this);
       };
-      this.adapterInterceptor.start();
+      this.bluetoothInternalsHandlerInterceptor.start();
       this.setupResolver.resolve();
       return Promise.resolve();
     };
