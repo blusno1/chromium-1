@@ -34,13 +34,8 @@ source_set("experimental_mojo") {
     "discovery_session.h",
   ]
 
-  #public_
   deps = [
     ":bluetooth",
-
-    # TODO(scheib) Before Landing, why are these public?
-    # TODO(scheib) Before Landing, why are these public?
-    # TODO(scheib) Before Landing, why are these public?
     "public/interfaces:experimental_interfaces",
     "//mojo/public/cpp/bindings",
   ]
@@ -50,7 +45,7 @@ source_set("experimental_mojo") {
     # public/interfaces/README.md
     "//device:device_unittests",
 
-    # bluetooth_internals is linked in chrome/browser/ui
+    # Single approved client:
     "//chrome/browser/ui/webui/bluetooth_internals:*",
   ]
 }

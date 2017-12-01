@@ -22,8 +22,7 @@ mojom("fake_bluetooth_interfaces") {
   use_once_callback = true
 }
 
-# Experimental interfaces are not ready for production use yet. See
-# README.md
+# Experimental interfaces are not ready for production use yet. See README.md
 mojom("experimental_interfaces") {
   sources = [
     "adapter.mojom",
@@ -38,16 +37,10 @@ mojom("experimental_interfaces") {
     # Experimental interfaces are not ready for production use yet. See
     # README.md
 
-    # TODO(scheib) Before Landing, why are these public?
-    # TODO(scheib) Before Landing, why are these public?
-    # TODO(scheib) Before Landing, why are these public?
+    # Implementation of the mojom interfaces:
     "//device/bluetooth:experimental_mojo",
 
-    #"//chrome/browser:*",
+    # Single approved client of the interfaces:
     "//chrome/browser/ui/webui/bluetooth_internals:*",
-
-    # TODO(scheib) Before Landing, is this needed?
-    # Required to link? No.
-    #"//chrome/browser/ui:*",
   ]
 }
