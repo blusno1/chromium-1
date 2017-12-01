@@ -51,7 +51,6 @@ source_set("experimental_mojo") {
     "//device:device_unittests",
 
     # bluetooth_internals is linked in chrome/browser/ui
-    "//chrome/browser/ui:ui",
     "//chrome/browser/ui/webui/bluetooth_internals:*",
   ]
 }
