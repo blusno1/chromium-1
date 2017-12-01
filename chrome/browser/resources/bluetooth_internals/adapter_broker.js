@@ -227,14 +227,11 @@ cr.define('adapter_broker', function() {
 
     // Get an Adapter service.
     return bluetoothInternalsHandler.getAdapter().then(function(response) {
-console.error("getAdapterBroker");
       if (!response.adapter.ptr.isBound()) {
         throw new Error('Bluetooth Not Supported on this platform.');
       }
-console.error("getAdapterBroker");
 
       adapterBroker = new AdapterBroker(response.adapter);
-console.error("getAdapterBroker");
       return adapterBroker;
     });
   }
