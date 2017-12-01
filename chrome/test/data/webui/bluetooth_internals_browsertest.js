@@ -44,7 +44,9 @@ BluetoothInternalsTest.prototype = {
   preLoad: function() {
     /**
      * A test adapter factory proxy for the chrome://bluetooth-internals
-     * page.
+     * page.  Provides a fake BluetoothInternalsHandler::GetAdapter
+     * implementation and acts as a root of all Test*Proxies by containing an
+     * adapter member.
      */
     class TestAdapterFactoryProxy extends TestBrowserProxy {
       constructor() {
