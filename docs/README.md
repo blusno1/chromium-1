@@ -1,4 +1,4 @@
-# Chromium docs
+# Chromium #delete
 
 This directory contains chromium project documentation in
 [Gitiles-flavored Markdown].  It is automatically [rendered by Gitiles].
