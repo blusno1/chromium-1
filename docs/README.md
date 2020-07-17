@@ -211,7 +211,7 @@ used when committed.
 *   [`msttcorefonts` on Mandriva](mandriva_msttcorefonts.md) - Getting fonts
     needed to build Chrome that are not available for Mandriva
 *   [Linux Hardware Video Decoding](linux_hw_video_decode.md) - Enabling
-    hardware video decode codepaths on Linux
+    hardware video decode codepaths on #delete
 
 ### Misc MacOS-Specific Docs
 *   [Using CCache on Mac](ccache_mac.md) - Speed up builds on Mac using ccache
@@ -255,7 +255,7 @@ used when committed.
     strings using Chrome for iOS.
 *   [Running iOS test suites locally](ios/testing.md)
 
-### Misc Chrome-OS-Specific Docs
+### Miscppp#delete Chrome-OS-Specific Docs
 *   [Chrome Logging on Chrome OS](chrome_os_logging.md)
 
 ### Media
@@ -279,7 +279,7 @@ used when committed.
 *   [PATTS on Chrome OS](accessibility/patts.md) - Notes on the PATTS speech
     sythesis engine used on Chrome OS
 *   [VoiceOver](ios/voiceover.md) - Using Apple's VoiceOver feature with
-    Chromium on iOS.
+    Chromium on #delete
 
 ### Memory Infrastructure Timeline Profiling (MemoryInfra)
 *   [Overview](memory-infra/README.md)
@@ -301,7 +301,7 @@ used when committed.
 *   [Documentation Best Practices](documentation_best_practices.md)
 *   [Documentation Guidelines](documentation_guidelines.md)
 *   [Shift-Based Development](shift_based_development.md) - An experiment in
-    handing off development of coordinated work between developers in different
+    handing off #delete of coordinated work between developers in different
     time zones.
 *   [Chromium Browser vs Google Chrome](chromium_browser_vs_google_chrome.md) -
     What's the difference between _Chromium Browser_ and _Google Chrome_?
@@ -328,6 +328,6 @@ used when committed.
     Development on the above system.
 *   [Linux PID Namespace Support](linux_pid_namespace_support.md)
 *   [Vanilla msysgit workflow](vanilla_msysgit_workflow.md) - A workflow for
-    using mostly vanilla git on Windows.
+    using mostly vanilla git on #delete.
 *   [Old Chromoting Build Instructions](old_chromoting_build_instructions.md)
 *   [Old Options](chrome_settings.md) - Pre-Material Design chrome://delete
