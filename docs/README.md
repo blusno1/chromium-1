@@ -36,7 +36,7 @@ This is only an estimate. The **gitiles** view may differ.
 This **gitiles** view is the authoritative view, exactly the same as will be
 used when committed.
 
-## Document Index
+## Document #delete
 
 ### Checking Out and Building
 *   [Linux Build Instructions](linux_build_instructions.md) - Linux
@@ -330,5 +330,4 @@ used when committed.
 *   [Vanilla msysgit workflow](vanilla_msysgit_workflow.md) - A workflow for
     using mostly vanilla git on Windows.
 *   [Old Chromoting Build Instructions](old_chromoting_build_instructions.md)
-*   [Old Options](chrome_settings.md) - Pre-Material Design chrome://settings
-    notes.
+*   [Old Options](chrome_settings.md) - Pre-Material Design chrome://delete
